@@ -37,6 +37,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(title, body, tokenize='trigram
 export interface NoteRow {
   path: string;
   title: string;
+  aliases: string[];
   mtime: number;
   size: number;
 }
@@ -315,9 +316,19 @@ export class Indexer {
   }
 
   list(): NoteRow[] {
-    return this.db
-      .prepare(`SELECT path, title, mtime, size FROM pages ORDER BY path COLLATE NOCASE`)
-      .all() as NoteRow[];
+    const rows = this.db
+      .prepare(`SELECT id, path, title, mtime, size FROM pages ORDER BY path COLLATE NOCASE`)
+      .all() as { id: number; path: string; title: string; mtime: number; size: number }[];
+    const aliases = new Map<number, string[]>();
+    for (const a of this.db.prepare(`SELECT page_id AS pageId, alias FROM aliases`).all() as {
+      pageId: number;
+      alias: string;
+    }[]) {
+      const list = aliases.get(a.pageId);
+      if (list) list.push(a.alias);
+      else aliases.set(a.pageId, [a.alias]);
+    }
+    return rows.map(({ id, ...r }) => ({ ...r, aliases: aliases.get(id) ?? [] }));
   }
 
   /** 3글자 이상은 FTS5 trigram, 그보다 짧은 질의는 LIKE로 대체한다(한글 2글자 검색 등). */

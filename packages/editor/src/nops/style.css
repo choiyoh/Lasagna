@@ -1,0 +1,68 @@
+/* Nopsidian 확장 노드 스타일. 색은 업스트림의 --oh-editor-* 토큰을 따른다. */
+.oh-editor__content .ProseMirror { white-space: pre-wrap; }
+
+/* 위키링크·임베드 */
+.nops-wikilink, .nops-embed {
+  color: var(--oh-editor-primary, #5b5bd6);
+  background: color-mix(in srgb, var(--oh-editor-primary, #5b5bd6) 10%, transparent);
+  border-radius: 4px;
+  padding: 0 3px;
+  cursor: pointer;
+}
+.nops-embed { font-family: ui-monospace, monospace; font-size: 0.92em; }
+.nops-math { font-family: ui-monospace, monospace; background: color-mix(in srgb, currentColor 7%, transparent); border-radius: 3px; padding: 0 3px; }
+.nops-raw, .nops-raw-inline {
+  font-family: ui-monospace, monospace; font-size: 0.88em; opacity: 0.8;
+  background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 4px;
+}
+.nops-raw { padding: 8px 10px; margin: 8px 0; white-space: pre-wrap; border-left: 3px solid color-mix(in srgb, currentColor 25%, transparent); }
+.nops-raw-inline { padding: 0 3px; }
+mark { background: #fff3a3; color: inherit; border-radius: 2px; padding: 0 1px; }
+@media (prefers-color-scheme: dark) { mark { background: #6b5d00; } }
+[data-theme='dark'] mark { background: #6b5d00; }
+
+/* 콜아웃·토글 */
+.nops-callout, .nops-toggle {
+  position: relative;
+  margin: 10px 0;
+  padding: 10px 12px 10px 38px;
+  border-radius: 8px;
+  border-left: 4px solid var(--nops-callout-color, #5b8def);
+  background: color-mix(in srgb, var(--nops-callout-color, #5b8def) 9%, transparent);
+}
+.nops-toggle { --nops-callout-color: #8a8a99; border-left-width: 2px; }
+.nops-callout[data-callout='tip'], .nops-callout[data-callout='hint'], .nops-callout[data-callout='success'], .nops-callout[data-callout='check'], .nops-callout[data-callout='done'] { --nops-callout-color: #2fa37a; }
+.nops-callout[data-callout='warning'], .nops-callout[data-callout='caution'], .nops-callout[data-callout='attention'], .nops-callout[data-callout='question'], .nops-callout[data-callout='help'] { --nops-callout-color: #d99a1b; }
+.nops-callout[data-callout='danger'], .nops-callout[data-callout='error'], .nops-callout[data-callout='failure'], .nops-callout[data-callout='fail'], .nops-callout[data-callout='bug'] { --nops-callout-color: #d1453b; }
+.nops-callout[data-callout='quote'], .nops-callout[data-callout='cite'], .nops-callout[data-callout='example'], .nops-callout[data-callout='abstract'] { --nops-callout-color: #8a8a99; }
+
+.nops-callout__handle, .nops-toggle__handle {
+  position: absolute; left: 8px; top: 9px; width: 22px; height: 22px; padding: 0;
+  border: 0; background: none; color: var(--nops-callout-color, #5b8def); font-size: 15px; line-height: 22px; text-align: center; cursor: default;
+}
+.nops-callout.is-foldable .nops-callout__handle, .nops-toggle__handle { cursor: pointer; border-radius: 4px; }
+.nops-callout.is-foldable .nops-callout__handle:hover, .nops-toggle__handle:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
+
+[data-callout-title], [data-toggle-summary] { font-weight: 600; min-height: 1.6em; }
+[data-callout-title]:empty::before, [data-toggle-summary]:empty::before { content: '제목'; opacity: 0.4; font-weight: 400; }
+.is-collapsed > .nops-callout__content > :not([data-callout-title]),
+.is-collapsed > .nops-toggle__content > :not([data-toggle-summary]) { display: none; }
+
+/* 열 */
+[data-columns] { display: flex; gap: 16px; margin: 10px 0; }
+[data-column] { flex: 1 1 0; min-width: 0; padding: 4px 10px; border-radius: 6px; outline: 1px dashed color-mix(in srgb, currentColor 18%, transparent); }
+@media (max-width: 640px) { [data-columns] { flex-direction: column; } }
+
+/* 할 일 목록 */
+li[data-checked] { list-style: none; position: relative; }
+li[data-checked]::before {
+  content: ''; position: absolute; left: -1.6em; top: 0.32em; width: 1em; height: 1em;
+  border: 1.5px solid currentColor; border-radius: 3px; opacity: 0.7; cursor: pointer;
+}
+li[data-checked='true']::before { background: var(--oh-editor-primary, #5b5bd6); border-color: var(--oh-editor-primary, #5b5bd6); opacity: 1; }
+li[data-checked='true']::after { content: '✓'; position: absolute; left: -1.5em; top: 0.18em; color: #fff; font-size: 0.85em; pointer-events: none; }
+li[data-checked='true'] > p:first-child { opacity: 0.6; text-decoration: line-through; }
+
+/* 수식 블록 */
+pre[data-math-block] { background: color-mix(in srgb, currentColor 6%, transparent); padding: 10px 12px; border-radius: 6px; font-family: ui-monospace, monospace; }
+pre[data-math-block]::before { content: '$$'; opacity: 0.4; display: block; }

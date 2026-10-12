@@ -16,7 +16,7 @@ import { createPlaceholderPlugin } from './plugins/placeholder';
 import { editorSchema } from './schema';
 import { resolveMessages, type EditorMessages } from './i18n';
 import { serializeHtml } from './serializers/html';
-import type { Editor, EditorAIController, EditorAIOptions, EditorEventHandler, EditorEventName, EditorMenuController, EditorOptions, EditorSchema, EditorStyle, EditorStyleMap, EditorToolbarController, EditorToolbarSupport, AIContext } from './types';
+import type { Editor, EditorDocument, EditorAIController, EditorAIOptions, EditorEventHandler, EditorEventName, EditorMenuController, EditorOptions, EditorSchema, EditorStyle, EditorStyleMap, EditorToolbarController, EditorToolbarSupport, AIContext } from './types';
 import { aiPluginKey, createAIPlugin } from './plugins/ai';
 import { createImageNodeView } from './ui/ImageNodeView';
 
@@ -42,6 +42,7 @@ function isSelectionInTableCell(state: EditorState) {
 
 function createPlugins(options: EditorOptions, schema: EditorSchema, messages: EditorMessages) {
   return [
+    ...(options.priorityPlugins ?? []),
     createHistoryPlugin(),
     createInputRulesPlugin(schema),
     createImageUploadPlugin(options.image, messages),
@@ -138,6 +139,20 @@ class ProseMirrorEditor implements Editor {
     this.view.updateState(this.createState(this.parseContent(content, format)));
     this.toolbar?.sync();
     this.emit('change');
+  }
+
+  getView() {
+    return this.view;
+  }
+
+  getDocument() {
+    return this.view.state.doc;
+  }
+
+  setDocument(doc: EditorDocument, options: { silent?: boolean } = {}) {
+    this.view.updateState(this.createState(doc));
+    this.toolbar?.sync();
+    if (!options.silent) this.emit('change');
   }
 
   setOutputFormat(format: 'html' | 'markdown') {
@@ -304,6 +319,7 @@ class ProseMirrorEditor implements Editor {
       state: this.createState(doc),
       editable: () => this.isEditable(),
       nodeViews: {
+        ...(this.options.nodeViews ?? {}),
         image: (node, view, getPos) => {
           if (typeof getPos !== 'function') {
             throw new Error('Expected image node position accessor');

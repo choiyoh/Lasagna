@@ -12,7 +12,8 @@
     "./table": "./src/table.ts",
     "./toolbar": "./src/toolbar.ts",
     "./ai": "./src/ai.ts",
-    "./style.css": "./src/style.css"
+    "./style.css": "./src/style.css",
+    "./nops": "./src/nops/index.ts"
   },
   "scripts": {
     "test": "vitest run",

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { NoteSummary, SearchHit, VaultInfo } from '@nopsidian/ipc-contract';
-import { renderMarkdownPreview } from './preview';
+import { createLinkResolver } from '@nopsidian/core/links';
+import type { WikiLinkTarget } from '@nopsidian/editor/nops';
+import { NoteEditor } from './NoteEditor';
 
 export function App() {
   const [vault, setVault] = useState<VaultInfo | null | undefined>(undefined);
@@ -62,7 +64,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [html, setHtml] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const refresh = useCallback(() => void window.nops.note.list().then(setNotes), []);
 
@@ -84,17 +86,33 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     return () => clearTimeout(t);
   }, [query]);
 
-  useEffect(() => {
-    if (!selected) return setHtml('');
-    let stale = false;
-    void window.nops.note.read({ path: selected }).then(async (r) => {
-      const out = await renderMarkdownPreview(r.content);
-      if (!stale) setHtml(out);
-    });
-    return () => {
-      stale = true;
-    };
-  }, [selected]);
+  const resolver = useMemo(
+    () =>
+      createLinkResolver(
+        notes.map((n, i) => ({ id: i, path: n.path, title: n.title })),
+        notes.flatMap((n, i) => n.aliases.map((alias) => ({ pageId: i, alias }))),
+      ),
+    [notes],
+  );
+
+  const openLink = useCallback(
+    (link: WikiLinkTarget) => {
+      const id = resolver(link.target, selected ?? '');
+      const note = id === undefined ? undefined : notes[id];
+      if (note) setSelected(note.path);
+    },
+    [resolver, notes, selected],
+  );
+
+  const createNote = async (rawName: string) => {
+    const name = rawName.trim().replace(/[\\/:*?"<>|]/g, '').replace(/\.md$/i, '');
+    setCreating(false);
+    if (!name) return;
+    const path = `${name}.md`;
+    const r = await window.nops.note.save({ path, content: `# ${name}\n`, baseHash: null });
+    setSelected(r.status === 'copy' && r.copyPath ? r.copyPath : path);
+    refresh();
+  };
 
   const tree = useMemo(() => buildTree(notes), [notes]);
 
@@ -107,6 +125,22 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             ⇄
           </button>
         </header>
+        {creating ? (
+          <input
+            className="search"
+            autoFocus
+            placeholder="새 노트 이름 (Enter)"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void createNote(e.currentTarget.value);
+              if (e.key === 'Escape') setCreating(false);
+            }}
+            onBlur={() => setCreating(false)}
+          />
+        ) : (
+          <button className="new-note" onClick={() => setCreating(true)}>
+            + 새 노트
+          </button>
+        )}
         <input
           className="search"
           placeholder="전문 검색"
@@ -138,8 +172,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       </aside>
       <main className="content">
         {selected ? (
-          // renderMarkdownPreview가 DOMPurify로 정화한 HTML만 넣는다.
-          <article className="preview" dangerouslySetInnerHTML={{ __html: html }} />
+          <NoteEditor key={selected} path={selected} onOpenLink={openLink} />
         ) : (
           <p className="muted pad">왼쪽에서 노트를 선택하세요. ({notes.length}개)</p>
         )}

@@ -35,6 +35,9 @@ importers:
       '@nopsidian/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@nopsidian/editor':
+        specifier: workspace:*
+        version: link:../../packages/editor
       '@nopsidian/ipc-contract':
         specifier: workspace:*
         version: link:../../packages/ipc-contract

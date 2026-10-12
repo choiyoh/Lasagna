@@ -284,7 +284,16 @@ nopsidian/
   - 표 안 위키링크의 `|`는 `\|`로 쓴다. 표 행은 헤더 폭으로 맞춘다
   - 프런트매터 없는 문서가 `---`로 시작하면 `***`로 쓴다(프런트매터 오인 방지)
   - PM 문서 안의 문자열은 항상 `\n`이고, CRLF는 직렬화 시 문서의 기존 줄바꿈 스타일로 복원한다
-- [ ] 남은 2단계 작업: 에디터 확장점(뷰·슬래시 항목·노드 뷰), 블록 핸들·드래그, 렌더러 연결과 자동 저장, 소스 모드
+- [x] **에디터 연결**: `packages/editor`에 확장점을 추가했다(`getView`/`getDocument`/`setDocument({silent})`, `nodeViews`, `priorityPlugins`, 슬래시 항목 `createNotionSupport({ slashItems })`). 업스트림 파일 수정은 이 훅들뿐이다
+- [x] `createNopsEditor`: 스키마·노드 뷰·입력 규칙·슬래시 항목·한국어 UI를 갖춘 에디터
+  - 콜아웃/토글(접기는 화면 상태라 문서가 바뀌지 않음), 열(2·3열), 수식 블록 삽입 명령과 슬래시 항목(`ㅋㅇㅇ` → 콜아웃)
+  - 제목 줄 Enter(커서 뒤 텍스트를 본문으로 이동) / 빈 제목 Backspace(콜아웃 풀기)
+  - 입력 변환: `[[노트#제목|별칭]]`, `![[img|300]]`, `==형광펜==`, `- [ ] `/`[x] `, 체크박스 클릭
+  - 위키링크 클릭 → 노트 열기
+- [x] 렌더러 `NoteEditor`: 읽기(hash) → 파싱 → 표시, 편집 500ms 후 자동 저장(`note.save` + baseHash), 블러·노트 전환 시 즉시 저장, 병합/충돌/사본 결과 안내, 편집 중이 아닐 때 외부 변경은 조용히 다시 불러오기, 새 노트 만들기
+- [x] E2E(패키징된 앱, 13개): 편집 시 고친 문단만 저장, **한글 IME 조합**(CDP `Input.imeSetComposition`) 후 Enter 분할, 초성 슬래시 → 콜아웃 저장, 편집 중 외부 편집 자동 병합, 외부 변경 리로드, 위키링크 클릭 이동
+- 참고: `apps/desktop/tsconfig.json`은 포크한 에디터 소스를 함께 타입 검사하므로 `noUncheckedIndexedAccess`를 끈다(업스트림을 npm 의존성으로 교체하면 되돌린다)
+- [ ] 남은 2단계 작업: 블록 핸들 + 드래그&드롭 / Turn into / 복제, 소스 모드(CodeMirror 6), 코드 블록 구문 강조, 이미지·파일을 볼트 `attachments/`에 저장하고 `vault://`로 표시, 노트 단위 undo/redo 보강, 토글 제목(`## 제목 {.toggle}`)
 
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`

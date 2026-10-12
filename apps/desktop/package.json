@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@nopsidian/core": "workspace:*",
+    "@nopsidian/editor": "workspace:*",
     "@nopsidian/ipc-contract": "workspace:*",
     "@parcel/watcher": "^2.6.0",
     "better-sqlite3": "^13.0.3",

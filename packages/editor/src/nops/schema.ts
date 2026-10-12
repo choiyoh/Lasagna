@@ -223,7 +223,20 @@ function buildNodes() {
     .update('heading', withAttrs(nodes.get('heading'), blockIdAttr))
     .update('bullet_list', withAttrs(nodes.get('bullet_list'), { tight: { default: true } }))
     .update('ordered_list', withAttrs(nodes.get('ordered_list'), { tight: { default: true } }))
-    .update('list_item', withAttrs(nodes.get('list_item'), { checked: { default: null } }))
+    .update('list_item', {
+      ...withAttrs(nodes.get('list_item'), { checked: { default: null } }),
+      parseDOM: [
+        {
+          tag: 'li',
+          getAttrs: (dom) => {
+            const v = (dom as HTMLElement).getAttribute('data-checked');
+            return { checked: v === null ? null : v === 'true' };
+          }
+        }
+      ],
+      toDOM: (node) =>
+        node.attrs.checked === null ? ['li', 0] : ['li', { 'data-checked': String(node.attrs.checked) }, 0]
+    })
     .update('code_block', withAttrs(nodes.get('code_block'), { meta: { default: null } }));
 
   nodes = nodes.append({

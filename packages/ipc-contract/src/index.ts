@@ -22,6 +22,7 @@ export type SaveResult = z.infer<typeof saveResult>;
 export const noteSummary = z.object({
   path: relPath,
   title: z.string(),
+  aliases: z.array(z.string()).default([]),
   mtime: z.number(),
   size: z.number(),
 });

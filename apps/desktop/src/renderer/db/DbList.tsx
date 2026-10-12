@@ -1,0 +1,89 @@
+import { useEffect, useState } from 'react';
+
+interface Props {
+  onOpen: (folder: string) => void;
+}
+
+/** 사이드바의 데이터베이스 목록 + 새 데이터베이스 만들기 */
+export function DbList({ onOpen }: Props) {
+  const [dbs, setDbs] = useState<Awaited<ReturnType<typeof window.nops.db.list>>>([]);
+  const [name, setName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const load = () => void window.nops.db.list().then(setDbs).catch(() => undefined);
+    load();
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const again = () => {
+      clearTimeout(t);
+      t = setTimeout(load, 500);
+    };
+    const offs = [window.nops.on('note.changed', again), window.nops.on('asset.changed', again)];
+    return () => {
+      clearTimeout(t);
+      offs.forEach((o) => o());
+    };
+  }, []);
+
+  const create = async () => {
+    const n = name.trim().replace(/[\\/:*?"<>|]/g, ' ').trim();
+    if (!n) return;
+    try {
+      const r = await window.nops.db.create({ folder: n, title: n });
+      setName('');
+      setCreating(false);
+      onOpen(r.folder);
+    } catch (e) {
+      setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+    }
+  };
+
+  return (
+    <div className="dblistpanel" data-testid="db-panel">
+      {dbs.length === 0 && <p className="muted small pad">데이터베이스가 없어요. 폴더에 <code>_db.yaml</code> 이 있으면 데이터베이스가 돼요.</p>}
+      <ul className="tags">
+        {dbs.map((d) => (
+          <li key={d.folder}>
+            <button className="tag" onClick={() => onOpen(d.folder)} title={d.folder || '(볼트 루트)'}>
+              <span>🗂 {d.title}</span>
+              <span className="count">{d.rowCount}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {creating ? (
+        <div className="dbadd">
+          <input
+            autoFocus
+            value={name}
+            placeholder="새 데이터베이스(폴더) 이름"
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void create();
+              if (e.key === 'Escape') setCreating(false);
+            }}
+            aria-label="데이터베이스 이름"
+          />
+          <button className="primary" onClick={() => void create()} disabled={!name.trim()}>만들기</button>
+        </div>
+      ) : (
+        <>
+          <button className="new-note" onClick={() => setCreating(true)}>+ 새 데이터베이스</button>
+          <button
+            className="new-note"
+            onClick={() =>
+              void window.nops.db.importCsv().then(
+                (r) => r && onOpen(r.folder),
+                (e) => setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)),
+              )
+            }
+          >
+            CSV 가져오기
+          </button>
+        </>
+      )}
+      {error && <p className="warn small pad">{error}</p>}
+    </div>
+  );
+}

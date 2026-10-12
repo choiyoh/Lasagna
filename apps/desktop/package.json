@@ -34,6 +34,7 @@
     "@nopsidian/ipc-contract": "workspace:*",
     "@nopsidian/sync-gdrive": "workspace:*",
     "@parcel/watcher": "^2.6.0",
+    "@tanstack/react-virtual": "^3.14.15",
     "better-sqlite3": "^13.0.3",
     "dompurify": "^3.4.16",
     "graphology": "^0.26.0",

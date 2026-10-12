@@ -799,6 +799,152 @@ test.describe('링크 코어', () => {
     await expect(dialog).toHaveCount(0);
   });
 
+  test('데이터베이스: 만들기·속성·행·셀 편집·외부 편집·보드·필터·속성 이름 변경', async () => {
+    const page = await app.firstWindow();
+    const dbDir = path.join(vaultDir, '할일');
+
+    // 1) 새 데이터베이스
+    await page.getByRole('tab', { name: 'DB' }).click();
+    await page.getByRole('button', { name: '+ 새 데이터베이스' }).click();
+    await page.getByLabel('데이터베이스 이름').fill('할일');
+    await page.getByLabel('데이터베이스 이름').press('Enter');
+    const screen = page.getByTestId('db-screen');
+    await expect(screen).toBeVisible();
+    expect(readFileSync(path.join(dbDir, '_db.yaml'), 'utf8')).toContain('title: 할일');
+
+    // 2) 속성 추가 — 상태(상태형), 점수(숫자)
+    await screen.getByRole('button', { name: '속성', exact: true }).click();
+    const props = page.getByRole('dialog', { name: '속성 관리' });
+    await props.getByLabel('새 속성 이름').fill('상태');
+    await props.getByLabel('새 속성 형식').selectOption('status');
+    await props.getByLabel('새 속성 옵션').fill('할 일, 진행, 완료');
+    await props.getByRole('button', { name: '추가' }).click();
+    await expect(props.getByLabel('상태 형식')).toBeVisible();
+    await props.getByLabel('새 속성 이름').fill('점수');
+    await props.getByLabel('새 속성 형식').selectOption('number');
+    await props.getByRole('button', { name: '추가' }).click();
+    await expect(props.getByLabel('점수 형식')).toBeVisible();
+    const yaml1 = readFileSync(path.join(dbDir, '_db.yaml'), 'utf8');
+    expect(yaml1).toContain('상태:');
+    expect(yaml1).toContain('점수:');
+    await screen.getByRole('button', { name: '속성', exact: true }).click();
+
+    // 3) 새 행
+    await screen.getByRole('button', { name: '+ 새 행' }).click();
+    await page.getByLabel('새 행 제목').fill('첫 할일');
+    await page.getByLabel('새 행 제목').press('Enter');
+    await expect(page.getByTestId('db-table')).toContainText('첫 할일');
+    const first = path.join(dbDir, '첫 할일.md');
+    expect(readFileSync(first, 'utf8')).toMatch(/^---\ncreated: /);
+
+    // 4) 셀 편집: 상태 선택 → 프런트매터에 그 키만 쓰인다
+    const row = page.locator('.dbtable__row', { hasText: '첫 할일' });
+    await row.getByRole('combobox').selectOption('진행');
+    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 5000 }).toContain('상태: 진행');
+    // 점수(숫자): 셀을 눌러 입력
+    await row.locator('.dbtable__td').nth(2).click();
+    await row.locator('input[type=text]').fill('42');
+    await row.locator('input[type=text]').press('Enter');
+    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 5000 }).toMatch(/점수: 42/);
+
+    // 5) 외부 편집: 파일을 직접 만들면 표에 나타난다
+    writeFileSync(path.join(dbDir, '밖에서 만든.md'), '---\n상태: 완료\n점수: 7\n---\n본문\n');
+    await expect(page.getByTestId('db-table')).toContainText('밖에서 만든', { timeout: 8000 });
+
+    // 6) 보드 뷰: 상태별 열, 카드를 다른 열로 끌면 값이 바뀐다
+    await screen.getByLabel('보기 형태').selectOption('board');
+    await screen.getByRole('button', { name: /^그룹/ }).click();
+    await page.getByLabel('그룹 속성').selectOption('상태');
+    const board = page.getByTestId('db-board');
+    await expect(board.getByTestId('board-col-진행')).toContainText('첫 할일');
+    await expect(board.getByTestId('board-col-완료')).toContainText('밖에서 만든');
+    // 네이티브 끌기는 창 포커스에 좌우되므로 같은 DataTransfer 로 끌기 이벤트를 직접 보낸다.
+    await page.evaluate(async () => {
+      const tick = () => new Promise((r) => setTimeout(r, 50));
+      const card = [...document.querySelectorAll('.dbcard')].find((c) => c.textContent?.includes('첫 할일'))!;
+      const col = document.querySelector('[data-testid="board-col-완료"]')!;
+      const dt = new DataTransfer();
+      const fire = (el: Element, type: string) => el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+      fire(card, 'dragstart');
+      await tick();
+      fire(col, 'dragover');
+      await tick();
+      fire(col, 'drop');
+      await tick();
+      fire(card, 'dragend');
+    });
+    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 5000 }).toContain('상태: 완료');
+
+    // 7) 필터를 걸고 보기를 저장하면 _db.yaml 의 뷰가 바뀐다
+    await screen.getByLabel('보기 형태').selectOption('table');
+    await screen.getByRole('button', { name: /^필터/ }).click();
+    await page.getByRole('button', { name: '+ 조건 추가' }).click();
+    const filter = page.getByRole('dialog', { name: '필터' });
+    await filter.getByLabel('속성', { exact: true }).selectOption('점수');
+    await filter.getByLabel('조건', { exact: true }).selectOption('>=');
+    await filter.getByLabel('값', { exact: true }).fill('10');
+    await expect(page.getByTestId('db-table')).toContainText('첫 할일');
+    await expect(page.getByTestId('db-table')).not.toContainText('밖에서 만든');
+    await screen.getByRole('button', { name: '보기 저장' }).click();
+    await expect.poll(() => readFileSync(path.join(dbDir, '_db.yaml'), 'utf8'), { timeout: 5000 }).toContain('>=');
+
+    // 8) 속성 이름 변경은 모든 행의 키도 바꾼다
+    await screen.getByRole('button', { name: '속성', exact: true }).click();
+    await page.getByRole('dialog', { name: '속성 관리' }).getByRole('button', { name: '점수' }).first().click();
+    const rename = page.getByLabel('새 이름');
+    await rename.fill('우선순위');
+    await rename.press('Enter');
+    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 8000 }).toMatch(/우선순위: 42/);
+    expect(readFileSync(path.join(dbDir, '밖에서 만든.md'), 'utf8')).toContain('우선순위: 7');
+    expect(readFileSync(path.join(dbDir, '_db.yaml'), 'utf8')).not.toContain('점수');
+    expect(readFileSync(path.join(dbDir, '_db.yaml'), 'utf8')).toContain('우선순위');
+
+    // Esc 로 닫힌다(속성 창이 열려 있어도)
+    await page.keyboard.press('Escape');
+    await expect(screen).toHaveCount(0);
+    await page.getByRole('tab', { name: '파일' }).click();
+  });
+
+  test('데이터베이스: CSV 가져오기(열 형식 추정)와 내보내기', async () => {
+    const page = await app.firstWindow();
+    const tmp = mkdtempSync(path.join(tmpdir(), 'nops-csv-'));
+    const csv = path.join(tmp, '도서.csv');
+    const out = path.join(tmp, '내보냄.csv');
+    writeFileSync(
+      csv,
+      '\uFEFF제목,저자,평점,읽음,시작일\n클린 코드,"마틴, 로버트",5,true,2026-10-01\n리팩터링,파울러,4,false,2026/10/05\n"줄\n바꿈",누군가,3,yes,2026-10-07\n',
+    );
+    await app.evaluate(({ dialog }, f) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [f] });
+    }, csv);
+    await page.getByRole('tab', { name: 'DB' }).click();
+    await page.getByRole('button', { name: 'CSV 가져오기' }).click();
+    const table = page.getByTestId('db-table');
+    await expect(table).toContainText('클린 코드', { timeout: 8000 });
+    await expect(table).toContainText('리팩터링');
+    const dir = path.join(vaultDir, '도서');
+    const yaml = readFileSync(path.join(dir, '_db.yaml'), 'utf8');
+    expect(yaml).toMatch(/평점:\s*\{?\s*type: number/);
+    expect(yaml).toMatch(/읽음:[\s\S]*?type: checkbox/);
+    expect(yaml).toMatch(/시작일:[\s\S]*?type: date/);
+    const note = readFileSync(path.join(dir, '클린 코드.md'), 'utf8');
+    expect(note).toContain('저자: 마틴, 로버트');
+    expect(note).toContain('평점: 5');
+    expect(note).toContain('읽음: true');
+    expect(readFileSync(path.join(dir, '리팩터링.md'), 'utf8')).toContain('시작일: 2026-10-05'); // 슬래시 날짜도 정규화
+
+    await app.evaluate(({ dialog }, f) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath: f });
+    }, out);
+    await page.getByRole('button', { name: 'CSV 내보내기' }).click();
+    await expect.poll(() => existsSync(out), { timeout: 5000 }).toBe(true);
+    const text = readFileSync(out, 'utf8');
+    expect(text.charCodeAt(0)).toBe(0xfeff);
+    expect(text).toContain('클린 코드,"마틴, 로버트",5,true,2026-10-01');
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: '파일' }).click();
+  });
+
   test('블록 링크: 메뉴로 복사하고, [[노트#^ 자동완성으로 넣고, 링크를 열면 그 블록으로 간다', async () => {
     const page = await app.firstWindow();
     const target = note('블록대상', '# 블록대상\n\n첫 문단\n\n복사할 문단\n\n마지막 문단\n');
@@ -869,7 +1015,7 @@ test.describe('링크 코어', () => {
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'daily', 'graph', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
+  expect(keys).toEqual(['app', 'asset', 'daily', 'db', 'graph', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

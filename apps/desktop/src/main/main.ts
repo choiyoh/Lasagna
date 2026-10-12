@@ -43,6 +43,7 @@ import {
 } from './vault';
 import { readFile } from 'node:fs/promises';
 import { CredentialStore, SyncController } from './sync';
+import { addRow, createDatabase, editSchema, exportCsv, importCsv, updateCell } from './db';
 
 // Forge Vite 플러그인이 주입하는 전역
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -283,6 +284,25 @@ function registerHandlers() {
   handle('sync.enable', ({ enabled }) => syncController.setEnabled(enabled));
   handle('sync.plan', () => syncController.plan());
   handle('sync.run', ({ force }) => syncController.run(force ?? false));
+  handle('db.list', async () => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('databases');
+  });
+  handle('db.query', async (input) => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('queryDatabase', input) as never;
+  });
+  handle('db.updateCell', async ({ path: rel, prop, value }) => {
+    await updateCell(requireVault(), rel, prop, value);
+    return undefined;
+  });
+  handle('db.addRow', async ({ folder, title, values, template }) => ({ path: await addRow(requireVault(), folder, title, values, template) }));
+  handle('db.editSchema', async ({ folder, op }) => ({ touchedRows: await editSchema(requireVault(), folder, op) }));
+  handle('db.create', async ({ folder, title }) => ({ folder: await createDatabase(requireVault(), folder, title) }));
+  handle('db.exportCsv', ({ folder, viewId }) => exportCsv(requireVault(), folder, viewId));
+  handle('db.importCsv', () => importCsv(requireVault()));
   handle('tag.list', async () => {
     const v = requireVault();
     await v.index.ready;

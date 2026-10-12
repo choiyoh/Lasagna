@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { databaseRowPaths, dbFolders, listDatabases, queryDatabase, type DbQueryParams } from './db-queries';
 import { globalGraph, localGraph, type GlobalGraphOptions, type LocalGraphOptions } from './graph-queries';
 import {
   NO_INLINE_SCAN,
@@ -12,7 +13,7 @@ import {
   type ParsedNote,
 } from '@nopsidian/core';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -24,7 +25,8 @@ CREATE TABLE IF NOT EXISTS pages (
   mtime REAL NOT NULL,
   size INTEGER NOT NULL,
   hash TEXT NOT NULL,
-  note_id TEXT
+  note_id TEXT,
+  frontmatter TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_pages_path ON pages(path);
 CREATE TABLE IF NOT EXISTS aliases (page_id INTEGER NOT NULL, alias TEXT NOT NULL);
@@ -283,6 +285,7 @@ export class Indexer {
     const note = parseNote(content);
     const title = note.meta.title || path.posix.basename(rel, path.posix.extname(rel));
     const folder = path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel);
+    const fm = JSON.stringify(note.frontmatter?.data ?? {});
     this.db.transaction(() => {
       const existing = this.db.prepare(`SELECT id FROM pages WHERE path=?`).get(rel) as
         | { id: number }
@@ -291,14 +294,14 @@ export class Indexer {
       if (existing) {
         id = existing.id;
         this.db
-          .prepare(`UPDATE pages SET title=?, folder=?, mtime=?, size=?, hash=?, note_id=? WHERE id=?`)
-          .run(title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null, id);
+          .prepare(`UPDATE pages SET title=?, folder=?, mtime=?, size=?, hash=?, note_id=?, frontmatter=? WHERE id=?`)
+          .run(title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null, fm, id);
         this.clearDerived(id);
       } else {
         id = Number(
           this.db
-            .prepare(`INSERT INTO pages(path,title,folder,mtime,size,hash,note_id) VALUES(?,?,?,?,?,?,?)`)
-            .run(rel, title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null).lastInsertRowid,
+            .prepare(`INSERT INTO pages(path,title,folder,mtime,size,hash,note_id,frontmatter) VALUES(?,?,?,?,?,?,?,?)`)
+            .run(rel, title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null, fm).lastInsertRowid,
         );
       }
       this.db.prepare(`INSERT INTO fts(rowid,title,body) VALUES(?,?,?)`).run(id, title, content);
@@ -536,6 +539,24 @@ export class Indexer {
          ORDER BY p.path`,
       )
       .all(tag, like) as { path: string; title: string }[];
+  }
+
+  /** 데이터베이스(`_db.yaml` 이 있는 폴더) 목록 */
+  databases() {
+    return listDatabases(this.db, this.root);
+  }
+
+  databaseRowPaths(folder: string) {
+    return databaseRowPaths(this.db, this.root, folder);
+  }
+
+  databaseFolders() {
+    return dbFolders(this.db);
+  }
+
+  /** 데이터베이스 뷰 질의(필터·정렬·그룹·계산 행) */
+  queryDatabase(params: DbQueryParams) {
+    return queryDatabase(this.db, this.root, params);
   }
 
   globalGraph(opts: GlobalGraphOptions = {}) {

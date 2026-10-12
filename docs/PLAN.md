@@ -348,6 +348,15 @@ nopsidian/
 - macOS 패키징 메모: Forge 가 만든 앱의 ad-hoc 서명이 깨져(Info.plist not bound) safeStorage 가 꺼져 있었다 → `postPackage` 에서 다시 서명. 배포용은 개발자 인증서 서명 필요.
 - [ ] 남은 것: 실제 Google 계정으로 수동 E2E(2대), changes.list 증분 목록, 큰 파일 재개 업로드 실전 검증, 충돌 해결 UI(양쪽 내용 비교), 동기화 대상 폴더 선택.
 
+### 5단계: 데이터베이스 코어 (2026-10-12~13 구현)
+- 형식(`packages/core/src/db`): `_db.yaml` zod 스키마(속성 16종 — 관계·롤업·수식은 정의만 보존, 계산은 6단계)·뷰·필터 AST. 나쁜 속성/뷰는 버리고 `issues`(위치 포함)로 알린다. 값 정규화(`normalizeValue`/`toFrontmatterValue`): 프런트매터를 느슨하게 읽고 빈 값은 키 삭제.
+- 질의(`query.ts`, DeepSeek 구현): 필터(and/or 중첩·타입별 연산·상대 날짜)·정렬(빈 값 항상 뒤·옵션 순서)·그룹(빈 옵션 그룹 포함)·계산 행. 인덱서가 `pages.frontmatter` 를 저장하고 워커가 질의(2만 행: 필터/정렬/그룹 40~70ms).
+- 쓰기: `setFrontmatter`/`_db.yaml` 편집(`yaml-edit.ts`, DeepSeek 구현) — 주석·키 순서·CRLF·본문 바이트 보존, 같은 값 재설정은 바이트 동일. 속성 이름 변경은 모든 행 키도 변경.
+- IPC `db.*`: list/query/updateCell/addRow/editSchema/create/importCsv/exportCsv.
+- UI: 사이드바 DB 탭(목록·새 DB·CSV 가져오기), 표(가상화·열 너비·셀 편집)·보드(끌어서 값 변경)·목록·갤러리, 필터/정렬/그룹/속성 표시 → "보기 저장"(`_db.yaml`), 속성 관리(추가·형식·옵션·이름 변경·삭제), 새 행, 외부 편집 즉시 반영.
+- CSV(`csv.ts`, DeepSeek 구현): RFC4180 파서, 열 형식 추정(숫자·체크박스·날짜·URL·이메일·선택·다중 선택), 가져오기=새 DB, 내보내기=현재 뷰(재가져오기 가능한 형식).
+- [ ] 남은 것: 링크된 뷰(```dbview 펜스 에디터 노드), 템플릿 UI(`.templates/` 선택·기본 템플릿 설정 — 서버는 `defaultTemplate`/`template` 지원), 행 열기 방식(사이드/센터 피크), CSV 가져오기 열 매핑 UI·기존 DB로 가져오기, 보드 카드 순서·하위 그룹 UI, 계산 행 UI, 본문 첫 이미지 커버, 고유 ID 자동 부여, 제목(파일명) 인라인 편집.
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

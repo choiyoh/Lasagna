@@ -1,0 +1,254 @@
+import { dialog, BrowserWindow } from 'electron';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { atomicWrite, resolveInVault, saveNote } from '@nopsidian/core';
+import {
+  DB_FILE,
+  STORED_TYPES,
+  TITLE_PROP,
+  normalizeValue,
+  parseDbSchema,
+  property as propertySchema,
+  toFrontmatterValue,
+  view as viewSchema,
+  type CellValue,
+  type DbSchema,
+  type DbRow,
+} from '@nopsidian/core/db';
+import {
+  csvToRows,
+  guessColumns,
+  parseCsv,
+  rowsToCsvTable,
+  toCsv,
+  buildRowNote,
+  newDbYaml,
+  moveDbView,
+  removeDbProperty,
+  removeDbView,
+  renameDbProperty,
+  renameFrontmatterKey,
+  setDbMeta,
+  setDbProperty,
+  setFrontmatter,
+  upsertDbView,
+} from '@nopsidian/core/db';
+import type { z } from 'zod';
+import type { dbSchemaOp } from '@nopsidian/ipc-contract';
+import { expandTemplate } from '../workers/index/templates';
+import type { OpenVault } from './vault';
+
+type SchemaOp = z.infer<typeof dbSchemaOp>;
+
+const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+
+/** 노트가 속한 데이터베이스 폴더(가장 가까운 상위 `_db.yaml` 폴더). 없으면 null. */
+export async function dbFolderOf(v: OpenVault, notePath: string): Promise<string | null> {
+  await v.index.ready;
+  const folders = await v.index.query<string[]>('databaseFolders');
+  const dir = path.posix.dirname(notePath) === '.' ? '' : path.posix.dirname(notePath);
+  let best: string | null = null;
+  for (const f of folders) {
+    if ((f === '' || dir === f || dir.startsWith(`${f}/`)) && (best === null || f.length > best.length)) best = f;
+  }
+  return best;
+}
+
+export function readDbSchema(v: OpenVault, folder: string): DbSchema {
+  const text = readFileSync(resolveInVault(v.info.path, path.posix.join(folder, DB_FILE)), 'utf8');
+  return parseDbSchema(text, path.posix.basename(folder)).schema;
+}
+
+/** 행 노트의 속성 하나를 고친다. 프런트매터의 그 키만 바뀌고 나머지 바이트는 그대로다. */
+export async function updateCell(v: OpenVault, notePath: string, prop: string, value: unknown): Promise<void> {
+  if (prop === TITLE_PROP) throw new Error('제목은 노트 이름 변경(F2)으로 바꿔 주세요');
+  const folder = await dbFolderOf(v, notePath);
+  if (folder === null) throw new Error('이 노트는 데이터베이스의 행이 아니에요');
+  const def = readDbSchema(v, folder).properties[prop];
+  if (!def) throw new Error(`없는 속성: ${prop}`);
+  if (!STORED_TYPES.has(def.type)) throw new Error('이 속성은 계산되는 값이라 직접 고칠 수 없어요');
+  const fmValue = toFrontmatterValue(def, normalizeValue(def, value));
+  const disk = readFileSync(resolveInVault(v.info.path, notePath), 'utf8');
+  const next = setFrontmatter(disk, { [prop]: fmValue });
+  if (next === disk) return;
+  saveNote({ root: v.info.path, rel: notePath, content: next, baseHash: sha(disk), baseContent: disk });
+}
+
+const unsafeName = /[\\/:*?"<>|]/g;
+
+/** `폴더/이름.md` — 이미 있으면 ` 2`, ` 3` … */
+function freeNotePath(root: string, folder: string, title: string): string {
+  const base = [...title].filter((c) => c.charCodeAt(0) >= 32).join('').replace(unsafeName, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || '제목 없음';
+  for (let n = 1; ; n++) {
+    const rel = path.posix.join(folder, `${base}${n > 1 ? ` ${n}` : ''}.md`);
+    if (!existsSync(resolveInVault(root, rel))) return rel;
+  }
+}
+
+const localIso = (d: Date) => {
+  const off = -d.getTimezoneOffset();
+  const p = (n: number) => String(Math.trunc(Math.abs(n))).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}${off >= 0 ? '+' : '-'}${p(off / 60)}:${p(off % 60)}`;
+};
+
+export async function addRow(
+  v: OpenVault,
+  folder: string,
+  title: string,
+  values: Record<string, unknown> = {},
+  template?: string,
+): Promise<string> {
+  const schema = readDbSchema(v, folder);
+  const fm: Record<string, unknown> = {};
+  for (const [name, raw] of Object.entries(values)) {
+    const def = schema.properties[name];
+    if (!def || !STORED_TYPES.has(def.type)) continue;
+    const out = toFrontmatterValue(def, normalizeValue(def, raw));
+    if (out !== undefined) fm[name] = out;
+  }
+  const now = new Date();
+  fm.created = localIso(now);
+  const tpl = template ?? schema.defaultTemplate;
+  let content: string;
+  if (tpl) {
+    const body = readFileSync(resolveInVault(v.info.path, tpl), 'utf8');
+    content = setFrontmatter(expandTemplate(body, { now, title }), fm);
+  } else {
+    content = buildRowNote(fm, '');
+  }
+  const rel = freeNotePath(v.info.path, folder, title);
+  atomicWrite(resolveInVault(v.info.path, rel), content);
+  return rel;
+}
+
+export async function createDatabase(v: OpenVault, folder: string, title: string): Promise<string> {
+  const abs = resolveInVault(v.info.path, folder === '' ? '.' : folder);
+  mkdirSync(abs, { recursive: true });
+  const file = resolveInVault(v.info.path, path.posix.join(folder, DB_FILE));
+  if (existsSync(file)) throw new Error('이미 데이터베이스예요');
+  atomicWrite(file, newDbYaml(title));
+  return folder;
+}
+
+/** `_db.yaml` 편집. 속성 이름 변경은 모든 행의 프런트매터 키도 함께 바꾼다(실패한 행은 건너뛰고 센다). */
+export async function editSchema(v: OpenVault, folder: string, op: SchemaOp): Promise<number> {
+  const file = resolveInVault(v.info.path, path.posix.join(folder, DB_FILE));
+  const text = readFileSync(file, 'utf8');
+  let next: string;
+  let touched = 0;
+  switch (op.kind) {
+    case 'setProperty': {
+      const r = propertySchema.safeParse(op.def);
+      if (!r.success || op.name === TITLE_PROP) throw new Error('속성 정의가 올바르지 않아요');
+      next = setDbProperty(text, op.name, r.data);
+      break;
+    }
+    case 'removeProperty':
+      next = removeDbProperty(text, op.name);
+      break;
+    case 'renameProperty': {
+      if (op.to === TITLE_PROP) throw new Error('`title` 은 쓸 수 없는 이름이에요');
+      next = renameDbProperty(text, op.from, op.to);
+      if (next !== text) {
+        await v.index.ready;
+        for (const rel of await v.index.query<string[]>('databaseRowPaths', folder)) {
+          try {
+            const disk = readFileSync(resolveInVault(v.info.path, rel), 'utf8');
+            const renamed = renameFrontmatterKey(disk, op.from, op.to);
+            if (renamed !== disk) {
+              saveNote({ root: v.info.path, rel, content: renamed, baseHash: sha(disk), baseContent: disk });
+              touched++;
+            }
+          } catch {
+            // 프런트매터가 깨졌거나 새 이름이 이미 있는 행은 그대로 둔다
+          }
+        }
+      }
+      break;
+    }
+    case 'upsertView': {
+      const r = viewSchema.safeParse(op.view);
+      if (!r.success) throw new Error('뷰 설정이 올바르지 않아요');
+      next = upsertDbView(text, r.data);
+      break;
+    }
+    case 'removeView':
+      next = removeDbView(text, op.id);
+      break;
+    case 'moveView':
+      next = moveDbView(text, op.id, op.toIndex);
+      break;
+    case 'meta':
+      next = setDbMeta(text, {
+        ...(op.title !== undefined ? { title: op.title } : {}),
+        ...(op.rowsFolder !== undefined ? { rowsFolder: op.rowsFolder } : {}),
+        ...(op.defaultTemplate !== undefined ? { defaultTemplate: op.defaultTemplate ?? undefined } : {}),
+      });
+      break;
+  }
+  if (next !== text) atomicWrite(file, next);
+  return touched;
+}
+
+const dlgParent = () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? undefined;
+
+/** 현재 뷰(필터·정렬 적용)를 CSV 로 저장한다. 저장한 경로, 취소하면 null. */
+export async function exportCsv(v: OpenVault, folder: string, viewId?: string): Promise<{ path: string; rows: number } | null> {
+  await v.index.ready;
+  const rows: DbRow[] = [];
+  let first: Awaited<ReturnType<typeof queryAll>> | null = null;
+  for (let offset = 0; ; offset += 5000) {
+    const r = await queryAll(v, folder, viewId, offset);
+    first ??= r;
+    rows.push(...(r.rows as DbRow[]));
+    if (r.rows.length < 5000) break;
+  }
+  const schema = first!.schema;
+  const cols = first!.view.columns?.length ? first!.view.columns : [TITLE_PROP, ...Object.keys(schema.properties)];
+  const table = rowsToCsvTable(schema, cols, rows.map((r) => ({ title: r.title, values: r.values as Record<string, CellValue> })));
+  const opts = { title: 'CSV 로 내보내기', defaultPath: `${schema.title ?? 'database'}.csv`, filters: [{ name: 'CSV', extensions: ['csv'] }] };
+  const win = dlgParent();
+  const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+  if (r.canceled || !r.filePath) return null;
+  writeFileSync(r.filePath, toCsv(table, { bom: true }));
+  return { path: r.filePath, rows: rows.length };
+}
+
+async function queryAll(v: OpenVault, folder: string, viewId: string | undefined, offset: number) {
+  return v.index.query<{ schema: DbSchema; view: { columns?: string[] }; rows: { path: string; title: string; values: Record<string, unknown> }[] }>(
+    'queryDatabase',
+    { folder, viewId, offset, limit: 5000 },
+  );
+}
+
+/** CSV 파일을 골라 새 데이터베이스(폴더)로 만든다: 열 형식은 값을 보고 추정한다. */
+export async function importCsv(v: OpenVault): Promise<{ folder: string; rows: number; issues: string[] } | null> {
+  const opts = { title: 'CSV 가져오기', properties: ['openFile' as const], filters: [{ name: 'CSV', extensions: ['csv', 'tsv', 'txt'] }] };
+  const win = dlgParent();
+  const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  const file = r.filePaths[0];
+  if (r.canceled || !file) return null;
+  const table = parseCsv(readFileSync(file, 'utf8'), { delimiter: 'auto' });
+  if (table.length < 2) throw new Error('가져올 행이 없어요(첫 줄은 열 이름이에요)');
+  const columns = guessColumns(table);
+  const imported = csvToRows(table, columns);
+  const base = path.basename(file).replace(/\.[^.]+$/, '').replace(unsafeName, ' ').trim() || '가져온 데이터';
+  let folder = base;
+  for (let n = 2; existsSync(resolveInVault(v.info.path, folder)); n++) folder = `${base} ${n}`;
+  await createDatabase(v, folder, base);
+  const yamlFile = resolveInVault(v.info.path, path.posix.join(folder, DB_FILE));
+  let yamlText = readFileSync(yamlFile, 'utf8');
+  for (const c of columns) if (c.prop && !c.isTitle) yamlText = setDbProperty(yamlText, c.name, c.prop);
+  atomicWrite(yamlFile, yamlText);
+  const seen = new Set<string>();
+  const issues: string[] = [];
+  for (const row of imported) {
+    issues.push(...row.issues);
+    let rel = freeNotePath(v.info.path, folder, row.title);
+    for (let n = 2; seen.has(rel); n++) rel = path.posix.join(folder, `${row.title.replace(unsafeName, ' ').trim()} ${n}.md`);
+    seen.add(rel);
+    atomicWrite(resolveInVault(v.info.path, rel), buildRowNote(row.values, ''));
+  }
+  return { folder, rows: imported.length, issues: issues.slice(0, 30) };
+}

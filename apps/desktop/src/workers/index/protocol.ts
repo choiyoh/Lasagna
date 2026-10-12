@@ -9,7 +9,11 @@ export type IndexQuery =
   | 'headingsOf'
   | 'blocksOf'
   | 'globalGraph'
-  | 'localGraph';
+  | 'localGraph'
+  | 'databases'
+  | 'queryDatabase'
+  | 'databaseRowPaths'
+  | 'databaseFolders';
 
 export type WorkerRequest =
   | { id: string; method: 'list' }

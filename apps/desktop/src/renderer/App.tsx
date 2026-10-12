@@ -8,6 +8,8 @@ import { useAssetStore } from './assets';
 import { ConfirmDialog } from './ConfirmDialog';
 import { flushAll } from './flush';
 import { LinkPanel } from './LinkPanel';
+import { DatabaseScreen } from './db/DatabaseScreen';
+import { DbList } from './db/DbList';
 import { SyncDialog, syncStateText } from './SyncDialog';
 import { GraphScreen, LocalGraph } from './graph/GraphScreen';
 import { createLinkHost, linkNameFor } from './link-host';
@@ -90,10 +92,11 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   /** 링크로 열 때 이동할 제목/블록 */
   const [focus, setFocus] = useState<{ heading: string | null; block: string | null } | null>(null);
   const [creating, setCreating] = useState(false);
-  const [sideTab, setSideTab] = useState<'files' | 'tags'>('files');
+  const [sideTab, setSideTab] = useState<'files' | 'tags' | 'db'>('files');
   const [panelOpen, setPanelOpen] = useState(true);
   const [switcher, setSwitcher] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
+  const [dbOpen, setDbOpen] = useState<string | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [dockTab, setDockTab] = useState<'links' | 'graph'>('links');
@@ -235,9 +238,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         setSwitcher(true);
       } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyG') {
         e.preventDefault();
-        setGraphOpen((o) => !o);
-      } else if (e.key === 'Escape' && graphOpen) {
+        { setDbOpen(null); setGraphOpen((o) => !o); }
+      } else if (e.key === 'Escape' && (graphOpen || (dbOpen !== null && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)))) {
         setGraphOpen(false);
+        setDbOpen(null);
       } else if (e.key === 'F2') {
         e.preventDefault();
         void renameCurrent();
@@ -248,7 +252,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [renameCurrent, openDaily, graphOpen]);
+  }, [renameCurrent, openDaily, graphOpen, dbOpen]);
 
   useEffect(() => {
     if (!toast) return;
@@ -288,7 +292,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               <button className="new-note" onClick={() => void openDaily()} title="오늘의 노트 (⌘⌥D)">
                 오늘
               </button>
-              <button className="new-note" onClick={() => setGraphOpen((o) => !o)} title="그래프 (⌘⇧G)">
+              <button className="new-note" onClick={() => { setDbOpen(null); setGraphOpen((o) => !o); }} title="그래프 (⌘⇧G)">
                 그래프
               </button>
               <button className="new-note" onClick={() => setSwitcher(true)} title="빠른 전환기 (⌘O)">
@@ -301,6 +305,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         <div className="sidebar__tabs" role="tablist">
           <button role="tab" aria-selected={sideTab === 'files'} className={sideTab === 'files' ? 'active' : ''} onClick={() => setSideTab('files')}>
             파일
+          </button>
+          <button role="tab" aria-selected={sideTab === 'db'} className={sideTab === 'db' ? 'active' : ''} onClick={() => setSideTab('db')}>
+            DB
           </button>
           <button role="tab" aria-selected={sideTab === 'tags'} className={sideTab === 'tags' ? 'active' : ''} onClick={() => setSideTab('tags')}>
             태그
@@ -329,13 +336,26 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             )
           ) : sideTab === 'tags' ? (
             <TagPanel onOpen={setSelected} />
+          ) : sideTab === 'db' ? (
+            <DbList onOpen={(f) => { setGraphOpen(false); setDbOpen(f); }} />
           ) : (
             <TreeView nodes={tree} selected={selected} onSelect={setSelected} />
           )}
         </nav>
       </aside>
       <main className="content">
-        {graphOpen ? (
+        {dbOpen !== null ? (
+          <DatabaseScreen
+            key={dbOpen}
+            folder={dbOpen}
+            vaultId={vault.id}
+            onOpenNote={(p) => {
+              setSelected(p);
+              setDbOpen(null);
+            }}
+            onClose={() => setDbOpen(null)}
+          />
+        ) : graphOpen ? (
           <GraphScreen
             current={selected}
             onOpen={(p) => {

@@ -97,6 +97,73 @@ export const syncRunSummary = z.object({
   errors: z.array(z.object({ path: z.string(), message: z.string() })),
 });
 
+// ── 데이터베이스(폴더 + _db.yaml) ──
+export const dbRowSchema = z.object({
+  path: relPath,
+  title: z.string(),
+  values: z.record(z.string(), z.unknown()),
+  created: z.string().optional(),
+  updated: z.string().optional(),
+});
+export type DbRowDto = z.infer<typeof dbRowSchema>;
+const dbGroup: z.ZodType<DbGroupDto> = z.lazy(() =>
+  z.object({
+    key: z.string().nullable(),
+    label: z.string(),
+    count: z.number(),
+    hidden: z.number(),
+    rows: z.array(dbRowSchema),
+    sub: z.array(dbGroup).optional(),
+  }),
+);
+export interface DbGroupDto {
+  key: string | null;
+  label: string;
+  count: number;
+  hidden: number;
+  rows: DbRowDto[];
+  sub?: DbGroupDto[];
+}
+export const dbInfo = z.object({ folder: z.string(), title: z.string(), rowCount: z.number(), issues: z.number() });
+export const dbQueryInput = z.object({
+  folder: z.string().max(1024),
+  viewId: z.string().max(200).optional(),
+  /** 저장하지 않은 임시 뷰(필터·정렬 UI) — main/worker 가 view 스키마로 다시 검증한다 */
+  view: z.unknown().optional(),
+  offset: z.number().int().min(0).optional(),
+  limit: z.number().int().min(1).max(5000).optional(),
+  groupLimit: z.number().int().min(1).max(1000).optional(),
+});
+export const dbQueryOutput = z.object({
+  folder: z.string(),
+  /** `@nopsidian/core/db` 의 DbSchema — 렌더러가 core 스키마 타입으로 읽는다 */
+  schema: z.unknown(),
+  issues: z.array(z.object({ path: z.string(), message: z.string() })),
+  view: z.unknown(),
+  total: z.number(),
+  matched: z.number(),
+  rows: z.array(dbRowSchema),
+  groups: z.array(dbGroup).nullable(),
+  calc: z.record(z.string(), z.unknown()),
+});
+export type DbQueryResult = z.infer<typeof dbQueryOutput>;
+
+/** `_db.yaml` 편집 작업 — 값 검증은 main 이 core 스키마로 다시 한다 */
+export const dbSchemaOp = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('setProperty'), name: z.string().min(1).max(100), def: z.unknown() }),
+  z.object({ kind: z.literal('removeProperty'), name: z.string().min(1).max(100) }),
+  z.object({ kind: z.literal('renameProperty'), from: z.string().min(1).max(100), to: z.string().min(1).max(100) }),
+  z.object({ kind: z.literal('upsertView'), view: z.unknown() }),
+  z.object({ kind: z.literal('removeView'), id: z.string().min(1).max(200) }),
+  z.object({ kind: z.literal('moveView'), id: z.string().min(1).max(200), toIndex: z.number().int().min(0) }),
+  z.object({
+    kind: z.literal('meta'),
+    title: z.string().max(200).optional(),
+    rowsFolder: z.string().max(200).optional(),
+    defaultTemplate: z.string().max(1024).nullable().optional(),
+  }),
+]);
+
 export const movePlan = z.object({
   moves: z.array(z.object({ from: relPath, to: relPath })),
   /** 링크가 바뀌는 노트(이동 전 경로) */
@@ -231,6 +298,31 @@ export const contract = {
   /** 아무것도 바꾸지 않고 무엇을 할지 계산만 한다(첫 동기화 확인용). */
   'sync.plan': { input: z.undefined(), output: syncPlanSummary },
   'sync.run': { input: z.object({ force: z.boolean().default(false) }), output: syncRunSummary },
+  'db.list': { input: z.undefined(), output: z.array(dbInfo) },
+  'db.query': { input: dbQueryInput, output: dbQueryOutput },
+  /** 행 노트의 속성 하나를 고친다(프런트매터의 그 키만 바뀐다). value null = 비움. */
+  'db.updateCell': {
+    input: z.object({ path: relPath, prop: z.string().min(1).max(100), value: z.unknown() }),
+    output: z.undefined(),
+  },
+  /** 새 행(노트)을 만든다. 템플릿이 있으면 그 본문·기본 속성을 쓴다. */
+  'db.addRow': {
+    input: z.object({
+      folder: z.string().max(1024),
+      title: z.string().min(1).max(200),
+      values: z.record(z.string(), z.unknown()).optional(),
+      template: relPath.optional(),
+    }),
+    output: z.object({ path: relPath }),
+  },
+  /** `_db.yaml` 을 고친다. renameProperty 는 모든 행의 프런트매터 키도 함께 바꾼다. */
+  'db.editSchema': { input: z.object({ folder: z.string().max(1024), op: dbSchemaOp }), output: z.object({ touchedRows: z.number() }) },
+  /** 폴더를 데이터베이스로 만든다(`_db.yaml` 생성). 폴더가 없으면 만든다. */
+  'db.create': { input: z.object({ folder: z.string().max(1024), title: z.string().min(1).max(200) }), output: z.object({ folder: z.string() }) },
+  /** 현재 뷰를 CSV 로 저장(저장 대화상자). 취소하면 null. */
+  'db.exportCsv': { input: z.object({ folder: z.string().max(1024), viewId: z.string().max(200).optional() }), output: z.object({ path: z.string(), rows: z.number() }).nullable() },
+  /** CSV 파일을 골라 새 데이터베이스로 만든다(열 형식 자동 추정). 취소하면 null. */
+  'db.importCsv': { input: z.undefined(), output: z.object({ folder: z.string(), rows: z.number(), issues: z.array(z.string()) }).nullable() },
   'tag.list': { input: z.undefined(), output: z.array(z.object({ tag: z.string(), count: z.number() })) },
   'tag.notes': {
     input: z.object({ tag: z.string().max(200) }),

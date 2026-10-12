@@ -170,3 +170,66 @@ button.link { color: var(--muted); }
 .syncdialog .dialog__actions.left { justify-content: flex-start; margin-top: 4px; }
 .syncdialog__ops { list-style: none; margin: 0; padding: 0; max-height: 28vh; overflow: auto; width: 100%; font-size: 12.5px; }
 .syncdialog__ops li { padding: 1px 0; word-break: break-all; }
+
+/* 데이터베이스 */
+.dbscreen { flex: 1; display: flex; flex-direction: column; min-height: 0; height: 100%; position: relative; }
+.dbscreen__head { display: flex; align-items: center; gap: 10px; padding: 38px 16px 6px; }
+.dbscreen__head h2 { margin: 0; font-size: 18px; }
+.dbscreen__head .spacer { flex: 1; }
+.dbscreen button, .dbtoolbar button, .dbpop button, .dbadd button { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border); }
+.dbscreen button.primary, .dbpop button.primary, .dbadd button.primary { background: var(--accent); border-color: transparent; color: #fff; }
+.dbscreen button:disabled { opacity: 0.5; }
+.dbscreen button.danger { color: #d44; }
+.dbtabs { display: flex; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+.dbtabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 5px 10px; color: var(--muted); }
+.dbtabs button.active { color: var(--fg); border-bottom-color: var(--accent); }
+.dbtoolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 16px; position: relative; font-size: 13px; }
+.dbtoolbar button.on { background: var(--hover); }
+.dbtoolbar select, .dbpop select, .dbpop input, .dbadd input, .dbprops input { padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+.dbtoolbar__type { display: flex; align-items: center; gap: 4px; }
+.dbtoolbar__dirty { display: flex; gap: 4px; margin-left: auto; }
+.dbpop { position: absolute; z-index: 20; top: 100%; left: 16px; min-width: 360px; max-width: 90%; padding: 10px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); display: flex; flex-direction: column; gap: 6px; }
+.dbscreen > .dbpop { top: 70px; right: 16px; left: auto; }
+.dbpop__row { display: flex; gap: 6px; align-items: center; }
+.dbpop__row input { flex: 1; min-width: 0; }
+.dbpop__actions { display: flex; gap: 6px; }
+.dbprops__name { border: 0 !important; padding: 0 !important; min-width: 110px; text-align: left; font-weight: 600; }
+.dbadd { display: flex; gap: 6px; padding: 6px 16px; }
+.dbadd input { flex: 1; }
+.dbissues { margin: 4px 16px; font-size: 12.5px; color: #d99a1b; }
+.dbscreen__body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.dbtable { flex: 1; overflow: auto; min-height: 0; }
+.dbtable__inner { position: relative; }
+.dbtable__head { display: flex; position: sticky; top: 0; z-index: 2; background: var(--bg-side); border-bottom: 1px solid var(--border); height: 30px; }
+.dbtable__th { position: relative; padding: 5px 8px; font-size: 12px; color: var(--muted); border-right: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
+.dbtable__grip { position: absolute; right: 0; top: 0; bottom: 0; width: 6px; cursor: col-resize; }
+.dbtable__row { position: absolute; left: 0; right: 0; display: flex; border-bottom: 1px solid var(--border); }
+.dbtable__row:hover { background: var(--hover); }
+.dbtable__td { padding: 4px 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: none; border-right: 1px solid var(--border); font-size: 13px; line-height: 22px; }
+.dbtable__td input[type='text'], .dbtable__td select { width: 100%; box-sizing: border-box; }
+.dbtable__td.editing { background: var(--bg); outline: 2px solid var(--accent); outline-offset: -2px; }
+.dbtable__title { color: var(--accent); font-weight: 600; text-align: left; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.dbtable__calc { display: flex; border-top: 1px solid var(--border); background: var(--bg-side); }
+.chip { display: inline-block; padding: 0 8px; margin-right: 4px; border-radius: 10px; background: var(--hover); font-size: 12px; line-height: 20px; }
+.chip.on { background: var(--accent); color: #fff; }
+.chip input { display: none; }
+.cell__stars button { border: 0; color: var(--muted); padding: 0 1px; }
+.cell__stars button.on { color: #e5a50a; }
+.cell__date { display: flex; gap: 4px; }
+.dbboard { display: flex; gap: 12px; padding: 12px 16px; align-items: flex-start; overflow: auto; flex: 1; }
+.dbboard__col { width: 260px; flex: none; background: var(--bg-side); border-radius: 10px; padding: 8px; }
+.dbboard__col.over { outline: 2px dashed var(--accent); }
+.dbboard__col h4 { margin: 0 0 8px; padding-top: 4px; border-top: 3px solid transparent; font-size: 13px; }
+.dbboard__cards { display: flex; flex-direction: column; gap: 6px; min-height: 24px; }
+.dbboard__add { width: 100%; margin-top: 6px; border: 0 !important; color: var(--muted); text-align: left; }
+.dbcard { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px; cursor: grab; }
+.dbcard__title { font-weight: 600; text-align: left; border: 0 !important; padding: 0 !important; }
+.dbcard__prop { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.dblist { list-style: none; margin: 0; padding: 8px 16px; }
+.dblist li { display: flex; gap: 14px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.dblist__title { color: var(--accent); font-weight: 600; border: 0 !important; padding: 0 !important; min-width: 220px; text-align: left; }
+.dbgallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; padding: 12px 16px; }
+.dbgallery__card { border: 1px solid var(--border); border-radius: 10px; padding: 8px; cursor: pointer; }
+.dbgallery__cover { height: 110px; border-radius: 6px; background: var(--hover); display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 6px; font-size: 28px; color: var(--muted); }
+.dbgallery__cover img { width: 100%; height: 100%; object-fit: cover; }
+.dblistpanel { padding: 4px 0; }

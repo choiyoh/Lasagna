@@ -10,6 +10,7 @@
     "typecheck": "tsc -p ."
   },
   "devDependencies": {
+    "@nopsidian/core": "workspace:*",
     "@types/node": "^22.20.5"
   },
   "exports": {

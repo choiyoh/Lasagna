@@ -296,6 +296,9 @@ importers:
 
   packages/sync-gdrive:
     devDependencies:
+      '@nopsidian/core':
+        specifier: workspace:*
+        version: link:../core
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5

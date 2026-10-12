@@ -60,6 +60,43 @@ export const graphSettings = z.object({
 });
 export type GraphSettings = z.infer<typeof graphSettings>;
 
+
+export const syncStatus = z.object({
+  /** Google 클라이언트 ID 가 저장돼 있다 */
+  configured: z.boolean(),
+  /** 계정이 연결돼 있다(토큰 보유) */
+  connected: z.boolean(),
+  /** 이 볼트에서 동기화를 켰다 */
+  enabled: z.boolean(),
+  /** 첫 동기화 계획을 확인하고 한 번 실행했다 — 그 뒤부터 자동 동기화 */
+  confirmedFirst: z.boolean(),
+  state: z.enum(['off', 'idle', 'syncing', 'offline', 'error', 'needsAuth', 'blocked']),
+  lastSync: z.number().nullable(),
+  message: z.string().nullable(),
+  /** 충돌 표식이 남았거나 충돌 사본이 생긴 노트 */
+  conflicts: z.array(z.string()),
+});
+export type SyncStatus = z.infer<typeof syncStatus>;
+
+export const syncPlanSummary = z.object({
+  firstSync: z.boolean(),
+  blocked: z.string().nullable(),
+  tracked: z.number(),
+  counts: z.record(z.string(), z.number()),
+  ops: z.array(z.object({ type: z.string(), path: z.string(), to: z.string().optional() })),
+  truncated: z.boolean(),
+});
+export const syncRunSummary = z.object({
+  pushed: z.number(),
+  pulled: z.number(),
+  merged: z.number(),
+  deleted: z.number(),
+  conflicts: z.number(),
+  failed: z.number(),
+  conflictPaths: z.array(z.string()),
+  errors: z.array(z.object({ path: z.string(), message: z.string() })),
+});
+
 export const movePlan = z.object({
   moves: z.array(z.object({ from: relPath, to: relPath })),
   /** 링크가 바뀌는 노트(이동 전 경로) */
@@ -180,6 +217,20 @@ export const contract = {
   },
   'graph.getSettings': { input: z.undefined(), output: graphSettings.nullable() },
   'graph.setSettings': { input: graphSettings, output: z.undefined() },
+  'sync.status': { input: z.undefined(), output: syncStatus },
+  /** Google 클라이언트 ID(사용자 본인 GCP 프로젝트)를 OS 키체인으로 암호화해 저장한다. */
+  'sync.setClient': {
+    input: z.object({ clientId: z.string().min(10).max(300), clientSecret: z.string().max(300).optional() }),
+    output: syncStatus,
+  },
+  /** 시스템 브라우저로 Google 로그인(PKCE + loopback)을 열고, 끝나면 연결 상태를 돌려준다. */
+  'sync.connect': { input: z.undefined(), output: syncStatus },
+  'sync.disconnect': { input: z.undefined(), output: syncStatus },
+  /** 이 볼트의 동기화를 켜고 끈다. */
+  'sync.enable': { input: z.object({ enabled: z.boolean() }), output: syncStatus },
+  /** 아무것도 바꾸지 않고 무엇을 할지 계산만 한다(첫 동기화 확인용). */
+  'sync.plan': { input: z.undefined(), output: syncPlanSummary },
+  'sync.run': { input: z.object({ force: z.boolean().default(false) }), output: syncRunSummary },
   'tag.list': { input: z.undefined(), output: z.array(z.object({ tag: z.string(), count: z.number() })) },
   'tag.notes': {
     input: z.object({ tag: z.string().max(200) }),
@@ -219,6 +270,7 @@ export const events = {
     external: z.boolean().default(true),
   }),
   'asset.changed': z.object({ path: relPath, kind: z.enum(['add', 'change', 'unlink']) }),
+  'sync.changed': syncStatus,
   'index.progress': z.object({ done: z.number(), total: z.number() }),
 } as const;
 export type EventName = keyof typeof events;

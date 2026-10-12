@@ -339,6 +339,15 @@ nopsidian/
 - 성능(합성 볼트, Electron 패키지): 5천 노드/1.5만 링크 · 1만 노드/3만 링크 모두 배치 중·후 60fps. `graph.global` 질의 0.7초(5천)/1.5초(1만) — 캐시는 후속 과제.
 - [ ] 남은 것: DB 관계 링크 노드 종류(5단계 이후), 첨부 노드, 위치 캐시(`graph_layout`), 라벨 겹침 개선.
 
+### 3.5단계: Google Drive 동기화 (2026-10-12 구현, 실제 Google 계정 E2E는 사용자 확인 필요)
+- 엔진(`packages/sync-gdrive`, 순수 TS): `planSync`(로컬/원격/base 해시 판단표, 이름 변경 추적, 삭제 20% 안전장치) + `executePlan`(3-way 병합·충돌 사본·낙관적 동시성·작업별 실패 격리). 메모리 Drive/로컬/상태 가짜로 기기 A·B·Drive 3자 시나리오 17개 + 실제 폴더·SQLite 통합 테스트.
+- Drive REST 클라이언트(`drive-rest.ts`, DeepSeek 구현): `drive.file` 스코프, 볼트별 `appProperties`, Drive 웹 편집 감지(md5 대조 후 해시 재계산), multipart/resumable, 재시도·백오프.
+- OAuth(`oauth.ts`, DeepSeek 구현): PKCE + 127.0.0.1 loopback, 토큰 갱신·`TokenProvider`.
+- 데스크톱: `SyncWorker`(worker_thread, 네트워크는 여기만·호스트 허용 목록), `FsLocalStore`·`SqliteSyncState`(DeepSeek 구현, `.nopsidian/sync/`), Main `SyncController`(자격 증명은 safeStorage 로 userData 에 암호화, 볼트에는 두지 않음), IPC `sync.*`, 사이드바 "☁" + 설정/첫 동기화 미리보기 대화상자, 충돌 목록. 첫 동기화 계획을 확인·실행하기 전에는 자동 동기화를 하지 않는다. 볼트 식별은 볼트 이름 기반(같은 이름의 폴더 = 같은 Drive 폴더).
+- 설정 안내: `docs/sync-setup.md`.
+- macOS 패키징 메모: Forge 가 만든 앱의 ad-hoc 서명이 깨져(Info.plist not bound) safeStorage 가 꺼져 있었다 → `postPackage` 에서 다시 서명. 배포용은 개발자 인증서 서명 필요.
+- [ ] 남은 것: 실제 Google 계정으로 수동 E2E(2대), changes.list 증분 목록, 큰 파일 재개 업로드 실전 검증, 충돌 해결 UI(양쪽 내용 비교), 동기화 대상 폴더 선택.
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

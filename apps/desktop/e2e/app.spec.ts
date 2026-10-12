@@ -29,7 +29,8 @@ test.beforeAll(async () => {
   for (let attempt = 1; attempt <= 3; attempt++) {
     const candidate = await electron.launch({
       executablePath: executable,
-      args: [`--user-data-dir=${path.join(base, `userdata-${attempt}`)}`],
+      // 재빌드마다 달라지는 ad-hoc 서명이 실제 키체인 허용 대화상자를 띄우지 않도록 모의 키체인을 쓴다.
+      args: ['--use-mock-keychain', `--user-data-dir=${path.join(base, `userdata-${attempt}`)}`],
     });
     try {
       await candidate.firstWindow({ timeout: attempt === 1 ? 60_000 : 45_000 });
@@ -777,6 +778,27 @@ test.describe('링크 코어', () => {
     await expect(page.getByTestId('graph-screen')).toHaveCount(0);
   });
 
+  test('동기화: 설정 대화상자에서 클라이언트를 저장하고, 연결 전에는 켤 수 없다', async () => {
+    const page = await app.firstWindow();
+    await expect(page.getByTestId('sync-bar')).toContainText('동기화 꺼짐');
+    await page.getByTestId('sync-bar').click();
+    const dialog = page.getByRole('dialog', { name: 'Google Drive 동기화' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Google 계정 연결' })).toBeDisabled();
+    await expect(dialog.getByRole('checkbox')).toBeDisabled();
+    await dialog.getByLabel('클라이언트 ID').fill('1234567890-abcdefghijk.apps.googleusercontent.com');
+    await dialog.getByRole('button', { name: '저장' }).click();
+    await expect(dialog.getByRole('button', { name: 'Google 계정 연결' })).toBeEnabled({ timeout: 8000 });
+    await expect(dialog).toContainText('클라이언트 ID가 저장돼 있어요');
+    expect(await page.evaluate(() => window.nops.sync.status())).toMatchObject({ configured: true, connected: false, enabled: false, state: 'off' });
+    // 아직 연결 전이니 계획을 세울 수 없다
+    await expect(page.evaluate(() => window.nops.sync.plan())).rejects.toThrow(/연결되지 않았어요/);
+    // 볼트 안에 로그인 정보가 새지 않았다
+    expect(existsSync(path.join(vaultDir, '.nopsidian', 'sync-auth.json'))).toBe(false);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+  });
+
   test('블록 링크: 메뉴로 복사하고, [[노트#^ 자동완성으로 넣고, 링크를 열면 그 블록으로 간다', async () => {
     const page = await app.firstWindow();
     const target = note('블록대상', '# 블록대상\n\n첫 문단\n\n복사할 문단\n\n마지막 문단\n');
@@ -847,7 +869,7 @@ test.describe('링크 코어', () => {
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'daily', 'graph', 'link', 'note', 'on', 'search', 'tag', 'template', 'vault']);
+  expect(keys).toEqual(['app', 'asset', 'daily', 'graph', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

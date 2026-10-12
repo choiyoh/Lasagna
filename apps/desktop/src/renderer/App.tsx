@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { NoteSummary, SearchHit, VaultInfo } from '@nopsidian/ipc-contract';
+import type { NoteSummary, SearchHit, SyncStatus, VaultInfo } from '@nopsidian/ipc-contract';
 import { createLinkResolver } from '@nopsidian/core/links';
 import type { WikiLinkTarget } from '@nopsidian/editor/nops';
 import { showTextPrompt } from '@nopsidian/editor/nops';
@@ -8,6 +8,7 @@ import { useAssetStore } from './assets';
 import { ConfirmDialog } from './ConfirmDialog';
 import { flushAll } from './flush';
 import { LinkPanel } from './LinkPanel';
+import { SyncDialog, syncStateText } from './SyncDialog';
 import { GraphScreen, LocalGraph } from './graph/GraphScreen';
 import { createLinkHost, linkNameFor } from './link-host';
 import { QuickSwitcher } from './QuickSwitcher';
@@ -93,6 +94,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [panelOpen, setPanelOpen] = useState(true);
   const [switcher, setSwitcher] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [sync, setSync] = useState<SyncStatus | null>(null);
   const [dockTab, setDockTab] = useState<'links' | 'graph'>('links');
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -218,6 +221,11 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     }
   }, [selected, refresh]);
 
+  useEffect(() => {
+    void window.nops.sync.status().then(setSync);
+    return window.nops.on('sync.changed', (s) => setSync(s as SyncStatus));
+  }, []);
+
   // 단축키: ⌘O 빠른 전환기 · F2 이름 변경 · ⌘⌥D 오늘의 노트
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -298,6 +306,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             태그
           </button>
         </div>
+        <button className="syncbar" onClick={() => setSyncOpen(true)} title="Google Drive 동기화" data-testid="sync-bar">
+          ☁ {sync?.enabled ? syncStateText(sync) : '동기화 꺼짐'}
+        </button>
         {progress && (
           <p className="muted small">
             인덱싱 {progress.done}/{progress.total}
@@ -372,6 +383,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       {switcher && (
         <QuickSwitcher notes={notes} onOpen={setSelected} onCreate={(n) => void createNote(n)} onClose={() => setSwitcher(false)} />
       )}
+      {syncOpen && <SyncDialog status={sync} onClose={() => setSyncOpen(false)} onOpenNote={setSelected} />}
       {confirm && <ConfirmDialog {...confirm} onCancel={() => setConfirm(null)} />}
       {toast && (
         <div className="toast" role="status">

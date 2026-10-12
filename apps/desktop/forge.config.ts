@@ -2,6 +2,8 @@ import type { ForgeConfig } from '@electron-forge/shared-types';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 import { copyNativeModules } from './native-modules';
 
 const config: ForgeConfig = {
@@ -18,6 +20,14 @@ const config: ForgeConfig = {
     packageAfterCopy: async (_config, buildPath) => {
       copyNativeModules(buildPath, process.cwd());
     },
+    // 앱 이름을 바꾸고 퓨즈를 쓰면 Electron 의 서명이 깨져(Info.plist not bound) macOS 가 키체인(safeStorage)을
+    // 막는다. 개발자 인증서 없이도 동작하도록 마지막에 ad-hoc 으로 다시 서명한다(배포용 서명은 별도).
+    postPackage: async (_config, result) => {
+      if (process.platform !== 'darwin') return;
+      for (const out of result.outputPaths) {
+        execFileSync('codesign', ['--force', '--deep', '--sign', '-', path.join(out, 'Nopsidian.app')]);
+      }
+    },
   },
   plugins: [
     new VitePlugin({
@@ -25,6 +35,7 @@ const config: ForgeConfig = {
         { entry: 'src/main/main.ts', config: 'vite.main.config.ts', target: 'main' },
         { entry: 'src/preload/preload.ts', config: 'vite.preload.config.ts', target: 'preload' },
         { entry: 'src/workers/index/index-worker.ts', config: 'vite.worker.config.ts', target: 'main' },
+        { entry: 'src/workers/sync/sync-worker.ts', config: 'vite.worker.config.ts', target: 'main' },
       ],
       renderer: [{ name: 'main_window', config: 'vite.renderer.config.ts' }],
     }),

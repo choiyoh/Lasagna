@@ -34,6 +34,13 @@ export interface OpenVault {
   selfWrites: Map<string, string>;
 }
 
+/** 동기화 같은 부가 기능이 볼트 수명주기에 끼어드는 지점 */
+export const vaultHooks: {
+  opened?: (info: VaultInfo) => void | Promise<void>;
+  closing?: () => void | Promise<void>;
+  changed?: () => void;
+} = {};
+
 let current: OpenVault | null = null;
 let broadcast: (name: EventName, payload: unknown) => void = () => {};
 
@@ -58,6 +65,7 @@ export async function openVaultAt(root: string): Promise<VaultInfo> {
   const cfg = path.join(dotDir, 'config.json');
   if (!existsSync(cfg)) writeFileSync(cfg, JSON.stringify({ version: 1 }, null, 2));
 
+  await vaultHooks.closing?.();
   await current?.index.close();
   current = null;
 
@@ -65,6 +73,7 @@ export async function openVaultAt(root: string): Promise<VaultInfo> {
   const bases = new Map<string, { hash: string; content: string }>();
   const selfWrites = new Map<string, string>();
   const index = new IndexClient(real, (e) => {
+    if (e.name === 'note.changed' || e.name === 'asset.changed') vaultHooks.changed?.();
     if (e.name === 'note.changed') {
       const mine = e.payload.hash !== undefined && selfWrites.get(e.payload.path) === e.payload.hash;
       if (mine) selfWrites.delete(e.payload.path);
@@ -75,6 +84,7 @@ export async function openVaultAt(root: string): Promise<VaultInfo> {
   });
   current = { info, index, bases, selfWrites };
   pushRecent(info);
+  await vaultHooks.opened?.(info);
   return info;
 }
 

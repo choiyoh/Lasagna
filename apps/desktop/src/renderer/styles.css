@@ -154,3 +154,19 @@ button.link { color: var(--muted); }
 .graphscreen__slider { display: flex; flex-direction: column; gap: 2px; }
 .graphscreen__group { display: flex; gap: 4px; align-items: center; }
 .graphscreen__group input:not([type='color']) { flex: 1; min-width: 0; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+
+/* 동기화 */
+.syncbar { display: block; width: calc(100% - 16px); margin: 0 8px 6px; padding: 3px 8px; border-radius: 6px; font-size: 12px; text-align: left; color: var(--muted); }
+.syncbar:hover { background: var(--hover); color: var(--fg); }
+.syncdialog { width: min(560px, 94vw); max-height: 88vh; overflow: auto; }
+.syncdialog section { margin: 12px 0; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.syncdialog h3 { margin: 0; font-size: 13px; }
+.syncdialog input:not([type='checkbox']) { width: 100%; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+.syncdialog button { padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); }
+.syncdialog button.primary { background: var(--accent); border-color: transparent; color: #fff; }
+.syncdialog button.link { border: 0; padding: 0; color: var(--accent); }
+.syncdialog button:disabled { opacity: 0.5; }
+.syncdialog .warn { color: #d99a1b; margin: 0; }
+.syncdialog .dialog__actions.left { justify-content: flex-start; margin-top: 4px; }
+.syncdialog__ops { list-style: none; margin: 0; padding: 0; max-height: 28vh; overflow: auto; width: 100%; font-size: 12.5px; }
+.syncdialog__ops li { padding: 1px 0; word-break: break-all; }

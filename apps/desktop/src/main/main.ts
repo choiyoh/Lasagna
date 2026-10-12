@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, shell } from 'electron';
+import { app, BrowserWindow, safeStorage, session, shell } from 'electron';
 import { createHash } from 'node:crypto';
 import { applyRename, planRename, undoRename } from './rename';
 import { linkMention } from '../workers/index/mention-link';
@@ -39,8 +39,10 @@ import {
   readVaultConfig,
   requireVault,
   setBroadcaster,
+  vaultHooks,
 } from './vault';
 import { readFile } from 'node:fs/promises';
+import { CredentialStore, SyncController } from './sync';
 
 // Forge Vite 플러그인이 주입하는 전역
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -107,6 +109,23 @@ function dailyTemplate(root: string, templatePath: string | null, day: string): 
   }
   return `# ${day}\n\n`;
 }
+
+const syncController = new SyncController({
+  credentials: new CredentialStore(path.join(app.getPath('userData'), 'sync-auth.json'), {
+    available: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (plain) => safeStorage.encryptString(plain),
+    decrypt: (data) => safeStorage.decryptString(data),
+  }),
+  workerFile: path.join(__dirname, 'sync-worker.cjs'),
+  openExternal: (url) => {
+    if (!openExternalSafe(url)) throw new Error('허용되지 않은 URL');
+    void shell.openExternal(url);
+  },
+  broadcast: (status) => broadcast('sync.changed', status),
+});
+vaultHooks.opened = (info) => syncController.attachVault(info.path, info.name);
+vaultHooks.closing = () => syncController.detachVault();
+vaultHooks.changed = () => syncController.notifyLocalChange();
 
 function registerHandlers() {
   handle('vault.listRecent', () => listRecent());
@@ -251,6 +270,19 @@ function registerHandlers() {
     atomicWrite(path.join(v.info.path, '.nopsidian', 'graph.json'), JSON.stringify(settings, null, 2));
     return undefined;
   });
+  handle('sync.status', () => syncController.status());
+  handle('sync.setClient', ({ clientId, clientSecret }) => {
+    syncController.setClient(clientId.trim(), clientSecret?.trim());
+    return syncController.status();
+  });
+  handle('sync.connect', () => syncController.connect());
+  handle('sync.disconnect', async () => {
+    await syncController.disconnect();
+    return syncController.status();
+  });
+  handle('sync.enable', ({ enabled }) => syncController.setEnabled(enabled));
+  handle('sync.plan', () => syncController.plan());
+  handle('sync.run', ({ force }) => syncController.run(force ?? false));
   handle('tag.list', async () => {
     const v = requireVault();
     await v.index.ready;
@@ -352,5 +384,6 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 app.on('before-quit', () => {
+  void syncController.detachVault();
   void getCurrent()?.index.close();
 });

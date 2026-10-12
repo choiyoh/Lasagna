@@ -28,10 +28,15 @@ import type {
 
 const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
 
-const NO_INLINE_SCAN: ReadonlySet<BlockKind> = new Set(['code', 'math', 'html']);
+/** 본문(프런트매터 제외)을 mdast로 파싱한다. 위치(offset)는 `body` 기준이다. */
+export function parseTree(body: string): Root {
+  return processor.parse(body) as Root;
+}
+
+export const NO_INLINE_SCAN: ReadonlySet<BlockKind> = new Set(['code', 'math', 'html']);
 
 /** 인라인 코드 구간을 같은 길이의 공백으로 가린다(줄바꿈은 유지해 줄 번호가 어긋나지 않게). */
-function maskInlineCode(s: string): string {
+export function maskInlineCode(s: string): string {
   return s.replace(/(`+)[\s\S]*?\1/g, (m) => m.replace(/[^\n]/g, ' '));
 }
 

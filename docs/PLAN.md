@@ -235,3 +235,28 @@ nopsidian/
 1. 이 계획을 Google Drive에 Google Docs 「Nopsidian — 구현 계획 v0.1」로 저장한다.
 2. `docs/PLAN.md`와 ADR-0001을 커밋하고 push한다.
 3. 0단계 스캐폴딩에 착수한다.
+
+---
+
+## 진행 상황
+
+### 0단계: 기반 (2026-10-12 구현 완료)
+- [x] pnpm 워크스페이스, TS/ESLint/Prettier/Vitest, Playwright(Electron) E2E
+- [x] 보안 하드닝: contextIsolation·sandbox, CSP, 외부 이동·새 창·권한 차단, Fuses(RunAsNode/NodeOptions/CliInspect/FileProtocol 끔, AsarIntegrity·OnlyLoadAppFromAsar 켬). 단 `NOPS_E2E=1` E2E 빌드에서만 inspect 퓨즈를 켠다
+- [x] IPC 계약(`packages/ipc-contract`): 발신자 프레임·오리진·등록된 webContents 검사 + zod 입출력 검증
+- [x] `app://`(번들 전용), `vault://`(볼트 하위·realpath 검사·Range 지원)
+- [x] 볼트 열기/최근 목록, `.nopsidian/config.json`
+- [x] IndexWorker: SQLite(WAL) + FTS5 trigram, 증분 스캔, @parcel/watcher(300ms 디바운스), 2글자 이하 LIKE 대체
+- [x] UI 셸: 폴더 트리, 전문 검색, 읽기 전용 미리보기(DOMPurify), 다크 모드
+- [ ] ko/en i18n 골격 (미구현)
+- [ ] 빌드 시 네이티브 모듈 SHA-256 매니페스트 생성·검증 (7단계 패키징에서)
+
+구현 중 확인한 사항
+- Electron Forge는 pnpm에서 `nodeLinker: hoisted`가 필요하다.
+- Forge Vite 플러그인은 `.vite/`만 패키징하므로, external 네이티브 모듈(better-sqlite3, @parcel/watcher)은 `packageAfterCopy` 훅(`apps/desktop/native-modules.ts`)에서 직접 복사하고 `.node`는 asar 밖으로 푼다.
+- 파일 감시 이벤트 경로는 realpath 기준이라(macOS `/var` → `/private/var`) 감시 루트도 realpath로 맞춘다.
+
+### 개발 명령
+- `pnpm test` / `pnpm typecheck` / `pnpm lint`
+- `pnpm --filter @nopsidian/desktop start` — 개발 실행
+- `pnpm --filter @nopsidian/desktop e2e` — E2E 빌드 후 Playwright 실행

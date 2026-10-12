@@ -3,3 +3,8 @@ packages:
   - packages/*
 allowBuilds:
   esbuild: true
+  electron: true
+  better-sqlite3: true
+  '@parcel/watcher': true
+# Electron Forge는 pnpm에서 hoisted 레이아웃을 요구한다.
+nodeLinker: hoisted

@@ -80,7 +80,9 @@ export function sanitizeAttachmentName(name: string): string {
   const base = name.replace(/\\/g, '/').split('/').pop() ?? '';
   // eslint-disable-next-line no-control-regex
   const cleaned = base.replace(/[\u0000-\u001f\u007f<>:"|?*#^[\]]/g, '').replace(/\s+/g, ' ').trim().replace(/^\.+/, '');
-  const limited = cleaned.length > 150 ? cleaned.slice(0, 120) + cleaned.slice(cleaned.lastIndexOf('.')).slice(0, 20) : cleaned;
+  // 150자를 넘으면 앞 120자로 줄이고, 확장자가 있으면(맨 앞 점은 제외) 확장자만 이어 붙인다.
+  const dot = cleaned.lastIndexOf('.');
+  const limited = cleaned.length > 150 ? cleaned.slice(0, 120) + (dot > 0 ? cleaned.slice(dot).slice(0, 20) : '') : cleaned;
   return limited || 'file';
 }
 

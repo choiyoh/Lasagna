@@ -45,6 +45,15 @@ describe('이름 만들기', () => {
     expect(sanitizeAttachmentName('x'.repeat(300) + '.png').length).toBeLessThanOrEqual(150);
   });
 
+  it('150자를 넘으면 확장자를 남기고 앞 120자로 줄인다', () => {
+    // (a) 점이 없으면 확장자를 붙이지 않고 앞 120자만 남긴다.
+    expect(sanitizeAttachmentName('x'.repeat(200))).toBe('x'.repeat(120));
+    // (b) 점이 있으면 확장자를 유지한다.
+    expect(sanitizeAttachmentName('x'.repeat(200) + '.png')).toBe('x'.repeat(120) + '.png');
+    // (c) 확장자가 21자 이상이어도 결과는 150자 이하다.
+    expect(sanitizeAttachmentName('x'.repeat(200) + '.' + 'e'.repeat(25)).length).toBeLessThanOrEqual(150);
+  });
+
   it('겹치면 번호를 붙인다', () => {
     const used = new Set(['a.png', 'a 1.png']);
     expect(uniqueName('b.png', (c) => used.has(c))).toBe('b.png');

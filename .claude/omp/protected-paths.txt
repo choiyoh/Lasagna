@@ -1,0 +1,35 @@
+# DeepSeek(보조 에이전트)가 수정할 수 없는 경로. 한 줄에 하나의 glob(저장소 루트 기준). `#`은 주석.
+# 어기면 ① 워크트리에서 쓰기 권한이 제거되고 ② 작업 종료 후 가드가 거부하며 ③ deepseek-accept.sh 가 병합을 거절한다.
+
+# ── 에디터 코어: Claude가 직접 관리 ──
+packages/editor/**
+packages/core/src/markdown/**
+packages/core/src/save.ts
+packages/core/src/merge3.ts
+packages/core/src/note-id.ts
+packages/core/src/vault-path.ts
+packages/core/src/index.ts
+apps/desktop/src/renderer/NoteEditor.tsx
+
+# ── 보안 경계(IPC·프로세스·프로토콜) ──
+packages/ipc-contract/**
+apps/desktop/src/main/**
+apps/desktop/src/preload/**
+apps/desktop/forge.config.ts
+apps/desktop/native-modules.ts
+apps/desktop/vite.*.config.ts
+
+# ── 저장소·빌드·에이전트 설정 ──
+.claude/**
+.github/**
+.gitignore
+package.json
+**/package.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+tsconfig.base.json
+**/tsconfig.json
+eslint.config.js
+docs/adr/**
+docs/PLAN.md
+CLAUDE.md

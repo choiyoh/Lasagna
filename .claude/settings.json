@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.claude/scripts/deepseek-analyze.sh:*)",
+      "Bash(.claude/scripts/deepseek-dev.sh:*)",
+      "Bash(.claude/scripts/deepseek-verify.sh:*)",
+      "Bash(.claude/scripts/deepseek-status.sh:*)",
+      "Bash(.claude/scripts/deepseek-doctor.sh:*)"
+    ],
+    "ask": [
+      "Bash(.claude/scripts/deepseek-accept.sh:*)",
+      "Bash(.claude/scripts/deepseek-discard.sh:*)"
+    ]
+  }
+}

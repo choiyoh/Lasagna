@@ -222,6 +222,96 @@ test('위키링크를 클릭하면 해당 노트가 열린다', async () => {
   await expect(page.locator('.ProseMirror h1')).toHaveText('도착');
 });
 
+test.describe('블록 핸들', () => {
+  const open = async (page: import('@playwright/test').Page, name: string, content: string) => {
+    const file = path.join(vaultDir, `${name}.md`);
+    writeFileSync(file, content);
+    await page.getByRole('button', { name, exact: true }).click();
+    await expect(page.locator('.ProseMirror')).toBeVisible();
+    return file;
+  };
+  const hoverBlock = async (page: import('@playwright/test').Page, text: string) => {
+    const el = page.locator('.ProseMirror p, .ProseMirror li, .ProseMirror h1, .ProseMirror h2', { hasText: text }).first();
+    await el.hover();
+    await expect(page.locator('.nops-handle')).toBeVisible();
+    return el;
+  };
+
+  test('⋮⋮ 메뉴: 블록 변환(제목 2), 복제, 삭제가 파일에 반영된다', async () => {
+    const page = await app.firstWindow();
+    const file = await open(page, '핸들메뉴', '# 핸들메뉴\n\n가\n\n나\n\n다\n');
+    await hoverBlock(page, '나');
+    await page.locator('.nops-handle__grip').click();
+    await page.locator('.nops-block-menu button', { hasText: '제목 2' }).click();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('## 나');
+
+    await hoverBlock(page, '가');
+    await page.locator('.nops-handle__grip').click();
+    await page.locator('.nops-block-menu button', { hasText: '복제' }).click();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 핸들메뉴\n\n가\n\n가\n\n## 나\n\n다\n');
+
+    await hoverBlock(page, '다');
+    await page.locator('.nops-handle__grip').click();
+    await page.locator('.nops-block-menu button', { hasText: '삭제' }).click();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 핸들메뉴\n\n가\n\n가\n\n## 나\n');
+  });
+
+  test('+ 버튼: 아래에 블록을 만들고 슬래시 메뉴가 열린다', async () => {
+    const page = await app.firstWindow();
+    await open(page, '핸들추가', '# 핸들추가\n\n끝 문단\n');
+    await hoverBlock(page, '끝 문단');
+    await page.locator('.nops-handle__add').click();
+    await expect(page.locator('.oh-editor__slash-item').first()).toBeVisible();
+  });
+
+  test('단축키: ⌘D 복제, ⌘⇧↓ 아래로 이동', async () => {
+    const page = await app.firstWindow();
+    const file = await open(page, '핸들키', '# 핸들키\n\nA\n\nB\n');
+    await page.locator('.ProseMirror p', { hasText: 'A' }).click();
+    // 클릭 직후 ProseMirror가 선택 영역을 동기화할 시간(사람의 입력 속도에서는 문제되지 않는다)
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Meta+Shift+ArrowDown');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 핸들키\n\nB\n\nA\n');
+    await page.keyboard.press('Meta+d');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 핸들키\n\nB\n\nA\n\nA\n');
+  });
+
+  test('끌어서 순서 바꾸기: 핸들을 잡고 다른 블록 위로 놓는다', async () => {
+    const page = await app.firstWindow();
+    const file = await open(page, '드래그순서', '# 드래그순서\n\n첫째\n\n둘째\n\n셋째\n');
+    await hoverBlock(page, '첫째');
+    const grip = await page.locator('.nops-handle__grip').boundingBox();
+    const target = await page.locator('.ProseMirror p', { hasText: '셋째' }).boundingBox();
+    await page.mouse.move(grip!.x + grip!.width / 2, grip!.y + grip!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip!.x + 20, grip!.y + 20, { steps: 4 });
+    // 셋째 문단의 아래쪽 절반 한가운데(가장자리 열 영역은 피한다)
+    await page.mouse.move(target!.x + target!.width / 2, target!.y + target!.height * 0.9, { steps: 12 });
+    await page.mouse.up();
+    await expect
+      .poll(() => readFileSync(file, 'utf8'), { timeout: 5000 })
+      .toBe('# 드래그순서\n\n둘째\n\n셋째\n\n첫째\n');
+  });
+
+  test('블록을 다른 블록의 오른쪽 가장자리에 놓으면 열 레이아웃이 된다', async () => {
+    const page = await app.firstWindow();
+    const file = await open(page, '드래그열', '# 드래그열\n\n왼쪽에 둘 글\n\n옮길 글\n');
+    await hoverBlock(page, '옮길 글');
+    const grip = await page.locator('.nops-handle__grip').boundingBox();
+    const target = await page.locator('.ProseMirror p', { hasText: '왼쪽에 둘 글' }).boundingBox();
+    await page.mouse.move(grip!.x + grip!.width / 2, grip!.y + grip!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip!.x + 20, grip!.y - 20, { steps: 4 });
+    await page.mouse.move(target!.x + target!.width - 8, target!.y + target!.height / 2, { steps: 12 });
+    await expect(page.locator('.nops-drop-side')).toBeVisible();
+    await page.mouse.up();
+    await expect
+      .poll(() => readFileSync(file, 'utf8'), { timeout: 5000 })
+      .toBe('# 드래그열\n\n::::columns\n\n:::column\n\n왼쪽에 둘 글\n\n:::\n\n:::column\n\n옮길 글\n\n:::\n\n::::\n');
+    await expect(page.locator('[data-columns] [data-column]')).toHaveCount(2);
+  });
+});
+
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());

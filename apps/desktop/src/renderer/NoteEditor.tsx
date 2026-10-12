@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Editor } from '@nopsidian/editor';
+import { TextSelection } from 'prosemirror-state';
 import { createNopsEditor, parseDocument, serializeDocument, type Baseline, type WikiLinkTarget } from '@nopsidian/editor/nops';
 
 const SAVE_DELAY_MS = 500;
@@ -47,10 +48,19 @@ export function NoteEditor({ path, onOpenLink }: Props) {
     const load = async () => {
       const r = await window.nops.note.read({ path });
       if (disposed) return;
+      // 이미 같은 내용이면(우리가 방금 쓴 파일의 감시 이벤트 등) 아무것도 바꾸지 않는다 — 커서가 튀지 않게
+      if (loaded && r.hash === hash) return;
       const parsed = parseDocument(r.content);
+      const view = editor.getView();
+      const oldHead = view.state.selection.head;
       baseline = parsed.baseline;
       hash = r.hash;
       editor.setDocument(parsed.doc, { silent: true });
+      if (loaded) {
+        // 다시 불러온 경우 커서를 같은 위치 근처에 둔다
+        const size = view.state.doc.content.size;
+        view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(Math.min(oldHead, size)))));
+      }
       dirty = false;
       loaded = true;
       setState('saved');

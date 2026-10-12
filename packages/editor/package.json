@@ -1,0 +1,42 @@
+{
+  "name": "@nopsidian/editor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "oh-new-editor(choiyoh/oh-new-editor@65acc2e)의 packages/core를 포크한 ProseMirror 블록 에디터. npm 배포 후 의존성으로 되돌릴 예정이라 소스 구조를 최대한 유지한다.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./markdown": "./src/markdown.ts",
+    "./notion": "./src/notion.ts",
+    "./table": "./src/table.ts",
+    "./toolbar": "./src/toolbar.ts",
+    "./ai": "./src/ai.ts",
+    "./style.css": "./src/style.css"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "dompurify": "^3.2.7",
+    "marked": "^16.3.0",
+    "prosemirror-commands": "^1.7.1",
+    "prosemirror-dropcursor": "^1.8.2",
+    "prosemirror-gapcursor": "^1.4.0",
+    "prosemirror-history": "^1.5.0",
+    "prosemirror-inputrules": "^1.5.1",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-model": "^1.25.4",
+    "prosemirror-schema-basic": "^1.2.4",
+    "prosemirror-schema-list": "^1.5.1",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-tables": "^1.8.1",
+    "prosemirror-transform": "^1.10.4",
+    "prosemirror-view": "^1.41.3",
+    "turndown": "^7.2.1"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}

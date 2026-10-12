@@ -40,7 +40,7 @@ nopsidian/
 |---|---|---|---|
 | **0. 기반** | Electron 하드닝, IPC 계약, 볼트 열기, watcher, IndexWorker + SQLite, app://·vault:// | 볼트를 열면 노트 목록과 FTS 검색이 동작 | 3~4주 |
 | **1. Markdown 코어** | remark 확장(wikilink·callout·directive·^blockid), md↔ProseMirror, 원문 보존 블록, 원자적 저장, 3-way 병합 | 샘플 볼트 500개 파일 라운드트립 100% | 4~6주 |
-| **2. 블록 에디터 MVP** | BlockNote 기반 P0 블록, 슬래시 메뉴, 인라인 서식, 단축 입력, 드래그&드롭, 소스 모드(CM6) | 일상 노트 작성 가능 | 8~10주 |
+| **2. 블록 에디터 MVP** | oh-new-editor 포크 기반 P0 블록, 슬래시 메뉴, 인라인 서식, 단축 입력, 드래그&드롭, 소스 모드(CM6) | 일상 노트 작성 가능 | 8~10주 |
 | **3. 링크 코어** | `[[` 자동 완성, 별칭, 제목/블록 링크, 임베드, 이름 변경 시 링크 갱신, 백링크, 태그, 빠른 전환기, 데일리 노트 | **MVP, 자기 사용 시작** | 4~6주 |
 | **3.5 Drive 동기화** (신규) | OAuth, SyncWorker, 양방향 동기화, 충돌 처리, 동기화 UI | 맥 2대 사이에서 볼트 왕복 동기화, 무손실 | 4~5주 |
 | 4. 그래프 | sigma.js + graphology, 워커 레이아웃, 전역·로컬, 필터·그룹 | 5천 노트에서 30fps | 3~4주 |
@@ -78,13 +78,19 @@ nopsidian/
 - **3-way 병합**(블록 단위, base = 마지막 저장본): 충돌한 블록은 양쪽을 다 보존하고 배너를 띄운다. 병합이 실패하면 `노트 (충돌 YYYY-MM-DD).md` 사본을 만든다. 이 모듈은 3.5단계 Drive 충돌에서도 그대로 다시 쓴다.
 - **골든 테스트**: `fixtures/vaults/`의 md를 doc으로 바꿨다가 다시 md로 바꿨을 때 바이트가 같아야 한다(정규화 허용 목록 제외). 퍼즈 테스트도 둔다.
 
-### 2단계: 블록 에디터 MVP
-- BlockNote(MIT 패키지만 사용)로 P0 블록을 만든다: 문단, H1~3, 목록, 할 일, 인용, 코드(Shiki), 구분선, GFM 표, 콜아웃, 토글, 이미지·파일(vault://).
-- 슬래시 메뉴(퍼지 + 한글 초성), 플로팅 툴바, 마크다운 단축 입력, 블록 핸들 드래그·다중 이동, Turn into, Cmd+D.
-- 노트 단위 undo/redo, 500ms 디바운스 자동 저장.
-- 소스 모드: CodeMirror 6로 원문 편집을 토글한다. 두 모드는 같은 저장 경로를 쓴다.
-- 한글 IME 회귀 테스트: Playwright로 조합 중 Enter/블록 분할 시나리오를 검사한다.
-- BlockNote로 콜아웃 중첩·커스텀 노드를 만들 수 없으면, 그 블록만 TipTap 확장으로 내려 구현한다(설계 5.2).
+### 2단계: 블록 에디터 MVP (ADR-0003: oh-new-editor 포크 기반)
+- `packages/editor`는 oh-new-editor `packages/core`의 포크(소스 직접 참조, 빌드 없음). 이미 있는 것: 슬래시 메뉴(한글 초성 검색), 버블 툴바, 링크 편집기, 표, 이미지 업로드, 마크다운 단축 입력, ko/en/zh UI, 다크 모드.
+- 만들 것
+  1. **스키마 확장**: 콜아웃(제목 노드 포함), 토글(제목 노드 포함), 열(`columns` ⊃ `column{2,5}`), 위키링크(인라인 atom), 임베드, 하이라이트·밑줄·색 마크, 블록 ID 속성
+  2. **Markdown ↔ ProseMirror 변환기**(1단계 파서 위): 블록 원문 오프셋을 노드가 기억하고, 바뀐 블록만 다시 직렬화한다. 알 수 없는 문법은 `rawBlock`으로 보존
+  3. **에디터 확장점**: 뷰 접근, 슬래시 항목 등록, 노드 뷰 등록(업스트림의 `createEditor()` 래퍼 보완)
+  4. **블록 핸들 + 드래그&드롭**, 다중 블록 이동, Turn into, 복제(Cmd+D)
+  5. 슬래시 항목: 콜아웃·토글·열·코드·표·이미지·구분선·수식·임베드
+  6. 소스 모드(CodeMirror 6), 코드 블록 구문 강조(Shiki)
+  7. 이미지·파일: 볼트 `attachments/`에 저장하고 `vault://`로 표시
+  8. 노트 단위 undo/redo, 500ms 디바운스 자동 저장(`note.save` 사용)
+- 한글 IME 회귀 테스트: Playwright로 조합 중 Enter/블록 분할 시나리오.
+- 업스트림 npm 배포 후 `@oh-new-editor/core` 의존성으로 교체한다(`packages/editor/UPSTREAM.md`).
 
 ### 3단계: 링크 코어 → MVP
 - 링크 해석(`packages/core`) 순서: 경로 정확 일치 → 파일명/제목(최단 경로 우선) → 별칭 → 미해결. 결과는 links 테이블에 저장한다.
@@ -217,7 +223,7 @@ nopsidian/
 ## 4. 결정 기록 (ADR, `docs/adr/`)
 - 0001: Drive API 내장 동기화 도입, 설계 문서 N1·N4·G2·G3 수정
 - 0002: Electron + React 19 + TS (설계 5.1)
-- 0003: BlockNote 시작 → TipTap/PM 폴백 (설계 5.2)
+- 0003: oh-new-editor 포크 사용 (BlockNote·TipTap 스파이크 비교 후 결정, 설계 5.2 대체)
 - 0004: 파일이 진실, SQLite는 인덱스 (설계 4.1)
 
 ## 5. 검증
@@ -264,7 +270,7 @@ nopsidian/
 - [x] 노트 ID(ULID) `ensureNoteId` — 프런트매터에 한 줄만 삽입
 - [x] 원자적 저장 + 히스토리 스냅샷 + 3-way 병합(블록 단위, 이웃 블록 변경 자동 병합, 충돌 시 양쪽 보존 + HTML 주석 표식, 공통 조상이 없으면 충돌 사본)
 - [x] IPC `note.read`(hash 포함) / `note.save`, 자기 쓰기 에코 구분(`note.changed.external`)
-- [ ] mdast ↔ ProseMirror/BlockNote 변환, 바뀐 블록의 mdast → Markdown 직렬화(커스텀 노드 포함) — 에디터를 확정하는 2단계에서 함께 구현
+- [ ] mdast ↔ ProseMirror 변환, 바뀐 블록의 mdast → Markdown 직렬화(커스텀 노드 포함) — 에디터를 확정하는 2단계에서 함께 구현
 - 결정: `:::` 펜스는 remark-directive를 쓰지 않는다(`[[a:b]]`·`시간:30` 같은 일반 텍스트의 `:name`을 디렉티브로 오인해 링크가 깨짐). 펜스는 앞뒤에 빈 줄이 있는 한 줄 문단으로 인식하고, 중첩은 콜론 개수로 구분한다(`::::columns` ⊃ `:::column`).
 
 ### 개발 명령

@@ -41,6 +41,9 @@ importers:
       '@nopsidian/ipc-contract':
         specifier: workspace:*
         version: link:../../packages/ipc-contract
+      '@nopsidian/sync-gdrive':
+        specifier: workspace:*
+        version: link:../../packages/sync-gdrive
       '@parcel/watcher':
         specifier: ^2.6.0
         version: 2.6.0

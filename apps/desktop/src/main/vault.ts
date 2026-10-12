@@ -28,6 +28,10 @@ function pushRecent(v: VaultInfo) {
 export interface OpenVault {
   info: VaultInfo;
   index: IndexClient;
+  /** 앱이 마지막으로 읽거나 저장한 노트별 디스크 내용 — 3-way 병합의 공통 조상 */
+  bases: Map<string, { hash: string; content: string }>;
+  /** 앱이 방금 쓴 파일의 해시 — 감시 이벤트가 자기 쓰기인지 구분하는 데 쓴다 */
+  selfWrites: Map<string, string>;
 }
 
 let current: OpenVault | null = null;
@@ -58,8 +62,18 @@ export async function openVaultAt(root: string): Promise<VaultInfo> {
   current = null;
 
   const info: VaultInfo = { id: vaultIdFor(real), name: path.basename(real), path: real };
-  const index = new IndexClient(real, (e) => broadcast(e.name, e.payload));
-  current = { info, index };
+  const bases = new Map<string, { hash: string; content: string }>();
+  const selfWrites = new Map<string, string>();
+  const index = new IndexClient(real, (e) => {
+    if (e.name === 'note.changed') {
+      const mine = e.payload.hash !== undefined && selfWrites.get(e.payload.path) === e.payload.hash;
+      if (mine) selfWrites.delete(e.payload.path);
+      broadcast(e.name, { path: e.payload.path, kind: e.payload.kind, external: !mine });
+    } else {
+      broadcast(e.name, e.payload);
+    }
+  });
+  current = { info, index, bases, selfWrites };
   pushRecent(info);
   return info;
 }

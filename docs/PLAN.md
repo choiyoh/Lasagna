@@ -256,6 +256,17 @@ nopsidian/
 - Forge Vite 플러그인은 `.vite/`만 패키징하므로, external 네이티브 모듈(better-sqlite3, @parcel/watcher)은 `packageAfterCopy` 훅(`apps/desktop/native-modules.ts`)에서 직접 복사하고 `.node`는 asar 밖으로 푼다.
 - 파일 감시 이벤트 경로는 realpath 기준이라(macOS `/var` → `/private/var`) 감시 루트도 realpath로 맞춘다.
 
+### 1단계: Markdown 코어 (2026-10-12 구현, 일부는 2단계로 이월)
+- [x] 파서(`packages/core/src/markdown`): 프런트매터(YAML, 깨져도 원문 보존), 위키링크·임베드·`#제목`·`^블록`·별칭, 태그(인라인·프런트매터), 제목/슬러그, 블록 ID(줄 끝·단독 줄), 콜아웃(`> [!type]±`), `:::name` 펜스, GFM/수식
+- [x] 바이트 보존: 문서를 [사이 공백 + 블록 원문] 단위로 나누고 `replaceBlock`은 해당 블록만 바꾼다. 합성 노트 500개 + 깨진 입력 3000개 퍼즈로 재조립 == 원문 검증
+- [x] 링크 해석(`link-resolve.ts`): 경로 → 파일명(짧은 경로·가까운 폴더 우선) → 제목 → 별칭. 인덱서가 추가·삭제 시 일괄 재해석
+- [x] 인덱서 연동: headings / links / tags / aliases / blocks 저장, 백링크·미해결 링크·태그 조회(스키마 v2)
+- [x] 노트 ID(ULID) `ensureNoteId` — 프런트매터에 한 줄만 삽입
+- [x] 원자적 저장 + 히스토리 스냅샷 + 3-way 병합(블록 단위, 이웃 블록 변경 자동 병합, 충돌 시 양쪽 보존 + HTML 주석 표식, 공통 조상이 없으면 충돌 사본)
+- [x] IPC `note.read`(hash 포함) / `note.save`, 자기 쓰기 에코 구분(`note.changed.external`)
+- [ ] mdast ↔ ProseMirror/BlockNote 변환, 바뀐 블록의 mdast → Markdown 직렬화(커스텀 노드 포함) — 에디터를 확정하는 2단계에서 함께 구현
+- 결정: `:::` 펜스는 remark-directive를 쓰지 않는다(`[[a:b]]`·`시간:30` 같은 일반 텍스트의 `:name`을 디렉티브로 오인해 링크가 깨짐). 펜스는 앞뒤에 빈 줄이 있는 한 줄 문단으로 인식하고, 중첩은 콜론 개수로 구분한다(`::::columns` ⊃ `:::column`).
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

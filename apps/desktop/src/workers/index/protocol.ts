@@ -12,5 +12,5 @@ export type WorkerResponse =
   | { type: 'fatal'; error: string };
 
 export type WorkerEvent =
-  | { type: 'event'; name: 'note.changed'; payload: { path: string; kind: 'add' | 'change' | 'unlink' } }
+  | { type: 'event'; name: 'note.changed'; payload: { path: string; kind: 'add' | 'change' | 'unlink'; hash?: string } }
   | { type: 'event'; name: 'index.progress'; payload: { done: number; total: number } };

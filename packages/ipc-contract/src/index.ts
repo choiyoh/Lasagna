@@ -10,6 +10,15 @@ export const relPath = z
 export const vaultInfo = z.object({ id: z.string(), name: z.string(), path: z.string() });
 export type VaultInfo = z.infer<typeof vaultInfo>;
 
+export const saveResult = z.object({
+  status: z.enum(['saved', 'merged', 'conflict', 'copy']),
+  /** 저장 후 디스크에 있는 내용 — 병합·충돌이면 에디터가 이 내용으로 다시 불러와야 한다 */
+  content: z.string(),
+  hash: z.string(),
+  copyPath: relPath.optional(),
+});
+export type SaveResult = z.infer<typeof saveResult>;
+
 export const noteSummary = z.object({
   path: relPath,
   title: z.string(),
@@ -36,7 +45,22 @@ export const contract = {
   'vault.pick': { input: z.undefined(), output: vaultInfo.nullable() },
   'vault.open': { input: z.object({ id: z.string() }), output: vaultInfo },
   'note.list': { input: z.undefined(), output: z.array(noteSummary) },
-  'note.read': { input: z.object({ path: relPath }), output: z.object({ content: z.string() }) },
+  'note.read': {
+    input: z.object({ path: relPath }),
+    output: z.object({ content: z.string(), hash: z.string() }),
+  },
+  /**
+   * baseHash = 앱이 마지막으로 읽거나 저장한 디스크 내용의 해시(새 노트는 null).
+   * 디스크가 그 사이 바뀌었으면 main이 3-way 병합하거나 충돌 사본을 만든다.
+   */
+  'note.save': {
+    input: z.object({
+      path: relPath,
+      content: z.string().max(20_000_000),
+      baseHash: z.string().nullable(),
+    }),
+    output: saveResult,
+  },
   'search.query': {
     input: z.object({ q: z.string().max(500), limit: z.number().int().min(1).max(200).default(50) }),
     output: z.array(searchHit),
@@ -51,7 +75,12 @@ export type ChannelOutput<C extends Channel> = z.output<Contract[C]['output']>;
 
 /** main → renderer 브로드캐스트 이벤트(수신 전용). */
 export const events = {
-  'note.changed': z.object({ path: relPath, kind: z.enum(['add', 'change', 'unlink']) }),
+  'note.changed': z.object({
+    path: relPath,
+    kind: z.enum(['add', 'change', 'unlink']),
+    /** 앱이 방금 쓴 내용이면 false (에디터를 다시 불러올 필요 없음) */
+    external: z.boolean().default(true),
+  }),
   'index.progress': z.object({ done: z.number(), total: z.number() }),
 } as const;
 export type EventName = keyof typeof events;

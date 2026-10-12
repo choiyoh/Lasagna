@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { createLinkResolver, parseNote, type ParsedNote } from '@nopsidian/core';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -14,7 +15,8 @@ CREATE TABLE IF NOT EXISTS pages (
   folder TEXT NOT NULL,
   mtime REAL NOT NULL,
   size INTEGER NOT NULL,
-  hash TEXT NOT NULL
+  hash TEXT NOT NULL,
+  note_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_pages_path ON pages(path);
 CREATE TABLE IF NOT EXISTS aliases (page_id INTEGER NOT NULL, alias TEXT NOT NULL);
@@ -74,14 +76,14 @@ export function walkMarkdown(root: string): Found[] {
   return out;
 }
 
-/** 첫 번째 `# 제목`, 없으면 파일명. (정식 파서는 1단계에서 대체) */
+/** 제목 우선순위: 프런트매터 title → 첫 H1 → 파일명 */
 export function deriveTitle(rel: string, content: string): string {
-  const m = /^#\s+(.+?)\s*$/m.exec(content.replace(/^---\n[\s\S]*?\n---\n/, ''));
-  return m?.[1] ?? path.posix.basename(rel, path.posix.extname(rel));
+  return parseNote(content).meta.title || path.posix.basename(rel, path.posix.extname(rel));
 }
 
 export class Indexer {
   readonly db: Database.Database;
+  private resolveDirty = true;
 
   constructor(
     private readonly root: string,
@@ -148,6 +150,7 @@ export class Indexer {
         removed++;
       }
     }
+    this.resolveLinks();
     return { changed, removed };
   }
 
@@ -164,30 +167,106 @@ export class Indexer {
       return false;
     }
     const hash = createHash('sha256').update(content).digest('hex');
-    const title = deriveTitle(rel, content);
+    const note = parseNote(content);
+    const title = note.meta.title || path.posix.basename(rel, path.posix.extname(rel));
     const folder = path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel);
-    const tx = this.db.transaction(() => {
-      const existing = this.db.prepare(`SELECT id, hash FROM pages WHERE path=?`).get(rel) as
-        | { id: number; hash: string }
+    this.db.transaction(() => {
+      const existing = this.db.prepare(`SELECT id FROM pages WHERE path=?`).get(rel) as
+        | { id: number }
         | undefined;
       let id: number;
       if (existing) {
         id = existing.id;
         this.db
-          .prepare(`UPDATE pages SET title=?, folder=?, mtime=?, size=?, hash=? WHERE id=?`)
-          .run(title, folder, st.mtimeMs, st.size, hash, id);
-        this.db.prepare(`DELETE FROM fts WHERE rowid=?`).run(id);
+          .prepare(`UPDATE pages SET title=?, folder=?, mtime=?, size=?, hash=?, note_id=? WHERE id=?`)
+          .run(title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null, id);
+        this.clearDerived(id);
       } else {
         id = Number(
           this.db
-            .prepare(`INSERT INTO pages(path,title,folder,mtime,size,hash) VALUES(?,?,?,?,?,?)`)
-            .run(rel, title, folder, st.mtimeMs, st.size, hash).lastInsertRowid,
+            .prepare(`INSERT INTO pages(path,title,folder,mtime,size,hash,note_id) VALUES(?,?,?,?,?,?,?)`)
+            .run(rel, title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null).lastInsertRowid,
         );
       }
       this.db.prepare(`INSERT INTO fts(rowid,title,body) VALUES(?,?,?)`).run(id, title, content);
-    });
-    tx();
+      this.storeDerived(id, note);
+    })();
+    this.resolveDirty = true;
     return true;
+  }
+
+  private clearDerived(id: number) {
+    for (const t of ['aliases', 'headings', 'blocks', 'tags'])
+      this.db.prepare(`DELETE FROM ${t} WHERE page_id=?`).run(id);
+    this.db.prepare(`DELETE FROM links WHERE src_page=?`).run(id);
+    this.db.prepare(`DELETE FROM fts WHERE rowid=?`).run(id);
+  }
+
+  private storeDerived(id: number, note: ParsedNote) {
+    const { meta, blocks } = note;
+    const insAlias = this.db.prepare(`INSERT INTO aliases(page_id, alias) VALUES(?,?)`);
+    for (const a of meta.aliases) insAlias.run(id, a);
+
+    const insHeading = this.db.prepare(
+      `INSERT INTO headings(page_id, level, text, slug, line) VALUES(?,?,?,?,?)`,
+    );
+    for (const h of meta.headings) insHeading.run(id, h.level, h.text, h.slug, h.line);
+
+    const insBlock = this.db.prepare(
+      `INSERT INTO blocks(id, page_id, type, parent_id, ord, text, heading_level, line_start, line_end)
+       VALUES(?,?,?,NULL,?,?,?,?,?)`,
+    );
+    for (const b of blocks)
+      insBlock.run(b.blockId ?? null, id, b.kind, b.index, b.text, b.headingLevel ?? null, b.lineStart, b.lineEnd);
+
+    const insTag = this.db.prepare(`INSERT INTO tags(page_id, tag, source) VALUES(?,?,?)`);
+    const seen = new Set<string>();
+    for (const t of meta.tags) {
+      const key = `${t.tag}\0${t.source}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      insTag.run(id, t.tag, t.source);
+    }
+
+    const insLink = this.db.prepare(
+      `INSERT INTO links(src_page, src_block, dst_raw, dst_heading, dst_block, kind, is_resolved)
+       VALUES(?,?,?,?,?,?,0)`,
+    );
+    for (const l of meta.links) {
+      const srcBlock = blocks.find((b) => l.line >= b.lineStart && l.line <= b.lineEnd)?.blockId ?? null;
+      insLink.run(id, srcBlock, l.target, l.heading ?? null, l.block ?? null, l.kind);
+    }
+  }
+
+  /**
+   * 링크 대상을 노트로 해석한다: 경로 정확 일치 → 파일명/제목 → 별칭 → 미해결.
+   * 노트가 추가·삭제·변경될 때마다 다시 계산해야 하므로 변경이 있었을 때만 일괄 재해석한다.
+   */
+  resolveLinks() {
+    if (!this.resolveDirty) return;
+    this.resolveDirty = false;
+    const pages = this.db.prepare(`SELECT id, path, title FROM pages`).all() as {
+      id: number;
+      path: string;
+      title: string;
+    }[];
+    const aliases = this.db.prepare(`SELECT page_id AS pageId, alias FROM aliases`).all() as {
+      pageId: number;
+      alias: string;
+    }[];
+    const links = this.db
+      .prepare(`SELECT rowid AS rid, src_page AS src, dst_raw AS raw, kind, dst_page AS cur FROM links`)
+      .all() as { rid: number; src: number; raw: string; kind: string; cur: number | null }[];
+    const srcPath = new Map(pages.map((p) => [p.id, p.path]));
+    const resolver = createLinkResolver(pages, aliases);
+    const upd = this.db.prepare(`UPDATE links SET dst_page=?, is_resolved=? WHERE rowid=?`);
+    this.db.transaction(() => {
+      for (const l of links) {
+        // `[[#제목]]`처럼 대상이 비어 있으면 같은 노트를 가리킨다
+        const dst = l.raw === '' ? l.src : resolver(l.raw, srcPath.get(l.src) ?? '');
+        if ((dst ?? null) !== l.cur) upd.run(dst ?? null, dst === undefined ? 0 : 1, l.rid);
+      }
+    })();
   }
 
   removeFile(rel: string) {
@@ -196,9 +275,43 @@ export class Indexer {
       | undefined;
     if (!row) return;
     this.db.transaction(() => {
-      this.db.prepare(`DELETE FROM fts WHERE rowid=?`).run(row.id);
+      this.clearDerived(row.id);
       this.db.prepare(`DELETE FROM pages WHERE id=?`).run(row.id);
     })();
+    this.resolveDirty = true;
+  }
+
+  /** 이 노트를 가리키는 링크(해석된 것만). 줄 번호·문맥 스니펫은 3단계에서 추가한다. */
+  backlinks(rel: string): { path: string; kind: string }[] {
+    this.resolveLinks();
+    return this.db
+      .prepare(
+        `SELECT DISTINCT p.path AS path, l.kind AS kind
+         FROM links l JOIN pages p ON p.id = l.src_page
+         WHERE l.dst_page = (SELECT id FROM pages WHERE path=?) AND l.src_page != l.dst_page
+         ORDER BY p.path`,
+      )
+      .all(rel) as { path: string; kind: string }[];
+  }
+
+  unresolvedLinks(): { path: string; target: string }[] {
+    this.resolveLinks();
+    return this.db
+      .prepare(
+        `SELECT p.path AS path, l.dst_raw AS target FROM links l JOIN pages p ON p.id = l.src_page
+         WHERE l.is_resolved = 0 AND l.kind IN ('wikilink','relation') ORDER BY p.path, l.dst_raw`,
+      )
+      .all() as { path: string; target: string }[];
+  }
+
+  tags(): { tag: string; count: number }[] {
+    return this.db
+      .prepare(`SELECT tag, COUNT(DISTINCT page_id) AS count FROM tags GROUP BY tag ORDER BY count DESC, tag`)
+      .all() as { tag: string; count: number }[];
+  }
+
+  hashOf(rel: string): string | undefined {
+    return (this.db.prepare(`SELECT hash FROM pages WHERE path=?`).get(rel) as { hash: string } | undefined)?.hash;
   }
 
   list(): NoteRow[] {

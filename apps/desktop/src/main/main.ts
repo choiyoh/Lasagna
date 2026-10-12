@@ -1,6 +1,6 @@
 import { app, BrowserWindow, session } from 'electron';
 import path from 'node:path';
-import { resolveInVault } from '@nopsidian/core';
+import { resolveInVault, saveNote, sha256 } from '@nopsidian/core';
 import { events, type EventName } from '@nopsidian/ipc-contract';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { installProtocols, registerSchemes } from './protocols';
@@ -73,8 +73,25 @@ function registerHandlers() {
   });
   handle('note.read', async ({ path: rel }) => {
     const v = requireVault();
-    const full = resolveInVault(v.info.path, rel);
-    return { content: await readFile(full, 'utf8') };
+    const content = await readFile(resolveInVault(v.info.path, rel), 'utf8');
+    const hash = sha256(content);
+    v.bases.set(rel, { hash, content });
+    return { content, hash };
+  });
+  handle('note.save', ({ path: rel, content, baseHash }) => {
+    const v = requireVault();
+    const base = v.bases.get(rel);
+    const result = saveNote({
+      root: v.info.path,
+      rel,
+      content,
+      baseHash,
+      ...(base && base.hash === baseHash ? { baseContent: base.content } : {}),
+    });
+    // 디스크에 실제로 있는 내용이 새 공통 조상이 된다(copy면 디스크는 그대로)
+    v.bases.set(rel, { hash: result.hash, content: result.content });
+    v.selfWrites.set(rel, result.hash);
+    return result;
   });
   handle('search.query', async ({ q, limit }) => {
     const v = requireVault();

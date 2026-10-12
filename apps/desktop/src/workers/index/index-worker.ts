@@ -19,11 +19,20 @@ let timer: NodeJS.Timeout | undefined;
 /** 300ms 디바운스로 모아서 처리한다. 같은 파일의 이벤트는 마지막 것만 남긴다. */
 function flush() {
   timer = undefined;
-  for (const [rel, kind] of pending) {
-    const ok = kind === 'unlink' ? (ix.removeFile(rel), false) : ix.indexFile(rel);
-    post({ type: 'event', name: 'note.changed', payload: { path: rel, kind: ok ? kind : 'unlink' } });
-  }
+  const batch = [...pending];
   pending.clear();
+  const results = batch.map(([rel, kind]) => {
+    const ok = kind === 'unlink' ? (ix.removeFile(rel), false) : ix.indexFile(rel);
+    return { rel, kind: ok ? kind : ('unlink' as const), hash: ok ? ix.hashOf(rel) : undefined };
+  });
+  ix.resolveLinks();
+  for (const r of results) {
+    post({
+      type: 'event',
+      name: 'note.changed',
+      payload: { path: r.rel, kind: r.kind, ...(r.hash ? { hash: r.hash } : {}) },
+    });
+  }
 }
 
 let sub: AsyncSubscription | undefined;

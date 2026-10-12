@@ -25,6 +25,14 @@ export type AssetInfo = z.infer<typeof assetInfo>;
 /** 한 번에 저장할 수 있는 첨부 크기 상한(IPC로 통째로 보내므로 제한한다) */
 export const MAX_ASSET_BYTES = 200 * 1024 * 1024;
 
+export const movePlan = z.object({
+  moves: z.array(z.object({ from: relPath, to: relPath })),
+  /** 링크가 바뀌는 노트(이동 전 경로) */
+  edits: z.array(z.object({ path: relPath, newPath: relPath, changes: z.number() })),
+  totalChanges: z.number(),
+});
+export type MovePlanInfo = z.infer<typeof movePlan>;
+
 export const noteSummary = z.object({
   path: relPath,
   title: z.string(),
@@ -67,6 +75,17 @@ export const contract = {
       baseHash: z.string().nullable(),
     }),
     output: saveResult,
+  },
+  /** 이름 변경/이동 미리보기: 파일은 건드리지 않고 어떤 링크가 몇 개 바뀌는지만 계산한다. `from`은 노트·첨부 파일 또는 폴더. */
+  'note.renamePlan': { input: z.object({ from: relPath, to: relPath }), output: movePlan },
+  /** 이름 변경/이동을 실행하고 볼트 전체의 링크를 갱신한다. 되돌릴 수 있도록 기록을 남긴다. */
+  'note.rename': {
+    input: z.object({ from: relPath, to: relPath }),
+    output: movePlan.extend({ undoId: z.string() }),
+  },
+  'note.undoRename': {
+    input: z.object({ undoId: z.string().regex(/^[0-9a-z-]+$/) }),
+    output: z.object({ restored: z.number(), skipped: z.array(relPath) }),
   },
   'search.query': {
     input: z.object({ q: z.string().max(500), limit: z.number().int().min(1).max(200).default(50) }),

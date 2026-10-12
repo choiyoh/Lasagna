@@ -5,3 +5,5 @@ export { parseWikiInner, findWikiLinks, findTags, slugify } from './inline.js';
 export { parseForEditor, decodeInline } from './editor-parse.js';
 export type { EditorParse, InlineToken, InlineTokenKind, DecodedPart } from './editor-parse.js';
 export { parseTree } from './parse.js';
+export { findLinkSpans, applyEdits } from './link-spans.js';
+export type { LinkSpan, TextEdit } from './link-spans.js';

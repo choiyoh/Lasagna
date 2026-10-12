@@ -1,5 +1,6 @@
 import { app, BrowserWindow, session, shell } from 'electron';
 import { createHash } from 'node:crypto';
+import { applyRename, planRename, undoRename } from './rename';
 import path from 'node:path';
 import {
   atomicWrite,
@@ -76,6 +77,14 @@ function broadcast(name: EventName, payload: unknown) {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send(name, parsed);
 }
 
+/** 이름 변경 계획을 세우려고 볼트의 모든 노트 내용과 첨부 목록을 읽는다. */
+async function snapshotVault(v: ReturnType<typeof requireVault>) {
+  const list = await v.index.list();
+  const notes = list.map((n) => ({ path: n.path, content: readFileSync(resolveInVault(v.info.path, n.path), 'utf8') }));
+  const assets = (await v.index.assets()).map((a) => a.path);
+  return { notes, assets };
+}
+
 function registerHandlers() {
   handle('vault.listRecent', () => listRecent());
   handle('vault.current', () => getCurrent()?.info ?? null);
@@ -108,6 +117,29 @@ function registerHandlers() {
     v.bases.set(rel, { hash: result.hash, content: result.content });
     v.selfWrites.set(rel, result.hash);
     return result;
+  });
+  handle('note.renamePlan', async ({ from, to }) => {
+    const v = requireVault();
+    await v.index.ready;
+    const { plan, moves } = planRename(v.info.path, await snapshotVault(v), from, to);
+    return { moves, edits: plan.edits.map((e) => ({ path: e.path, newPath: e.newPath, changes: e.changes })), totalChanges: plan.totalChanges };
+  });
+  handle('note.rename', async ({ from, to }) => {
+    const v = requireVault();
+    await v.index.ready;
+    const { plan, moves } = planRename(v.info.path, await snapshotVault(v), from, to);
+    const { undoId } = applyRename(v.info.path, moves, plan);
+    // 앱이 기억하던 노트 내용(3-way 병합의 기준)은 이동·갱신 뒤에는 무효다
+    v.bases.clear();
+    v.selfWrites.clear();
+    return { moves, edits: plan.edits.map((e) => ({ path: e.path, newPath: e.newPath, changes: e.changes })), totalChanges: plan.totalChanges, undoId };
+  });
+  handle('note.undoRename', ({ undoId }) => {
+    const v = requireVault();
+    const r = undoRename(v.info.path, undoId);
+    v.bases.clear();
+    v.selfWrites.clear();
+    return r;
   });
   handle('search.query', async ({ q, limit }) => {
     const v = requireVault();

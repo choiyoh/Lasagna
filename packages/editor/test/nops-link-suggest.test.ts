@@ -40,6 +40,30 @@ describe('parseLinkQuery', () => {
   });
 });
 
+describe('prepare (블록 ID 부여 등 비동기 준비)', () => {
+  it('고르면 prepare가 끝난 뒤 그 결과의 블록 ID로 링크가 들어간다', async () => {
+    const prepare = vi.fn(async () => ({ block: 'z9y8x7' }));
+    const suggest = vi.fn((): LinkSuggestion[] => [{ label: '대상 문단', target: '노트', kind: 'block', prepare }]);
+    const { view } = setup(suggest);
+    type(view, '[[노트#^대');
+    await flush();
+    press(view, 'Enter');
+    await flush();
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(serializeDocument(view.state.doc, null)).toBe('[[노트#^z9y8x7]]\n');
+  });
+
+  it('prepare가 실패하면 링크를 넣지 않고 닫는다', async () => {
+    const suggest = vi.fn((): LinkSuggestion[] => [{ label: 'x', target: '노트', kind: 'block', prepare: async () => Promise.reject(new Error('fail')) }]);
+    const { view } = setup(suggest);
+    type(view, '[[노트#^');
+    await flush();
+    press(view, 'Enter');
+    await flush();
+    expect(JSON.stringify(view.state.doc.toJSON())).not.toContain('wikilink');
+  });
+});
+
 describe('[[ 자동완성', () => {
   it('[[ 를 치면 후보가 뜨고 입력에 따라 좁혀진다', async () => {
     const { view } = setup();

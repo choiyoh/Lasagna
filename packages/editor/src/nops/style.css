@@ -138,3 +138,6 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 .nops-link-suggest__label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nops-link-suggest__label mark { background: none; color: var(--oh-editor-primary, #5b5bd6); font-weight: 700; }
 .nops-link-suggest__detail { font-size: 11px; opacity: 0.55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.nops-flash { animation: nops-flash 1.6s ease-out; }
+@keyframes nops-flash { 0% { background: color-mix(in srgb, var(--oh-editor-primary, #5b5bd6) 28%, transparent); } 100% { background: transparent; } }

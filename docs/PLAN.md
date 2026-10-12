@@ -328,7 +328,8 @@ nopsidian/
 - [x] **데일리 노트**(`오늘` 버튼, ⌘⌥D): `일기/YYYY-MM-DD.md`, 볼트 설정 `dailyFolder`·`dailyTemplate`(`{{date}}`·`{{title}}`)
 - [x] 분업: 인덱서 질의 4종(`backlinkContexts`·`outgoingLinks`·`unlinkedMentions`·`notesByTag`, 스키마 v3)과 `quickSwitch`는 **DeepSeek이 구현**했고 Claude가 검토·검증했다(각 결과는 별도 커밋에 명시). 자동완성·이름 변경·IPC·UI는 Claude
 - 알려진 한계: 블록 링크(`[[노트#^id]]`) 자동완성과 "블록 링크 복사"는 아직 없다(직접 입력은 가능). 링크 호버 미리보기·북마크는 7단계. 이름 변경 UI는 노트 단위이고 폴더는 아직 없다. 언링크드 멘션에서 "링크로 변환" 버튼은 아직 없다
-- [ ] 남은 3단계 작업: 블록 링크 복사·자동완성, 언링크드 멘션 "링크로 변환", 템플릿 삽입, 폴더 이름 변경 UI
+- [x] 블록 링크(복사·`[[노트#^id]]` 자동완성·이동 시 강조), 언링크드 멘션 "링크로 변환"(DeepSeek 구현·Claude 검토), 템플릿 삽입·데일리 템플릿(DeepSeek 구현·Claude 검토)
+- [ ] 남은 3단계 작업: 폴더 이름 변경 UI (백엔드는 폴더 지원). 링크 호버 미리보기·북마크·블록 임베드는 후속 단계
 
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`

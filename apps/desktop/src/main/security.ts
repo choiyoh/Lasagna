@@ -71,10 +71,15 @@ export function hardenWebContents(wc: WebContents, devServerUrl?: string) {
   wc.on('will-attach-webview', (e) => e.preventDefault());
 }
 
-export function installSessionPolicy() {
+/** 앱 화면에 허용하는 권한은 클립보드 쓰기(블록 링크 복사)뿐이다. 카메라·마이크·알림·위치 등은 모두 거부한다. */
+export function isPermissionAllowed(permission: string, requestingUrl: string, devServerUrl?: string): boolean {
+  return permission === 'clipboard-sanitized-write' && isTrustedUrl(requestingUrl, devServerUrl);
+}
+
+export function installSessionPolicy(devServerUrl?: string) {
   const ses = session.defaultSession;
-  ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
-  ses.setPermissionCheckHandler(() => false);
+  ses.setPermissionRequestHandler((_wc, perm, cb, details) => cb(isPermissionAllowed(perm, details.requestingUrl, devServerUrl)));
+  ses.setPermissionCheckHandler((_wc, perm, origin) => isPermissionAllowed(perm, origin, devServerUrl));
   app.on('web-contents-created', (_e, wc) => {
     wc.on('will-attach-webview', (ev) => ev.preventDefault());
   });

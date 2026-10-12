@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
-import { createNopsEditor, insertCallout, insertColumns, insertToggle, parseDocument, serializeDocument } from '../src/nops';
+import { createNopsEditor, insertCallout, insertColumns, insertMarkdown, insertToggle, parseDocument, serializeDocument } from '../src/nops';
 
 function setup(src = '') {
   const host = document.createElement('div');
@@ -169,5 +169,40 @@ describe('한글 입력', () => {
     placeCursor(view, end);
     type(view, ' 가나다라 ㅎㅎ');
     expect(serializeDocument(view.state.doc, parsed.baseline)).toBe('# 제목\n\n본문 가나다라 ㅎㅎ\n');
+  });
+});
+
+describe('insertMarkdown (템플릿 삽입)', () => {
+  it('여러 블록을 현재 위치에 넣는다', () => {
+    const { view } = setup('앞\n\n뒤\n');
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1 + '앞'.length + 2))); // 두 번째 문단 시작
+    expect(insertMarkdown(view, '## 할 일\n\n- [ ] 하나\n- [ ] 둘\n\n> [!tip] 팁\n')).toBe(true);
+    expect(serializeDocument(view.state.doc, null)).toBe('앞\n\n## 할 일\n\n- [ ] 하나\n- [ ] 둘\n\n> [!tip] 팁\n\n뒤\n');
+    expect(() => view.state.doc.check()).not.toThrow();
+  });
+
+  it('한 문단짜리는 문단을 쪼개지 않고 이어 붙인다', () => {
+    const { view } = setup('가나\n');
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
+    insertMarkdown(view, '**굵게** [[링크]]');
+    expect(serializeDocument(view.state.doc, null)).toBe('가**굵게** [[링크]]나\n');
+  });
+
+  it('선택 영역은 대체된다', () => {
+    const { view } = setup('아주 긴 문장\n');
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 4, 5))); // '긴'
+    insertMarkdown(view, '짧은');
+    expect(serializeDocument(view.state.doc, null)).toBe('아주 짧은 문장\n');
+  });
+});
+
+describe('flashBlock', () => {
+  it('장식으로 잠깐 강조하고 지운다(DOM 클래스를 직접 건드리지 않는다)', async () => {
+    const { view, host } = setup('가\n\n나\n');
+    const { flashBlock } = await import('../src/nops');
+    flashBlock(view, view.state.doc.child(0).nodeSize, 30);
+    expect(host.querySelector('.nops-flash')?.textContent).toBe('나');
+    await new Promise((r) => setTimeout(r, 80));
+    expect(host.querySelector('.nops-flash')).toBeNull();
   });
 });

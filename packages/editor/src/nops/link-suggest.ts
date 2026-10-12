@@ -24,7 +24,9 @@ export interface LinkSuggestion {
   alias?: string | null;
   /** `label` 안의 강조 구간 */
   ranges?: Array<[number, number]>;
-  kind: 'note' | 'heading' | 'asset' | 'create';
+  kind: 'note' | 'heading' | 'asset' | 'create' | 'block';
+  /** 고른 뒤 링크를 넣기 전에 실행한다(예: 대상 블록에 `^id` 부여). 돌려준 `block`이 링크의 블록 ID가 된다 */
+  prepare?: () => Promise<{ block: string }>;
 }
 
 /** 에디터가 링크 자동완성을 위해 앱에 요구하는 기능 */
@@ -201,7 +203,17 @@ class SuggestUi {
   }
 
   private choose(view: EditorView, item: LinkSuggestion) {
-    const active = this.active ?? findActive(view);
+    if (item.prepare) {
+      // 비동기 준비가 끝난 뒤 그 사이 문서가 바뀌었을 수 있으니 위치를 다시 찾는다
+      void item
+        .prepare()
+        .then(({ block }) => {
+          if (!view.isDestroyed) this.choose(view, { ...item, prepare: undefined, block });
+        })
+        .catch(() => this.close());
+      return;
+    }
+    const active = findActive(view) ?? this.active;
     if (!active) return;
     const { schema, doc } = view.state;
     const type = active.embed ? schema.nodes.embed : schema.nodes.wikilink;
@@ -236,7 +248,7 @@ class SuggestUi {
       row.setAttribute('aria-selected', String(i === this.selected));
       const icon = document.createElement('span');
       icon.className = 'nops-link-suggest__icon';
-      icon.textContent = { note: '📄', heading: '#', asset: '🖼', create: '＋' }[item.kind];
+      icon.textContent = { note: '📄', heading: '#', asset: '🖼', create: '＋', block: '¶' }[item.kind];
       const text = document.createElement('span');
       text.className = 'nops-link-suggest__text';
       const label = document.createElement('span');

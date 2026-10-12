@@ -4,11 +4,12 @@ import { createNotionSupport } from '../notion';
 import { createTableSupport } from '../table';
 import type { Editor, EditorOptions, SlashItemSpec } from '../types';
 import { createCodeHighlightPlugin } from './code-highlight';
-import { createBlockHandlePlugin, createBlockKeymapPlugin } from './block-handle';
+import { type BlockLinkOptions, createBlockHandlePlugin, createBlockKeymapPlugin } from './block-handle';
 import { insertCallout, insertColumns, insertMathBlock, insertToggle } from './commands';
 import { type NopsAssetHost, resolveImageSrc } from './asset-host';
 import { createEmbedView } from './embed-view';
 import { createFilesPlugin } from './files-plugin';
+import { createFlashPlugin } from './flash';
 import { createLinkSuggestPlugin, type NopsLinkHost } from './link-suggest';
 import { nopsNodeViews } from './node-views';
 import { showTextPrompt } from './prompt';
@@ -24,6 +25,8 @@ export interface NopsEditorOptions {
   onOpenLink?: (link: WikiLinkTarget) => void;
   /** `[[` 링크 자동완성. 없으면 자동완성이 꺼진다(직접 `[[노트]]`를 끝까지 치면 링크로 바뀐다) */
   links?: NopsLinkHost;
+  /** 블록 메뉴의 "블록 링크 복사". 없으면 그 항목이 숨겨진다 */
+  blockLink?: BlockLinkOptions;
   /** 첨부(이미지·파일) 저장·표시. 없으면 첨부 기능이 꺼진다 */
   assets?: NopsAssetHost;
   /** 추가 슬래시 항목 (예: DB 뷰) */
@@ -77,8 +80,9 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
     plugins: [
       createNopsInputRules(nopsSchema),
       createInteractionPlugin({ onOpenLink: options.onOpenLink }),
-      ...createBlockHandlePlugin(),
+      ...createBlockHandlePlugin(options.blockLink),
       createCodeHighlightPlugin(),
+      createFlashPlugin(),
     ],
   });
 }

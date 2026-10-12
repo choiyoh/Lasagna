@@ -8,7 +8,7 @@ import { useAssetStore } from './assets';
 import { ConfirmDialog } from './ConfirmDialog';
 import { flushAll } from './flush';
 import { LinkPanel } from './LinkPanel';
-import { createLinkHost } from './link-host';
+import { createLinkHost, linkNameFor } from './link-host';
 import { QuickSwitcher } from './QuickSwitcher';
 import { TagPanel } from './TagPanel';
 
@@ -85,6 +85,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  /** 링크로 열 때 이동할 제목/블록 */
+  const [focus, setFocus] = useState<{ heading: string | null; block: string | null } | null>(null);
   const [creating, setCreating] = useState(false);
   const [sideTab, setSideTab] = useState<'files' | 'tags'>('files');
   const [panelOpen, setPanelOpen] = useState(true);
@@ -124,7 +126,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     (link: WikiLinkTarget) => {
       const id = resolver(link.target, selected ?? '');
       const note = id === undefined ? undefined : notes[id];
-      if (note) setSelected(note.path);
+      if (note) {
+        setFocus(link.heading || link.block ? { heading: link.heading, block: link.block } : null);
+        setSelected(note.path);
+      }
     },
     [resolver, notes, selected],
   );
@@ -139,6 +144,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         assets: () => assets.list(),
         currentPath: () => live.current.selected ?? '',
         headings: (path) => window.nops.link.headings({ path }),
+        blocks: (path) => window.nops.link.blocks({ path }),
+        ensureBlockId: async (path, line) => (await window.nops.link.ensureBlockId({ path, line })).id,
       }),
     [assets],
   );
@@ -313,6 +320,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             vaultId={vault.id}
             assets={assets}
             links={linkHost}
+            focus={focus}
+            noteLinkName={linkNameFor(selected, notes.map((n) => n.path))}
             onOpenLink={openLink}
             onRename={() => void renameCurrent()}
           />

@@ -1,6 +1,8 @@
-import type { Node as PMNode, NodeType } from 'prosemirror-model';
+import { Slice, type Node as PMNode, type NodeType } from 'prosemirror-model';
 import { TextSelection } from 'prosemirror-state';
 import type { Command, EditorState, Transaction } from 'prosemirror-state';
+import type { EditorView } from 'prosemirror-view';
+import { parseDocument } from './md';
 
 /**
  * 현재 블록 자리에 노드를 넣는다. 현재 블록이 빈 문단이면 그 자리를 대체하고,
@@ -130,4 +132,16 @@ export function toggleChecked(state: EditorState, pos: number): Transaction | nu
   const node = state.doc.nodeAt(pos);
   if (!node || node.type.name !== 'list_item' || node.attrs.checked === null) return null;
   return state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: !node.attrs.checked });
+}
+
+/** 마크다운 조각을 현재 선택 위치에 블록·인라인으로 넣는다(템플릿 삽입 등). 선택 영역은 대체된다. */
+export function insertMarkdown(view: EditorView, markdown: string): boolean {
+  const { doc } = parseDocument(markdown, view.state.schema);
+  // 한 문단짜리 조각은 문단을 쪼개지 않고 그 자리에 이어 붙인다
+  const single = doc.childCount === 1 && doc.child(0).type.name === 'paragraph';
+  const slice = single ? new Slice(doc.child(0).content, 0, 0) : new Slice(doc.content, 0, 0);
+  const tr = view.state.tr.replaceSelection(slice);
+  if (!tr.docChanged) return false;
+  view.dispatch(tr.scrollIntoView());
+  return true;
 }

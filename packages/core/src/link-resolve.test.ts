@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createLinkResolver } from './link-resolve.js';
+import { createLinkResolver, linkNameFor } from './link-resolve.js';
 
 const pages = [
   { id: 1, path: '프로젝트/Nopsidian.md', title: 'Nopsidian' },
@@ -51,5 +51,15 @@ describe('createLinkResolver', () => {
     expect(resolve('clean code', '')).toBe(2);
     expect(resolve('존재하지 않는 노트', '')).toBeUndefined();
     expect(resolve('', '')).toBeUndefined();
+  });
+});
+
+describe('linkNameFor', () => {
+  const paths = ['독서/클린 코드.md', '독서/아카이브/클린 코드.md', '프로젝트/Nopsidian.md', 'a/Memo.md', 'b/memo.md'];
+  it('파일 이름이 유일하면 이름만, 겹치면 경로(확장자 제외)', () => {
+    expect(linkNameFor('프로젝트/Nopsidian.md', paths)).toBe('Nopsidian');
+    expect(linkNameFor('독서/클린 코드.md', paths)).toBe('독서/클린 코드');
+    expect(linkNameFor('독서/아카이브/클린 코드.md', paths)).toBe('독서/아카이브/클린 코드');
+    expect(linkNameFor('a/Memo.md', paths)).toBe('a/Memo'); // 대소문자만 다른 이름도 겹침으로 본다
   });
 });

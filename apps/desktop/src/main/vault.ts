@@ -102,10 +102,12 @@ export interface VaultConfig {
   /** 데일리 노트 폴더와, 새 데일리 노트에 쓸 템플릿 노트(볼트 기준 경로, 없으면 null) */
   dailyFolder: string;
   dailyTemplate: string | null;
+  /** "템플릿 삽입"이 찾는 폴더 */
+  templatesFolder: string;
 }
 
 export function readVaultConfig(root: string): VaultConfig {
-  const fallback: VaultConfig = { version: 1, attachmentFolder: 'attachments', dailyFolder: '일기', dailyTemplate: null };
+  const fallback: VaultConfig = { version: 1, attachmentFolder: 'attachments', dailyFolder: '일기', dailyTemplate: null, templatesFolder: '템플릿' };
   try {
     const raw = JSON.parse(readFileSync(path.join(root, '.nopsidian', 'config.json'), 'utf8')) as Partial<VaultConfig>;
     const folder = typeof raw.attachmentFolder === 'string' ? raw.attachmentFolder.replace(/^\/+|\/+$/g, '') : '';
@@ -115,6 +117,10 @@ export function readVaultConfig(root: string): VaultConfig {
       ...raw,
       attachmentFolder: folder && !folder.startsWith('.') ? folder : fallback.attachmentFolder,
       dailyFolder: daily && !daily.startsWith('.') && !daily.includes('..') ? daily : fallback.dailyFolder,
+      templatesFolder:
+        typeof raw.templatesFolder === 'string' && raw.templatesFolder && !raw.templatesFolder.startsWith('.') && !raw.templatesFolder.includes('..')
+          ? raw.templatesFolder.replace(/^\/+|\/+$/g, '')
+          : fallback.templatesFolder,
       dailyTemplate: typeof raw.dailyTemplate === 'string' && raw.dailyTemplate ? raw.dailyTemplate : null,
     };
   } catch {

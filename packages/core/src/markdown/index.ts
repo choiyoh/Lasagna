@@ -7,3 +7,5 @@ export type { EditorParse, InlineToken, InlineTokenKind, DecodedPart } from './e
 export { parseTree } from './parse.js';
 export { findLinkSpans, applyEdits } from './link-spans.js';
 export type { LinkSpan, TextEdit } from './link-spans.js';
+export { ensureBlockIdAt, newBlockId } from './block-id.js';
+export type { EnsureBlockIdResult } from './block-id.js';

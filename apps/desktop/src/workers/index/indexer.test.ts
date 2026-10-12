@@ -356,4 +356,32 @@ describe('Indexer', () => {
       expect(ix.listAssets()).toEqual([]);
     });
   });
+
+  describe('블록 목록(blocksOf)', () => {
+    it('코드·수식 블록과 단독 ^id 줄은 빼고, ID가 있으면 함께 돌려준다', () => {
+      put('a.md', '# 제목\n\n첫 문단 ^b1\n\n```ts\ncode\n```\n\n둘째 문단\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n^t1\n');
+      ix.scan();
+      const blocks = ix.blocksOf('a.md');
+      expect(blocks.map((b) => [b.type, b.text, b.id])).toEqual([
+        ['heading', '제목', null],
+        ['paragraph', '첫 문단', 'b1'],
+        ['paragraph', '둘째 문단', null],
+        ['table', 'ab12', 't1'],
+      ]);
+      expect(blocks[1]!.line).toBe(3);
+    });
+
+    it('긴 블록은 80자로 줄이고 없는 노트는 빈 목록', () => {
+      put('b.md', `${'가'.repeat(120)}\n`);
+      ix.scan();
+      expect(ix.blocksOf('b.md')[0]!.text).toBe(`${'가'.repeat(80)}…`);
+      expect(ix.blocksOf('nope.md')).toEqual([]);
+    });
+
+    it('headingsOf는 줄 순서로 돌려준다', () => {
+      put('c.md', '# A\n\n## B\n\n### C\n');
+      ix.scan();
+      expect(ix.headingsOf('c.md').map((h) => [h.level, h.text, h.line])).toEqual([[1, 'A', 1], [2, 'B', 3], [3, 'C', 5]]);
+    });
+  });
 });

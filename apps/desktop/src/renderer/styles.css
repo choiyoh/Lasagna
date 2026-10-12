@@ -128,3 +128,8 @@ button.link { color: var(--muted); }
 .switcher__path mark { background: none; color: var(--accent); }
 .toast { position: fixed; left: 20px; bottom: 20px; z-index: 55; display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 8px; background: #2b2b33; color: #f0f0f4; font-size: 13px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
 .toast button { color: #a9a9ff; font-weight: 600; }
+
+
+.linkpanel__mention { position: relative; }
+.linkpanel__convert { position: absolute; right: 4px; top: 4px; padding: 1px 6px; font-size: 11px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); color: var(--accent); opacity: 0; }
+.linkpanel__mention:hover .linkpanel__convert, .linkpanel__convert:focus { opacity: 1; }

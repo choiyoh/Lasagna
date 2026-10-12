@@ -6,7 +6,8 @@ export type IndexQuery =
   | 'unlinkedMentions'
   | 'notesByTag'
   | 'tags'
-  | 'headingsOf';
+  | 'headingsOf'
+  | 'blocksOf';
 
 export type WorkerRequest =
   | { id: string; method: 'list' }

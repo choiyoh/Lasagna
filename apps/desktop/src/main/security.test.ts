@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ app: { on: vi.fn() }, session: {}, shell: {} }));
 
-const { SECURE_WEB_PREFERENCES, buildCsp, isTrustedUrl } = await import('./security');
+const { SECURE_WEB_PREFERENCES, buildCsp, isPermissionAllowed, isTrustedUrl } = await import('./security');
 
 describe('webPreferences 스냅샷', () => {
   it('보안 기본값이 바뀌지 않는다', () => {
@@ -41,5 +41,15 @@ describe('isTrustedUrl', () => {
     expect(isTrustedUrl('file:///etc/passwd')).toBe(false);
     expect(isTrustedUrl('http://localhost:5173/', 'http://localhost:5173/')).toBe(true);
     expect(isTrustedUrl('http://localhost:9999/', 'http://localhost:5173/')).toBe(false);
+  });
+});
+
+describe('권한', () => {
+  it('앱 화면의 클립보드 쓰기만 허용하고 나머지는 모두 거부한다', () => {
+    expect(isPermissionAllowed('clipboard-sanitized-write', 'app://nopsidian/index.html')).toBe(true);
+    expect(isPermissionAllowed('clipboard-sanitized-write', 'https://evil.example/')).toBe(false);
+    for (const p of ['media', 'geolocation', 'notifications', 'clipboard-read', 'midi', 'openExternal', 'fullscreen']) {
+      expect(isPermissionAllowed(p, 'app://nopsidian/index.html'), p).toBe(false);
+    }
   });
 });

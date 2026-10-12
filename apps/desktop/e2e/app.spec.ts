@@ -14,7 +14,7 @@ let vaultDir: string;
 
 test.beforeAll(async () => {
   // 방금 패키징한 앱의 첫 실행은 macOS의 검사 때문에 30초 넘게 걸릴 수 있다.
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
   const base = mkdtempSync(path.join(tmpdir(), 'nops-e2e-'));
   vaultDir = path.join(base, '내 볼트');
   mkdirSync(path.join(vaultDir, '프로젝트'), { recursive: true });
@@ -23,11 +23,24 @@ test.beforeAll(async () => {
     path.join(vaultDir, '위험.md'),
     '# 위험\n<script>window.__pwned = 1</script>\n<img src=x onerror="window.__pwned = 1">\n[링크](javascript:alert(1))\n',
   );
-  app = await electron.launch({
-    executablePath: executable,
-    args: [`--user-data-dir=${path.join(base, 'userdata')}`],
-  });
-  await app.firstWindow({ timeout: 150_000 });
+  // 앱을 막 종료하거나 재패키징한 직후에는 첫 창이 안 뜨고 멈추는 경우가 가끔 있다(macOS 쪽 일시 현상).
+  // 짧게 기다려 보고 안 뜨면 닫고 다시 띄운다. 앱 동작이 아니라 테스트 준비 단계의 재시도다.
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const candidate = await electron.launch({
+      executablePath: executable,
+      args: [`--user-data-dir=${path.join(base, `userdata-${attempt}`)}`],
+    });
+    try {
+      await candidate.firstWindow({ timeout: attempt === 1 ? 60_000 : 45_000 });
+      app = candidate;
+      break;
+    } catch (e) {
+      lastError = e;
+      await candidate.close().catch(() => undefined);
+    }
+  }
+  if (!app) throw lastError;
   // 폴더 선택 대화상자는 자동화할 수 없으므로 main에서 대체한다.
   await app.evaluate(({ dialog }, dir) => {
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as typeof dialog.showOpenDialog;
@@ -663,6 +676,115 @@ test.describe('링크 코어', () => {
     expect(readFileSync(path.join(vaultDir, '참조A.md'), 'utf8')).toBe('# 참조A\n\n[[옛이름]] 그리고 [[옛이름#소제목|보기]]\n');
   });
 
+  test('템플릿 삽입: 슬래시로 템플릿을 골라 변수를 채워 넣는다', async () => {
+    const page = await app.firstWindow();
+    note('템플릿/회의록', '---\ntags: [meeting]\n---\n## 회의 {{title}}\n\n- 날짜: {{date:YYYY년 M월 D일 (ddd)}}\n- [ ] 안건\n');
+    const file = note('템플릿대상', '# 템플릿대상\n\n시작\n');
+    await open(page, '템플릿대상');
+    const expectedDate = await page.evaluate(() => {
+      const d = new Date();
+      return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${'일월화수목금토'[d.getDay()]})`;
+    });
+    await page.locator('.ProseMirror p', { hasText: '시작' }).click();
+    await page.waitForTimeout(150);
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('/ㅌㅍㄹ');
+    await expect(page.locator('.oh-editor__slash-item', { hasText: '템플릿 삽입' }).first()).toBeVisible();
+    await page.keyboard.press('Enter');
+    const picker = page.getByRole('dialog', { name: '템플릿 삽입' });
+    await expect(picker).toBeVisible();
+    await expect(picker).toContainText('회의록', { timeout: 5000 });
+    // 슬래시 메뉴가 에디터로 포커스를 되돌린 뒤 피커 입력창이 다시 포커스를 잡을 때까지 기다린다
+    await expect(picker.locator('input')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.ProseMirror h2')).toHaveText('회의 템플릿대상');
+    await expect
+      .poll(() => readFileSync(file, 'utf8'), { timeout: 5000 })
+      .toContain(`## 회의 템플릿대상\n\n- 날짜: ${expectedDate}\n- [ ] 안건`);
+    // 템플릿의 프런트매터는 넣지 않는다
+    expect(readFileSync(file, 'utf8')).not.toContain('meeting');
+  });
+
+  test('데일리 노트 템플릿: 볼트 설정의 템플릿 변수를 채운다', async () => {
+    const page = await app.firstWindow();
+    note('템플릿/일일', '# {{date:YYYY년 M월 D일}} 일기\n\n- 요일: {{date:dddd}}\n');
+    mkdirSync(path.join(vaultDir, '.nopsidian'), { recursive: true });
+    writeFileSync(path.join(vaultDir, '.nopsidian/config.json'), JSON.stringify({ version: 1, dailyTemplate: '템플릿/일일.md' }));
+    const r = await page.evaluate(() => window.nops.daily.open({ date: '2031-05-17' }));
+    expect(r).toEqual({ path: '일기/2031-05-17.md', created: true });
+    expect(readFileSync(path.join(vaultDir, '일기/2031-05-17.md'), 'utf8')).toBe('# 2031년 5월 17일 일기\n\n- 요일: 토요일\n');
+    writeFileSync(path.join(vaultDir, '.nopsidian/config.json'), JSON.stringify({ version: 1 }));
+  });
+
+  test('언링크드 멘션 → 링크로 변환', async () => {
+    const page = await app.firstWindow();
+    note('변환대상', '# 변환대상 노트\n\n본문\n');
+    const mention = note('변환멘션', '# 변환멘션\n\n오늘은 변환대상 노트를 정리했다. 변환대상 노트는 두 번 나온다.\n');
+    await open(page, '변환대상 노트');
+    await page.getByRole('tab', { name: /언링크드/ }).click();
+    const panel = page.getByTestId('panel-unlinked');
+    await expect(panel).toContainText('오늘은 변환대상 노트를 정리했다', { timeout: 8000 });
+    await panel.locator('.linkpanel__mention').first().hover();
+    await panel.getByRole('button', { name: '링크로 변환' }).first().click();
+    await expect
+      .poll(() => readFileSync(mention, 'utf8'), { timeout: 8000 })
+      // 링크 대상은 파일 이름(변환대상), 본문에 보이던 글자(제목)는 별칭으로 남는다
+      .toBe('# 변환멘션\n\n오늘은 [[변환대상|변환대상 노트]]를 정리했다. 변환대상 노트는 두 번 나온다.\n');
+    // 이제 이 노트를 가리키는 링크가 생겼으므로 언링크드 목록에서 사라진다
+    await expect(panel).toContainText('언급된 곳이 없어요', { timeout: 8000 });
+    await page.getByRole('tab', { name: /백링크/ }).click();
+    await expect(page.getByTestId('panel-backlinks')).toContainText('변환멘션', { timeout: 8000 });
+  });
+
+  test('블록 링크: 메뉴로 복사하고, [[노트#^ 자동완성으로 넣고, 링크를 열면 그 블록으로 간다', async () => {
+    const page = await app.firstWindow();
+    const target = note('블록대상', '# 블록대상\n\n첫 문단\n\n복사할 문단\n\n마지막 문단\n');
+    const plain = note('아이디없음', '# 아이디없음\n\n붙일 문단 하나\n');
+    const source = note('블록출발', '# 블록출발\n\n시작\n');
+
+    // 1) 메뉴 → 블록 링크 복사
+    await open(page, '블록대상');
+    const para = page.locator('.ProseMirror p', { hasText: '복사할 문단' });
+    await para.hover();
+    await expect(page.locator('.nops-handle')).toBeVisible();
+    await page.locator('.nops-handle__grip').click();
+    await page.locator('.nops-block-menu button', { hasText: '블록 링크 복사' }).click();
+    await expect(page.locator('.note-editor__notice')).toContainText('복사했어요', { timeout: 5000 });
+    const clip = await app.evaluate(({ clipboard }) => clipboard.readText());
+    const m = /^\[\[블록대상#\^([a-z0-9]{6})\]\]$/.exec(clip);
+    expect(m, clip).not.toBeNull();
+    const id = m![1]!;
+    await expect.poll(() => readFileSync(target, 'utf8'), { timeout: 5000 }).toBe(`# 블록대상\n\n첫 문단\n\n복사할 문단 ^${id}\n\n마지막 문단\n`);
+
+    // 2) 다른 노트에서 [[블록대상#^ 자동완성 (이미 ID가 있는 블록)
+    await open(page, '블록출발');
+    await page.locator('.ProseMirror p', { hasText: '시작' }).click();
+    await page.waitForTimeout(150);
+    await page.keyboard.press('End');
+    await page.keyboard.type(' 참고: [[블록대상#^복사');
+    const popup = page.locator('.nops-link-suggest');
+    await expect(popup.locator('.is-active')).toContainText('복사할 문단');
+    await expect(popup.locator('.is-active')).toContainText(`^${id}`);
+    await page.keyboard.press('Enter');
+    await expect.poll(() => readFileSync(source, 'utf8'), { timeout: 5000 }).toContain(`[[블록대상#^${id}]]`);
+
+    // 3) ID가 없는 블록을 고르면 대상 노트에 ID가 새로 붙는다
+    await page.keyboard.type(' 또 [[아이디없음#^붙일');
+    await expect(popup.locator('.is-active')).toContainText('붙일 문단 하나');
+    await expect(popup.locator('.is-active')).toContainText('ID를 새로');
+    await page.keyboard.press('Enter');
+    await expect
+      .poll(() => readFileSync(plain, 'utf8'), { timeout: 8000 })
+      .toMatch(/^# 아이디없음\n\n붙일 문단 하나 \^[a-z0-9]{6}\n$/);
+    await expect.poll(() => readFileSync(source, 'utf8'), { timeout: 5000 }).toMatch(/\[\[아이디없음#\^[a-z0-9]{6}\]\]/);
+
+    // 4) 블록 링크를 클릭하면 그 노트로 가서 해당 블록을 강조한다
+    await page.locator('.nops-wikilink', { hasText: '블록대상' }).click();
+    await expect(page.locator('.ProseMirror h1')).toHaveText('블록대상');
+    await expect(page.locator('.nops-flash')).toContainText('복사할 문단', { timeout: 5000 });
+  });
+
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
     const page = await app.firstWindow();
     const today = await page.evaluate(() => {
@@ -685,7 +807,7 @@ test.describe('링크 코어', () => {
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'daily', 'link', 'note', 'on', 'search', 'tag', 'vault']);
+  expect(keys).toEqual(['app', 'asset', 'daily', 'link', 'note', 'on', 'search', 'tag', 'template', 'vault']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

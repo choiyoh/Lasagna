@@ -401,3 +401,71 @@ export function normalizeColumns(state: EditorState): Transaction | null {
   return tr;
 }
 
+
+// ───────────────────────── 블록 링크용 ID ─────────────────────────
+
+const ID_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+
+function randomId(existing: ReadonlySet<string>): string {
+  for (;;) {
+    const bytes = globalThis.crypto.getRandomValues(new Uint8Array(6));
+    let id = '';
+    for (let i = 0; i < 6; i++) id += ID_CHARS[bytes[i]! % ID_CHARS.length];
+    if (!existing.has(id)) return id;
+  }
+}
+
+/** 문서에 이미 쓰인 블록 ID(문단·제목의 속성과, 표·코드 뒤의 단독 `^id` 문단) */
+export function collectBlockIds(doc: PMNode): Set<string> {
+  const ids = new Set<string>();
+  doc.descendants((n) => {
+    if (n.attrs.blockId) ids.add(n.attrs.blockId as string);
+    if (n.type.name === 'paragraph') {
+      const m = /^\^([A-Za-z0-9-]+)$/.exec(n.textContent);
+      if (m) ids.add(m[1]!);
+    }
+    return true;
+  });
+  return ids;
+}
+
+/**
+ * 이 블록을 가리키는 블록 링크에 쓸 ID를 보장한다. 이미 있으면 그대로 쓰고 `tr`은 null.
+ *  - 문단·제목: 속성에 ID. 목록 항목: 첫 문단. 인용·콜아웃·토글: 마지막 문단
+ *  - 그 밖의 블록(표·코드·수식·이미지 …): 바로 아래에 `^id` 문단을 둔다(마크다운에서는 단독 줄이 된다)
+ */
+export function ensureBlockId(state: EditorState, ref: BlockRef): { id: string; tr: Transaction | null } {
+  const $pos = state.doc.resolve(ref.pos);
+  const { paragraph } = state.schema.nodes;
+  const existing = collectBlockIds(state.doc);
+
+  // ID를 속성으로 가질 수 있는 문단/제목 찾기
+  const holder = (node: PMNode, pos: number): { node: PMNode; pos: number } | null => {
+    const name = node.type.name;
+    if (name === 'paragraph' || name === 'heading') return { node, pos };
+    if (name === 'list_item') return holder(node.child(0), pos + 1);
+    if (name === 'blockquote' || name === 'callout' || name === 'toggle') {
+      const last = node.lastChild;
+      if (!last || last.type.name !== 'paragraph') return null;
+      return { node: last, pos: pos + node.nodeSize - 1 - last.nodeSize };
+    }
+    return null;
+  };
+  void $pos;
+
+  const target = holder(ref.node, ref.pos);
+  if (target) {
+    const current = target.node.attrs.blockId as string | null;
+    if (current) return { id: current, tr: null };
+    const id = randomId(existing);
+    return { id, tr: state.tr.setNodeMarkup(target.pos, undefined, { ...target.node.attrs, blockId: id }) };
+  }
+
+  // 단독 `^id` 문단이 이미 바로 아래에 있으면 재사용
+  const after = ref.pos + ref.node.nodeSize;
+  const next = state.doc.nodeAt(after);
+  const m = next && next.type.name === 'paragraph' ? /^\^([A-Za-z0-9-]+)$/.exec(next.textContent) : null;
+  if (m) return { id: m[1]!, tr: null };
+  const id = randomId(existing);
+  return { id, tr: state.tr.insert(after, paragraph!.create(null, state.schema.text(`^${id}`))) };
+}

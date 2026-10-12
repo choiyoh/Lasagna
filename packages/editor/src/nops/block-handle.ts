@@ -12,6 +12,7 @@ import {
   deleteBlock,
   dropToColumns,
   duplicateBlock,
+  ensureBlockId,
   moveBlock,
   normalizeColumns,
   turnInto,
@@ -62,6 +63,7 @@ class BlockHandleView {
   constructor(
     private readonly view: EditorView,
     private readonly setDragSource: (s: DragSource | null) => void,
+    private readonly blockLink?: BlockLinkOptions,
   ) {
     this.host = (view.dom.closest('.oh-editor') as HTMLElement | null) ?? view.dom.parentElement ?? document.body;
 
@@ -253,6 +255,19 @@ class BlockHandleView {
       hr.className = 'nops-block-menu__sep';
       menu.append(hr);
     }
+    if (this.blockLink) {
+      menu.append(
+        this.menuButton('블록 링크 복사', () => {
+          this.closeMenu();
+          const fresh = this.refreshRef(ref);
+          if (!fresh) return;
+          const { id, tr } = ensureBlockId(this.view.state, fresh);
+          if (tr) this.view.dispatch(tr);
+          this.blockLink!.copy(`[[${this.blockLink!.noteName()}#^${id}]]`);
+          this.view.focus();
+        }),
+      );
+    }
     menu.append(
       this.menuButton('복제', () => run((s, r) => duplicateBlock(s, r)), '⌘D'),
       this.menuButton('위로 이동', () => run((s, r) => moveBlock(s, r, -1)), '⌘⇧↑'),
@@ -333,14 +348,21 @@ function sideTarget(view: EditorView, event: DragEvent): { ref: BlockRef; side: 
  * 블록 핸들(+ 버튼, 끌어서 이동, 블록 메뉴), 좌우 드롭으로 열 만들기, 이동 뒤 빈 열 정리.
  * 위/아래 드롭은 ProseMirror 기본 드롭(dropcursor 표시선 포함)을 그대로 쓴다.
  */
-export function createBlockHandlePlugin(): Plugin[] {
+export interface BlockLinkOptions {
+  /** 이 노트를 가리킬 때 쓰는 이름(파일 이름 또는 경로, 확장자 제외) */
+  noteName: () => string;
+  /** 클립보드에 쓴다 */
+  copy: (text: string) => void;
+}
+
+export function createBlockHandlePlugin(blockLink?: BlockLinkOptions): Plugin[] {
   let dragSource: DragSource | null = null;
   let handle: BlockHandleView | null = null;
 
   const main = new Plugin({
     key: blockHandleKey,
     view(view) {
-      handle = new BlockHandleView(view, (s) => (dragSource = s));
+      handle = new BlockHandleView(view, (s) => (dragSource = s), blockLink);
       return {
         update: () => handle?.update(),
         destroy: () => {

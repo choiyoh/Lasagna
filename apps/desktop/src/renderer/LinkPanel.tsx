@@ -129,9 +129,21 @@ export function LinkPanel({ path, onOpen }: Props) {
                   {items[0]!.title}
                 </button>
                 {items.map((it, i) => (
-                  <button key={i} className="linkpanel__snippet" onClick={() => onOpen(p)} title={`${p}:${it.line}`}>
-                    {it.snippet}
-                  </button>
+                  <div key={i} className="linkpanel__mention">
+                    <button className="linkpanel__snippet" onClick={() => onOpen(p)} title={`${p}:${it.line}`}>
+                      {it.snippet}
+                    </button>
+                    <button
+                      className="linkpanel__convert"
+                      title="이 글자를 [[링크]]로 바꿔요"
+                      onClick={async () => {
+                        await window.nops.link.convertMention({ path: p, line: it.line, targetPath: path });
+                        void load();
+                      }}
+                    >
+                      링크로 변환
+                    </button>
+                  </div>
                 ))}
               </section>
             ))

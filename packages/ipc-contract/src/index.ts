@@ -114,6 +114,26 @@ export const contract = {
     input: z.object({ path: relPath }),
     output: z.array(z.object({ text: z.string(), level: z.number(), line: z.number() })),
   },
+  'link.blocks': {
+    input: z.object({ path: relPath }),
+    output: z.array(z.object({ id: z.string().nullable(), text: z.string(), line: z.number(), type: z.string() })),
+  },
+  /** 그 노트의 `line`번째 줄이 속한 블록에 `^id`를 붙이고(이미 있으면 그대로) ID를 돌려준다. 파일을 직접 고친다. */
+  'link.ensureBlockId': {
+    input: z.object({ path: relPath, line: z.number().int().min(1) }),
+    output: z.object({ id: z.string(), changed: z.boolean() }),
+  },
+  /** 언링크드 멘션 하나를 위키링크로 바꾼다(`path` 노트의 `line` 줄 블록에서 `targetPath` 노트의 제목·별칭이 나온 첫 곳). */
+  'link.convertMention': {
+    input: z.object({ path: relPath, line: z.number().int().min(1), targetPath: relPath }),
+    output: z.object({ changed: z.boolean(), replaced: z.string().optional() }),
+  },
+  'template.list': { input: z.undefined(), output: z.array(z.object({ path: relPath, title: z.string() })) },
+  /** 템플릿 노트를 읽어 변수를 채운 본문(프런트매터 제외)을 돌려준다. */
+  'template.read': {
+    input: z.object({ path: relPath, title: z.string().max(300) }),
+    output: z.object({ content: z.string() }),
+  },
   'tag.list': { input: z.undefined(), output: z.array(z.object({ tag: z.string(), count: z.number() })) },
   'tag.notes': {
     input: z.object({ tag: z.string().max(200) }),

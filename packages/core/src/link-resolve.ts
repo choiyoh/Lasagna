@@ -100,3 +100,14 @@ export function createLinkResolver(pages: ResolvablePage[], aliases: ResolvableA
     return byAlias.get(lower(name))?.[0];
   };
 }
+
+/**
+ * 노트를 가리킬 때 쓰는 이름: 파일 이름이 볼트에서 유일하면 파일 이름만, 아니면 경로(확장자 제외).
+ * 렌더러(자동완성)와 메인(멘션 → 링크 변환)이 같은 규칙을 쓴다.
+ */
+export function linkNameFor(path: string, allPaths: readonly string[]): string {
+  const base = (p: string) => stripMd(p.slice(p.lastIndexOf('/') + 1)).toLowerCase();
+  const mine = base(path);
+  const same = allPaths.filter((p) => base(p) === mine).length;
+  return same <= 1 ? stripMd(path.slice(path.lastIndexOf('/') + 1)) : stripMd(path);
+}

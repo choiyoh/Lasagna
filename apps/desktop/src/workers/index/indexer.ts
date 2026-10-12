@@ -495,6 +495,25 @@ export class Indexer {
     return out.slice(0, limit);
   }
 
+  /** 노트의 블록 목록 — `[[노트#^` 자동완성용(코드·수식·HTML 제외, 텍스트는 정리해 80자까지) */
+  blocksOf(rel: string): { id: string | null; text: string; line: number; type: string }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT b.id AS id, b.text AS text, b.line_start AS line, b.type AS type
+         FROM blocks b JOIN pages p ON p.id = b.page_id
+         WHERE p.path = ? AND b.type IN ('paragraph','heading','list','quote','callout','table')
+         ORDER BY b.ord`,
+      )
+      .all(rel) as { id: string | null; text: string | null; line: number; type: string }[];
+    return rows
+      .map((r) => {
+        // 목록에는 줄 끝의 ` ^id` 표기를 보이지 않는다(ID는 따로 돌려준다)
+        const flat = (r.text ?? '').replace(/\s+/g, ' ').replace(/\s*\^[A-Za-z0-9-]+\s*$/, '').trim();
+        return { id: r.id, text: flat.length > 80 ? `${flat.slice(0, 80)}…` : flat, line: r.line, type: r.type };
+      })
+      .filter((r) => r.text !== '' && !/^\^[A-Za-z0-9-]+$/.test(r.text));
+  }
+
   /** 노트의 제목(헤딩) 목록 — `[[노트#` 자동완성용 */
   headingsOf(rel: string): { text: string; level: number; line: number }[] {
     return this.db

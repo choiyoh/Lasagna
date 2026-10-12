@@ -1,10 +1,15 @@
 import { app, BrowserWindow, session, shell } from 'electron';
 import { createHash } from 'node:crypto';
 import { applyRename, planRename, undoRename } from './rename';
+import { linkMention } from '../workers/index/mention-link';
+import { expandTemplate } from '../workers/index/templates';
 import path from 'node:path';
 import {
   atomicWrite,
+  ensureBlockIdAt,
   isGenericName,
+  linkNameFor,
+  splitFrontmatter,
   pastedName,
   mimeFromName,
   resolveInVault,
@@ -88,12 +93,14 @@ async function snapshotVault(v: ReturnType<typeof requireVault>) {
 const localDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-/** 데일리 노트 내용: 템플릿 노트가 있으면 `{{date}}`·`{{title}}`을 채워 쓰고, 없으면 제목만. */
+/** 데일리 노트 내용: 템플릿 노트가 있으면 변수를 채워 쓰고(프런트매터 포함 그대로), 없으면 제목만. */
 function dailyTemplate(root: string, templatePath: string | null, day: string): string {
+  const [y, m, d] = day.split('-').map(Number) as [number, number, number];
+  const now = new Date();
+  now.setFullYear(y, m - 1, d); // 날짜는 요청한 날, 시각은 지금
   if (templatePath) {
     try {
-      const raw = readFileSync(resolveInVault(root, templatePath), 'utf8');
-      return raw.replace(/\{\{\s*(date|title)\s*\}\}/g, day);
+      return expandTemplate(readFileSync(resolveInVault(root, templatePath), 'utf8'), { now, title: day });
     } catch {
       // 템플릿을 못 읽으면 기본 내용으로
     }
@@ -177,6 +184,49 @@ function registerHandlers() {
     await v.index.ready;
     return v.index.query('headingsOf', rel);
   });
+  handle('link.blocks', async ({ path: rel }) => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('blocksOf', rel);
+  });
+  handle('link.ensureBlockId', ({ path: rel, line }) => {
+    const v = requireVault();
+    const content = readFileSync(resolveInVault(v.info.path, rel), 'utf8');
+    const r = ensureBlockIdAt(content, line);
+    if (!r) throw new Error('그 줄에서 블록을 찾지 못했습니다');
+    if (r.changed) {
+      // 대상 노트가 편집기에 열려 있어도 외부 편집과 같은 경로(3-way 병합)로 합쳐진다
+      saveNote({ root: v.info.path, rel, content: r.content, baseHash: sha256(content), baseContent: content });
+    }
+    return { id: r.id, changed: r.changed };
+  });
+  handle('link.convertMention', async ({ path: rel, line, targetPath }) => {
+    const v = requireVault();
+    await v.index.ready;
+    const notes = await v.index.list();
+    const target = notes.find((n) => n.path === targetPath);
+    if (!target) throw new Error('대상 노트를 찾을 수 없습니다');
+    // 목록(`unlinkedMentions`)과 같은 기준: 2글자 이하 말은 쓰지 않는다
+    const terms = [target.title, ...target.aliases].filter((t) => [...t].length > 2);
+    const content = readFileSync(resolveInVault(v.info.path, rel), 'utf8');
+    const r = linkMention(content, { line, terms, target: linkNameFor(targetPath, notes.map((n) => n.path)) });
+    if (r.changed) saveNote({ root: v.info.path, rel, content: r.content, baseHash: sha256(content), baseContent: content });
+    return { changed: r.changed, ...(r.replaced ? { replaced: r.replaced } : {}) };
+  });
+  handle('template.list', async () => {
+    const v = requireVault();
+    await v.index.ready;
+    const folder = readVaultConfig(v.info.path).templatesFolder;
+    return (await v.index.list()).filter((n) => n.path.startsWith(`${folder}/`)).map((n) => ({ path: n.path, title: n.title }));
+  });
+  handle('template.read', ({ path: rel, title }) => {
+    const v = requireVault();
+    const raw = readFileSync(resolveInVault(v.info.path, rel), 'utf8');
+    const fm = splitFrontmatter(raw);
+    // 이미 있는 노트에 끼워 넣는 용도이므로 템플릿의 프런트매터는 뺀다
+    const body = fm ? raw.slice(fm.end) : raw;
+    return { content: expandTemplate(body, { now: new Date(), title }).replace(/^\s*\n/, '') };
+  });
   handle('tag.list', async () => {
     const v = requireVault();
     await v.index.ready;
@@ -251,7 +301,7 @@ function registerHandlers() {
 }
 
 app.whenReady().then(() => {
-  installSessionPolicy();
+  installSessionPolicy(devServerUrl);
   if (devServerUrl) {
     // 개발 서버는 HMR 때문에 완화된 CSP를 쓴다. 운영 CSP는 app:// 응답 헤더로 강제된다.
     session.defaultSession.webRequest.onHeadersReceived((d, cb) => {

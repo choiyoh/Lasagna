@@ -7,6 +7,7 @@ import {
   deleteBlock,
   dropToColumns,
   duplicateBlock,
+  ensureBlockId,
   moveBlock,
   normalizeColumns,
   turnInto,
@@ -213,3 +214,41 @@ describe('선택 보존', () => {
 });
 
 void (null as unknown as PMNode);
+
+describe('ensureBlockId (블록 링크용 ID)', () => {
+  const ensure = (src: string, text: string) => {
+    const s0 = stateOf(src);
+    const { id, tr } = ensureBlockId(s0, blockWith(s0, text));
+    const s1 = tr ? s0.apply(tr) : s0;
+    return { id, md: md(s1), changed: Boolean(tr) };
+  };
+
+  it('문단·제목은 속성에, 이미 있으면 그대로', () => {
+    const a = ensure('앞\n\n대상 문단\n', '대상');
+    expect(a.id).toMatch(/^[a-z0-9]{6}$/);
+    expect(a.md).toBe(`앞\n\n대상 문단 ^${a.id}\n`);
+    expect(ensure('# 제목 ^h1\n', '제목')).toEqual({ id: 'h1', md: '# 제목 ^h1\n', changed: false });
+  });
+
+  it('목록 항목은 첫 문단, 콜아웃은 마지막 문단에 붙는다', () => {
+    const a = ensure('- a\n- b\n', 'b');
+    expect(a.md).toBe(`- a\n- b ^${a.id}\n`);
+    const c = ensure('> [!note] 제목\n> 본문\n', '본문');
+    expect(c.md).toBe(`> [!note] 제목\n> 본문 ^${c.id}\n`);
+  });
+
+  it('표·코드는 아래에 단독 `^id` 문단을 두고, 이미 있으면 재사용한다', () => {
+    const t = ensure('| 가 | 나 |\n| - | - |\n| 1 | 2 |\n', '1');
+    expect(t.md).toBe(`| 가 | 나 |\n| - | - |\n| 1 | 2 |\n\n^${t.id}\n`);
+    const again = ensure(t.md, '1');
+    expect(again).toMatchObject({ id: t.id, changed: false });
+    const code = ensure('```\nx\n```\n', 'x');
+    expect(code.md).toBe(`\`\`\`\nx\n\`\`\`\n\n^${code.id}\n`);
+  });
+
+  it('문서 안의 다른 ID와 겹치지 않는다', () => {
+    const ids = new Set<string>();
+    for (let i = 0; i < 40; i++) ids.add(ensure('한 문단 ^aaaaaa\n\n다른 문단\n', '다른').id);
+    expect(ids.has('aaaaaa')).toBe(false);
+  });
+});

@@ -2,9 +2,16 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { createLinkResolver, mimeFromName, parseNote, type ParsedNote } from '@nopsidian/core';
+import {
+  NO_INLINE_SCAN,
+  createLinkResolver,
+  maskInlineCode,
+  mimeFromName,
+  parseNote,
+  type ParsedNote,
+} from '@nopsidian/core';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -24,7 +31,8 @@ CREATE TABLE IF NOT EXISTS headings (page_id INTEGER NOT NULL, level INTEGER NOT
 CREATE TABLE IF NOT EXISTS blocks (id TEXT, page_id INTEGER NOT NULL, type TEXT NOT NULL, parent_id TEXT, ord INTEGER NOT NULL, text TEXT, heading_level INTEGER, line_start INTEGER, line_end INTEGER);
 CREATE TABLE IF NOT EXISTS links (
   src_page INTEGER NOT NULL, src_block TEXT, dst_page INTEGER, dst_raw TEXT NOT NULL,
-  dst_heading TEXT, dst_block TEXT, kind TEXT NOT NULL, is_resolved INTEGER NOT NULL DEFAULT 0
+  dst_heading TEXT, dst_block TEXT, kind TEXT NOT NULL, is_resolved INTEGER NOT NULL DEFAULT 0,
+  line INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_links_dst ON links(dst_page);
 CREATE INDEX IF NOT EXISTS idx_links_src ON links(src_page);
@@ -44,6 +52,30 @@ export interface NoteRow {
 export interface Hit {
   path: string;
   title: string;
+  snippet: string;
+}
+/** 이 노트를 가리키는 링크 하나와, 그 링크가 놓인 블록의 문맥 */
+export interface BacklinkContext {
+  path: string;
+  title: string;
+  kind: string;
+  line: number;
+  snippet: string;
+}
+/** 이 노트가 가진 링크 하나(미해결 포함) */
+export interface OutgoingLink {
+  target: string;
+  resolvedPath: string | null;
+  kind: string;
+  heading: string | null;
+  block: string | null;
+  line: number;
+}
+/** 대상 노트의 제목·별칭이 링크 없이 나온 자리 */
+export interface UnlinkedMention {
+  path: string;
+  title: string;
+  line: number;
   snippet: string;
 }
 
@@ -77,6 +109,32 @@ function walkFiles(root: string, include: (name: string) => boolean): Found[] {
 }
 
 const isMarkdown = (name: string) => name.toLowerCase().endsWith('.md');
+
+const REGEX_SPECIALS = /[.*+?^${}()|[\]\\]/g;
+
+/** 블록 텍스트를 한 줄로 정리하고 160자를 넘으면 자른다(문맥 미리보기용). */
+function cleanSnippet(text: string | null | undefined): string {
+  const flat = (text ?? '').replace(/\s+/g, ' ').trim();
+  const chars = [...flat];
+  return chars.length > 160 ? `${chars.slice(0, 160).join('')}…` : flat;
+}
+
+/** 위키링크·임베드·마크다운 링크 구간을 같은 길이의 공백으로 가린다(인라인 코드는 파서와 같은 규칙). */
+function maskLinkedSpans(src: string): string {
+  const blank = (m: string) => ' '.repeat(m.length);
+  return maskInlineCode(src)
+    .replace(/!?\[\[[^[\]\n]*\]\]/g, blank)
+    .replace(/!?\[[^[\]\n]*\]\([^()\n]*\)/g, blank);
+}
+
+/**
+ * 멘션 판정 정규식: 앞은 시작이나 글자·숫자가 아닌 문자, 뒤는 끝이나 글자·숫자가 아닌 문자 또는 한글(조사).
+ * 대소문자는 구분하지 않는다.
+ */
+function mentionRe(term: string): RegExp {
+  const escaped = term.replace(REGEX_SPECIALS, '\\$&');
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?!(?!\\p{Script=Hangul})[\\p{L}\\p{N}])`, 'iu');
+}
 
 /** 볼트 안의 .md 파일을 모은다. 점(.)으로 시작하는 폴더(.nopsidian, .git 등)는 건너뛴다. */
 export const walkMarkdown = (root: string): Found[] => walkFiles(root, isMarkdown);
@@ -283,12 +341,12 @@ export class Indexer {
     }
 
     const insLink = this.db.prepare(
-      `INSERT INTO links(src_page, src_block, dst_raw, dst_heading, dst_block, kind, is_resolved)
-       VALUES(?,?,?,?,?,?,0)`,
+      `INSERT INTO links(src_page, src_block, dst_raw, dst_heading, dst_block, kind, line, is_resolved)
+       VALUES(?,?,?,?,?,?,?,0)`,
     );
     for (const l of meta.links) {
       const srcBlock = blocks.find((b) => l.line >= b.lineStart && l.line <= b.lineEnd)?.blockId ?? null;
-      insLink.run(id, srcBlock, l.target, l.heading ?? null, l.block ?? null, l.kind);
+      insLink.run(id, srcBlock, l.target, l.heading ?? null, l.block ?? null, l.kind, l.line);
     }
   }
 
@@ -335,7 +393,7 @@ export class Indexer {
     this.resolveDirty = true;
   }
 
-  /** 이 노트를 가리키는 링크(해석된 것만). 줄 번호·문맥 스니펫은 3단계에서 추가한다. */
+  /** 이 노트를 가리키는 링크(해석된 것만)의 경로·종류. 줄 번호·문맥은 backlinkContexts를 쓴다. */
   backlinks(rel: string): { path: string; kind: string }[] {
     this.resolveLinks();
     return this.db
@@ -346,6 +404,108 @@ export class Indexer {
          ORDER BY p.path`,
       )
       .all(rel) as { path: string; kind: string }[];
+  }
+
+  /** 이 노트를 가리키는 링크마다 그 링크가 놓인 블록의 문맥을 붙여 돌려준다(자기 자신 제외, path→line 순). */
+  backlinkContexts(rel: string): BacklinkContext[] {
+    this.resolveLinks();
+    const rows = this.db
+      .prepare(
+        `SELECT p.path AS path, p.title AS title, l.kind AS kind, l.line AS line
+         FROM links l JOIN pages p ON p.id = l.src_page
+         WHERE l.dst_page = (SELECT id FROM pages WHERE path=?) AND l.src_page != l.dst_page
+         ORDER BY p.path, l.line`,
+      )
+      .all(rel) as { path: string; title: string; kind: string; line: number }[];
+    const findBlock = this.db.prepare(
+      `SELECT b.text AS text FROM blocks b JOIN pages p ON p.id = b.page_id
+       WHERE p.path = ? AND b.line_start <= ? AND b.line_end >= ?
+       ORDER BY b.ord LIMIT 1`,
+    );
+    return rows.map((r) => {
+      const block = findBlock.get(r.path, r.line, r.line) as { text: string | null } | undefined;
+      return { ...r, snippet: cleanSnippet(block?.text) };
+    });
+  }
+
+  /** 이 노트가 가진 모든 링크(미해결 포함)를 줄→대상 순으로 돌려준다. */
+  outgoingLinks(rel: string): OutgoingLink[] {
+    this.resolveLinks();
+    return this.db
+      .prepare(
+        `SELECT l.dst_raw AS target, p.path AS resolvedPath, l.kind AS kind,
+                l.dst_heading AS heading, l.dst_block AS block, l.line AS line
+         FROM links l LEFT JOIN pages p ON p.id = l.dst_page
+         WHERE l.src_page = (SELECT id FROM pages WHERE path=?)
+         ORDER BY l.line, l.dst_raw`,
+      )
+      .all(rel) as OutgoingLink[];
+  }
+
+  /**
+   * 이 노트의 제목·별칭이 다른 노트 본문에 링크 없이 글자 그대로 나온 자리(언링크드 멘션).
+   * 자기 자신·이미 이 노트로 링크한 노트·코드 블록·인라인 코드·이미 링크된 구간은 제외하고,
+   * 같은 블록은 한 번만 센다(정렬 path→line, limit개까지).
+   */
+  unlinkedMentions(rel: string, limit = 200): UnlinkedMention[] {
+    this.resolveLinks();
+    const target = this.db.prepare(`SELECT id, title FROM pages WHERE path=?`).get(rel) as
+      | { id: number; title: string }
+      | undefined;
+    // 2글자 이하 제목은 오탐이 많아 아예 찾지 않는다
+    if (!target || [...target.title].length <= 2) return [];
+    const aliases = this.db.prepare(`SELECT alias FROM aliases WHERE page_id=?`).all(target.id) as {
+      alias: string;
+    }[];
+    const terms = [target.title, ...aliases.map((a) => a.alias)].filter((t) => [...t].length > 2);
+    const patterns = terms.map((t) => mentionRe(t));
+
+    const skip = new Set<number>([target.id]);
+    for (const r of this.db
+      .prepare(`SELECT DISTINCT src_page AS id FROM links WHERE dst_page=?`)
+      .all(target.id) as { id: number }[])
+      skip.add(r.id);
+
+    // 후보 페이지는 blocks.text LIKE로 좁히고, 실제 판정은 원문을 다시 파싱해 블록 단위로 한다
+    const findPages = this.db.prepare(
+      `SELECT p.id AS id, p.path AS path, p.title AS title, f.body AS body
+       FROM pages p JOIN fts f ON f.rowid = p.id
+       WHERE p.id IN (SELECT DISTINCT page_id FROM blocks WHERE text LIKE ? ESCAPE '\\')`,
+    );
+    const candidates = new Map<number, { id: number; path: string; title: string; body: string }>();
+    for (const term of terms) {
+      const like = `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      for (const r of findPages.all(like) as { id: number; path: string; title: string; body: string }[]) {
+        candidates.set(r.id, r);
+      }
+    }
+
+    const out: UnlinkedMention[] = [];
+    for (const cand of candidates.values()) {
+      if (skip.has(cand.id)) continue;
+      const note = parseNote(cand.body);
+      for (const b of note.blocks) {
+        if (NO_INLINE_SCAN.has(b.kind)) continue;
+        const masked = maskLinkedSpans(b.source);
+        if (!patterns.some((re) => re.test(masked))) continue;
+        out.push({ path: cand.path, title: cand.title, line: b.lineStart, snippet: cleanSnippet(b.text) });
+      }
+    }
+    out.sort((a, b) => (a.path === b.path ? a.line - b.line : a.path < b.path ? -1 : 1));
+    return out.slice(0, limit);
+  }
+
+  /** 태그와 그 하위 태그(a → a, a/b, a/b/c)를 가진 노트. 접두어만 같은 태그(ab)는 뺀다. */
+  notesByTag(tag: string): { path: string; title: string }[] {
+    const like = `${tag.replace(/[\\%_]/g, (c) => `\\${c}`)}/%`;
+    return this.db
+      .prepare(
+        `SELECT DISTINCT p.path AS path, p.title AS title
+         FROM tags t JOIN pages p ON p.id = t.page_id
+         WHERE t.tag = ? OR t.tag LIKE ? ESCAPE '\\'
+         ORDER BY p.path`,
+      )
+      .all(tag, like) as { path: string; title: string }[];
   }
 
   unresolvedLinks(): { path: string; target: string }[] {

@@ -157,6 +157,165 @@ describe('Indexer', () => {
     });
   });
 
+  describe('백링크 문맥', () => {
+    it('링크가 놓인 블록의 문맥을 줄 번호와 함께 돌려준다', () => {
+      put('a.md', '# A\n\n첫 문단이다\n\n[[B]]를 참고한 문단\n');
+      put('B.md', '# B');
+      ix.scan();
+      expect(ix.backlinkContexts('B.md')).toEqual([
+        { path: 'a.md', title: 'A', kind: 'wikilink', line: 5, snippet: '[[B]]를 참고한 문단' },
+      ]);
+    });
+
+    it('자기 자신 링크는 빼고 path→line 순으로 정렬한다', () => {
+      put('a.md', '# A\n[[B]] 그리고 [[#A]]');
+      put('z.md', '# Z\n\n[[B]]');
+      put('B.md', '# B');
+      ix.scan();
+      expect(ix.backlinkContexts('B.md').map((c) => [c.path, c.line])).toEqual([
+        ['a.md', 2],
+        ['z.md', 3],
+      ]);
+    });
+
+    it('문맥 블록이 없는 링크(프런트매터 relation)는 스니펫이 빈 문자열', () => {
+      put('책.md', '---\n관련: "[[저자]]"\n---\n# 책');
+      put('저자.md', '# 저자');
+      ix.scan();
+      expect(ix.backlinkContexts('저자.md')).toEqual([
+        { path: '책.md', title: '책', kind: 'relation', line: 1, snippet: '' },
+      ]);
+    });
+
+    it('여러 줄 문맥은 공백 한 칸으로 정리하고 160자를 넘으면 자른다', () => {
+      const long = `긴 문단 ${'가'.repeat(200)}`;
+      put('a.md', `# A\n\n${long}\n둘째 줄 [[B]]\n`);
+      put('B.md', '# B');
+      ix.scan();
+      const [ctx] = ix.backlinkContexts('B.md');
+      expect(ctx!.line).toBe(4);
+      expect(ctx!.snippet).toBe(`${long} 둘째 줄 [[B]]`.slice(0, 160) + '…');
+      expect(ctx!.snippet).toHaveLength(161);
+    });
+  });
+
+  describe('아웃고잉 링크', () => {
+    it('미해결 링크는 resolvedPath가 null, 같은 노트 [[#제목]]은 자기 자신', () => {
+      put('a.md', '# A\n## 소제목\n[[B]] [[#소제목]] [없는](nope.md)\n');
+      put('B.md', '# B');
+      ix.scan();
+      expect(ix.outgoingLinks('a.md')).toEqual([
+        { target: '', resolvedPath: 'a.md', kind: 'wikilink', heading: '소제목', block: null, line: 3 },
+        { target: 'B', resolvedPath: 'B.md', kind: 'wikilink', heading: null, block: null, line: 3 },
+        { target: 'nope.md', resolvedPath: null, kind: 'md', heading: null, block: null, line: 3 },
+      ]);
+    });
+
+    it('임베드와 블록 앵커도 담고 줄→대상 순으로 정렬한다', () => {
+      put('a.md', '# A\n\n![[C]] 와 [[B#^블록1]]\n');
+      put('B.md', '# B\n## 소제목');
+      put('C.md', '# C');
+      ix.scan();
+      expect(ix.outgoingLinks('a.md')).toEqual([
+        { target: 'B', resolvedPath: 'B.md', kind: 'wikilink', heading: null, block: '블록1', line: 3 },
+        { target: 'C', resolvedPath: 'C.md', kind: 'embed', heading: null, block: null, line: 3 },
+      ]);
+    });
+
+    it('링크가 없는 노트와 없는 노트는 빈 배열', () => {
+      put('a.md', '# A\n본문만');
+      ix.scan();
+      expect(ix.outgoingLinks('a.md')).toEqual([]);
+      expect(ix.outgoingLinks('없는 노트.md')).toEqual([]);
+    });
+  });
+
+  describe('언링크드 멘션', () => {
+    it('제목·별칭이 링크 없이 나온 블록을 찾고, 이미 링크한 노트·자기 자신은 뺀다', () => {
+      put('클린 코드.md', '---\naliases: [Clean Code]\n---\n# 클린 코드\n\n클린 코드 정리\n');
+      put('멘션.md', '# 멘션\n\n클린 코드를 읽었다\n\nClean Code도 읽었다\n');
+      put('링크.md', '# 링크\n\n[[클린 코드]]와 클린 코드\n');
+      put('임베드.md', '# 임베드\n\n![[클린 코드]] 그리고 클린 코드\n');
+      ix.scan();
+      expect(ix.unlinkedMentions('클린 코드.md')).toEqual([
+        { path: '멘션.md', title: '멘션', line: 3, snippet: '클린 코드를 읽었다' },
+        { path: '멘션.md', title: '멘션', line: 5, snippet: 'Clean Code도 읽었다' },
+      ]);
+    });
+
+    it('한글 조사는 허용하고, 앞뒤에 영문·숫자가 붙으면 뺀다', () => {
+      put('Rust.md', '# Rust');
+      put('a.md', '# a\n\nRust를 배우자\n\nRust의 책\n\nRusty는 다르다\n\nRust2024\n\nMyRust도 아니다\n');
+      ix.scan();
+      expect(ix.unlinkedMentions('Rust.md')).toEqual([
+        { path: 'a.md', title: 'a', line: 3, snippet: 'Rust를 배우자' },
+        { path: 'a.md', title: 'a', line: 5, snippet: 'Rust의 책' },
+      ]);
+    });
+
+    it('코드 블록과 인라인 코드 안의 출현은 뺀다', () => {
+      put('리팩터링.md', '# 리팩터링');
+      put('a.md', '# a\n\n```\n리팩터링 코드\n```\n\n`리팩터링`은 코드다\n\n리팩터링은 좋다\n');
+      ix.scan();
+      expect(ix.unlinkedMentions('리팩터링.md')).toEqual([
+        { path: 'a.md', title: 'a', line: 9, snippet: '리팩터링은 좋다' },
+      ]);
+    });
+
+    it('이미 위키링크·마크다운 링크 텍스트 안에 있는 출현은 뺀다', () => {
+      put('리팩터링.md', '# 리팩터링');
+      put('다른 노트.md', '# 다른 노트');
+      put(
+        'a.md',
+        '# a\n\n[[다른 노트|리팩터링]] 표시 텍스트\n\n[리팩터링](other.md) 링크 텍스트\n\n![[리팩터링.png]]\n',
+      );
+      ix.scan();
+      expect(ix.unlinkedMentions('리팩터링.md')).toEqual([]);
+    });
+
+    it('같은 블록은 한 번만 세고, path→line 순으로 limit까지 자른다', () => {
+      put('리팩터링.md', '# 리팩터링');
+      put('a.md', '# a\n\n리팩터링 리팩터링 리팩터링\n\n리팩터링 하나\n');
+      put('b.md', '# b\n\n다음 파일 리팩터링\n');
+      ix.scan();
+      expect(ix.unlinkedMentions('리팩터링.md').map((m) => [m.path, m.line])).toEqual([
+        ['a.md', 3],
+        ['a.md', 5],
+        ['b.md', 3],
+      ]);
+      expect(ix.unlinkedMentions('리팩터링.md', 1).map((m) => [m.path, m.line])).toEqual([
+        ['a.md', 3],
+      ]);
+    });
+
+    it('2글자 이하 제목과 없는 노트는 빈 배열', () => {
+      put('AB.md', '# AB');
+      put('a.md', '# a\n\nAB는 나온다\n');
+      ix.scan();
+      expect(ix.unlinkedMentions('AB.md')).toEqual([]);
+      expect(ix.unlinkedMentions('없는 노트.md')).toEqual([]);
+    });
+  });
+
+  describe('태그별 노트', () => {
+    it('태그와 하위 태그를 포함하고, 접두어만 같은 태그는 뺀다', () => {
+      put('a.md', '# a\n#독서');
+      put('b.md', '# b\n#독서/소설');
+      put('c.md', '# c\n#독서/소설/한국');
+      put('d.md', '# d\n#독서가');
+      put('e.md', '---\ntags: [독서]\n---\n# e\n#독서');
+      ix.scan();
+      expect(ix.notesByTag('독서')).toEqual([
+        { path: 'a.md', title: 'a' },
+        { path: 'b.md', title: 'b' },
+        { path: 'c.md', title: 'c' },
+        { path: 'e.md', title: 'e' },
+      ]);
+      expect(ix.notesByTag('독서/소설').map((n) => n.path)).toEqual(['b.md', 'c.md']);
+      expect(ix.notesByTag('없음')).toEqual([]);
+    });
+  });
+
   describe('첨부 인덱스', () => {
     it('.md가 아닌 파일만, 점 폴더 제외하고 목록에 넣는다', () => {
       put('a.md', '# A');

@@ -19,7 +19,7 @@ import {
   uniqueName,
 } from '@nopsidian/core';
 import { existsSync, readFileSync } from 'node:fs';
-import { events, type EventName } from '@nopsidian/ipc-contract';
+import { events, graphSettings, type EventName } from '@nopsidian/ipc-contract';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { installProtocols, registerSchemes } from './protocols';
 import {
@@ -226,6 +226,30 @@ function registerHandlers() {
     // 이미 있는 노트에 끼워 넣는 용도이므로 템플릿의 프런트매터는 뺀다
     const body = fm ? raw.slice(fm.end) : raw;
     return { content: expandTemplate(body, { now: new Date(), title }).replace(/^\s*\n/, '') };
+  });
+  handle('graph.global', async (opts) => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('globalGraph', opts);
+  });
+  handle('graph.local', async ({ path: rel, depth, direction, ...opts }) => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('localGraph', rel, { ...opts, depth, direction });
+  });
+  handle('graph.getSettings', async () => {
+    const v = requireVault();
+    try {
+      const parsed = graphSettings.safeParse(JSON.parse(readFileSync(path.join(v.info.path, '.nopsidian', 'graph.json'), 'utf8')));
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
+  });
+  handle('graph.setSettings', async (settings) => {
+    const v = requireVault();
+    atomicWrite(path.join(v.info.path, '.nopsidian', 'graph.json'), JSON.stringify(settings, null, 2));
+    return undefined;
   });
   handle('tag.list', async () => {
     const v = requireVault();

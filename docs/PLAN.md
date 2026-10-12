@@ -331,6 +331,14 @@ nopsidian/
 - [x] 블록 링크(복사·`[[노트#^id]]` 자동완성·이동 시 강조), 언링크드 멘션 "링크로 변환"(DeepSeek 구현·Claude 검토), 템플릿 삽입·데일리 템플릿(DeepSeek 구현·Claude 검토)
 - [ ] 남은 3단계 작업: 폴더 이름 변경 UI (백엔드는 폴더 지원). 링크 호버 미리보기·북마크·블록 임베드는 후속 단계
 
+### 4단계: 그래프 뷰 (2026-10-12 구현)
+- 데이터: `graph.global`/`graph.local` IPC → IndexWorker `globalGraph`/`localGraph`(`graph-queries.ts`, DeepSeek 구현·Claude 검토). 노드 = 노트(+옵션: 태그 `#x`, 미해결 `?x`), 엣지 = 해석된 링크(중복·자기 링크 제외). 로컬은 깊이 1~5·방향(양/나가는/들어오는) BFS.
+- 렌더링: sigma 3 + graphology. ForceAtlas2는 Web Worker(`layout-worker.ts`)에서 돌려 위치만 받는다. 노드 크기=링크 수, 라벨은 줌 임계값 이상에서만, 호버 시 이웃 강조, 클릭하면 노트 열기, 화살표 토글.
+- 필터·색 그룹: `filter.ts`(DeepSeek 구현) 질의(`tag:` `path:` `folder:` `file:` `kind:`, `-제외`, 따옴표). 설정(필터·그룹·옵션·힘 슬라이더)은 `.nopsidian/graph.json`(동기화 대상)에 저장.
+- UI: 사이드바 "그래프" 버튼/⌘⇧G(Esc로 닫기), 오른쪽 패널의 "로컬 그래프" 탭.
+- 성능(합성 볼트, Electron 패키지): 5천 노드/1.5만 링크 · 1만 노드/3만 링크 모두 배치 중·후 60fps. `graph.global` 질의 0.7초(5천)/1.5초(1만) — 캐시는 후속 과제.
+- [ ] 남은 것: DB 관계 링크 노드 종류(5단계 이후), 첨부 노드, 위치 캐시(`graph_layout`), 라벨 겹침 개선.
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

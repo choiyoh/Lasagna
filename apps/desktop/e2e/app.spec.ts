@@ -737,6 +737,46 @@ test.describe('링크 코어', () => {
     await expect(page.getByTestId('panel-backlinks')).toContainText('변환멘션', { timeout: 8000 });
   });
 
+  test('그래프: 전역·로컬 그래프와 설정 저장', async () => {
+    const page = await app.firstWindow();
+    note('그래프A', '# 그래프A\n\n[[그래프B]] 와 [[없는그래프노트]] #그래프태그\n');
+    note('그래프B', '# 그래프B\n\n본문\n');
+    // 질의: 해석된 링크는 엣지, 미해결·태그는 옵션일 때만
+    await expect
+      .poll(() => page.evaluate(() => window.nops.graph.global({}).then((g) => g.edges.filter((e) => e.source === '그래프A.md').map((e) => e.target))), { timeout: 8000 })
+      .toEqual(['그래프B.md']);
+    const full = await page.evaluate(() => window.nops.graph.global({ includeTags: true, includeUnresolved: true }));
+    expect(full.nodes.map((n) => n.id)).toEqual(expect.arrayContaining(['#그래프태그', '?없는그래프노트']));
+    const local = await page.evaluate(() => window.nops.graph.local({ path: '그래프A.md', depth: 1, direction: 'out' }));
+    expect(local.nodes.map((n) => n.id).sort()).toEqual(['그래프A.md', '그래프B.md']);
+
+    // 로컬 그래프: 오른쪽 패널의 탭
+    await open(page, '그래프A');
+    await page.getByRole('tab', { name: '로컬 그래프' }).click();
+    await expect(page.getByTestId('graph-local-stats')).toContainText('2개 노드', { timeout: 8000 });
+    await expect(page.getByTestId('graph-local').locator('canvas').first()).toBeAttached();
+
+    // 전역 그래프: 열기 → 필터 입력이 .nopsidian/graph.json 에 저장 → Esc 로 닫기
+    await page.getByRole('button', { name: '그래프', exact: true }).click();
+    await expect(page.getByTestId('graph-screen')).toBeVisible();
+    await expect(page.getByTestId('graph-global-stats')).toContainText('개 노드', { timeout: 8000 });
+    await page.getByLabel('그래프 필터').fill('tag:#그래프태그');
+    await expect
+      .poll(
+        () => {
+          try {
+            return JSON.parse(readFileSync(path.join(vaultDir, '.nopsidian/graph.json'), 'utf8')).filter;
+          } catch {
+            return null;
+          }
+        },
+        { timeout: 5000 },
+      )
+      .toBe('tag:#그래프태그');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('graph-screen')).toHaveCount(0);
+  });
+
   test('블록 링크: 메뉴로 복사하고, [[노트#^ 자동완성으로 넣고, 링크를 열면 그 블록으로 간다', async () => {
     const page = await app.firstWindow();
     const target = note('블록대상', '# 블록대상\n\n첫 문단\n\n복사할 문단\n\n마지막 문단\n');
@@ -807,7 +847,7 @@ test.describe('링크 코어', () => {
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'daily', 'link', 'note', 'on', 'search', 'tag', 'template', 'vault']);
+  expect(keys).toEqual(['app', 'asset', 'daily', 'graph', 'link', 'note', 'on', 'search', 'tag', 'template', 'vault']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

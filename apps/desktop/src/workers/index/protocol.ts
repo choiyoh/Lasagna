@@ -7,7 +7,9 @@ export type IndexQuery =
   | 'notesByTag'
   | 'tags'
   | 'headingsOf'
-  | 'blocksOf';
+  | 'blocksOf'
+  | 'globalGraph'
+  | 'localGraph';
 
 export type WorkerRequest =
   | { id: string; method: 'list' }

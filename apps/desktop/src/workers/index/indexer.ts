@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { globalGraph, localGraph, type GlobalGraphOptions, type LocalGraphOptions } from './graph-queries';
 import {
   NO_INLINE_SCAN,
   createLinkResolver,
@@ -535,6 +536,16 @@ export class Indexer {
          ORDER BY p.path`,
       )
       .all(tag, like) as { path: string; title: string }[];
+  }
+
+  globalGraph(opts: GlobalGraphOptions = {}) {
+    this.resolveLinks();
+    return globalGraph(this.db, opts);
+  }
+
+  localGraph(rel: string, opts: LocalGraphOptions = {}) {
+    this.resolveLinks();
+    return localGraph(this.db, rel, opts);
   }
 
   unresolvedLinks(): { path: string; target: string }[] {

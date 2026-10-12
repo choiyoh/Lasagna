@@ -8,6 +8,7 @@ import { useAssetStore } from './assets';
 import { ConfirmDialog } from './ConfirmDialog';
 import { flushAll } from './flush';
 import { LinkPanel } from './LinkPanel';
+import { GraphScreen, LocalGraph } from './graph/GraphScreen';
 import { createLinkHost, linkNameFor } from './link-host';
 import { QuickSwitcher } from './QuickSwitcher';
 import { TagPanel } from './TagPanel';
@@ -91,6 +92,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [sideTab, setSideTab] = useState<'files' | 'tags'>('files');
   const [panelOpen, setPanelOpen] = useState(true);
   const [switcher, setSwitcher] = useState(false);
+  const [graphOpen, setGraphOpen] = useState(false);
+  const [dockTab, setDockTab] = useState<'links' | 'graph'>('links');
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const assets = useAssetStore();
@@ -222,6 +225,11 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'o') {
         e.preventDefault();
         setSwitcher(true);
+      } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyG') {
+        e.preventDefault();
+        setGraphOpen((o) => !o);
+      } else if (e.key === 'Escape' && graphOpen) {
+        setGraphOpen(false);
       } else if (e.key === 'F2') {
         e.preventDefault();
         void renameCurrent();
@@ -232,7 +240,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [renameCurrent, openDaily]);
+  }, [renameCurrent, openDaily, graphOpen]);
 
   useEffect(() => {
     if (!toast) return;
@@ -271,6 +279,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               </button>
               <button className="new-note" onClick={() => void openDaily()} title="오늘의 노트 (⌘⌥D)">
                 오늘
+              </button>
+              <button className="new-note" onClick={() => setGraphOpen((o) => !o)} title="그래프 (⌘⇧G)">
+                그래프
               </button>
               <button className="new-note" onClick={() => setSwitcher(true)} title="빠른 전환기 (⌘O)">
                 ⌘O
@@ -313,7 +324,16 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         </nav>
       </aside>
       <main className="content">
-        {selected ? (
+        {graphOpen ? (
+          <GraphScreen
+            current={selected}
+            onOpen={(p) => {
+              setSelected(p);
+              setGraphOpen(false);
+            }}
+            onClose={() => setGraphOpen(false)}
+          />
+        ) : selected ? (
           <NoteEditor
             key={selected}
             path={selected}
@@ -334,7 +354,19 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           <button className="rightdock__toggle" onClick={() => setPanelOpen((o) => !o)} title="링크 패널 열기/닫기" aria-expanded={panelOpen}>
             {panelOpen ? '›' : '‹'}
           </button>
-          {panelOpen && <LinkPanel path={selected} onOpen={setSelected} />}
+          {panelOpen && (
+            <div className="dockbody">
+              <div className="dockbody__tabs" role="tablist">
+                <button role="tab" aria-selected={dockTab === 'links'} className={dockTab === 'links' ? 'active' : ''} onClick={() => setDockTab('links')}>
+                  링크
+                </button>
+                <button role="tab" aria-selected={dockTab === 'graph'} className={dockTab === 'graph' ? 'active' : ''} onClick={() => setDockTab('graph')}>
+                  로컬 그래프
+                </button>
+              </div>
+              {dockTab === 'links' ? <LinkPanel path={selected} onOpen={setSelected} /> : <LocalGraph path={selected} onOpen={setSelected} />}
+            </div>
+          )}
         </div>
       )}
       {switcher && (

@@ -25,6 +25,41 @@ export type AssetInfo = z.infer<typeof assetInfo>;
 /** 한 번에 저장할 수 있는 첨부 크기 상한(IPC로 통째로 보내므로 제한한다) */
 export const MAX_ASSET_BYTES = 200 * 1024 * 1024;
 
+
+export const graphNode = z.object({
+  id: z.string(),
+  kind: z.enum(['note', 'tag', 'unresolved']),
+  label: z.string(),
+  folder: z.string(),
+  tags: z.array(z.string()),
+  degree: z.number(),
+  depth: z.number().optional(),
+});
+export const graphData = z.object({
+  nodes: z.array(graphNode),
+  edges: z.array(z.object({ source: z.string(), target: z.string(), kind: z.enum(['link', 'tag']) })),
+});
+export type GraphData = z.infer<typeof graphData>;
+
+export const graphOptions = z.object({
+  includeTags: z.boolean().optional(),
+  includeUnresolved: z.boolean().optional(),
+  includeOrphans: z.boolean().optional(),
+});
+
+/** `.nopsidian/graph.json` — 그래프 뷰 설정(볼트와 함께 동기화되는 쪽) */
+export const graphSettings = z.object({
+  filter: z.string().max(500),
+  groups: z.array(z.object({ query: z.string().max(500), color: z.string().max(32) })).max(20),
+  includeTags: z.boolean(),
+  includeUnresolved: z.boolean(),
+  includeOrphans: z.boolean(),
+  arrows: z.boolean(),
+  /** 0~1 슬라이더 값 */
+  forces: z.object({ gravity: z.number(), repulsion: z.number(), linkDistance: z.number() }),
+});
+export type GraphSettings = z.infer<typeof graphSettings>;
+
 export const movePlan = z.object({
   moves: z.array(z.object({ from: relPath, to: relPath })),
   /** 링크가 바뀌는 노트(이동 전 경로) */
@@ -134,6 +169,17 @@ export const contract = {
     input: z.object({ path: relPath, title: z.string().max(300) }),
     output: z.object({ content: z.string() }),
   },
+  'graph.global': { input: graphOptions, output: graphData },
+  'graph.local': {
+    input: graphOptions.extend({
+      path: relPath,
+      depth: z.number().int().min(1).max(5),
+      direction: z.enum(['both', 'out', 'in']),
+    }),
+    output: graphData,
+  },
+  'graph.getSettings': { input: z.undefined(), output: graphSettings.nullable() },
+  'graph.setSettings': { input: graphSettings, output: z.undefined() },
   'tag.list': { input: z.undefined(), output: z.array(z.object({ tag: z.string(), count: z.number() })) },
   'tag.notes': {
     input: z.object({ tag: z.string().max(200) }),

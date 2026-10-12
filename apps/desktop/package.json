@@ -35,6 +35,9 @@
     "@parcel/watcher": "^2.6.0",
     "better-sqlite3": "^13.0.3",
     "dompurify": "^3.4.16",
+    "graphology": "^0.26.0",
+    "graphology-layout-forceatlas2": "^0.10.1",
+    "graphology-types": "^0.24.8",
     "prosemirror-state": "^1.4.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -43,6 +46,7 @@
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.2",
+    "sigma": "^3.0.3",
     "unified": "^11.0.5",
     "zod": "^4.6.5"
   }

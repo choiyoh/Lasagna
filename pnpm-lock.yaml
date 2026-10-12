@@ -291,6 +291,12 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
 
+  packages/sync-gdrive:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+
 packages:
 
   '@alcalzone/ansi-tokenize@0.3.1':

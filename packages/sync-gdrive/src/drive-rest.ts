@@ -1,0 +1,450 @@
+/**
+ * Google Drive v3 REST 클라이언트 — `DriveClient` 인터페이스의 실제 HTTP 구현.
+ *
+ * - `fetch` 는 주입받는다(테스트에서 가짜 fetch 로 요청 모양을 검증한다).
+ * - `drive.file` 스코프를 전제로 하므로 앱이 만든 파일만 보인다.
+ * - 볼트 구분은 `appProperties.nopsVault` 로 한다(폴더 이름이 아니라 값이 열쇠). 폴더는
+ *   `Nopsidian/<vaultName>/…` 에 만들되, 폴더 자신에도 `nopsVault` 를 붙여 볼트별로 격리한다.
+ * - 파일 내용 해시는 `appProperties.contentHash`(sha256)에 저장하고 `md5Checksum` 과
+ *   `appProperties.contentMd5` 를 대조해 Drive 웹에서 사람이 고친 파일을 감지한다.
+ */
+
+import { createHash, randomUUID } from 'node:crypto';
+
+import type { DriveClient, RemoteFile, SyncPath } from './types.js';
+import { RevisionConflictError } from './types.js';
+
+/** 메타데이터·목록 조회 기본 엔드포인트 */
+const API_BASE = 'https://www.googleapis.com/drive/v3';
+/** 업로드는 업로드 전용 호스트를 쓴다 */
+const UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3/files';
+/** 이 크기 이하는 multipart 한 번, 초과하면 resumable 세션으로 올린다 */
+const MULTIPART_LIMIT = 5 * 1024 * 1024;
+/** 지수 백오프 상한 */
+const MAX_BACKOFF_MS = 32_000;
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
+/** 목록 조회에서 필요한 필드만 받는다 */
+const FILE_FIELDS = 'id,appProperties,headRevisionId,size';
+/** 403 이어도 재시도해야 하는 reason */
+const RATE_LIMIT_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded']);
+
+/** 401 — 토큰이 만료·폐기됐다. 재시도해도 소용없다(토큰을 새로 받아야 한다). */
+export class DriveAuthError extends Error {
+  constructor(message = 'Drive 인증 실패(401): 액세스 토큰이 만료됐거나 폐기됐어요') {
+    super(message);
+    this.name = 'DriveAuthError';
+  }
+}
+
+/** 그 밖의 비정상 응답(재시도 소진 포함). 네트워크 예외는 status 0 으로 온다. */
+export class DriveApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = 'DriveApiError';
+  }
+}
+
+export interface GoogleDriveOptions {
+  /** Node 18+ 전역 fetch 시그니처. 테스트에서 가짜 fetch 를 넣는다. */
+  fetch: typeof fetch;
+  /** 호출마다 최신 토큰을 받는다(만료 직전 재발급 대응) */
+  getAccessToken: () => Promise<string>;
+  /** 볼트 식별자(appProperties.nopsVault 값). 폴더 이름과 무관하게 이 볼트의 파일을 찾는 열쇠 */
+  vaultKey: string;
+  /** Drive 폴더 이름: Nopsidian/<vaultName>/… */
+  vaultName: string;
+  /** 재시도 대기(테스트에서 주입). 기본 setTimeout */
+  sleep?: (ms: number) => Promise<void>;
+  /** 재시도 횟수(최초 시도 제외). 기본 5 */
+  maxRetries?: number;
+}
+
+/** 요청에 쓰는 최소 init — 헤더는 평범한 객체로만 넘긴다 */
+interface FetchInit {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: Uint8Array | string;
+}
+
+/**
+ * Node 의 fetch 는 `Uint8Array` 본문을 그대로 받지만, lib.dom 의 `BodyInit`(=`BufferSource`)은
+ * `ArrayBufferView<ArrayBuffer>` 만 허용해서 `Uint8Array<ArrayBufferLike>` 를 통과시키지 못한다.
+ * 큰 파일을 복사하지 않으려면 여기서 한 번만 타입을 맞춰 준다.
+ */
+const asBody = (body: Uint8Array | string | undefined): BodyInit | undefined =>
+  body as unknown as BodyInit | undefined;
+
+interface DriveFile {
+  id: string;
+  parents?: string[];
+  appProperties?: Record<string, string>;
+  headRevisionId?: string;
+  size?: string;
+  md5Checksum?: string;
+}
+
+interface FileList {
+  nextPageToken?: string;
+  files?: DriveFile[];
+}
+
+interface DriveErrorBody {
+  error?: { errors?: Array<{ reason?: string }> };
+}
+
+const sha256Hex = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+const md5Hex = (bytes: Uint8Array): string => createHash('md5').update(bytes).digest('hex');
+
+/** Drive 쿼리 문자열 안의 작은따옴표 리터럴용 이스케이프 */
+const escapeQuery = (value: string): string => value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+/** 'a/b/c.md' → 'a/b' (루트면 '') */
+const parentPath = (path: string): string => {
+  const i = path.lastIndexOf('/');
+  return i < 0 ? '' : path.slice(0, i);
+};
+
+/** 'a/b/c.md' → 'c.md' */
+const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+
+const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** multipart/related 본문 조립 — JSON 메타데이터 파트 + octet-stream 본문 파트 */
+function buildMultipart(metadata: unknown, bytes: Uint8Array): { contentType: string; body: Uint8Array } {
+  const boundary = `nopsidian-${randomUUID()}`;
+  const encoder = new TextEncoder();
+  const head = encoder.encode(
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}` +
+      `\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`,
+  );
+  const tail = encoder.encode(`\r\n--${boundary}--`);
+  const body = new Uint8Array(head.length + bytes.length + tail.length);
+  body.set(head, 0);
+  body.set(bytes, head.length);
+  body.set(tail, head.length + bytes.length);
+  return { contentType: `multipart/related; boundary=${boundary}`, body };
+}
+
+export class GoogleDriveClient implements DriveClient {
+  private readonly fetchImpl: typeof fetch;
+  private readonly getAccessToken: () => Promise<string>;
+  private readonly vaultKey: string;
+  private readonly vaultName: string;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private readonly maxRetries: number;
+  /** 'Nopsidian/<vaultName>/…' 상대 폴더 경로 → 폴더 id */
+  private readonly folderIds = new Map<string, string>();
+  /** headRevisionId → 이미 계산해 둔 sha256(같은 revision 을 여러 번 받지 않는다) */
+  private readonly hashesByRevision = new Map<string, string>();
+  /** fileId → 마지막으로 안 내용 sha256(move 응답에 contentHash 가 없을 때 대비) */
+  private readonly hashesById = new Map<string, string>();
+
+  constructor(opts: GoogleDriveOptions) {
+    this.fetchImpl = opts.fetch;
+    this.getAccessToken = opts.getAccessToken;
+    this.vaultKey = opts.vaultKey;
+    this.vaultName = opts.vaultName;
+    this.sleep = opts.sleep ?? defaultSleep;
+    this.maxRetries = opts.maxRetries ?? 5;
+  }
+
+  async list(): Promise<RemoteFile[]> {
+    const q =
+      `appProperties has { key='nopsVault' and value='${escapeQuery(this.vaultKey)}' }` +
+      ` and trashed=false and mimeType!='${FOLDER_MIME}'`;
+    const params = new URLSearchParams({
+      q,
+      fields: 'nextPageToken,files(id,parents,appProperties,headRevisionId,size,md5Checksum)',
+      pageSize: '1000',
+      spaces: 'drive',
+    });
+
+    const result: RemoteFile[] = [];
+    let pageToken: string | undefined;
+    do {
+      const query = new URLSearchParams(params);
+      if (pageToken) query.set('pageToken', pageToken);
+      const res = await this.request(`${API_BASE}/files?${query}`);
+      const page = (await res.json()) as FileList;
+      for (const file of page.files ?? []) {
+        const remote = await this.toRemoteFile(file);
+        if (remote) result.push(remote);
+      }
+      pageToken = page.nextPageToken;
+    } while (pageToken);
+    return result;
+  }
+
+  async download(id: string): Promise<Uint8Array> {
+    const res = await this.request(`${API_BASE}/files/${encodeURIComponent(id)}?alt=media`);
+    return new Uint8Array(await res.arrayBuffer());
+  }
+
+  async upload(args: {
+    path: SyncPath;
+    bytes: Uint8Array;
+    hash: string;
+    existing?: { id: string; revision: string };
+  }): Promise<RemoteFile> {
+    const { path, bytes, hash, existing } = args;
+    const parentId = await this.ensureFolder(parentPath(path));
+    const appProperties: Record<string, string> = {
+      nopsVault: this.vaultKey,
+      relPath: path,
+      contentHash: hash,
+      contentMd5: md5Hex(bytes),
+    };
+    // 기존 파일 교체는 parents 를 건드리지 않는다(경로 이동은 move 담당).
+    const metadata = existing ? { appProperties } : { name: baseName(path), parents: [parentId], appProperties };
+
+    if (existing) {
+      // 업로드 전에 현재 revision 을 확인 — 그 사이 원격이 바뀌었으면 이번 동기화에서는 건너뛴다.
+      const current = await this.headRevision(existing.id);
+      if (current !== existing.revision) throw new RevisionConflictError(path);
+    }
+
+    const res =
+      bytes.length > MULTIPART_LIMIT
+        ? await this.uploadResumable(existing ? 'PATCH' : 'POST', existing?.id, metadata, bytes)
+        : await this.uploadMultipart(existing ? 'PATCH' : 'POST', existing?.id, metadata, bytes);
+
+    const file = (await res.json()) as DriveFile;
+    const revision = file.headRevisionId ?? '';
+    if (revision) this.hashesByRevision.set(revision, hash);
+    this.hashesById.set(file.id, hash);
+    return {
+      id: file.id,
+      path: file.appProperties?.relPath ?? path,
+      hash: file.appProperties?.contentHash ?? hash,
+      revision,
+      size: Number(file.size ?? 0),
+    };
+  }
+
+  async move(id: string, to: SyncPath): Promise<RemoteFile> {
+    const current = await this.request(`${API_BASE}/files/${encodeURIComponent(id)}?fields=parents`);
+    const parents = ((await current.json()) as DriveFile).parents ?? [];
+    const newParent = await this.ensureFolder(parentPath(to));
+
+    const params = new URLSearchParams({ fields: FILE_FIELDS });
+    // 부모가 이미 같으면 addParents/removeParents 를 보내지 않는다(불필요한 요청 변수 제거).
+    if (!(parents.length === 1 && parents[0] === newParent)) {
+      params.set('addParents', newParent);
+      if (parents.length > 0) params.set('removeParents', parents.join(','));
+    }
+
+    const res = await this.request(`${API_BASE}/files/${encodeURIComponent(id)}?${params}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({ name: baseName(to), appProperties: { relPath: to } }),
+    });
+    const file = (await res.json()) as DriveFile;
+    const hash = file.appProperties?.contentHash ?? this.hashesById.get(id) ?? '';
+    if (hash) this.hashesById.set(id, hash);
+    return {
+      id: file.id,
+      path: file.appProperties?.relPath ?? to,
+      hash,
+      revision: file.headRevisionId ?? '',
+      size: Number(file.size ?? 0),
+    };
+  }
+
+  async trash(id: string): Promise<void> {
+    await this.request(`${API_BASE}/files/${encodeURIComponent(id)}?fields=id`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({ trashed: true }),
+    });
+  }
+
+  /** Drive 파일 리소스 → RemoteFile. `relPath` 가 없으면 이 볼트의 파일이 아니므로 null. */
+  private async toRemoteFile(file: DriveFile): Promise<RemoteFile | null> {
+    const relPath = file.appProperties?.relPath;
+    if (!relPath) return null;
+
+    const revision = file.headRevisionId ?? '';
+    let hash = file.appProperties?.contentHash ?? '';
+    const md5 = file.md5Checksum;
+    // Drive 웹에서 사람이 고치면 내용만 바뀌고 appProperties 는 그대로다.
+    // md5Checksum 이 우리가 기록한 contentMd5 와 다르면 contentHash 를 믿지 않는다.
+    if (md5 && md5 !== file.appProperties?.contentMd5) {
+      const cached = revision ? this.hashesByRevision.get(revision) : undefined;
+      if (cached !== undefined) {
+        hash = cached;
+      } else {
+        hash = sha256Hex(await this.download(file.id));
+        if (revision) this.hashesByRevision.set(revision, hash);
+      }
+    }
+    this.hashesById.set(file.id, hash);
+    return { id: file.id, path: relPath, hash, revision, size: Number(file.size ?? 0) };
+  }
+
+  /** 현재 revision(낙관적 동시성 검사용) */
+  private async headRevision(id: string): Promise<string> {
+    const res = await this.request(`${API_BASE}/files/${encodeURIComponent(id)}?fields=headRevisionId`);
+    return ((await res.json()) as DriveFile).headRevisionId ?? '';
+  }
+
+  /** 경로의 상위 폴더들을 `Nopsidian` → `<vaultName>` → … 순서로 찾거나 만든다. 결과는 메모리 캐시. */
+  private async ensureFolder(relDir: string): Promise<string> {
+    const cached = this.folderIds.get(relDir);
+    if (cached) return cached;
+
+    const segments = relDir === '' ? [] : relDir.split('/').filter(Boolean);
+    const chain = ['Nopsidian', this.vaultName, ...segments];
+    let parent = 'root';
+    let walked = '';
+    for (const name of chain) {
+      walked = walked === '' ? name : `${walked}/${name}`;
+      let id = this.folderIds.get(walked);
+      if (!id) {
+        id = (await this.findFolder(name, parent)) ?? (await this.createFolder(name, parent));
+        this.folderIds.set(walked, id);
+      }
+      parent = id;
+    }
+    return parent;
+  }
+
+  /** 같은 부모 아래 이 볼트의 폴더를 찾는다. 없으면 undefined. */
+  private async findFolder(name: string, parent: string): Promise<string | undefined> {
+    const q =
+      `name='${escapeQuery(name)}' and '${escapeQuery(parent)}' in parents` +
+      ` and mimeType='${FOLDER_MIME}' and trashed=false` +
+      ` and appProperties has { key='nopsVault' and value='${escapeQuery(this.vaultKey)}' }`;
+    const res = await this.request(`${API_BASE}/files?${new URLSearchParams({ q, fields: 'files(id)' })}`);
+    const data = (await res.json()) as FileList;
+    return data.files?.[0]?.id;
+  }
+
+  private async createFolder(name: string, parent: string): Promise<string> {
+    const res = await this.request(`${API_BASE}/files?fields=id`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({
+        name,
+        mimeType: FOLDER_MIME,
+        parents: [parent],
+        appProperties: { nopsVault: this.vaultKey },
+      }),
+    });
+    return ((await res.json()) as DriveFile).id;
+  }
+
+  private async uploadMultipart(
+    method: 'POST' | 'PATCH',
+    fileId: string | undefined,
+    metadata: unknown,
+    bytes: Uint8Array,
+  ): Promise<Response> {
+    const { contentType, body } = buildMultipart(metadata, bytes);
+    return this.request(this.uploadUrl(fileId, 'multipart'), {
+      method,
+      headers: { 'Content-Type': contentType, 'Content-Length': String(body.length) },
+      body,
+    });
+  }
+
+  /** 큰 파일: 세션을 열고(메타데이터) Location 으로 본문을 PUT 한다 */
+  private async uploadResumable(
+    method: 'POST' | 'PATCH',
+    fileId: string | undefined,
+    metadata: unknown,
+    bytes: Uint8Array,
+  ): Promise<Response> {
+    const session = await this.request(this.uploadUrl(fileId, 'resumable'), {
+      method,
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify(metadata),
+    });
+    const location = session.headers.get('location');
+    if (!location) {
+      throw new DriveApiError('resumable 업로드 응답에 Location 헤더가 없어요', session.status);
+    }
+    return this.request(location, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(bytes.length) },
+      body: bytes,
+    });
+  }
+
+  private uploadUrl(fileId: string | undefined, uploadType: 'multipart' | 'resumable'): string {
+    const params = new URLSearchParams({ uploadType, fields: FILE_FIELDS });
+    return fileId ? `${UPLOAD_BASE}/${encodeURIComponent(fileId)}?${params}` : `${UPLOAD_BASE}?${params}`;
+  }
+
+  /**
+   * 모든 요청의 공통 래퍼: Authorization 부착, 401 → DriveAuthError,
+   * 429·5xx·403(rate limit) 및 네트워크 예외 → 지수 백오프 재시도 후 DriveApiError,
+   * 그 밖의 4xx → 즉시 DriveApiError.
+   */
+  private async request(url: string, init: FetchInit = {}): Promise<Response> {
+    const token = await this.getAccessToken();
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}`, ...init.headers };
+
+    for (let attempt = 0; ; attempt++) {
+      let res: Response | null = null;
+      let failure: unknown;
+      try {
+        res = await this.fetchImpl(url, { method: init.method ?? 'GET', headers, body: asBody(init.body) });
+      } catch (err) {
+        failure = err;
+      }
+
+      if (!res) {
+        if (attempt >= this.maxRetries) {
+          throw new DriveApiError(`Drive 요청 실패(네트워크): ${errorText(failure)}`, 0);
+        }
+        await this.sleep(this.backoffMs(attempt, null));
+        continue;
+      }
+
+      if (res.status === 401) throw new DriveAuthError();
+      if (!(await isRetryable(res))) {
+        if (!res.ok) throw await apiError(res);
+        return res;
+      }
+      if (attempt >= this.maxRetries) throw await apiError(res);
+      await this.sleep(this.backoffMs(attempt, res.headers.get('retry-after')));
+    }
+  }
+
+  /** 1s, 2s, 4s … 상한 32s. `Retry-After`(초)가 있으면 그 값을 우선한다. */
+  private backoffMs(attempt: number, retryAfter: string | null): number {
+    const seconds = retryAfter === null ? Number.NaN : Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    return Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS);
+  }
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** 429, 5xx, 그리고 403 중 rate limit 사유만 재시도 대상이다. */
+async function isRetryable(res: Response): Promise<boolean> {
+  if (res.status === 429 || res.status >= 500) return true;
+  if (res.status !== 403) return false;
+  try {
+    const body = (await res.clone().json()) as DriveErrorBody;
+    const reason = body.error?.errors?.[0]?.reason;
+    return reason !== undefined && RATE_LIMIT_REASONS.has(reason);
+  } catch {
+    return false;
+  }
+}
+
+async function apiError(res: Response): Promise<DriveApiError> {
+  let detail = '';
+  try {
+    detail = (await res.text()).slice(0, 300);
+  } catch {
+    // 본문이 없거나 읽을 수 없으면 statusText 만 남긴다
+  }
+  return new DriveApiError(`Drive API ${res.status}: ${detail || res.statusText}`, res.status);
+}

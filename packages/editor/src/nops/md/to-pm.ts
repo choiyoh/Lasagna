@@ -9,6 +9,7 @@ import type {
   Table,
 } from 'mdast';
 import { decodeInline, parseWikiInner, type EditorParse, type InlineToken } from '@nopsidian/core/markdown';
+import { parseSizeSpec } from '@nopsidian/core/assets';
 
 /** 최상위 PM 블록 하나와, 그것을 만들어 낸 원문 구간 [start, end) (파일 전체 기준 오프셋). */
 export interface Segment {
@@ -26,6 +27,15 @@ interface Ctx {
 
 const CALLOUT_HEAD = /^\[!([A-Za-z][\w-]*)\]([+-])?[ \t]*/;
 const lf = (s: string) => s.replace(/\r\n?/g, '\n');
+/** `![alt|400](src)` · `![|400x300](src)` — Obsidian과 같은 크기 표기를 alt 끝에서 읽는다 */
+function splitImageAlt(alt: string | null | undefined): { alt: string | null; width: string | null; height: string | null } {
+  const text = alt ?? '';
+  const bar = text.lastIndexOf('|');
+  const size = bar >= 0 ? parseSizeSpec(text.slice(bar + 1)) : null;
+  if (!size) return { alt: text || null, width: null, height: null };
+  return { alt: text.slice(0, bar) || null, width: String(size.width), height: size.height ? String(size.height) : null };
+}
+
 const TRAILING_ID = /(^|\s)\^([A-Za-z0-9-]+)$/;
 
 function slice(ctx: Ctx, node: { position?: import('unist').Position }): string {
@@ -144,7 +154,8 @@ function paragraphToPm(ctx: Ctx, node: Paragraph, inlineOnly = false): PMNode {
   const { schema } = ctx;
   const only = node.children.length === 1 ? node.children[0] : undefined;
   if (only?.type === 'image' && !inlineOnly) {
-    return schema.nodes.image!.create({ src: only.url, alt: only.alt ?? null, title: only.title ?? null });
+    const { alt, width, height } = splitImageAlt(only.alt);
+    return schema.nodes.image!.create({ src: only.url, alt, title: only.title ?? null, width, height });
   }
   const { nodes, blockId } = extractBlockId(inlineToPm(ctx, node.children));
   return schema.nodes.paragraph!.create({ blockId }, nodes);

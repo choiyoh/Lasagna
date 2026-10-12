@@ -14,11 +14,18 @@ const watchRoot = realpathSync(root);
 const post = (m: WorkerResponse | WorkerEvent) => port.postMessage(m);
 
 const pending = new Map<string, 'add' | 'change' | 'unlink'>();
+const pendingAssets = new Map<string, 'add' | 'change' | 'unlink'>();
 let timer: NodeJS.Timeout | undefined;
 
 /** 300ms 디바운스로 모아서 처리한다. 같은 파일의 이벤트는 마지막 것만 남긴다. */
 function flush() {
   timer = undefined;
+  const assetBatch = [...pendingAssets];
+  pendingAssets.clear();
+  for (const [rel, kind] of assetBatch) {
+    const exists = ix.syncAssetFile(rel);
+    post({ type: 'event', name: 'asset.changed', payload: { path: rel, kind: exists ? (kind === 'unlink' ? 'change' : kind) : 'unlink' } });
+  }
   const batch = [...pending];
   pending.clear();
   const results = batch.map(([rel, kind]) => {
@@ -43,9 +50,10 @@ async function startWatching() {
       if (err) return;
       for (const e of events) {
         const rel = path.relative(watchRoot, e.path).split(path.sep).join('/');
-        if (!rel.toLowerCase().endsWith('.md')) continue;
         if (rel.split('/').some((seg) => seg.startsWith('.'))) continue;
-        pending.set(rel, e.type === 'delete' ? 'unlink' : e.type === 'create' ? 'add' : 'change');
+        const kind = e.type === 'delete' ? 'unlink' : e.type === 'create' ? 'add' : 'change';
+        if (rel.toLowerCase().endsWith('.md')) pending.set(rel, kind);
+        else if (!rel.includes('.nops-tmp-')) pendingAssets.set(rel, kind);
       }
       timer ??= setTimeout(flush, 300);
     },
@@ -58,6 +66,8 @@ port.on('message', (req: WorkerRequest) => {
     switch (req.method) {
       case 'list':
         return post({ type: 'response', id: req.id, result: ix.list() });
+      case 'assets':
+        return post({ type: 'response', id: req.id, result: ix.listAssets() });
       case 'search':
         return post({ type: 'response', id: req.id, result: ix.search(req.params.q, req.params.limit) });
       case 'close':

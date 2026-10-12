@@ -126,7 +126,7 @@ function startUpload(view: EditorView, id: string, file: File, options: Normaliz
       if (!placeholder) return;
       if (!src) throw new Error(messages.uploadEmptyUrl);
 
-      const image = view.state.schema.nodes.image.create({ src, alt: file.name });
+      const image = view.state.schema.nodes.image.create({ src, alt: file.name.replace(/\.[^./\\]+$/, '') });
       const tr = view.state.tr
         .insert(placeholder.from, image)
         .setMeta(imageUploadPluginKey, { type: 'remove', id } satisfies UploadPluginMeta);

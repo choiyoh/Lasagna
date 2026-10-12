@@ -19,6 +19,12 @@ export const saveResult = z.object({
 });
 export type SaveResult = z.infer<typeof saveResult>;
 
+export const assetInfo = z.object({ path: relPath, size: z.number() });
+export type AssetInfo = z.infer<typeof assetInfo>;
+
+/** 한 번에 저장할 수 있는 첨부 크기 상한(IPC로 통째로 보내므로 제한한다) */
+export const MAX_ASSET_BYTES = 200 * 1024 * 1024;
+
 export const noteSummary = z.object({
   path: relPath,
   title: z.string(),
@@ -66,6 +72,17 @@ export const contract = {
     input: z.object({ q: z.string().max(500), limit: z.number().int().min(1).max(200).default(50) }),
     output: z.array(searchHit),
   },
+  'asset.list': { input: z.undefined(), output: z.array(assetInfo) },
+  /** 첨부를 볼트의 첨부 폴더에 저장한다. 같은 이름·같은 내용이면 기존 파일을 재사용한다. */
+  'asset.save': {
+    input: z.object({
+      name: z.string().max(255),
+      data: z.instanceof(Uint8Array).refine((d) => d.byteLength <= MAX_ASSET_BYTES, '파일이 너무 큽니다'),
+    }),
+    output: z.object({ path: relPath, reused: z.boolean() }),
+  },
+  /** 안전한 문서 형식은 기본 앱으로 열고, 그 외(실행 파일 등)는 Finder에서 위치만 보여 준다. */
+  'asset.open': { input: z.object({ path: relPath }), output: z.enum(['opened', 'revealed']) },
   'app.openExternal': { input: z.object({ url: z.string().url() }), output: z.undefined() },
 } as const;
 
@@ -82,6 +99,7 @@ export const events = {
     /** 앱이 방금 쓴 내용이면 false (에디터를 다시 불러올 필요 없음) */
     external: z.boolean().default(true),
   }),
+  'asset.changed': z.object({ path: relPath, kind: z.enum(['add', 'change', 'unlink']) }),
   'index.progress': z.object({ done: z.number(), total: z.number() }),
 } as const;
 export type EventName = keyof typeof events;

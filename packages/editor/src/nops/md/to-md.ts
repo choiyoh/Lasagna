@@ -143,8 +143,10 @@ export function blockToMdast(node: PMNode): Any | null {
       return { type: 'code', lang: a.language ?? null, meta: a.meta ?? null, value: node.textContent };
     case 'math_block':
       return { type: 'math', value: node.textContent };
-    case 'image':
-      return { type: 'paragraph', children: [{ type: 'image', url: a.src, alt: a.alt ?? '', title: a.title ?? null }] };
+    case 'image': {
+      const size = a.width ? `|${a.width}${a.height ? `x${a.height}` : ''}` : '';
+      return { type: 'paragraph', children: [{ type: 'image', url: a.src, alt: `${a.alt ?? ''}${size}`, title: a.title ?? null }] };
+    }
     case 'bullet_list':
     case 'ordered_list': {
       const items: Any[] = [];

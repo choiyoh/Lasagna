@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { createLinkResolver, parseNote, type ParsedNote } from '@nopsidian/core';
+import { createLinkResolver, mimeFromName, parseNote, type ParsedNote } from '@nopsidian/core';
 
 export const SCHEMA_VERSION = 2;
 
@@ -55,15 +55,14 @@ interface Found {
 
 const IGNORED_DIRS = new Set(['node_modules']);
 
-/** 볼트 안의 .md 파일을 모은다. 점(.)으로 시작하는 폴더(.nopsidian, .git 등)는 건너뛴다. */
-export function walkMarkdown(root: string): Found[] {
+function walkFiles(root: string, include: (name: string) => boolean): Found[] {
   const out: Found[] = [];
   const visit = (dir: string) => {
     for (const ent of readdirSync(dir, { withFileTypes: true })) {
       if (ent.name.startsWith('.') || IGNORED_DIRS.has(ent.name)) continue;
       const full = path.join(dir, ent.name);
       if (ent.isDirectory()) visit(full);
-      else if (ent.isFile() && ent.name.toLowerCase().endsWith('.md')) {
+      else if (ent.isFile() && include(ent.name)) {
         const st = statSync(full);
         out.push({
           rel: path.relative(root, full).split(path.sep).join('/'),
@@ -76,6 +75,14 @@ export function walkMarkdown(root: string): Found[] {
   visit(root);
   return out;
 }
+
+const isMarkdown = (name: string) => name.toLowerCase().endsWith('.md');
+
+/** 볼트 안의 .md 파일을 모은다. 점(.)으로 시작하는 폴더(.nopsidian, .git 등)는 건너뛴다. */
+export const walkMarkdown = (root: string): Found[] => walkFiles(root, isMarkdown);
+
+/** 볼트 안의 첨부(.md가 아닌 모든 파일) */
+export const walkAssets = (root: string): Found[] => walkFiles(root, (n) => !isMarkdown(n) && !n.includes('.nops-tmp-'));
 
 /** 제목 우선순위: 프런트매터 title → 첫 H1 → 파일명 */
 export function deriveTitle(rel: string, content: string): string {
@@ -152,7 +159,53 @@ export class Indexer {
       }
     }
     this.resolveLinks();
+    this.syncAssets();
     return { changed, removed };
+  }
+
+  /** 첨부 목록을 디스크와 맞춘다(경로·크기만 저장 — 내용 해시는 저장할 때만 필요하다). */
+  syncAssets() {
+    const found = walkAssets(this.root);
+    const known = new Set(
+      (this.db.prepare(`SELECT path FROM assets`).all() as { path: string }[]).map((r) => r.path),
+    );
+    const upsert = this.db.prepare(
+      `INSERT INTO assets(path, sha256, mime, size) VALUES(?, NULL, ?, ?)
+       ON CONFLICT(path) DO UPDATE SET mime=excluded.mime, size=excluded.size`,
+    );
+    this.db.transaction(() => {
+      const seen = new Set<string>();
+      for (const f of found) {
+        seen.add(f.rel);
+        upsert.run(f.rel, mimeFromName(f.rel), f.size);
+      }
+      for (const p of known) if (!seen.has(p)) this.db.prepare(`DELETE FROM assets WHERE path=?`).run(p);
+    })();
+  }
+
+  /** 첨부 하나의 변화를 반영한다. 파일이 없으면 지우고 false. */
+  syncAssetFile(rel: string): boolean {
+    try {
+      const st = statSync(path.join(this.root, rel));
+      if (!st.isFile()) throw new Error('not a file');
+      this.db
+        .prepare(
+          `INSERT INTO assets(path, sha256, mime, size) VALUES(?, NULL, ?, ?)
+           ON CONFLICT(path) DO UPDATE SET mime=excluded.mime, size=excluded.size`,
+        )
+        .run(rel, mimeFromName(rel), st.size);
+      return true;
+    } catch {
+      this.db.prepare(`DELETE FROM assets WHERE path=?`).run(rel);
+      return false;
+    }
+  }
+
+  listAssets(): { path: string; size: number }[] {
+    return this.db.prepare(`SELECT path, size FROM assets ORDER BY path COLLATE NOCASE`).all() as {
+      path: string;
+      size: number;
+    }[];
   }
 
   /** 단일 파일 (재)인덱싱. 파일이 없으면 제거하고 false. */

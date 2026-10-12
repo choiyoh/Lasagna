@@ -109,3 +109,14 @@ describe('saveNote', () => {
     expect(existsSync(path.join(root, '..', 'x.md'))).toBe(false);
   });
 });
+
+describe('atomicWrite 바이너리', () => {
+  it('바이트 배열을 그대로 쓴다', () => {
+    const bytes = new Uint8Array([0, 255, 128, 10, 13, 0xef, 0xbb, 0xbf]);
+    atomicWrite(file('bin/a.bin'), bytes);
+    expect([...readFileSync(file('bin/a.bin'))]).toEqual([...bytes]);
+    const big = new Uint8Array(3 * 1024 * 1024).map((_, i) => i % 251);
+    atomicWrite(file('bin/big.bin'), big);
+    expect(Buffer.compare(readFileSync(file('bin/big.bin')), Buffer.from(big))).toBe(0);
+  });
+});

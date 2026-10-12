@@ -97,3 +97,23 @@ pre[data-math-block]::before { content: '$$'; opacity: 0.4; display: block; }
 .nops-drop-side { position: fixed; z-index: 35; width: 4px; border-radius: 2px; background: var(--oh-editor-primary, #5b5bd6); pointer-events: none; }
 .ProseMirror.nops-side-drop ~ .prosemirror-dropcursor-block, .nops-side-drop + .prosemirror-dropcursor-block { display: none; }
 body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
+
+/* 임베드(이미지·미디어·파일) */
+.nops-embed.is-image, .nops-embed:has(video), .nops-embed:has(audio) { display: inline-block; position: relative; max-width: 100%; vertical-align: bottom; background: none; padding: 0; border-radius: 6px; }
+.nops-embed__img { display: block; max-width: 100%; height: auto; border-radius: 6px; }
+.nops-embed__video { display: block; max-width: 100%; border-radius: 6px; }
+.nops-embed__audio { display: block; width: 320px; max-width: 100%; }
+.nops-embed.is-selected .nops-embed__img { outline: 2px solid var(--oh-editor-primary, #5b5bd6); outline-offset: 1px; }
+.nops-embed__resize { position: absolute; right: -4px; bottom: -4px; width: 12px; height: 12px; border-radius: 3px; background: var(--oh-editor-primary, #5b5bd6); border: 2px solid var(--oh-editor-bg, #fff); cursor: nwse-resize; }
+.nops-embed__chip { display: inline-block; padding: 0 6px; border-radius: 4px; cursor: pointer; font-family: inherit; background: color-mix(in srgb, var(--oh-editor-primary, #5b5bd6) 12%, transparent); color: var(--oh-editor-primary, #5b5bd6); }
+.nops-embed__chip.is-missing { cursor: default; background: color-mix(in srgb, #d1453b 14%, transparent); color: #d1453b; }
+
+/* 입력 대화상자 */
+.nops-prompt { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.25); }
+.nops-prompt__box { width: min(420px, 90vw); padding: 16px; border-radius: 10px; background: var(--oh-editor-bg, #fff); color: var(--oh-editor-text, #0f172a); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3); font-size: 13px; }
+@media (prefers-color-scheme: dark) { .nops-prompt__box { background: #232328; color: #e6e6ea; } }
+.nops-prompt__box label { display: block; }
+.nops-prompt__box input { display: block; width: 100%; margin-top: 8px; padding: 7px 9px; border-radius: 6px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); background: transparent; color: inherit; font: inherit; }
+.nops-prompt__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.nops-prompt__actions button { padding: 5px 12px; border-radius: 6px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); background: none; color: inherit; font: inherit; cursor: pointer; }
+.nops-prompt__actions button[type='submit'] { background: var(--oh-editor-primary, #5b5bd6); border-color: transparent; color: #fff; }

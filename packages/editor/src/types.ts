@@ -154,6 +154,10 @@ export interface EditorOptions {
   plugins?: Plugin[];
   /** Plugins registered before the built-in keymaps (e.g. custom Enter/Backspace handling). */
   priorityPlugins?: Plugin[];
+  /** Maps an image `src` to a loadable URL at render time (e.g. vault-relative path → vault:// URL). */
+  resolveImageSrc?: (src: string) => string;
+  /** Text prompt used for alt-text editing. Defaults to `window.prompt`, which Electron does not support. */
+  prompt?: (message: string, value: string) => Promise<string | null>;
   /** Extra node views keyed by node type name. */
   nodeViews?: Record<string, NodeViewConstructor>;
   /** Custom ProseMirror schema (overrides table schema and default). */

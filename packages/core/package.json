@@ -29,6 +29,7 @@
     ".": "./src/index.ts",
     "./markdown": "./src/markdown/index.ts",
     "./testing": "./src/testing/corpus.ts",
-    "./links": "./src/link-resolve.ts"
+    "./links": "./src/link-resolve.ts",
+    "./assets": "./src/assets.ts"
   }
 }

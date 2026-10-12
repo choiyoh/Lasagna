@@ -5,7 +5,11 @@ import { createTableSupport } from '../table';
 import type { Editor, EditorOptions, SlashItemSpec } from '../types';
 import { createBlockHandlePlugin, createBlockKeymapPlugin } from './block-handle';
 import { insertCallout, insertColumns, insertMathBlock, insertToggle } from './commands';
+import { type NopsAssetHost, resolveImageSrc } from './asset-host';
+import { createEmbedView } from './embed-view';
+import { createFilesPlugin } from './files-plugin';
 import { nopsNodeViews } from './node-views';
+import { showTextPrompt } from './prompt';
 import { createInteractionPlugin, createNopsInputRules, createTitleKeymapPlugin, type WikiLinkTarget } from './plugins';
 import { nopsSchema } from './schema';
 
@@ -16,8 +20,8 @@ export interface NopsEditorOptions {
   readOnly?: boolean;
   /** 위키링크·임베드 클릭 */
   onOpenLink?: (link: WikiLinkTarget) => void;
-  /** 이미지 업로드(볼트 첨부 저장). 없으면 이미지 삽입 UI를 숨긴다 */
-  image?: EditorOptions['image'];
+  /** 첨부(이미지·파일) 저장·표시. 없으면 첨부 기능이 꺼진다 */
+  assets?: NopsAssetHost;
   /** 추가 슬래시 항목 (예: DB 뷰) */
   slashItems?: SlashItemSpec[];
 }
@@ -36,8 +40,11 @@ export const nopsSlashItems: SlashItemSpec[] = [
 ];
 
 /** Nopsidian 스키마·노드 뷰·입력 규칙·슬래시 항목을 갖춘 에디터를 만든다. */
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml', 'image/avif', 'image/bmp'];
+
 export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions = {}): Editor {
   const table = createTableSupport();
+  const assets = options.assets;
   return createEditor(host, {
     schema: nopsSchema,
     table: { ...table, schema: nopsSchema },
@@ -46,9 +53,17 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
     messages: messagesKo,
     placeholder: options.placeholder ?? "'/'를 눌러 블록을 추가하세요",
     readOnly: options.readOnly,
-    image: options.image,
-    nodeViews: nopsNodeViews,
-    priorityPlugins: [createTitleKeymapPlugin(), createBlockKeymapPlugin()],
+    image: assets
+      ? {
+          upload: async (file) => assets.imageSrc(await assets.save(file)),
+          accept: IMAGE_TYPES,
+          maxSize: 50_000_000,
+        }
+      : undefined,
+    resolveImageSrc: assets ? (src) => resolveImageSrc(assets, src) : undefined,
+    prompt: showTextPrompt,
+    nodeViews: assets ? { ...nopsNodeViews, embed: createEmbedView(assets, options.onOpenLink) } : nopsNodeViews,
+    priorityPlugins: [createTitleKeymapPlugin(), createBlockKeymapPlugin(), ...(assets ? [createFilesPlugin(assets)] : [])],
     plugins: [
       createNopsInputRules(nopsSchema),
       createInteractionPlugin({ onOpenLink: options.onOpenLink }),

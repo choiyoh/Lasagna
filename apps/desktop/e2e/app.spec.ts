@@ -1,5 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -312,10 +312,123 @@ test.describe('블록 핸들', () => {
   });
 });
 
+const PNG_B64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+test.describe('첨부', () => {
+  /** 클립보드/드롭에 파일을 실어 `.ProseMirror`에 이벤트를 쏜다 */
+  const fire = (page: import('@playwright/test').Page, kind: 'paste' | 'drop', file: { name: string; type: string; b64: string }) =>
+    page.evaluate(
+      ({ kind, file }) => {
+        const bytes = Uint8Array.from(atob(file.b64), (c) => c.charCodeAt(0));
+        const dt = new DataTransfer();
+        dt.items.add(new File([bytes], file.name, { type: file.type }));
+        const target = document.querySelector('.ProseMirror')!;
+        const rect = target.getBoundingClientRect();
+        const ev =
+          kind === 'paste'
+            ? new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })
+            : new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true, clientX: rect.left + 40, clientY: rect.top + 20 });
+        target.dispatchEvent(ev);
+      },
+      { kind, file },
+    );
+
+  const openNote = async (page: import('@playwright/test').Page, name: string, content: string) => {
+    const file = path.join(vaultDir, `${name}.md`);
+    writeFileSync(file, content);
+    await page.getByRole('button', { name, exact: true }).click();
+    await expect(page.locator('.ProseMirror')).toBeVisible();
+    return file;
+  };
+
+  test('이미지 붙여넣기: attachments/에 저장되고 노트에는 상대 경로 이미지가 들어가 화면에 보인다', async () => {
+    const page = await app.firstWindow();
+    const file = await openNote(page, '첨부이미지', '# 첨부이미지\n\n끝\n');
+    await page.locator('.ProseMirror p', { hasText: '끝' }).click();
+    await page.waitForTimeout(150);
+    await fire(page, 'paste', { name: 'diagram.png', type: 'image/png', b64: PNG_B64 });
+    await expect.poll(() => existsSync(path.join(vaultDir, 'attachments/diagram.png')), { timeout: 5000 }).toBe(true);
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('![diagram](attachments/diagram.png)');
+    const img = page.locator('.ProseMirror img').first();
+    await expect(img).toHaveAttribute('src', /^vault:\/\/[0-9a-f]{12}\/attachments\/diagram\.png$/);
+    await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
+  });
+
+  test('같은 이미지를 또 붙여넣어도 파일은 하나(내용이 같으면 재사용)', async () => {
+    const page = await app.firstWindow();
+    await openNote(page, '첨부중복', '# 첨부중복\n\n끝\n');
+    await fire(page, 'paste', { name: 'diagram.png', type: 'image/png', b64: PNG_B64 });
+    await expect(page.locator('.ProseMirror img')).toHaveCount(1);
+    expect(readdirSync(path.join(vaultDir, 'attachments')).filter((f) => f.startsWith('diagram'))).toEqual(['diagram.png']);
+  });
+
+  test('이름만 같고 내용이 다르면 번호를 붙여 저장한다', async () => {
+    const page = await app.firstWindow();
+    await openNote(page, '첨부이름', '# 첨부이름\n\n끝\n');
+    const other = Buffer.from(PNG_B64, 'base64');
+    other[other.length - 20] ^= 0xff; // 내용이 달라지도록 한 바이트 변경
+    await fire(page, 'paste', { name: 'diagram.png', type: 'image/png', b64: other.toString('base64') });
+    await expect.poll(() => existsSync(path.join(vaultDir, 'attachments/diagram 1.png')), { timeout: 5000 }).toBe(true);
+  });
+
+  test('PDF를 끌어다 놓으면 저장되고 ![[파일]] 칩이 생긴다', async () => {
+    const page = await app.firstWindow();
+    const file = await openNote(page, '첨부파일', '# 첨부파일\n\n끝\n');
+    await fire(page, 'drop', { name: '보고서.pdf', type: 'application/pdf', b64: Buffer.from('%PDF-1.4 test').toString('base64') });
+    await expect.poll(() => existsSync(path.join(vaultDir, 'attachments/보고서.pdf')), { timeout: 5000 }).toBe(true);
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('![[보고서.pdf]]');
+    await expect(page.locator('.nops-embed__chip', { hasText: '보고서.pdf' })).toBeVisible();
+  });
+
+  test('![[이미지|크기]] 임베드는 그림으로 보이고 크기가 적용된다', async () => {
+    const page = await app.firstWindow();
+    mkdirSync(path.join(vaultDir, 'attachments'), { recursive: true });
+    writeFileSync(path.join(vaultDir, 'attachments/pic.png'), Buffer.from(PNG_B64, 'base64'));
+    await openNote(page, '첨부임베드', '# 첨부임베드\n\n![[pic.png|120]] ![[없는파일.png]]\n');
+    const img = page.locator('img.nops-embed__img');
+    await expect(img).toHaveAttribute('src', /attachments\/pic\.png$/, { timeout: 5000 });
+    await expect(img).toHaveCSS('width', '120px');
+    await expect(page.locator('.nops-embed__chip.is-missing')).toContainText('없는파일.png');
+  });
+
+  test('이미지 대체 텍스트: 더블클릭하면 입력창이 뜨고(prompt 없이) 저장된다', async () => {
+    const page = await app.firstWindow();
+    const file = await openNote(page, '첨부대체텍스트', '# 첨부대체텍스트\n\n![](attachments/pic.png)\n');
+    await page.locator('.ProseMirror img').dblclick();
+    const input = page.locator('.nops-prompt input');
+    await expect(input).toBeVisible();
+    await input.fill('빨간 점');
+    await input.press('Enter');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('![빨간 점](attachments/pic.png)');
+  });
+
+  test('vault:// 는 볼트 밖과 앱 내부 폴더를 열어 주지 않는다', async () => {
+    const page = await app.firstWindow();
+    const results = await page.evaluate(async () => {
+      const id = (document.querySelector('.ProseMirror img') as HTMLImageElement).src.split('/')[2]!;
+      const load = (src: string) =>
+        new Promise<string>((resolve) => {
+          const i = new Image();
+          i.onload = () => resolve('loaded');
+          i.onerror = () => resolve('blocked');
+          i.src = src;
+        });
+      return {
+        ok: await load(`vault://${id}/attachments/pic.png`),
+        internal: await load(`vault://${id}/.nopsidian/config.json`),
+        traversal: await load(`vault://${id}/%2e%2e/%2e%2e/etc/hosts`),
+        otherVault: await load(`vault://000000000000/attachments/pic.png`),
+      };
+    });
+    expect(results).toEqual({ ok: 'loaded', internal: 'blocked', traversal: 'blocked', otherVault: 'blocked' });
+  });
+});
+
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'note', 'on', 'search', 'vault']);
+  expect(keys).toEqual(['app', 'asset', 'note', 'on', 'search', 'vault']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

@@ -2,7 +2,7 @@ import { app, dialog, BrowserWindow } from 'electron';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import type { VaultInfo } from '@nopsidian/ipc-contract';
+import type { EventName, VaultInfo } from '@nopsidian/ipc-contract';
 import { IndexClient } from './index-client';
 
 const MAX_RECENT = 10;
@@ -35,7 +35,7 @@ export interface OpenVault {
 }
 
 let current: OpenVault | null = null;
-let broadcast: (name: 'note.changed' | 'index.progress', payload: unknown) => void = () => {};
+let broadcast: (name: EventName, payload: unknown) => void = () => {};
 
 export function setBroadcaster(fn: typeof broadcast) {
   broadcast = fn;
@@ -93,4 +93,21 @@ export async function pickAndOpen(parent: BrowserWindow | null): Promise<VaultIn
   const dir = r.filePaths[0];
   if (r.canceled || !dir) return null;
   return openVaultAt(dir);
+}
+
+export interface VaultConfig {
+  version: number;
+  /** 새 첨부를 저장할 폴더(볼트 기준) */
+  attachmentFolder: string;
+}
+
+export function readVaultConfig(root: string): VaultConfig {
+  const fallback: VaultConfig = { version: 1, attachmentFolder: 'attachments' };
+  try {
+    const raw = JSON.parse(readFileSync(path.join(root, '.nopsidian', 'config.json'), 'utf8')) as Partial<VaultConfig>;
+    const folder = typeof raw.attachmentFolder === 'string' ? raw.attachmentFolder.replace(/^\/+|\/+$/g, '') : '';
+    return { ...fallback, ...raw, attachmentFolder: folder && !folder.startsWith('.') ? folder : fallback.attachmentFolder };
+  } catch {
+    return fallback;
+  }
 }

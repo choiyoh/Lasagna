@@ -3,6 +3,7 @@ import type { NoteSummary, SearchHit, VaultInfo } from '@nopsidian/ipc-contract'
 import { createLinkResolver } from '@nopsidian/core/links';
 import type { WikiLinkTarget } from '@nopsidian/editor/nops';
 import { NoteEditor } from './NoteEditor';
+import { useAssetStore } from './assets';
 
 export function App() {
   const [vault, setVault] = useState<VaultInfo | null | undefined>(undefined);
@@ -65,6 +66,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const assets = useAssetStore();
 
   const refresh = useCallback(() => void window.nops.note.list().then(setNotes), []);
 
@@ -172,7 +174,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       </aside>
       <main className="content">
         {selected ? (
-          <NoteEditor key={selected} path={selected} onOpenLink={openLink} />
+          <NoteEditor key={selected} path={selected} vaultId={vault.id} assets={assets} onOpenLink={openLink} />
         ) : (
           <p className="muted pad">왼쪽에서 노트를 선택하세요. ({notes.length}개)</p>
         )}

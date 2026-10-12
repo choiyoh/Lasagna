@@ -47,6 +47,9 @@ export class IndexClient {
   list() {
     return this.call<NoteRow[]>('list');
   }
+  assets() {
+    return this.call<{ path: string; size: number }[]>('assets');
+  }
   search(q: string, limit: number) {
     return this.call<Hit[]>('search', { q, limit });
   }

@@ -156,4 +156,45 @@ describe('Indexer', () => {
       expect(ix.tags()).toEqual([]);
     });
   });
+
+  describe('첨부 인덱스', () => {
+    it('.md가 아닌 파일만, 점 폴더 제외하고 목록에 넣는다', () => {
+      put('a.md', '# A');
+      put('attachments/사진.png', 'x');
+      put('docs/보고서.pdf', 'pdfdata');
+      put('.nopsidian/skip.bin', 'no');
+      put('attachments/.hidden', 'no');
+      ix.scan();
+      expect(ix.listAssets()).toEqual([
+        { path: 'attachments/사진.png', size: 1 },
+        { path: 'docs/보고서.pdf', size: 7 },
+      ]);
+    });
+
+    it('syncAssetFile: 추가·크기 변경·삭제를 반영한다', () => {
+      ix.scan();
+      put('attachments/a.png', '12');
+      expect(ix.syncAssetFile('attachments/a.png')).toBe(true);
+      put('attachments/a.png', '12345');
+      ix.syncAssetFile('attachments/a.png');
+      expect(ix.listAssets()).toEqual([{ path: 'attachments/a.png', size: 5 }]);
+      rmSync(path.join(root, 'attachments/a.png'));
+      expect(ix.syncAssetFile('attachments/a.png')).toBe(false);
+      expect(ix.listAssets()).toEqual([]);
+    });
+
+    it('재스캔하면 사라진 첨부가 정리된다', () => {
+      put('x.png', '1');
+      ix.scan();
+      rmSync(path.join(root, 'x.png'));
+      ix.scan();
+      expect(ix.listAssets()).toEqual([]);
+    });
+
+    it('저장 중 임시 파일은 첨부로 보지 않는다', () => {
+      put('attachments/a.png.nops-tmp-1-abc', 'x');
+      ix.scan();
+      expect(ix.listAssets()).toEqual([]);
+    });
+  });
 });

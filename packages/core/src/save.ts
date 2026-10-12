@@ -18,12 +18,17 @@ import { resolveInVault } from './vault-path.js';
 export const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
 /** 임시 파일 → fsync → rename. 중간에 죽어도 원본이 반쯤 쓰인 상태로 남지 않는다. */
-export function atomicWrite(file: string, data: string) {
+export function atomicWrite(file: string, data: string | Uint8Array) {
   mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.nops-tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
   const fd = openSync(tmp, 'w');
   try {
-    writeSync(fd, data);
+    if (typeof data === 'string') {
+      writeSync(fd, data);
+    } else {
+      // 큰 바이너리는 한 번에 다 쓰이지 않을 수 있으므로 끝까지 반복한다
+      for (let off = 0; off < data.length; ) off += writeSync(fd, data, off, data.length - off);
+    }
     fsyncSync(fd);
   } catch (e) {
     closeSync(fd);

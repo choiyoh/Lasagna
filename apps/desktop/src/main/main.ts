@@ -1,6 +1,18 @@
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, session, shell } from 'electron';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { resolveInVault, saveNote, sha256 } from '@nopsidian/core';
+import {
+  atomicWrite,
+  isGenericName,
+  pastedName,
+  mimeFromName,
+  resolveInVault,
+  sanitizeAttachmentName,
+  saveNote,
+  sha256,
+  uniqueName,
+} from '@nopsidian/core';
+import { existsSync, readFileSync } from 'node:fs';
 import { events, type EventName } from '@nopsidian/ipc-contract';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { installProtocols, registerSchemes } from './protocols';
@@ -18,6 +30,7 @@ import {
   listRecent,
   openRecent,
   pickAndOpen,
+  readVaultConfig,
   requireVault,
   setBroadcaster,
 } from './vault';
@@ -29,6 +42,9 @@ declare const MAIN_WINDOW_VITE_NAME: string;
 
 const devServerUrl =
   typeof MAIN_WINDOW_VITE_DEV_SERVER_URL === 'string' ? MAIN_WINDOW_VITE_DEV_SERVER_URL : undefined;
+
+/** 기본 앱으로 열어도 안전한 문서·미디어 형식 */
+const OPENABLE = /\.(pdf|txt|csv|png|jpe?g|gif|webp|svg|avif|bmp|mp3|m4a|wav|ogg|flac|mp4|webm|mov|m4v|docx?|xlsx?|pptx?|hwp|hwpx|rtf)$/i;
 
 registerSchemes();
 
@@ -97,6 +113,48 @@ function registerHandlers() {
     const v = requireVault();
     await v.index.ready;
     return v.index.search(q, limit ?? 50);
+  });
+  handle('asset.list', async () => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.assets();
+  });
+  handle('asset.save', ({ name, data }) => {
+    const v = requireVault();
+    const folder = readVaultConfig(v.info.path).attachmentFolder;
+    let clean = sanitizeAttachmentName(name);
+    if (isGenericName(clean)) clean = pastedName(mimeFromName(clean));
+    const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    let reused = false;
+    const final = uniqueName(clean, (candidate) => {
+      const full = resolveInVault(v.info.path, `${folder}/${candidate}`);
+      if (!existsSync(full)) return false;
+      // 같은 이름에 같은 내용이면 새로 만들지 않고 재사용한다
+      if (createHash('sha256').update(readFileSync(full)).digest('hex') === digest) {
+        reused = true;
+        return false;
+      }
+      return true;
+    });
+    const rel = `${folder}/${final}`;
+    if (!reused) atomicWrite(resolveInVault(v.info.path, rel), bytes);
+    return { path: rel, reused };
+  });
+  handle('asset.open', async ({ path: rel }) => {
+    const v = requireVault();
+    const full = resolveInVault(v.info.path, rel);
+    // 실행될 수 있는 형식(.app, .command, .sh …)은 열지 않고 위치만 보여 준다
+    if (!OPENABLE.test(rel)) {
+      shell.showItemInFolder(full);
+      return 'revealed' as const;
+    }
+    const err = await shell.openPath(full);
+    if (err) {
+      shell.showItemInFolder(full);
+      return 'revealed' as const;
+    }
+    return 'opened' as const;
   });
   handle('app.openExternal', ({ url }) => {
     if (!openExternalSafe(url)) throw new Error('허용되지 않은 URL');

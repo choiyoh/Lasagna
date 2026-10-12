@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Editor } from '@nopsidian/editor';
+import { relativePath, vaultUrl } from '@nopsidian/core/assets';
+import type { AssetStore } from './assets';
 import { TextSelection } from 'prosemirror-state';
-import { createNopsEditor, parseDocument, serializeDocument, type Baseline, type WikiLinkTarget } from '@nopsidian/editor/nops';
+import {
+  createNopsEditor,
+  parseDocument,
+  serializeDocument,
+  type Baseline,
+  type NopsAssetHost,
+  type WikiLinkTarget,
+} from '@nopsidian/editor/nops';
 
 const SAVE_DELAY_MS = 500;
 
@@ -9,6 +18,8 @@ type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
 
 interface Props {
   path: string;
+  vaultId: string;
+  assets: AssetStore;
   onOpenLink: (link: WikiLinkTarget) => void;
 }
 
@@ -25,7 +36,7 @@ const NOTICES = {
  *  - 편집 후 500ms: 바뀐 블록만 다시 쓴 마크다운을 `note.save`로 저장 (baseHash로 외부 변경 감지)
  *  - 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다
  */
-export function NoteEditor({ path, onOpenLink }: Props) {
+export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
   const [notice, setNotice] = useState<string | null>(null);
@@ -37,7 +48,25 @@ export function NoteEditor({ path, onOpenLink }: Props) {
     if (!host) return;
     let disposed = false;
 
-    const editor: Editor = createNopsEditor(host, { onOpenLink: (l) => linkRef.current(l) });
+    const noteDir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+    const assetHost: NopsAssetHost = {
+      resolve: (target) => assets.resolve(target, path),
+      url: (p) => vaultUrl(vaultId, p),
+      save: async (file) => {
+        const data = new Uint8Array(await file.arrayBuffer());
+        const r = await window.nops.asset.save({ name: file.name, data });
+        assets.add(r.path); // 에디터가 바로 그리도록 목록에 즉시 반영한다
+        return r.path;
+      },
+      imageSrc: (p) => relativePath(noteDir, p),
+      embedTarget: (p) => {
+        const base = p.slice(p.lastIndexOf('/') + 1);
+        return assets.resolve(base, path) === p ? base : p;
+      },
+      open: (p) => void window.nops.asset.open({ path: p }),
+      onError: (m) => setNotice(m),
+    };
+    const editor: Editor = createNopsEditor(host, { onOpenLink: (l) => linkRef.current(l), assets: assetHost });
     let baseline: Baseline | null = null;
     let hash: string | null = null;
     let dirty = false;
@@ -131,7 +160,7 @@ export function NoteEditor({ path, onOpenLink }: Props) {
       }
       editor.destroy();
     };
-  }, [path]);
+  }, [path, vaultId, assets]);
 
   return (
     <div className="note-editor">

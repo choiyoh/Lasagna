@@ -278,22 +278,29 @@ class ProseMirrorEditor implements Editor {
     uploadImageFiles(this.view, files, this.options.image, this.view.state.selection.from, this.uploadLifecycle, this.messages);
   }
 
-  private editSelectedImageAlt() {
+  private async editSelectedImageAlt() {
     const selection = this.view.state.selection;
     if (!(selection instanceof NodeSelection) || selection.node.type !== this.view.state.schema.nodes.image) {
       return;
     }
 
     const currentAlt = selection.node.attrs.alt ?? '';
-    const nextAlt = window.prompt(this.messages.imageAltPrompt, currentAlt);
-    if (nextAlt === null) {
+    const ask = this.options.prompt ?? (async (message: string, value: string) => window.prompt(message, value));
+    const nextAlt = await ask(this.messages.imageAltPrompt, currentAlt);
+    if (nextAlt === null || this.destroyed) {
+      return;
+    }
+
+    // The prompt is async, so re-read the selection: it may have moved while the dialog was open.
+    const current = this.view.state.selection;
+    if (!(current instanceof NodeSelection) || current.from !== selection.from || current.node.type !== selection.node.type) {
       return;
     }
 
     this.view.dispatch(
       this.view.state.tr
-        .setNodeMarkup(selection.from, undefined, {
-          ...selection.node.attrs,
+        .setNodeMarkup(current.from, undefined, {
+          ...current.node.attrs,
           alt: nextAlt.trim() || null
         })
         .scrollIntoView()
@@ -325,7 +332,7 @@ class ProseMirrorEditor implements Editor {
             throw new Error('Expected image node position accessor');
           }
 
-          return createImageNodeView(view, this.messages)(node, view, getPos);
+          return createImageNodeView(view, this.messages, this.options.resolveImageSrc)(node, view, getPos);
         }
       },
       handleDoubleClickOn: (_view, pos, node) => {

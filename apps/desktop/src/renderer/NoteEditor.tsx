@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Editor } from '@nopsidian/editor';
 import { relativePath, vaultUrl } from '@nopsidian/core/assets';
-import type { AssetStore } from './assets';
 import { TextSelection } from 'prosemirror-state';
 import {
   createNopsEditor,
@@ -11,10 +10,13 @@ import {
   type NopsAssetHost,
   type WikiLinkTarget,
 } from '@nopsidian/editor/nops';
+import type { SourceEditor } from '@nopsidian/editor/nops/source';
+import type { AssetStore } from './assets';
 
 const SAVE_DELAY_MS = 500;
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
+type Mode = 'edit' | 'source';
 
 interface Props {
   path: string;
@@ -31,21 +33,27 @@ const NOTICES = {
 } as const;
 
 /**
- * 노트 하나를 편집한다.
- *  - 열 때: 읽기(hash) → 파싱 → 에디터에 표시
- *  - 편집 후 500ms: 바뀐 블록만 다시 쓴 마크다운을 `note.save`로 저장 (baseHash로 외부 변경 감지)
- *  - 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다
+ * 노트 하나를 편집한다. 두 가지 모드가 같은 저장 흐름을 쓴다.
+ *  - 편집 모드: 블록 에디터. 저장할 때 바뀐 블록만 다시 쓴다.
+ *  - 소스 모드(⌘E): 파일 전체(프런트매터 포함)의 마크다운 원문을 그대로 편집한다.
+ *
+ * 열기: 읽기(hash) → 파싱 → 표시. 편집 500ms 뒤 `note.save`(baseHash로 외부 변경 감지).
+ * 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다.
  */
 export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
+  const [mode, setModeState] = useState<Mode>('edit');
   const [notice, setNotice] = useState<string | null>(null);
   const linkRef = useRef(onOpenLink);
   linkRef.current = onOpenLink;
+  const toggleRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    const sourceHost = sourceHostRef.current;
+    if (!host || !sourceHost) return;
     let disposed = false;
 
     const noteDir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
@@ -67,6 +75,9 @@ export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
       onError: (m) => setNotice(m),
     };
     const editor: Editor = createNopsEditor(host, { onOpenLink: (l) => linkRef.current(l), assets: assetHost });
+
+    let source: SourceEditor | null = null;
+    let current: Mode = 'edit';
     let baseline: Baseline | null = null;
     let hash: string | null = null;
     let dirty = false;
@@ -74,18 +85,30 @@ export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let loaded = false;
 
+    /** 지금 화면(어느 모드든)의 파일 내용 */
+    const currentContent = () =>
+      current === 'source' && source ? source.getText() : serializeDocument(editor.getDocument(), baseline);
+    /** 저장하는 동안 더 편집했는지 비교하기 위한 스냅샷 */
+    const snapshot = () => (current === 'source' && source ? source.getText() : editor.getDocument());
+
+    /** 디스크에서 읽은(또는 병합된) 내용으로 두 화면을 맞춘다 */
+    const showContent = (content: string) => {
+      const parsed = parseDocument(content);
+      baseline = parsed.baseline;
+      editor.setDocument(parsed.doc, { silent: true });
+      source?.setText(content);
+    };
+
     const load = async () => {
       const r = await window.nops.note.read({ path });
       if (disposed) return;
       // 이미 같은 내용이면(우리가 방금 쓴 파일의 감시 이벤트 등) 아무것도 바꾸지 않는다 — 커서가 튀지 않게
       if (loaded && r.hash === hash) return;
-      const parsed = parseDocument(r.content);
       const view = editor.getView();
       const oldHead = view.state.selection.head;
-      baseline = parsed.baseline;
       hash = r.hash;
-      editor.setDocument(parsed.doc, { silent: true });
-      if (loaded) {
+      showContent(r.content);
+      if (loaded && current === 'edit') {
         // 다시 불러온 경우 커서를 같은 위치 근처에 둔다
         const size = view.state.doc.content.size;
         view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(Math.min(oldHead, size)))));
@@ -99,20 +122,20 @@ export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
       if (!loaded || saving || !dirty) return;
       saving = true;
       setState('saving');
-      const docAtSave = editor.getDocument();
+      const atSave = snapshot();
       try {
-        const content = serializeDocument(docAtSave, baseline);
+        const content = currentContent();
         const r = await window.nops.note.save({ path, content, baseHash: hash });
         if (disposed) return;
         hash = r.hash;
-        baseline = parseDocument(r.content).baseline;
         if (r.status !== 'saved') {
-          // 디스크 내용이 앱의 내용과 달라졌으므로 에디터를 그 내용으로 다시 채운다
-          editor.setDocument(parseDocument(r.content).doc, { silent: true });
+          // 디스크 내용이 앱의 내용과 달라졌으므로 화면을 그 내용으로 다시 채운다
+          showContent(r.content);
           setNotice(NOTICES[r.status]);
           dirty = false;
         } else {
-          dirty = editor.getDocument() !== docAtSave; // 저장하는 동안 더 편집했으면 다시 저장
+          baseline = parseDocument(r.content).baseline;
+          dirty = snapshot() !== atSave; // 저장하는 동안 더 편집했으면 다시 저장
         }
         setState(dirty ? 'dirty' : 'saved');
       } catch (e) {
@@ -130,17 +153,46 @@ export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
       timer = setTimeout(() => void save(), SAVE_DELAY_MS);
     };
 
-    editor.on('change', () => {
+    const markDirty = () => {
       if (!loaded) return;
       dirty = true;
       setNotice(null);
       setState('dirty');
       schedule();
-    });
+    };
+    editor.on('change', markDirty);
     editor.on('blur', () => {
       clearTimeout(timer);
       void save();
     });
+
+    // ── 모드 전환 ──
+    const setMode = async (next: Mode) => {
+      if (!loaded || next === current) return;
+      if (next === 'source') {
+        if (!source) {
+          // 소스 편집기(CodeMirror)는 처음 쓸 때 불러온다
+          const { createSourceEditor } = await import('@nopsidian/editor/nops/source');
+          if (disposed) return;
+          source = createSourceEditor(sourceHost, { text: currentContent(), onChange: markDirty });
+        } else {
+          source.setText(currentContent());
+        }
+        current = 'source';
+        setModeState('source');
+        source.focus();
+      } else {
+        if (!source) return;
+        const text = source.getText();
+        const parsed = parseDocument(text);
+        baseline = parsed.baseline; // 소스에서 고친 내용이 기준이 되므로 안 바뀐 블록은 바이트 그대로 유지된다
+        editor.setDocument(parsed.doc, { silent: true });
+        current = 'edit';
+        setModeState('edit');
+        editor.focus();
+      }
+    };
+    toggleRef.current = () => void setMode(current === 'edit' ? 'source' : 'edit');
 
     const offChanged = window.nops.on('note.changed', (e) => {
       if (e.path !== path || !e.external || e.kind === 'unlink') return;
@@ -156,16 +208,40 @@ export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
       clearTimeout(timer);
       // 닫기 전에 남은 편집을 저장한다
       if (loaded && dirty && !saving) {
-        void window.nops.note.save({ path, content: serializeDocument(editor.getDocument(), baseline), baseHash: hash });
+        void window.nops.note.save({ path, content: currentContent(), baseHash: hash });
       }
+      toggleRef.current = () => undefined;
+      source?.destroy();
       editor.destroy();
     };
   }, [path, vaultId, assets]);
 
+  // ⌘E / Ctrl+E: 편집 모드 ↔ 소스 모드
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        toggleRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
-    <div className="note-editor">
-      <div className="note-editor__status" data-state={state} aria-live="polite">
-        {state === 'saved' ? '저장됨' : state === 'saving' ? '저장 중…' : state === 'error' ? '저장 실패' : '편집 중'}
+    <div className="note-editor" data-mode={mode}>
+      <div className="note-editor__bar">
+        <span className="note-editor__status" data-state={state} aria-live="polite">
+          {state === 'saved' ? '저장됨' : state === 'saving' ? '저장 중…' : state === 'error' ? '저장 실패' : '편집 중'}
+        </span>
+        <button
+          className="note-editor__mode"
+          onClick={() => toggleRef.current()}
+          title="편집 모드 ↔ 소스 모드 (⌘E)"
+          aria-pressed={mode === 'source'}
+        >
+          {mode === 'source' ? '편집 모드' : '소스 모드'}
+        </button>
       </div>
       {notice && (
         <div className="note-editor__notice" role="status">
@@ -175,7 +251,8 @@ export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
           </button>
         </div>
       )}
-      <div ref={hostRef} className="note-editor__host" data-theme="system" data-testid="note-editor" />
+      <div ref={hostRef} className="note-editor__host" data-theme="system" data-testid="note-editor" hidden={mode === 'source'} />
+      <div ref={sourceHostRef} className="note-editor__source" data-testid="source-editor" hidden={mode === 'edit'} />
     </div>
   );
 }

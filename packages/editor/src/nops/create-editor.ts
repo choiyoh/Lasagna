@@ -3,6 +3,7 @@ import { messagesKo } from '../i18n';
 import { createNotionSupport } from '../notion';
 import { createTableSupport } from '../table';
 import type { Editor, EditorOptions, SlashItemSpec } from '../types';
+import { createCodeHighlightPlugin } from './code-highlight';
 import { createBlockHandlePlugin, createBlockKeymapPlugin } from './block-handle';
 import { insertCallout, insertColumns, insertMathBlock, insertToggle } from './commands';
 import { type NopsAssetHost, resolveImageSrc } from './asset-host';
@@ -68,6 +69,7 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
       createNopsInputRules(nopsSchema),
       createInteractionPlugin({ onOpenLink: options.onOpenLink }),
       ...createBlockHandlePlugin(),
+      createCodeHighlightPlugin(),
     ],
   });
 }

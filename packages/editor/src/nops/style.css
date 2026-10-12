@@ -117,3 +117,9 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 .nops-prompt__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .nops-prompt__actions button { padding: 5px 12px; border-radius: 6px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); background: none; color: inherit; font: inherit; cursor: pointer; }
 .nops-prompt__actions button[type='submit'] { background: var(--oh-editor-primary, #5b5bd6); border-color: transparent; color: #fff; }
+
+/* 코드 블록 구문 강조 (Shiki 이중 테마 변수) */
+.nops-tok { color: var(--shiki-light); }
+@media (prefers-color-scheme: dark) { .nops-tok { color: var(--shiki-dark); } }
+[data-theme='light'] .nops-tok { color: var(--shiki-light); }
+[data-theme='dark'] .nops-tok { color: var(--shiki-dark); }

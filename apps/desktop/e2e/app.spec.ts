@@ -425,6 +425,113 @@ test.describe('첨부', () => {
   });
 });
 
+test.describe('소스 모드와 코드 강조', () => {
+  const openNote = async (page: import('@playwright/test').Page, name: string, content: string) => {
+    const file = path.join(vaultDir, `${name}.md`);
+    writeFileSync(file, content);
+    await page.getByRole('button', { name, exact: true }).click();
+    await expect(page.locator('.ProseMirror')).toBeVisible();
+    return file;
+  };
+
+  test('소스 모드: 프런트매터를 포함한 원문이 보이고, 고치면 저장되며 편집 모드에도 반영된다', async () => {
+    const page = await app.firstWindow();
+    const original = '---\nid: SRC1\ntags: [a]\n---\n\n# 소스\n\n본문 **굵게**\n';
+    const file = await openNote(page, '소스', original);
+    await page.getByRole('button', { name: '소스 모드' }).click();
+    const cm = page.locator('.cm-content');
+    await expect(cm).toBeVisible({ timeout: 10000 });
+    await expect(cm).toContainText('id: SRC1');
+    await expect(cm).toContainText('본문 **굵게**');
+    await expect(page.locator('.ProseMirror')).toBeHidden();
+
+    await cm.click();
+    await page.keyboard.press('Meta+ArrowDown');
+    await page.keyboard.type('\n소스에서 쓴 줄 [[링크]]\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe(original + '\n소스에서 쓴 줄 [[링크]]\n');
+
+    await page.getByRole('button', { name: '편집 모드' }).click();
+    await expect(page.locator('.ProseMirror')).toContainText('소스에서 쓴 줄');
+    await expect(page.locator('.nops-wikilink', { hasText: '링크' })).toBeVisible();
+    expect(readFileSync(file, 'utf8')).toBe(original + '\n소스에서 쓴 줄 [[링크]]\n');
+  });
+
+  test('⌘E로 모드를 전환하고, 편집 모드에서 고친 내용이 소스에 그대로 보인다', async () => {
+    const page = await app.firstWindow();
+    const file = await openNote(page, '소스전환', '# 소스전환\n\n처음\n');
+    await page.locator('.ProseMirror p', { hasText: '처음' }).click();
+    await page.waitForTimeout(150);
+    await page.keyboard.press('End');
+    await page.keyboard.type(' 추가');
+    await page.keyboard.press('Meta+e');
+    await expect(page.locator('.cm-content')).toContainText('처음 추가', { timeout: 10000 });
+    expect(await page.locator('.cm-content').innerText()).toContain('# 소스전환');
+    await page.keyboard.press('Meta+e');
+    await expect(page.locator('.ProseMirror')).toBeVisible();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 소스전환\n\n처음 추가\n');
+  });
+
+  test('에디터가 모르는 문법(각주)도 소스 모드에서 손실 없이 고칠 수 있다', async () => {
+    const page = await app.firstWindow();
+    const file = await openNote(page, '소스각주', '# 소스각주\n\n본문[^1]\n\n[^1]: 각주 내용\n');
+    // 편집 모드에서는 원문 블록으로 보존된다
+    await expect(page.locator('.nops-raw')).toContainText('[^1]: 각주 내용');
+    await page.getByRole('button', { name: '소스 모드' }).click();
+    const cm = page.locator('.cm-content');
+    await expect(cm).toContainText('[^1]: 각주 내용', { timeout: 10000 });
+    await cm.click();
+    await page.keyboard.press('Meta+ArrowDown');
+    await page.keyboard.type('\n[^2]: 둘째 각주\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 소스각주\n\n본문[^1]\n\n[^1]: 각주 내용\n\n[^2]: 둘째 각주\n');
+    await page.getByRole('button', { name: '편집 모드' }).click();
+    await expect(page.locator('.nops-raw').nth(1)).toContainText('[^2]: 둘째 각주');
+    expect(readFileSync(file, 'utf8')).toBe('# 소스각주\n\n본문[^1]\n\n[^1]: 각주 내용\n\n[^2]: 둘째 각주\n');
+  });
+
+  test('소스 모드에서도 한글 조합 입력이 된다', async () => {
+    const page = await app.firstWindow();
+    const file = await openNote(page, '소스한글', '# 소스한글\n\n끝');
+    await page.getByRole('button', { name: '소스 모드' }).click();
+    const cm = page.locator('.cm-content');
+    await expect(cm).toBeVisible({ timeout: 10000 });
+    await cm.click();
+    await page.keyboard.press('Meta+ArrowDown');
+    const cdp = await page.context().newCDPSession(page);
+    for (const text of ['ㅎ', '하', '한']) {
+      await cdp.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length });
+    }
+    await cdp.send('Input.insertText', { text: '한' });
+    for (const text of ['ㄱ', '그', '글']) {
+      await cdp.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length });
+    }
+    await cdp.send('Input.insertText', { text: '글' });
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 소스한글\n\n끝한글');
+  });
+
+  test('소스 모드에서 보는 중에 파일이 밖에서 바뀌면 소스도 갱신된다', async () => {
+    const page = await app.firstWindow();
+    const file = await openNote(page, '소스리로드', '# 소스리로드\n\n처음\n');
+    await page.getByRole('button', { name: '소스 모드' }).click();
+    await expect(page.locator('.cm-content')).toContainText('처음', { timeout: 10000 });
+    writeFileSync(file, '# 소스리로드\n\n밖에서 바뀜\n');
+    await expect(page.locator('.cm-content')).toContainText('밖에서 바뀜', { timeout: 5000 });
+  });
+
+  test('코드 블록은 언어별로 색이 입혀지고, 저장되는 마크다운에는 영향이 없다', async () => {
+    const page = await app.firstWindow();
+    const src = '# 코드강조\n\n```ts\nconst x: number = 1; // 주석\n```\n\n```python\ndef f():\n    return 1\n```\n';
+    const file = await openNote(page, '코드강조', src);
+    await expect.poll(() => page.locator('.ProseMirror pre .nops-tok').count(), { timeout: 10000 }).toBeGreaterThan(5);
+    const colors = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('.ProseMirror pre .nops-tok')].map((el) => getComputedStyle(el).color),
+    );
+    expect(new Set(colors).size).toBeGreaterThan(2); // 여러 색
+    await expect(page.locator('.ProseMirror pre').first()).toHaveText('const x: number = 1; // 주석');
+    await page.waitForTimeout(800);
+    expect(readFileSync(file, 'utf8')).toBe(src);
+  });
+});
+
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());

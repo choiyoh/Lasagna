@@ -99,14 +99,24 @@ export interface VaultConfig {
   version: number;
   /** 새 첨부를 저장할 폴더(볼트 기준) */
   attachmentFolder: string;
+  /** 데일리 노트 폴더와, 새 데일리 노트에 쓸 템플릿 노트(볼트 기준 경로, 없으면 null) */
+  dailyFolder: string;
+  dailyTemplate: string | null;
 }
 
 export function readVaultConfig(root: string): VaultConfig {
-  const fallback: VaultConfig = { version: 1, attachmentFolder: 'attachments' };
+  const fallback: VaultConfig = { version: 1, attachmentFolder: 'attachments', dailyFolder: '일기', dailyTemplate: null };
   try {
     const raw = JSON.parse(readFileSync(path.join(root, '.nopsidian', 'config.json'), 'utf8')) as Partial<VaultConfig>;
     const folder = typeof raw.attachmentFolder === 'string' ? raw.attachmentFolder.replace(/^\/+|\/+$/g, '') : '';
-    return { ...fallback, ...raw, attachmentFolder: folder && !folder.startsWith('.') ? folder : fallback.attachmentFolder };
+    const daily = typeof raw.dailyFolder === 'string' ? raw.dailyFolder.replace(/^\/+|\/+$/g, '') : '';
+    return {
+      ...fallback,
+      ...raw,
+      attachmentFolder: folder && !folder.startsWith('.') ? folder : fallback.attachmentFolder,
+      dailyFolder: daily && !daily.startsWith('.') && !daily.includes('..') ? daily : fallback.dailyFolder,
+      dailyTemplate: typeof raw.dailyTemplate === 'string' && raw.dailyTemplate ? raw.dailyTemplate : null,
+    };
   } catch {
     return fallback;
   }

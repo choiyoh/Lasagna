@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { Hit, NoteRow } from '../workers/index/indexer';
-import type { WorkerEvent, WorkerResponse } from '../workers/index/protocol';
+import type { IndexQuery, WorkerEvent, WorkerResponse } from '../workers/index/protocol';
 
 type Listener = (e: WorkerEvent) => void;
 
@@ -46,6 +46,10 @@ export class IndexClient {
 
   list() {
     return this.call<NoteRow[]>('list');
+  }
+  /** 읽기 전용 인덱스 질의를 워커에서 실행한다 */
+  query<T>(name: IndexQuery, ...args: unknown[]) {
+    return this.call<T>('query', { name, args });
   }
   assets() {
     return this.call<{ path: string; size: number }[]>('assets');

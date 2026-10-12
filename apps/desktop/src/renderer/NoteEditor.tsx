@@ -8,10 +8,12 @@ import {
   serializeDocument,
   type Baseline,
   type NopsAssetHost,
+  type NopsLinkHost,
   type WikiLinkTarget,
 } from '@nopsidian/editor/nops';
 import type { SourceEditor } from '@nopsidian/editor/nops/source';
 import type { AssetStore } from './assets';
+import { registerFlush } from './flush';
 
 const SAVE_DELAY_MS = 500;
 
@@ -22,7 +24,10 @@ interface Props {
   path: string;
   vaultId: string;
   assets: AssetStore;
+  links: NopsLinkHost;
   onOpenLink: (link: WikiLinkTarget) => void;
+  /** 이름 변경(F2) */
+  onRename?: () => void;
 }
 
 /** 저장 결과가 앱의 내용과 달라졌을 때 사용자에게 알리는 문구 */
@@ -40,7 +45,7 @@ const NOTICES = {
  * 열기: 읽기(hash) → 파싱 → 표시. 편집 500ms 뒤 `note.save`(baseHash로 외부 변경 감지).
  * 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다.
  */
-export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
+export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
@@ -48,6 +53,8 @@ export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const linkRef = useRef(onOpenLink);
   linkRef.current = onOpenLink;
+  const linksRef = useRef(links);
+  linksRef.current = links;
   const toggleRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
@@ -74,7 +81,7 @@ export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
       open: (p) => void window.nops.asset.open({ path: p }),
       onError: (m) => setNotice(m),
     };
-    const editor: Editor = createNopsEditor(host, { onOpenLink: (l) => linkRef.current(l), assets: assetHost });
+    const editor: Editor = createNopsEditor(host, { onOpenLink: (l) => linkRef.current(l), assets: assetHost, links: linksRef.current });
 
     let source: SourceEditor | null = null;
     let current: Mode = 'edit';
@@ -194,6 +201,13 @@ export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
     };
     toggleRef.current = () => void setMode(current === 'edit' ? 'source' : 'edit');
 
+    // 이름 변경처럼 디스크를 건드리는 작업 전에 미저장 내용을 저장한다
+    const unregisterFlush = registerFlush(async () => {
+      clearTimeout(timer);
+      while (saving) await new Promise((r) => setTimeout(r, 20));
+      await save();
+    });
+
     const offChanged = window.nops.on('note.changed', (e) => {
       if (e.path !== path || !e.external || e.kind === 'unlink') return;
       if (dirty || saving) return; // 편집 중이면 다음 저장에서 병합한다
@@ -204,6 +218,7 @@ export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
 
     return () => {
       disposed = true;
+      unregisterFlush();
       offChanged();
       clearTimeout(timer);
       // 닫기 전에 남은 편집을 저장한다
@@ -234,6 +249,11 @@ export function NoteEditor({ path, vaultId, assets, onOpenLink }: Props) {
         <span className="note-editor__status" data-state={state} aria-live="polite">
           {state === 'saved' ? '저장됨' : state === 'saving' ? '저장 중…' : state === 'error' ? '저장 실패' : '편집 중'}
         </span>
+        {onRename && (
+          <button className="note-editor__mode" onClick={onRename} title="이름 바꾸기 / 이동 (F2)">
+            이름 바꾸기
+          </button>
+        )}
         <button
           className="note-editor__mode"
           onClick={() => toggleRef.current()}

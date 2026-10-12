@@ -33,6 +33,26 @@ export const movePlan = z.object({
 });
 export type MovePlanInfo = z.infer<typeof movePlan>;
 
+export const backlinkContext = z.object({
+  path: relPath,
+  title: z.string(),
+  kind: z.string(),
+  line: z.number(),
+  snippet: z.string(),
+});
+export const outgoingLink = z.object({
+  target: z.string(),
+  resolvedPath: relPath.nullable(),
+  kind: z.string(),
+  heading: z.string().nullable(),
+  block: z.string().nullable(),
+  line: z.number(),
+});
+export const unlinkedMention = z.object({ path: relPath, title: z.string(), line: z.number(), snippet: z.string() });
+export type BacklinkContext = z.infer<typeof backlinkContext>;
+export type OutgoingLink = z.infer<typeof outgoingLink>;
+export type UnlinkedMention = z.infer<typeof unlinkedMention>;
+
 export const noteSummary = z.object({
   path: relPath,
   title: z.string(),
@@ -87,6 +107,20 @@ export const contract = {
     input: z.object({ undoId: z.string().regex(/^[0-9a-z-]+$/) }),
     output: z.object({ restored: z.number(), skipped: z.array(relPath) }),
   },
+  'link.backlinks': { input: z.object({ path: relPath }), output: z.array(backlinkContext) },
+  'link.outgoing': { input: z.object({ path: relPath }), output: z.array(outgoingLink) },
+  'link.unlinked': { input: z.object({ path: relPath }), output: z.array(unlinkedMention) },
+  'link.headings': {
+    input: z.object({ path: relPath }),
+    output: z.array(z.object({ text: z.string(), level: z.number(), line: z.number() })),
+  },
+  'tag.list': { input: z.undefined(), output: z.array(z.object({ tag: z.string(), count: z.number() })) },
+  'tag.notes': {
+    input: z.object({ tag: z.string().max(200) }),
+    output: z.array(z.object({ path: relPath, title: z.string() })),
+  },
+  /** 오늘 날짜의 데일리 노트를 열고(없으면 만들고) 그 경로를 돌려준다. */
+  'daily.open': { input: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }), output: z.object({ path: relPath, created: z.boolean() }) },
   'search.query': {
     input: z.object({ q: z.string().max(500), limit: z.number().int().min(1).max(200).default(50) }),
     output: z.array(searchHit),

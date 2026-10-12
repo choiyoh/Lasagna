@@ -8,6 +8,8 @@ import { createAssetResolver, type AssetResolver } from '@nopsidian/core/assets'
 export interface AssetStore {
   resolve: (target: string, fromPath: string) => string | undefined;
   add: (path: string) => void;
+  /** 현재 알려진 첨부 경로 전체 */
+  list: () => string[];
 }
 
 export function useAssetStore(): AssetStore {
@@ -21,6 +23,7 @@ export function useAssetStore(): AssetStore {
     };
     return {
       resolve: (target, fromPath) => resolver.current(target, fromPath),
+      list: () => [...paths.current],
       add: (path) => {
         if (paths.current.has(path)) return;
         paths.current.add(path);

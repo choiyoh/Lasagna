@@ -7,3 +7,5 @@ export type { WikiLinkTarget } from './plugins';
 export * from './blocks';
 export type { NopsAssetHost } from './asset-host';
 export { showTextPrompt } from './prompt';
+export { parseLinkQuery } from './link-suggest';
+export type { LinkQuery, LinkSuggestion, NopsLinkHost } from './link-suggest';

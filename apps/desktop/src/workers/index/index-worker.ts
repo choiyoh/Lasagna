@@ -66,6 +66,13 @@ port.on('message', (req: WorkerRequest) => {
     switch (req.method) {
       case 'list':
         return post({ type: 'response', id: req.id, result: ix.list() });
+      case 'query': {
+        const { name, args } = req.params;
+        const allowed = ['backlinkContexts', 'outgoingLinks', 'unlinkedMentions', 'notesByTag', 'tags', 'headingsOf'];
+        if (!allowed.includes(name)) throw new Error(`허용되지 않은 질의: ${name}`);
+        const fn = (ix as unknown as Record<string, (...a: unknown[]) => unknown>)[name]!;
+        return post({ type: 'response', id: req.id, result: fn.apply(ix, args) });
+      }
       case 'assets':
         return post({ type: 'response', id: req.id, result: ix.listAssets() });
       case 'search':

@@ -9,6 +9,7 @@ import { insertCallout, insertColumns, insertMathBlock, insertToggle } from './c
 import { type NopsAssetHost, resolveImageSrc } from './asset-host';
 import { createEmbedView } from './embed-view';
 import { createFilesPlugin } from './files-plugin';
+import { createLinkSuggestPlugin, type NopsLinkHost } from './link-suggest';
 import { nopsNodeViews } from './node-views';
 import { showTextPrompt } from './prompt';
 import { createInteractionPlugin, createNopsInputRules, createTitleKeymapPlugin, type WikiLinkTarget } from './plugins';
@@ -21,6 +22,8 @@ export interface NopsEditorOptions {
   readOnly?: boolean;
   /** 위키링크·임베드 클릭 */
   onOpenLink?: (link: WikiLinkTarget) => void;
+  /** `[[` 링크 자동완성. 없으면 자동완성이 꺼진다(직접 `[[노트]]`를 끝까지 치면 링크로 바뀐다) */
+  links?: NopsLinkHost;
   /** 첨부(이미지·파일) 저장·표시. 없으면 첨부 기능이 꺼진다 */
   assets?: NopsAssetHost;
   /** 추가 슬래시 항목 (예: DB 뷰) */
@@ -64,7 +67,13 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
     resolveImageSrc: assets ? (src) => resolveImageSrc(assets, src) : undefined,
     prompt: showTextPrompt,
     nodeViews: assets ? { ...nopsNodeViews, embed: createEmbedView(assets, options.onOpenLink) } : nopsNodeViews,
-    priorityPlugins: [createTitleKeymapPlugin(), createBlockKeymapPlugin(), ...(assets ? [createFilesPlugin(assets)] : [])],
+    // 자동완성은 Enter/Tab/방향키를 기본 키맵보다 먼저 받아야 한다
+    priorityPlugins: [
+      ...(options.links ? [createLinkSuggestPlugin(options.links)] : []),
+      createTitleKeymapPlugin(),
+      createBlockKeymapPlugin(),
+      ...(assets ? [createFilesPlugin(assets)] : []),
+    ],
     plugins: [
       createNopsInputRules(nopsSchema),
       createInteractionPlugin({ onOpenLink: options.onOpenLink }),

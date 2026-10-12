@@ -1,13 +1,22 @@
-import type { Hit, NoteRow } from './indexer';
+
+/** 워커가 대신 실행해 주는 인덱스 질의(읽기 전용) */
+export type IndexQuery =
+  | 'backlinkContexts'
+  | 'outgoingLinks'
+  | 'unlinkedMentions'
+  | 'notesByTag'
+  | 'tags'
+  | 'headingsOf';
 
 export type WorkerRequest =
   | { id: string; method: 'list' }
   | { id: string; method: 'assets' }
+  | { id: string; method: 'query'; params: { name: IndexQuery; args: unknown[] } }
   | { id: string; method: 'search'; params: { q: string; limit: number } }
   | { id: string; method: 'close' };
 
 export type WorkerResponse =
-  | { type: 'response'; id: string; result: NoteRow[] | Hit[] | { path: string; size: number }[] | null }
+  | { type: 'response'; id: string; result: unknown }
   | { type: 'response'; id: string; error: string }
   | { type: 'ready' }
   | { type: 'fatal'; error: string };

@@ -74,3 +74,57 @@ button.link { color: var(--muted); }
 .note-editor__notice button { color: var(--muted); }
 .note-editor__host { --oh-editor-content-padding: 0; }
 .note-editor__host .oh-editor { border: 0; box-shadow: none; background: transparent; }
+
+/* 사이드바 탭·액션 */
+.sidebar__actions { display: flex; gap: 6px; padding: 0 12px 8px; }
+.sidebar__actions .new-note { margin: 0; flex: 1; padding: 5px 4px; text-align: center; }
+.sidebar__actions .search { margin: 0; flex: 1; }
+.sidebar__tabs { display: flex; gap: 2px; padding: 0 12px 6px; }
+.sidebar__tabs button { flex: 1; padding: 3px 0; border-radius: 6px; color: var(--muted); text-align: center; }
+.sidebar__tabs button.active { background: var(--hover); color: var(--fg); }
+.tags, .tagnotes { list-style: none; margin: 0; padding: 0; }
+.tag { display: flex; justify-content: space-between; width: 100%; padding: 2px 8px; border-radius: 4px; }
+.tag:hover, .tag.active { background: var(--hover); }
+.tagnotes { padding-left: 18px; }
+.tagnotes button { display: block; width: 100%; padding: 1px 8px; color: var(--muted); border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tagnotes button:hover { background: var(--hover); color: var(--fg); }
+.count { color: var(--muted); font-size: 11px; margin-left: 4px; }
+
+/* 오른쪽 링크 패널 */
+.rightdock { display: flex; border-left: 1px solid var(--border); background: var(--bg-side); }
+.rightdock__toggle { width: 16px; color: var(--muted); text-align: center; }
+.rightdock__toggle:hover { background: var(--hover); color: var(--fg); }
+.rightdock.open { width: 320px; }
+.linkpanel { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.linkpanel__tabs { display: flex; gap: 2px; padding: 40px 8px 6px; }
+.linkpanel__tabs button { flex: 1; padding: 3px 2px; font-size: 12px; border-radius: 6px; color: var(--muted); text-align: center; }
+.linkpanel__tabs button.active { background: var(--hover); color: var(--fg); }
+.linkpanel__body { flex: 1; overflow: auto; padding: 0 8px 24px; }
+.linkpanel__note { display: block; width: 100%; padding: 8px 4px 2px; font-weight: 600; color: var(--accent); }
+.linkpanel__snippet { display: block; width: 100%; padding: 4px 8px; margin: 1px 0; border-radius: 6px; font-size: 12.5px; color: var(--fg); opacity: 0.85; border-left: 2px solid var(--border); }
+.linkpanel__snippet:hover { background: var(--hover); opacity: 1; }
+.linkpanel .kind { margin-left: 6px; font-size: 11px; color: var(--muted); }
+.linkpanel__list { list-style: none; margin: 0; padding: 0; }
+.linkpanel__list li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 4px; }
+.linkpanel__list button { color: var(--accent); text-align: left; }
+.unresolved { color: #d99a1b; }
+
+/* 대화상자·빠른 전환기·토스트 */
+.dialog-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.3); }
+.dialog-backdrop.top { align-items: flex-start; padding-top: 14vh; }
+.dialog { width: min(480px, 92vw); padding: 18px 20px; border-radius: 12px; background: var(--bg); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35); }
+.dialog h2 { margin: 0 0 8px; font-size: 15px; }
+.dialog ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); max-height: 40vh; overflow: auto; }
+.dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.dialog__actions button { padding: 5px 14px; border-radius: 6px; border: 1px solid var(--border); }
+.dialog__actions .primary { background: var(--accent); border-color: transparent; color: #fff; }
+.switcher { width: min(560px, 92vw); border-radius: 12px; background: var(--bg); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35); overflow: hidden; }
+.switcher input { width: 100%; padding: 14px 16px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: inherit; font-size: 15px; outline: none; }
+.switcher__list { max-height: 50vh; overflow: auto; padding: 4px; }
+.switcher__item { display: flex; flex-direction: column; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+.switcher__item.is-active { background: var(--hover); }
+.switcher__title mark { background: none; color: var(--accent); font-weight: 700; }
+.switcher__path { font-size: 11.5px; color: var(--muted); }
+.switcher__path mark { background: none; color: var(--accent); }
+.toast { position: fixed; left: 20px; bottom: 20px; z-index: 55; display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 8px; background: #2b2b33; color: #f0f0f4; font-size: 13px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
+.toast button { color: #a9a9ff; font-weight: 600; }

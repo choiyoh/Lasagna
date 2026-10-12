@@ -495,6 +495,16 @@ export class Indexer {
     return out.slice(0, limit);
   }
 
+  /** 노트의 제목(헤딩) 목록 — `[[노트#` 자동완성용 */
+  headingsOf(rel: string): { text: string; level: number; line: number }[] {
+    return this.db
+      .prepare(
+        `SELECT h.text AS text, h.level AS level, h.line AS line FROM headings h JOIN pages p ON p.id = h.page_id
+         WHERE p.path = ? ORDER BY h.line`,
+      )
+      .all(rel) as { text: string; level: number; line: number }[];
+  }
+
   /** 태그와 그 하위 태그(a → a, a/b, a/b/c)를 가진 노트. 접두어만 같은 태그(ab)는 뺀다. */
   notesByTag(tag: string): { path: string; title: string }[] {
     const like = `${tag.replace(/[\\%_]/g, (c) => `\\${c}`)}/%`;

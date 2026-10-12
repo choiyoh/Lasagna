@@ -123,3 +123,18 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 @media (prefers-color-scheme: dark) { .nops-tok { color: var(--shiki-dark); } }
 [data-theme='light'] .nops-tok { color: var(--shiki-light); }
 [data-theme='dark'] .nops-tok { color: var(--shiki-dark); }
+
+/* 링크 자동완성 */
+.nops-link-suggest {
+  position: fixed; z-index: 45; width: 340px; max-height: 300px; overflow: auto; padding: 4px; border-radius: 10px;
+  background: var(--oh-editor-bg, #fff); color: var(--oh-editor-text, #0f172a);
+  border: 1px solid var(--oh-editor-border, #cbd5e1); box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18); font-size: 13px;
+}
+@media (prefers-color-scheme: dark) { .nops-link-suggest { background: #232328; color: #e6e6ea; border-color: #34343b; } }
+.nops-link-suggest__item { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.nops-link-suggest__item.is-active, .nops-link-suggest__item:hover { background: color-mix(in srgb, var(--oh-editor-primary, #5b5bd6) 16%, transparent); }
+.nops-link-suggest__icon { width: 18px; text-align: center; opacity: 0.8; }
+.nops-link-suggest__text { display: flex; flex-direction: column; min-width: 0; }
+.nops-link-suggest__label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nops-link-suggest__label mark { background: none; color: var(--oh-editor-primary, #5b5bd6); font-weight: 700; }
+.nops-link-suggest__detail { font-size: 11px; opacity: 0.55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

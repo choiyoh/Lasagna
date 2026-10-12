@@ -532,10 +532,160 @@ test.describe('소스 모드와 코드 강조', () => {
   });
 });
 
+test.describe('링크 코어', () => {
+  const note = (name: string, content: string) => {
+    const file = path.join(vaultDir, `${name}.md`);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, content);
+    return file;
+  };
+  const open = async (page: import('@playwright/test').Page, title: string) => {
+    await page.getByRole('button', { name: title, exact: true }).first().click();
+    await expect(page.locator('.ProseMirror')).toBeVisible();
+  };
+
+  test('백링크 패널: 이 노트를 가리키는 노트와 링크가 놓인 문맥이 보인다', async () => {
+    const page = await app.firstWindow();
+    note('독서/클린 코드', '---\naliases: [Clean Code]\ntags: [독서/개발]\n---\n# 클린 코드\n\n읽기 쉬운 코드\n');
+    note('독서/리팩터링', '# 리팩터링\n\n함께 읽을 책은 [[클린 코드#1장|1장]]이다 #개발\n\n별칭으로도: [[Clean Code]]\n');
+    await open(page, '클린 코드');
+    await page.getByRole('tab', { name: /백링크/ }).click();
+    const panel = page.getByTestId('panel-backlinks');
+    await expect(panel.getByRole('button', { name: '리팩터링', exact: true })).toBeVisible({ timeout: 8000 });
+    await expect(panel).toContainText('함께 읽을 책은');
+    await expect(panel).toContainText('별칭으로도');
+    await expect(page.getByRole('tab', { name: /백링크/ })).toContainText('2');
+    // 스니펫을 누르면 그 노트로 이동
+    await panel.getByRole('button', { name: /함께 읽을 책은/ }).click();
+    await expect(page.locator('.ProseMirror h1')).toHaveText('리팩터링');
+  });
+
+  test('나가는 링크: 해석된 링크는 이동 버튼, 없는 노트는 미해결 표시', async () => {
+    const page = await app.firstWindow();
+    note('나가는링크', '# 나가는링크\n\n[[클린 코드]] 와 [[아직 없는 노트]]\n');
+    await open(page, '나가는링크');
+    await page.getByRole('tab', { name: /나가는 링크/ }).click();
+    const panel = page.getByTestId('panel-outgoing');
+    await expect(panel.getByRole('button', { name: '클린 코드' })).toBeVisible({ timeout: 8000 });
+    await expect(panel.locator('.unresolved')).toHaveText('아직 없는 노트');
+  });
+
+  test('언링크드 멘션: 링크 없이 제목이 나온 곳(한글 조사 포함)을 찾는다', async () => {
+    const page = await app.firstWindow();
+    note('멘션글', '# 멘션글\n\n요즘 클린 코드를 다시 읽는다. 코드 안의 `클린 코드`는 제외.\n');
+    await open(page, '클린 코드');
+    await page.getByRole('tab', { name: /언링크드/ }).click();
+    const panel = page.getByTestId('panel-unlinked');
+    await expect(panel).toContainText('요즘 클린 코드를 다시 읽는다', { timeout: 8000 });
+    await expect(panel.getByRole('button', { name: '멘션글', exact: true })).toBeVisible();
+    // 이미 링크한 노트(리팩터링)는 나오지 않는다
+    await expect(panel.getByRole('button', { name: '리팩터링', exact: true })).toHaveCount(0);
+  });
+
+  test('태그 패널: 개수와 중첩 태그, 누르면 노트 목록', async () => {
+    const page = await app.firstWindow();
+    await page.getByRole('tab', { name: '태그' }).click();
+    const tags = page.getByTestId('tag-panel');
+    await expect(tags).toContainText('#개발', { timeout: 8000 });
+    await tags.getByRole('button', { name: /#개발/ }).first().click();
+    await expect(tags.getByRole('button', { name: '클린 코드' }).or(tags.getByRole('button', { name: '리팩터링' })).first()).toBeVisible();
+    await page.getByRole('tab', { name: '파일' }).click();
+  });
+
+  test('빠른 전환기(⌘O): 한글 초성으로 찾아 열고, 없으면 새 노트를 만든다', async () => {
+    const page = await app.firstWindow();
+    await page.keyboard.press('Meta+o');
+    const input = page.getByPlaceholder(/노트 이름·별칭/);
+    await expect(input).toBeVisible();
+    await input.fill('ㅋㄹㅋㄷ');
+    await expect(page.locator('.switcher__item.is-active')).toContainText('클린 코드');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.ProseMirror h1')).toHaveText('클린 코드');
+
+    await page.keyboard.press('Meta+o');
+    await page.getByPlaceholder(/노트 이름·별칭/).fill('cleancode');
+    await expect(page.locator('.switcher__item.is-active')).toContainText('클린 코드'); // 별칭 Clean Code 퍼지
+    await page.keyboard.press('Escape');
+
+    await page.keyboard.press('Meta+o');
+    await page.getByPlaceholder(/노트 이름·별칭/).fill('전환기로 만든 노트');
+    await expect(page.locator('.switcher__item.is-active')).toContainText('새 노트 만들기');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => existsSync(path.join(vaultDir, '전환기로 만든 노트.md')), { timeout: 5000 }).toBe(true);
+  });
+
+  test('[[ 자동완성: 후보를 고르면 위키링크가 들어가고 파일에 저장된다', async () => {
+    const page = await app.firstWindow();
+    const file = note('자동완성', '# 자동완성\n\n시작\n');
+    await open(page, '자동완성');
+    await page.locator('.ProseMirror p', { hasText: '시작' }).click();
+    await page.waitForTimeout(150);
+    await page.keyboard.press('End');
+    await page.keyboard.type(' 참고: [[ㅋㄹ');
+    const popup = page.locator('.nops-link-suggest');
+    await expect(popup).toBeVisible();
+    await expect(popup.locator('.is-active')).toContainText('클린 코드');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.nops-wikilink', { hasText: '클린 코드' })).toBeVisible();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 자동완성\n\n시작 참고: [[클린 코드]]\n');
+    // 제목 자동완성: [[클린 코드#
+    await page.keyboard.type(' 또 [[클린 코드#');
+    await expect(popup).toBeVisible({ timeout: 5000 });
+  });
+
+  test('이름 변경(F2): 링크 갱신 미리보기를 확인하고 바꾸면 모든 링크가 따라가며, 되돌릴 수 있다', async () => {
+    const page = await app.firstWindow();
+    note('옛이름', '# 옛이름\n\n본문\n');
+    note('참조A', '# 참조A\n\n[[옛이름]] 그리고 [[옛이름#소제목|보기]]\n');
+    note('참조B', '---\n관련: ["[[옛이름]]"]\n---\n# 참조B\n\n`[[옛이름]]`은 코드라 그대로\n');
+    await open(page, '옛이름');
+    await expect(page.getByRole('tab', { name: /백링크/ })).toContainText('3', { timeout: 8000 });
+
+    await page.keyboard.press('F2');
+    const input = page.locator('.nops-prompt input');
+    await expect(input).toHaveValue('옛이름');
+    await input.fill('폴더/새이름');
+    await input.press('Enter');
+    const dialog = page.getByRole('dialog', { name: '이름을 바꾸고 링크를 갱신할까요?' });
+    await expect(dialog).toContainText('3개');
+    await expect(dialog).toContainText('2개 노트');
+    await dialog.getByRole('button', { name: '바꾸기' }).click();
+
+    await expect.poll(() => existsSync(path.join(vaultDir, '폴더/새이름.md')), { timeout: 8000 }).toBe(true);
+    expect(existsSync(path.join(vaultDir, '옛이름.md'))).toBe(false);
+    expect(readFileSync(path.join(vaultDir, '참조A.md'), 'utf8')).toBe('# 참조A\n\n[[새이름]] 그리고 [[새이름#소제목|보기]]\n');
+    expect(readFileSync(path.join(vaultDir, '참조B.md'), 'utf8')).toBe('---\n관련: ["[[새이름]]"]\n---\n# 참조B\n\n`[[옛이름]]`은 코드라 그대로\n');
+    await expect(page.locator('.toast')).toContainText('링크 3개를 고쳤어요');
+
+    await page.locator('.toast').getByRole('button', { name: '되돌리기' }).click();
+    await expect.poll(() => existsSync(path.join(vaultDir, '옛이름.md')), { timeout: 8000 }).toBe(true);
+    expect(existsSync(path.join(vaultDir, '폴더'))).toBe(false);
+    expect(readFileSync(path.join(vaultDir, '참조A.md'), 'utf8')).toBe('# 참조A\n\n[[옛이름]] 그리고 [[옛이름#소제목|보기]]\n');
+  });
+
+  test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
+    const page = await app.firstWindow();
+    const today = await page.evaluate(() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    });
+    await page.getByRole('button', { name: '오늘', exact: true }).click();
+    await expect(page.locator('.ProseMirror h1')).toHaveText(today, { timeout: 8000 });
+    const file = path.join(vaultDir, '일기', `${today}.md`);
+    expect(readFileSync(file, 'utf8')).toBe(`# ${today}\n\n`);
+    await page.locator('.ProseMirror').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('오늘 한 일');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('오늘 한 일');
+    await page.getByRole('button', { name: '오늘', exact: true }).click();
+    await expect(page.locator('.ProseMirror')).toContainText('오늘 한 일');
+  });
+});
+
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'note', 'on', 'search', 'vault']);
+  expect(keys).toEqual(['app', 'asset', 'daily', 'link', 'note', 'on', 'search', 'tag', 'vault']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

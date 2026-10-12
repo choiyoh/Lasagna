@@ -85,6 +85,22 @@ async function snapshotVault(v: ReturnType<typeof requireVault>) {
   return { notes, assets };
 }
 
+const localDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** 데일리 노트 내용: 템플릿 노트가 있으면 `{{date}}`·`{{title}}`을 채워 쓰고, 없으면 제목만. */
+function dailyTemplate(root: string, templatePath: string | null, day: string): string {
+  if (templatePath) {
+    try {
+      const raw = readFileSync(resolveInVault(root, templatePath), 'utf8');
+      return raw.replace(/\{\{\s*(date|title)\s*\}\}/g, day);
+    } catch {
+      // 템플릿을 못 읽으면 기본 내용으로
+    }
+  }
+  return `# ${day}\n\n`;
+}
+
 function registerHandlers() {
   handle('vault.listRecent', () => listRecent());
   handle('vault.current', () => getCurrent()?.info ?? null);
@@ -140,6 +156,46 @@ function registerHandlers() {
     v.bases.clear();
     v.selfWrites.clear();
     return r;
+  });
+  handle('link.backlinks', async ({ path: rel }) => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('backlinkContexts', rel);
+  });
+  handle('link.outgoing', async ({ path: rel }) => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('outgoingLinks', rel);
+  });
+  handle('link.unlinked', async ({ path: rel }) => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('unlinkedMentions', rel);
+  });
+  handle('link.headings', async ({ path: rel }) => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('headingsOf', rel);
+  });
+  handle('tag.list', async () => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('tags');
+  });
+  handle('tag.notes', async ({ tag }) => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('notesByTag', tag.replace(/^#/, ''));
+  });
+  handle('daily.open', ({ date }) => {
+    const v = requireVault();
+    const cfg = readVaultConfig(v.info.path);
+    const day = date ?? localDate(new Date());
+    const rel = `${cfg.dailyFolder}/${day}.md`;
+    const full = resolveInVault(v.info.path, rel);
+    if (existsSync(full)) return { path: rel, created: false };
+    atomicWrite(full, dailyTemplate(v.info.path, cfg.dailyTemplate, day));
+    return { path: rel, created: true };
   });
   handle('search.query', async ({ q, limit }) => {
     const v = requireVault();

@@ -6,7 +6,7 @@
   - macOS → `out/make/dmg/<arch>/Nopsidian.dmg` + `out/make/zip/darwin/<arch>/*.zip`
   - Windows → `out/make/squirrel.windows/<arch>/Nopsidian-Setup.exe` (+ `.nupkg`, `RELEASES`) + `out/make/zip/win32/<arch>/*.zip`(설치 없이 쓰는 휴대용)
 - **각 OS 에서 빌드해야 한다.** `better-sqlite3`·`@parcel/watcher` 가 플랫폼별 네이티브 모듈이고 `native-modules.ts` 가 현재 OS 용 바이너리만 앱에 넣는다. 그래서 맥에서 Windows 설치 파일을 만들 수 없다.
-- CI: `.github/workflows/build.yml` — 푸시/PR 마다 세 OS 에서 린트·타입·테스트, `main` 과 `v*` 태그에서는 macOS·Windows 러너가 설치 파일을 만들어 아티팩트로 올린다. `v*` 태그를 푸시하면 초안 GitHub 릴리스에 `.dmg`/`.exe`/`.zip` 이 붙는다.
+- CI: `.github/workflows/build.yml` — 푸시/PR 마다 세 OS 에서 린트·타입·테스트, `main` 과 `v*` 태그에서는 macOS·Windows 러너가 설치 파일을 만들어 아티팩트로 올린다. `v*` 태그를 푸시하면 GitHub 릴리스에 `.dmg`/`.exe`/`.zip` 이 붙는다.
 
 ## 알아 둘 것
 - 서명하지 않았다. macOS 는 ad-hoc 서명(키체인 `safeStorage` 가 동작하도록 `postPackage` 훅)이라 다른 맥에서 처음 열 때 Gatekeeper 경고가 나온다(우클릭 → 열기). 배포용 서명·공증은 Apple Developer 인증서, Windows 는 코드 서명 인증서가 있어야 하며 아직 연결하지 않았다.

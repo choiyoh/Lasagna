@@ -74,7 +74,12 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
+          generate_release_notes: true
+          body: |
+            서명하지 않은 빌드입니다.
+            - **macOS**: `.dmg` 를 열어 Applications 로 옮긴 뒤, 처음 한 번은 우클릭 → 열기.
+            - **Windows**: `Nopsidian-Setup.exe` 실행(SmartScreen 경고가 나오면 "추가 정보 → 실행"). 설치 없이 쓰려면 `.zip`.
           files: |
             dist/**/*.dmg
             dist/**/*.exe

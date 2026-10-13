@@ -153,6 +153,9 @@ importers:
       electron:
         specifier: ^44.7.0
         version: 44.7.0
+      once:
+        specifier: ^1.4.0
+        version: 1.4.0
       vite:
         specifier: ^8.3.4
         version: 8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)
@@ -5181,7 +5184,6 @@ snapshots:
   once@1.4.0:
     dependencies:
       wrappy: 1.0.2
-    optional: true
 
   onetime@5.1.2:
     dependencies:

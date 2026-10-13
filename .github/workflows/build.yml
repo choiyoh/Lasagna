@@ -1,15 +1,11 @@
 name: build
 
-# 무료 분량(비공개 저장소: 월 2000분, macOS 는 10배·Windows 는 2배로 계산)을 아끼려고 최소만 돌린다.
-#  - 푸시/PR: Linux 에서 린트·타입·테스트만(가장 싸다)
-#  - `v*` 태그: Windows 설치 파일(Squirrel exe + zip)을 만들어 GitHub 릴리스에 붙인다
-#  - macOS dmg 는 비싸서 CI 에서 만들지 않는다: 맥에서 `scripts/release-mac.sh <태그>` 로 만들어 같은 릴리스에 올린다
-#  - 세 OS 전체 테스트가 필요하면 Actions 탭에서 수동 실행(workflow_dispatch, all-os 체크)
+# GitHub 에서는 설치 파일을 만들지 않는다(빌드 결과물은 각 PC 에서 만들어 구글 드라이브 `AI Works/Nopsidian/빌드` 에 둔다).
+# 여기서는 가장 싼 Linux 에서 린트·타입·테스트만 돌린다. 세 OS 전체 테스트가 필요하면 Actions 탭에서 수동 실행(all-os).
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -57,49 +53,3 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm -r test
-
-  make-windows:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: test
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @nopsidian/desktop make
-      - uses: actions/upload-artifact@v4
-        with:
-          name: nopsidian-windows
-          path: |
-            apps/desktop/out/make/**/*.exe
-            apps/desktop/out/make/**/*.zip
-            apps/desktop/out/make/**/*.nupkg
-            apps/desktop/out/make/**/RELEASES
-          if-no-files-found: error
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: make-windows
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      - uses: softprops/action-gh-release@v2
-        with:
-          draft: false
-          generate_release_notes: true
-          body: |
-            서명하지 않은 빌드입니다.
-            - **Windows**: `Nopsidian-Setup.exe` 실행(SmartScreen 경고가 나오면 "추가 정보 → 실행"). 설치 없이 쓰려면 `.zip`.
-            - **macOS**: `.dmg` 를 열어 Applications 로 옮긴 뒤, 처음 한 번은 우클릭 → 열기. (맥에서 직접 빌드해 올립니다)
-          files: |
-            dist/**/*.exe
-            dist/**/*.zip

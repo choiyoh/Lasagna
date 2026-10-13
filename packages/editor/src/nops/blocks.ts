@@ -123,6 +123,88 @@ export function moveBlock(state: EditorState, ref: BlockRef, dir: -1 | 1): Trans
   return tr.scrollIntoView();
 }
 
+// ───────────────────────── 여러 블록(범위 선택) ─────────────────────────
+
+/**
+ * 선택이 같은 부모 아래의 형제 블록 둘 이상에 걸쳐 있으면 그 블록들을 순서대로 돌려준다.
+ * 한 블록 안에 있거나, 서로 다른 부모에 걸치면 null(그때는 커서가 있는 블록 하나만 다룬다).
+ */
+export function selectedBlocks(state: EditorState): BlockRef[] | null {
+  const { $from, $to } = state.selection;
+  if ($from.pos === $to.pos) return null;
+  const a = blockAt($from);
+  const b = blockAt($to);
+  if (!a || !b || a.pos === b.pos || a.depth !== b.depth) return null;
+  const pa = state.doc.resolve(a.pos);
+  const pb = state.doc.resolve(b.pos);
+  if (pa.start(a.depth - 1) !== pb.start(b.depth - 1)) return null;
+  const parent = pa.node(a.depth - 1);
+  const refs: BlockRef[] = [];
+  for (let i = pa.index(a.depth - 1); i <= pb.index(b.depth - 1); i++) {
+    const child = parent.child(i);
+    if (child.type.name.endsWith('_title') || child.type.name === 'toggle_summary') continue;
+    let pos = pa.start(a.depth - 1);
+    for (let k = 0; k < i; k++) pos += parent.child(k).nodeSize;
+    refs.push({ pos, node: child, depth: a.depth });
+  }
+  return refs.length > 1 ? refs : null;
+}
+
+const endOf = (r: BlockRef) => r.pos + r.node.nodeSize;
+
+export function duplicateBlocks(state: EditorState, refs: BlockRef[]): Transaction {
+  const last = refs[refs.length - 1]!;
+  const copies = refs.map((r) => stripBlockIds(r.node));
+  const at = endOf(last);
+  const tr = state.tr.insert(at, copies);
+  tr.setSelection(TextSelection.near(tr.doc.resolve(at + 1)));
+  return tr.scrollIntoView();
+}
+
+export function deleteBlocks(state: EditorState, refs: BlockRef[]): Transaction {
+  const first = refs[0]!;
+  const last = refs[refs.length - 1]!;
+  const $pos = state.doc.resolve(first.pos);
+  let depth = first.depth;
+  let from = first.pos;
+  let to = endOf(last);
+  // 컨테이너의 자식을 전부 지우면 빈 껍데기가 남으므로 컨테이너째 지운다
+  while (depth > 1 && $pos.node(depth - 1).childCount === refs.length && COLLAPSE_WITH_LAST_CHILD.has($pos.node(depth - 1).type.name)) {
+    depth--;
+    from = $pos.before(depth);
+    to = from + $pos.node(depth).nodeSize;
+  }
+  const tr = state.tr.delete(from, to);
+  tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(from, tr.doc.content.size)), -1));
+  tr.setMeta('nopsMove', true);
+  return tr.scrollIntoView();
+}
+
+/** 선택한 블록 묶음을 같은 부모 안에서 한 칸 위/아래로 옮긴다(이웃 하나와 자리를 바꾼다). */
+export function moveBlocks(state: EditorState, refs: BlockRef[], dir: -1 | 1): Transaction | null {
+  const first = refs[0]!;
+  const last = refs[refs.length - 1]!;
+  const $first = state.doc.resolve(first.pos);
+  const parent = $first.node(first.depth - 1);
+  const firstIndex = $first.index(first.depth - 1);
+  const neighborIndex = dir === -1 ? firstIndex - 1 : firstIndex + refs.length;
+  if (neighborIndex < 0 || neighborIndex >= parent.childCount) return null;
+  const neighbor = parent.child(neighborIndex);
+  if (neighbor.type.name.endsWith('_title') || neighbor.type.name === 'toggle_summary') return null;
+  const group = refs.map((r) => r.node);
+  const parentStart = $first.start(first.depth - 1);
+  let offset = 0;
+  for (let i = 0; i < Math.min(firstIndex, neighborIndex); i++) offset += parent.child(i).nodeSize;
+  const from = parentStart + offset;
+  const to = dir === -1 ? endOf(last) : from + first.node.nodeSize + (endOf(last) - first.pos - first.node.nodeSize) + neighbor.nodeSize;
+  const tr = state.tr.replaceWith(from, to, dir === -1 ? [...group, neighbor] : [neighbor, ...group]);
+  const groupStart = dir === -1 ? from : from + neighbor.nodeSize;
+  const groupEnd = groupStart + group.reduce((n, g) => n + g.nodeSize, 0);
+  tr.setSelection(TextSelection.create(tr.doc, groupStart + 1, groupEnd - 1));
+  tr.setMeta('nopsMove', true);
+  return tr.scrollIntoView();
+}
+
 // ───────────────────────── 블록 종류 바꾸기 ─────────────────────────
 
 export type TurnIntoKind =

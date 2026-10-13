@@ -10,11 +10,15 @@ import {
   blockAt,
   canTurnInto,
   deleteBlock,
+  deleteBlocks,
   dropToColumns,
   duplicateBlock,
+  duplicateBlocks,
   ensureBlockId,
   moveBlock,
+  moveBlocks,
   normalizeColumns,
+  selectedBlocks,
   turnInto,
 } from './blocks';
 
@@ -223,7 +227,7 @@ class BlockHandleView {
     this.openMenu(ref);
   };
 
-  private openMenu(ref: BlockRef) {
+  private openMenu(ref: BlockRef, keyboard = false) {
     const menu = document.createElement('div');
     menu.className = 'nops-block-menu';
     menu.setAttribute('role', 'menu');
@@ -237,6 +241,31 @@ class BlockHandleView {
       if (tr) this.view.dispatch(tr);
       this.view.focus();
     };
+
+    // 여러 블록에 걸친 선택이고 이 블록이 그 안에 있으면 선택한 블록 전체를 다룬다
+    const multi = selectedBlocks(this.view.state)?.filter((b) => b.pos === ref.pos).length ? selectedBlocks(this.view.state) : null;
+    if (multi) {
+      const title = document.createElement('div');
+      title.className = 'nops-block-menu__title';
+      title.textContent = `블록 ${multi.length}개 선택됨`;
+      menu.append(title);
+      const runMulti = (fn: (state: EditorState, refs: BlockRef[]) => import('prosemirror-state').Transaction | null) => {
+        this.closeMenu();
+        const refs = selectedBlocks(this.view.state);
+        if (!refs) return;
+        const tr = fn(this.view.state, refs);
+        if (tr) this.view.dispatch(tr);
+        this.view.focus();
+      };
+      menu.append(
+        this.menuButton('복제', () => runMulti((s, r) => duplicateBlocks(s, r)), '⌘D'),
+        this.menuButton('위로 이동', () => runMulti((s, r) => moveBlocks(s, r, -1)), '⌘⇧↑'),
+        this.menuButton('아래로 이동', () => runMulti((s, r) => moveBlocks(s, r, 1)), '⌘⇧↓'),
+        this.menuButton('삭제', () => runMulti((s, r) => deleteBlocks(s, r)), '', true),
+      );
+      this.mountMenu(menu, keyboard ? this.blockRect(ref) : undefined, keyboard);
+      return;
+    }
 
     const kinds = TURN_ORDER.filter((k) => canTurnInto(ref, k));
     if (kinds.length) {
@@ -275,14 +304,41 @@ class BlockHandleView {
       this.menuButton('삭제', () => run((s, r) => deleteBlock(s, r)), '', true),
     );
 
+    this.mountMenu(menu, keyboard ? this.blockRect(ref) : undefined, keyboard);
+  }
+
+  private blockRect(ref: BlockRef): DOMRect {
+    return (domOf(this.view, ref) ?? this.view.dom).getBoundingClientRect();
+  }
+
+  /** 메뉴를 화면에 붙이고 위치를 잡는다. `anchor` 가 없으면 핸들 아래. 키보드로 열면 첫 항목에 포커스를 둔다. */
+  private mountMenu(menu: HTMLElement, anchor?: DOMRect, keyboard = false) {
     document.body.append(menu);
-    const rect = this.grip.getBoundingClientRect();
+    const rect = anchor ?? this.grip.getBoundingClientRect();
     menu.style.left = `${rect.left}px`;
     menu.style.top = `${rect.bottom + 6}px`;
     const mr = menu.getBoundingClientRect();
     if (mr.bottom > window.innerHeight - 8) menu.style.top = `${Math.max(8, window.innerHeight - mr.height - 8)}px`;
     this.menu = menu;
     this.root.classList.add('is-menu-open');
+    if (keyboard) this.menuItems()[0]?.focus();
+  }
+
+  private menuItems(): HTMLButtonElement[] {
+    return this.menu ? [...this.menu.querySelectorAll<HTMLButtonElement>('button.nops-block-menu__item')] : [];
+  }
+
+  /** 키보드(⌘/)로 커서가 있는 블록(또는 선택한 여러 블록)의 메뉴를 연다. */
+  openMenuAtSelection(): boolean {
+    if (this.menu) {
+      this.closeMenu();
+      return true;
+    }
+    const ref = blockAt(this.view.state.selection.$from);
+    if (!ref) return false;
+    this.current = ref;
+    this.openMenu(ref, true);
+    return true;
   }
 
   private menuButton(label: string, onClick: () => void, hint = '', danger = false) {
@@ -324,9 +380,25 @@ class BlockHandleView {
   };
 
   private readonly onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && this.menu) {
+    if (!this.menu) return;
+    if (e.key === 'Escape') {
       this.closeMenu();
       this.view.focus();
+      return;
+    }
+    // 메뉴 안 키보드 이동: ↑↓ · Home/End · Tab(순환). Enter/Space 는 단추의 기본 동작(클릭)이 처리한다.
+    const items = this.menuItems();
+    if (!items.length) return;
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    let next = -1;
+    if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) next = at < 0 ? 0 : (at + 1) % items.length;
+    else if (e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) next = at <= 0 ? items.length - 1 : at - 1;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = items.length - 1;
+    if (next >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      items[next]!.focus();
     }
   };
 }
@@ -372,6 +444,14 @@ export function createBlockHandlePlugin(blockLink?: BlockLinkOptions): Plugin[] 
       };
     },
     props: {
+      handleKeyDown(_view, event) {
+        // ⌘/ (Ctrl+/): 커서가 있는 블록의 메뉴를 키보드로 연다
+        if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key === '/') {
+          event.preventDefault();
+          return handle?.openMenuAtSelection() ?? false;
+        }
+        return false;
+      },
       handleDrop(view, event, _slice, moved) {
         if (!dragSource || !moved) return false;
         const target = sideTarget(view, event as DragEvent);
@@ -414,12 +494,23 @@ export function createBlockKeymapPlugin(): Plugin {
   const current = (state: EditorState) => blockAt(state.selection.$from);
   return keymap({
     'Mod-d': (state, dispatch) => {
+      const many = selectedBlocks(state);
+      if (many) {
+        if (dispatch) dispatch(duplicateBlocks(state, many));
+        return true;
+      }
       const ref = current(state);
       if (!ref) return false;
       if (dispatch) dispatch(duplicateBlock(state, ref));
       return true;
     },
     'Mod-Shift-ArrowUp': (state, dispatch) => {
+      const many = selectedBlocks(state);
+      if (many) {
+        const tr = moveBlocks(state, many, -1);
+        if (tr && dispatch) dispatch(tr);
+        return true;
+      }
       const ref = current(state);
       const tr = ref && moveBlock(state, ref, -1);
       if (!tr) return false;
@@ -427,6 +518,12 @@ export function createBlockKeymapPlugin(): Plugin {
       return true;
     },
     'Mod-Shift-ArrowDown': (state, dispatch) => {
+      const many = selectedBlocks(state);
+      if (many) {
+        const tr = moveBlocks(state, many, 1);
+        if (tr && dispatch) dispatch(tr);
+        return true;
+      }
       const ref = current(state);
       const tr = ref && moveBlock(state, ref, 1);
       if (!tr) return false;

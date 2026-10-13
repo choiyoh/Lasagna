@@ -919,6 +919,13 @@ test.describe('링크 코어', () => {
     }, csv);
     await page.getByRole('tab', { name: 'DB' }).click();
     await page.getByRole('button', { name: 'CSV 가져오기' }).click();
+    const importer = page.getByRole('dialog', { name: 'CSV 가져오기' });
+    await expect(importer).toContainText('3행');
+    await expect(importer.getByLabel('평점 형식')).toHaveValue('number');
+    await expect(importer.getByLabel('읽음 형식')).toHaveValue('checkbox');
+    await importer.getByRole('button', { name: '가져오기', exact: true }).click();
+    await expect(importer).toContainText('3개 행을 가져왔어요');
+    await importer.getByRole('button', { name: '데이터베이스 열기' }).click();
     const table = page.getByTestId('db-table');
     await expect(table).toContainText('클린 코드', { timeout: 8000 });
     await expect(table).toContainText('리팩터링');
@@ -1038,6 +1045,146 @@ views:
 
     await page.keyboard.press('Escape');
     await page.getByRole('tab', { name: '파일' }).click();
+  });
+
+  test('미뤄 둔 기능: 폴더 이름 변경·중첩 필터·옆 창·제목 이름 변경·템플릿·CSV 기존 DB·노트 안의 데이터베이스 뷰', async () => {
+    const page = await app.firstWindow();
+    const put = (rel: string, body: string) => {
+      mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
+      writeFileSync(path.join(vaultDir, rel), body);
+    };
+    put('옛폴더/_db.yaml', 'title: 책장\nproperties:\n  상태: { type: select, options: [{name: 읽음}, {name: 안읽음}] }\n  쪽수: { type: number }\nviews:\n  - { id: t, name: 표, type: table }\n  - { id: b, name: 보드, type: board, groupBy: 상태 }\n');
+    put('옛폴더/가.md', '---\n상태: 읽음\n쪽수: 100\n---\n가 본문\n');
+    put('옛폴더/나.md', '---\n상태: 안읽음\n쪽수: 300\n---\n');
+    put('옛폴더/다.md', '---\n상태: 읽음\n쪽수: 500\n---\n');
+    put('템플릿/책.md', '---\n상태: 안읽음\n---\n## 메모\n\n{{title}} 을 읽고\n');
+    put('보는곳.md', '# 보는곳\n\n```dbview\ndb: 책장\nview: 표\n```\n');
+
+    // 1) 폴더 이름 변경 — 열린 데이터베이스와 행 경로가 따라간다
+    await page.getByRole('tab', { name: '파일' }).click();
+    const summary = page.locator('summary', { hasText: '옛폴더' });
+    await summary.hover();
+    await page.getByRole('button', { name: '옛폴더 폴더 이름 변경' }).click();
+    const prompt = page.getByRole('dialog').locator('input');
+    await prompt.fill('새폴더');
+    await prompt.press('Enter');
+    await expect.poll(() => existsSync(path.join(vaultDir, '새폴더/_db.yaml')), { timeout: 8000 }).toBe(true);
+    expect(existsSync(path.join(vaultDir, '옛폴더'))).toBe(false);
+
+    // 2) 노트 안의 데이터베이스 뷰(```dbview) — 값 편집이 파일에 쓰인다
+    await page.getByRole('button', { name: '보는곳', exact: true }).first().click();
+    const embed = page.getByTestId('db-embed');
+    await expect(embed).toContainText('책장', { timeout: 8000 });
+    await expect(embed).toContainText('가');
+    await embed.locator('.dbtable__row', { hasText: '나' }).getByRole('combobox').selectOption('읽음');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '새폴더/나.md'), 'utf8'), { timeout: 5000 }).toContain('상태: 읽음');
+    // 설정 편집 토글로 YAML 이 보이고, 문법이 틀리면 알린다
+    await page.locator('.nops-dbview__bar button').click();
+    await expect(page.locator('.nops-dbview__src')).toBeVisible();
+
+    // 3) 데이터베이스 화면: 중첩 필터(상태=읽음 AND (쪽수<=100 OR 쪽수>=500))
+    await page.getByRole('tab', { name: 'DB' }).click();
+    await page.getByRole('button', { name: /책장/ }).first().click();
+    const screen = page.getByTestId('db-screen');
+    await screen.getByRole('button', { name: /^필터/ }).click();
+    const fd = page.getByRole('dialog', { name: '필터' });
+    await fd.getByRole('button', { name: '+ 조건 추가' }).first().click();
+    await fd.getByLabel('속성', { exact: true }).last().selectOption('상태');
+    await fd.getByLabel('값', { exact: true }).last().selectOption('읽음');
+    await fd.getByRole('button', { name: '+ 그룹 추가' }).first().click();
+    const orGroup = fd.getByLabel('조건 결합').last();
+    await orGroup.selectOption('or');
+    const props = fd.getByLabel('속성', { exact: true });
+    await props.last().selectOption('쪽수');
+    await fd.getByLabel('조건', { exact: true }).last().selectOption('<=');
+    await fd.getByLabel('값', { exact: true }).last().fill('100');
+    // 안쪽 그룹의 버튼이 DOM 에서 루트의 것보다 앞에 있다
+    await fd.getByRole('button', { name: '+ 조건 추가' }).first().click();
+    await fd.getByLabel('속성', { exact: true }).last().selectOption('쪽수');
+    await fd.getByLabel('조건', { exact: true }).last().selectOption('>=');
+    await fd.getByLabel('값', { exact: true }).last().fill('500');
+    const tbl = page.getByTestId('db-table');
+    await expect(tbl).toContainText('가');
+    await expect(tbl).toContainText('다');
+    await expect(tbl.locator('.dbtable__row')).toHaveCount(2);
+    await screen.getByRole('button', { name: /^필터/ }).click();
+
+    // 4) 옆 창으로 행 열기 + 제목 두 번 눌러 이름 바꾸기
+    await screen.getByLabel('행 열기 방식').selectOption('side');
+    await tbl.getByRole('button', { name: '가', exact: true }).click();
+    await expect(page.getByTestId('db-peek')).toContainText('가 본문', { timeout: 8000 });
+    await page.getByTestId('db-peek').getByRole('button', { name: '닫기' }).click();
+    await tbl.getByRole('button', { name: '가', exact: true }).dblclick();
+    await page.getByLabel('제목 바꾸기').fill('가나');
+    await page.getByLabel('제목 바꾸기').press('Enter');
+    await expect.poll(() => existsSync(path.join(vaultDir, '새폴더/가나.md')), { timeout: 8000 }).toBe(true);
+    expect(existsSync(path.join(vaultDir, '새폴더/가.md'))).toBe(false);
+    await screen.getByLabel('행 열기 방식').selectOption('full');
+
+    // 5) 템플릿: 등록하고 기본으로 지정하면 새 행이 템플릿 본문·속성으로 만들어진다
+    await screen.getByRole('button', { name: '템플릿', exact: true }).click();
+    const tp = page.getByRole('dialog', { name: '템플릿' });
+    await tp.getByLabel('템플릿 노트 검색').fill('책');
+    await tp.getByRole('button', { name: /템플릿\/책\.md/ }).click();
+    await expect.poll(() => readFileSync(path.join(vaultDir, '새폴더/_db.yaml'), 'utf8'), { timeout: 5000 }).toContain('defaultTemplate');
+    await screen.getByRole('button', { name: '템플릿', exact: true }).click();
+    await screen.getByRole('button', { name: '+ 새 행' }).click();
+    await page.getByLabel('새 행 제목').fill('템플릿행');
+    await page.getByLabel('새 행 제목').press('Enter');
+    await expect.poll(() => existsSync(path.join(vaultDir, '새폴더/템플릿행.md')), { timeout: 8000 }).toBe(true);
+    const made = readFileSync(path.join(vaultDir, '새폴더/템플릿행.md'), 'utf8');
+    expect(made).toContain('상태: 안읽음');
+    expect(made).toContain('템플릿행 을 읽고');
+
+    // 6) CSV 를 기존 데이터베이스에 더하기(이름이 같은 속성은 기존 형식을 따른다)
+    const csv = path.join(mkdtempSync(path.join(tmpdir(), 'nops-csv2-')), '추가.csv');
+    writeFileSync(csv, '제목,상태,쪽수\n추가1,읽음,42\n추가2,안읽음,x\n');
+    await app.evaluate(({ dialog }, f) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [f] });
+    }, csv);
+    await screen.getByRole('button', { name: 'CSV 가져오기' }).click();
+    const imp = page.getByRole('dialog', { name: 'CSV 가져오기' });
+    await imp.getByLabel('기존 데이터베이스에 추가').check();
+    await imp.getByRole('button', { name: '가져오기', exact: true }).click();
+    await expect(imp).toContainText('2개 행을 가져왔어요');
+    await expect(imp).toContainText('읽을 수 없는 값'); // 쪽수 'x'
+    await imp.getByRole('button', { name: '데이터베이스 열기' }).click();
+    expect(readFileSync(path.join(vaultDir, '새폴더/추가1.md'), 'utf8')).toContain('쪽수: 42');
+
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: '파일' }).click();
+  });
+
+  test('블록 메뉴: 키보드로 열고(⌘/) 방향키로 고르고, 여러 블록 선택은 묶음으로 처리한다', async () => {
+    const page = await app.firstWindow();
+    const file = note('다중블록', '# 다중블록\n\n첫째\n\n둘째\n\n셋째\n');
+    await open(page, '다중블록');
+    await page.locator('.ProseMirror p', { hasText: '첫째' }).click();
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Shift+ArrowDown'); // 첫째 ~ 둘째 에 걸친 선택
+    await page.waitForTimeout(150); // 선택 변경을 에디터가 읽을 시간
+    await page.keyboard.press('Control+/');
+    const menu = page.locator('.nops-block-menu');
+    await expect(menu).toBeVisible();
+    await expect(menu).toContainText('블록 2개 선택됨');
+    // 키보드로 열면 첫 항목(복제)에 포커스가 있고, ↓ 로 옮길 수 있다
+    await expect(menu.locator('button').first()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(menu.locator('button').nth(1)).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter'); // 복제
+    await expect(menu).toHaveCount(0);
+    await expect
+      .poll(() => readFileSync(file, 'utf8'), { timeout: 8000 })
+      .toBe('# 다중블록\n\n첫째\n\n둘째\n\n첫째\n\n둘째\n\n셋째\n');
+
+    // Esc 로 메뉴를 닫으면 에디터로 포커스가 돌아온다
+    await page.locator('.ProseMirror p', { hasText: '셋째' }).click();
+    await page.keyboard.press('Control+/');
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
   });
 
   test('블록 링크: 메뉴로 복사하고, [[노트#^ 자동완성으로 넣고, 링크를 열면 그 블록으로 간다', async () => {

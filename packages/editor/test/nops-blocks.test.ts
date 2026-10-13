@@ -5,11 +5,15 @@ import {
   blockAt,
   canTurnInto,
   deleteBlock,
+  deleteBlocks,
   dropToColumns,
   duplicateBlock,
+  duplicateBlocks,
   ensureBlockId,
   moveBlock,
+  moveBlocks,
   normalizeColumns,
+  selectedBlocks,
   turnInto,
 } from '../src/nops/blocks';
 import { parseDocument, serializeDocument } from '../src/nops/md';
@@ -250,5 +254,54 @@ describe('ensureBlockId (블록 링크용 ID)', () => {
     const ids = new Set<string>();
     for (let i = 0; i < 40; i++) ids.add(ensure('한 문단 ^aaaaaa\n\n다른 문단\n', '다른').id);
     expect(ids.has('aaaaaa')).toBe(false);
+  });
+});
+
+describe('여러 블록 선택', () => {
+  /** `from` 글자를 가진 블록 안에서 `to` 글자를 가진 블록 안까지 선택 */
+  const select = (state: EditorState, from: string, to: string) => {
+    const a = blockWith(state, from);
+    const b = blockWith(state, to);
+    return state.apply(state.tr.setSelection(TextSelection.create(state.doc, a.pos + 1, b.pos + 1)));
+  };
+  const md = (s: EditorState) => serializeDocument(s.doc, null);
+
+  it('같은 부모의 블록 둘 이상에 걸친 선택만 인식한다', () => {
+    const s = stateOf('가\n\n나\n\n다\n\n라\n');
+    expect(selectedBlocks(select(s, '가', '다'))!.map((b) => b.node.textContent)).toEqual(['가', '나', '다']);
+    expect(selectedBlocks(s)).toBeNull(); // 커서만
+    const one = s.apply(s.tr.setSelection(TextSelection.create(s.doc, 1, 2)));
+    expect(selectedBlocks(one)).toBeNull(); // 한 블록 안
+    const nested = stateOf('- 항목1\n- 항목2\n\n밖\n');
+    expect(selectedBlocks(select(nested, '항목1', '밖'))).toBeNull(); // 부모가 다름
+  });
+
+  it('복제·삭제·이동을 묶음으로 한다', () => {
+    const s = stateOf('가\n\n나\n\n다\n\n라\n');
+    const sel = select(s, '나', '다');
+    const refs = selectedBlocks(sel)!;
+    expect(md(sel.apply(duplicateBlocks(sel, refs)))).toBe('가\n\n나\n\n다\n\n나\n\n다\n\n라\n');
+    expect(md(sel.apply(deleteBlocks(sel, refs)))).toBe('가\n\n라\n');
+    expect(md(sel.apply(moveBlocks(sel, refs, -1)!))).toBe('나\n\n다\n\n가\n\n라\n');
+    expect(md(sel.apply(moveBlocks(sel, refs, 1)!))).toBe('가\n\n라\n\n나\n\n다\n');
+  });
+
+  it('끝에서는 더 못 움직이고, 이동 뒤에도 같은 묶음이 선택돼 있다', () => {
+    const s = stateOf('가\n\n나\n\n다\n');
+    const top = select(s, '가', '나');
+    expect(moveBlocks(top, selectedBlocks(top)!, -1)).toBeNull();
+    const moved = top.apply(moveBlocks(top, selectedBlocks(top)!, 1)!);
+    expect(md(moved)).toBe('다\n\n가\n\n나\n');
+    expect(selectedBlocks(moved)!.map((b) => b.node.textContent)).toEqual(['가', '나']);
+    // 한 번 더 아래로 → 끝이라 null
+    expect(moveBlocks(moved, selectedBlocks(moved)!, 1)).toBeNull();
+  });
+
+  it('목록 항목 전체를 지우면 빈 목록 껍데기도 지운다', () => {
+    const s = stateOf('앞\n\n- 가\n- 나\n\n뒤\n');
+    const sel = select(s, '가', '나');
+    const refs = selectedBlocks(sel)!;
+    expect(refs).toHaveLength(2);
+    expect(md(sel.apply(deleteBlocks(sel, refs)))).toBe('앞\n\n뒤\n');
   });
 });

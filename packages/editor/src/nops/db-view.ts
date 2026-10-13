@@ -1,6 +1,6 @@
 import type { Node as PMNode } from 'prosemirror-model';
 import type { EditorView, NodeView } from 'prosemirror-view';
-import type { SlashItemSpec } from '../types';
+import type { SlashItemSpec } from '@oh-new-editor/core';
 import { insertMarkdown } from './commands';
 
 /**

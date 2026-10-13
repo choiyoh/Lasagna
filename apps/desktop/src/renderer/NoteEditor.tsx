@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Editor } from '@nopsidian/editor';
+import type { Editor } from '@nopsidian/editor/nops';
 import { createDbViewHost } from './db/dbview-host';
 import type { DbEmbedHost } from './db/EmbeddedDb';
 import { relativePath, vaultUrl } from '@nopsidian/core/assets';

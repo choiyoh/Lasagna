@@ -79,7 +79,7 @@ nopsidian/
 - **골든 테스트**: `fixtures/vaults/`의 md를 doc으로 바꿨다가 다시 md로 바꿨을 때 바이트가 같아야 한다(정규화 허용 목록 제외). 퍼즈 테스트도 둔다.
 
 ### 2단계: 블록 에디터 MVP (ADR-0003: oh-new-editor 포크 기반)
-- `packages/editor`는 oh-new-editor `packages/core`의 포크(소스 직접 참조, 빌드 없음). 이미 있는 것: 슬래시 메뉴(한글 초성 검색), 버블 툴바, 링크 편집기, 표, 이미지 업로드, 마크다운 단축 입력, ko/en/zh UI, 다크 모드.
+- (현재: 포크를 끝내고 `@oh-new-editor/core ^0.2.1` npm 의존성 위에 `nops/` 확장만 둔다 — ADR-0003 갱신.) 처음에는 oh-new-editor `packages/core`의 포크였다. 이미 있는 것: 슬래시 메뉴(한글 초성 검색), 버블 툴바, 링크 편집기, 표, 이미지 업로드, 마크다운 단축 입력, ko/en/zh UI, 다크 모드.
 - 만들 것
   1. **스키마 확장**: 콜아웃(제목 노드 포함), 토글(제목 노드 포함), 열(`columns` ⊃ `column{2,5}`), 위키링크(인라인 atom), 임베드, 하이라이트·밑줄·색 마크, 블록 ID 속성
   2. **Markdown ↔ ProseMirror 변환기**(1단계 파서 위): 블록 원문 오프셋을 노드가 기억하고, 바뀐 블록만 다시 직렬화한다. 알 수 없는 문법은 `rawBlock`으로 보존
@@ -90,7 +90,7 @@ nopsidian/
   7. 이미지·파일: 볼트 `attachments/`에 저장하고 `vault://`로 표시
   8. 노트 단위 undo/redo, 500ms 디바운스 자동 저장(`note.save` 사용)
 - 한글 IME 회귀 테스트: Playwright로 조합 중 Enter/블록 분할 시나리오.
-- 업스트림 npm 배포 후 `@oh-new-editor/core` 의존성으로 교체한다(`packages/editor/UPSTREAM.md`).
+- [x] 업스트림 npm 배포(0.2.1) 후 `@oh-new-editor/core` 의존성으로 교체했다.
 
 ### 3단계: 링크 코어 → MVP
 - 링크 해석(`packages/core`) 순서: 경로 정확 일치 → 파일명/제목(최단 경로 우선) → 별칭 → 미해결. 결과는 links 테이블에 저장한다.
@@ -292,7 +292,7 @@ nopsidian/
   - 위키링크 클릭 → 노트 열기
 - [x] 렌더러 `NoteEditor`: 읽기(hash) → 파싱 → 표시, 편집 500ms 후 자동 저장(`note.save` + baseHash), 블러·노트 전환 시 즉시 저장, 병합/충돌/사본 결과 안내, 편집 중이 아닐 때 외부 변경은 조용히 다시 불러오기, 새 노트 만들기
 - [x] E2E(패키징된 앱, 13개): 편집 시 고친 문단만 저장, **한글 IME 조합**(CDP `Input.imeSetComposition`) 후 Enter 분할, 초성 슬래시 → 콜아웃 저장, 편집 중 외부 편집 자동 병합, 외부 변경 리로드, 위키링크 클릭 이동
-- 참고: `apps/desktop/tsconfig.json`은 포크한 에디터 소스를 함께 타입 검사하므로 `noUncheckedIndexedAccess`를 끈다(업스트림을 npm 의존성으로 교체하면 되돌린다)
+- 참고: `apps/desktop/tsconfig.json`은 포크한 에디터 소스를 함께 타입 검사하므로 `noUncheckedIndexedAccess`를 끈다(npm 의존성 전환 후 켜 보니 기존 코드에 오류가 남아 있어 그대로 둔다 — 별도 정리 과제)
 - [x] **블록 핸들 + 드래그&드롭** (`nops/blocks.ts`, `nops/block-handle.ts`)
   - 마우스를 올리면 블록 왼쪽에 `+` / `⋮⋮` 핸들이 뜬다. 목록은 항목 단위, 표·콜아웃·토글은 통째로, 열 안의 블록은 그 블록이 대상이다
   - `+`: 아래에 빈 블록을 만들고 슬래시 메뉴를 연다 / `⋮⋮` 클릭: 블록 메뉴(블록 변환 11종, 복제, 위/아래 이동, 삭제) / `⋮⋮` 끌기: 이동(ProseMirror 기본 드롭 + dropcursor, 중첩 컨테이너 안으로도 이동)

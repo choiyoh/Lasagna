@@ -2,8 +2,7 @@ import { Schema } from 'prosemirror-model';
 import type { MarkSpec, NodeSpec } from 'prosemirror-model';
 import { tableNodes } from 'prosemirror-tables';
 
-import { marks as baseMarks } from '../schema/marks';
-import { nodes as baseNodes } from '../schema/nodes';
+import { marks as baseMarks, nodes as baseNodes } from '@oh-new-editor/core';
 
 /**
  * Nopsidian 스키마 = 업스트림 기본 노드 + 콜아웃·토글·열·위키링크·임베드·수식·원문 보존 노드 + 표.

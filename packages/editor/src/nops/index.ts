@@ -12,3 +12,4 @@ export type { LinkQuery, LinkSuggestion, NopsLinkHost } from './link-suggest';
 export type { BlockLinkOptions } from './block-handle';
 export { flashBlock } from './flash';
 export { type NopsDbViewHost, DBVIEW_LANG } from './db-view';
+export type { Editor, EditorOptions } from '@oh-new-editor/core';

@@ -1,8 +1,7 @@
-import { createEditor } from '../editor';
-import { messagesKo } from '../i18n';
-import { createNotionSupport } from '../notion';
-import { createTableSupport } from '../table';
-import type { Editor, EditorOptions, SlashItemSpec } from '../types';
+import '@oh-new-editor/core/style.css';
+import { createEditor, messagesKo, type Editor, type EditorOptions, type SlashItemSpec } from '@oh-new-editor/core';
+import { createNotionSupport } from '@oh-new-editor/core/notion';
+import { createTableSupport } from '@oh-new-editor/core/table';
 import { createCodeHighlightPlugin } from './code-highlight';
 import { type BlockLinkOptions, createBlockHandlePlugin, createBlockKeymapPlugin } from './block-handle';
 import { insertCallout, insertColumns, insertMathBlock, insertToggle } from './commands';
@@ -68,6 +67,7 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
           upload: async (file) => assets.imageSrc(await assets.save(file)),
           accept: IMAGE_TYPES,
           maxSize: 50_000_000,
+          altText: (file) => file.name.replace(/\.[^./\\]+$/, ''),
         }
       : undefined,
     resolveImageSrc: assets ? (src) => resolveImageSrc(assets, src) : undefined,

@@ -1,6 +1,6 @@
 # ADR-0003: 에디터는 oh-new-editor를 포크해 사용한다
 
-- 상태: 승인
+- 상태: 승인 (2026-10-13 갱신: 포크를 끝내고 npm 의존성으로 전환 — 아래 "갱신")
 - 날짜: 2026-10-12
 - 대체: 설계 문서 5.2의 "BlockNote로 시작 → TipTap/ProseMirror로 하강"
 
@@ -33,3 +33,8 @@ Electron 안에서 스파이크로 비교했다(콜아웃 > 목록 > 토글 > �
 - 업스트림에 없는 것: 뷰 접근 API, 슬래시 항목 확장점, 블록 핸들·드래그, "Turn into", 소스 모드, 볼트 첨부 연동.
 - 한글 IME 조합과 대용량 문서 성능은 구현 중 Playwright로 검증한다.
 - 포크 코드는 업스트림과 diff를 유지하기 위해 lint 대상에서 제외하고, 고친 파일부터 점진적으로 포함한다.
+
+## 갱신 (2026-10-13): npm 의존성으로 전환
+업스트림에 호스트 확장 훅(`priorityPlugins`, `nodeViews`, `resolveImageSrc`, `prompt`, `image.altText`, `getView/getDocument/setDocument`,
+`createNotionSupport({slashItems})`)을 반영하고 `@oh-new-editor/core@0.2.1`로 배포했다(의존성은 번들에서 외부화).
+`packages/editor`는 포크 소스와 `UPSTREAM.md`를 지우고 Nopsidian 확장(`nops/`)만 남겼으며, 코어는 `@oh-new-editor/core ^0.2.1`을 쓴다.

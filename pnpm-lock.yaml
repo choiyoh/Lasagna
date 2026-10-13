@@ -226,12 +226,9 @@ importers:
       '@nopsidian/core':
         specifier: workspace:*
         version: link:../core
-      dompurify:
-        specifier: ^3.2.7
-        version: 3.4.16
-      marked:
-        specifier: ^16.3.0
-        version: 16.4.2
+      '@oh-new-editor/core':
+        specifier: ^0.2.1
+        version: 0.2.1
       mdast-util-gfm:
         specifier: ^3.1.0
         version: 3.1.0
@@ -283,9 +280,6 @@ importers:
       shiki:
         specifier: ^4.5.0
         version: 4.5.0
-      turndown:
-        specifier: ^7.2.1
-        version: 7.2.4
     devDependencies:
       '@types/mdast':
         specifier: ^4.0.4
@@ -757,6 +751,9 @@ packages:
 
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
+
+  '@oh-new-editor/core@0.2.1':
+    resolution: {integrity: sha512-PTPehEvZyiFUk5WreWBFzZfObLJZcXoVTeuHpcITozoCHL3Op3GTzajpfNXb2oPN0QvMho6+9IO8zpfLpaovCg==}
 
   '@oxc-project/types@0.153.0':
     resolution: {integrity: sha512-jSNrRIyvPVLL5E1z/tS5zLAprosGz/FuI1PWwEOz59j3E4TTTzSpqKb/RDGqJhhW0QHYISGXxq582wGx6T11Tw==}
@@ -3175,6 +3172,25 @@ snapshots:
   '@marijn/find-cluster-break@1.0.4': {}
 
   '@mixmark-io/domino@2.2.0': {}
+
+  '@oh-new-editor/core@0.2.1':
+    dependencies:
+      dompurify: 3.4.16
+      marked: 16.4.2
+      prosemirror-commands: 1.7.2
+      prosemirror-dropcursor: 1.8.4
+      prosemirror-gapcursor: 1.4.1
+      prosemirror-history: 1.5.1
+      prosemirror-inputrules: 1.5.1
+      prosemirror-keymap: 1.2.3
+      prosemirror-model: 1.25.12
+      prosemirror-schema-basic: 1.2.5
+      prosemirror-schema-list: 1.5.1
+      prosemirror-state: 1.4.4
+      prosemirror-tables: 1.8.5
+      prosemirror-transform: 1.12.2
+      prosemirror-view: 1.42.6
+      turndown: 7.2.4
 
   '@oxc-project/types@0.153.0': {}
 

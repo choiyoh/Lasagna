@@ -1,3 +1,4 @@
+/* global Buffer, console */
 // apps/desktop/assets/icon.svg → icon.png(1024), icon.icns(macOS), icon.ico(Windows)
 // 실행: node scripts/make-icons.mjs  (macOS 에서: iconutil 사용). 결과 파일은 커밋한다.
 import { execFileSync } from 'node:child_process';

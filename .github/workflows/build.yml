@@ -1,8 +1,10 @@
 name: build
 
-# 테스트는 macOS·Windows·Linux 에서, 설치 파일은 macOS(dmg)와 Windows(Squirrel 설치 exe)에서 만든다.
-# 네이티브 모듈(better-sqlite3, @parcel/watcher)이 플랫폼별이라 설치 파일은 각 OS 러너에서 빌드해야 한다.
-# `v*` 태그를 푸시하면 만든 설치 파일을 GitHub 릴리스(초안)에 붙인다.
+# 무료 분량(비공개 저장소: 월 2000분, macOS 는 10배·Windows 는 2배로 계산)을 아끼려고 최소만 돌린다.
+#  - 푸시/PR: Linux 에서 린트·타입·테스트만(가장 싸다)
+#  - `v*` 태그: Windows 설치 파일(Squirrel exe + zip)을 만들어 GitHub 릴리스에 붙인다
+#  - macOS dmg 는 비싸서 CI 에서 만들지 않는다: 맥에서 `scripts/release-mac.sh <태그>` 로 만들어 같은 릴리스에 올린다
+#  - 세 OS 전체 테스트가 필요하면 Actions 탭에서 수동 실행(workflow_dispatch, all-os 체크)
 
 on:
   push:
@@ -10,17 +12,22 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      all-os:
+        description: 'Windows·macOS 에서도 테스트(분량을 많이 쓴다)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -30,17 +37,31 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
-        if: matrix.os == 'ubuntu-latest'
       - run: pnpm typecheck
       - run: pnpm -r test
 
-  make:
-    needs: test
+  test-all-os:
+    if: github.event_name == 'workflow_dispatch' && inputs.all-os
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm -r test
+
+  make-windows:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -52,18 +73,17 @@ jobs:
       - run: pnpm --filter @nopsidian/desktop make
       - uses: actions/upload-artifact@v4
         with:
-          name: nopsidian-${{ matrix.os }}
+          name: nopsidian-windows
           path: |
-            apps/desktop/out/make/**/*.dmg
-            apps/desktop/out/make/**/*.zip
             apps/desktop/out/make/**/*.exe
+            apps/desktop/out/make/**/*.zip
             apps/desktop/out/make/**/*.nupkg
             apps/desktop/out/make/**/RELEASES
           if-no-files-found: error
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: make
+    needs: make-windows
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -78,9 +98,8 @@ jobs:
           generate_release_notes: true
           body: |
             서명하지 않은 빌드입니다.
-            - **macOS**: `.dmg` 를 열어 Applications 로 옮긴 뒤, 처음 한 번은 우클릭 → 열기.
             - **Windows**: `Nopsidian-Setup.exe` 실행(SmartScreen 경고가 나오면 "추가 정보 → 실행"). 설치 없이 쓰려면 `.zip`.
+            - **macOS**: `.dmg` 를 열어 Applications 로 옮긴 뒤, 처음 한 번은 우클릭 → 열기. (맥에서 직접 빌드해 올립니다)
           files: |
-            dist/**/*.dmg
             dist/**/*.exe
             dist/**/*.zip

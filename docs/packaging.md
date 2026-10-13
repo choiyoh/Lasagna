@@ -6,7 +6,9 @@
   - macOS → `out/make/dmg/<arch>/Nopsidian.dmg` + `out/make/zip/darwin/<arch>/*.zip`
   - Windows → `out/make/squirrel.windows/<arch>/Nopsidian-Setup.exe` (+ `.nupkg`, `RELEASES`) + `out/make/zip/win32/<arch>/*.zip`(설치 없이 쓰는 휴대용)
 - **각 OS 에서 빌드해야 한다.** `better-sqlite3`·`@parcel/watcher` 가 플랫폼별 네이티브 모듈이고 `native-modules.ts` 가 현재 OS 용 바이너리만 앱에 넣는다. 그래서 맥에서 Windows 설치 파일을 만들 수 없다.
-- CI: `.github/workflows/build.yml` — 푸시/PR 마다 세 OS 에서 린트·타입·테스트, `main` 과 `v*` 태그에서는 macOS·Windows 러너가 설치 파일을 만들어 아티팩트로 올린다. `v*` 태그를 푸시하면 GitHub 릴리스에 `.dmg`/`.exe`/`.zip` 이 붙는다.
+- CI: `.github/workflows/build.yml` — 비공개 저장소는 무료 분량이 월 2000분이고 macOS 러너는 10배·Windows 는 2배로 센다. 그래서 푸시/PR 은 Linux 에서 린트·타입·테스트만 돌리고, `v*` 태그에서만 **Windows** 설치 파일(`.exe`/`.zip`)을 만들어 릴리스에 붙인다. 세 OS 전체 테스트는 Actions 탭에서 수동 실행(`all-os`).
+- **macOS 설치 파일은 CI 에서 만들지 않는다.** 맥에서 `scripts/release-mac.sh v0.3.0` 을 실행하면 dmg·zip 을 만들어 같은 릴리스에 올린다.
+- 분량이 바닥났을 때: ① 저장소를 공개로 바꾸면 Actions 가 무료·무제한, ② 다음 결제 주기에 초기화, ③ 윈도우 PC 에서 직접 `pnpm install && pnpm --filter @nopsidian/desktop make` (결과는 `apps/desktop/out/make/`), ④ 윈도우 PC 를 self-hosted runner 로 등록.
 
 ## 알아 둘 것
 - 서명하지 않았다. macOS 는 ad-hoc 서명(키체인 `safeStorage` 가 동작하도록 `postPackage` 훅)이라 다른 맥에서 처음 열 때 Gatekeeper 경고가 나온다(우클릭 → 열기). 배포용 서명·공증은 Apple Developer 인증서, Windows 는 코드 서명 인증서가 있어야 하며 아직 연결하지 않았다.

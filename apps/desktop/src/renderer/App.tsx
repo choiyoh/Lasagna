@@ -328,6 +328,19 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     }
   }, []);
 
+  const importNotion = useCallback(async () => {
+    try {
+      const r = await window.nops.import.notion();
+      if (!r.folder) return;
+      refresh();
+      setToast({
+        message: `Notion에서 노트 ${r.notes}개·데이터베이스 ${r.databases}개·첨부 ${r.assets}개를 "${r.folder}" 폴더로 가져왔어요${r.unresolvedLinks ? ` (연결 못 한 링크 ${r.unresolvedLinks}개)` : ''}.`,
+      });
+    } catch (e) {
+      setToast({ message: `가져오기 실패: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }, [refresh]);
+
   const commands = useMemo<PaletteCommand[]>(
     () => [
       { id: 'quick', label: '노트 열기 (빠른 전환기)', hint: '⌘O', keywords: ['open', '열기', '전환', 'ㅇㄱ'], run: () => setSwitcher(true) },
@@ -347,9 +360,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'export-html', label: '현재 노트를 HTML로 내보내기', keywords: ['export', 'html', '내보내기'], enabled: !!selected, run: () => void exportNote('html') },
       { id: 'export-pdf', label: '현재 노트를 PDF로 내보내기', keywords: ['export', 'pdf', '내보내기'], enabled: !!selected, run: () => void exportNote('pdf') },
       { id: 'export-vault', label: '볼트 전체를 HTML 사이트로 내보내기', keywords: ['export', 'site', 'html', '내보내기', '사이트'], run: () => void exportVault() },
+      { id: 'import-notion', label: 'Notion 내보내기(ZIP) 가져오기', keywords: ['import', 'notion', '노션', '가져오기'], run: () => void importNotion() },
       { id: 'close', label: '다른 볼트 열기', keywords: ['vault', '볼트', '닫기'], run: onClose },
     ],
-    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, onClose],
+    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, onClose],
   );
 
   useEffect(() => {

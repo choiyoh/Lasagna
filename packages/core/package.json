@@ -41,6 +41,7 @@
     "./db/values": "./src/db/values.ts",
     "./db/rollup": "./src/db/rollup.ts",
     "./db/embed": "./src/db/embed.ts",
-    "./export": "./src/export/html.ts"
+    "./export": "./src/export/html.ts",
+    "./import": "./src/import/notion.ts"
   }
 }

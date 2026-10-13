@@ -46,6 +46,7 @@ import {
 } from './vault';
 import { readFile } from 'node:fs/promises';
 import { CredentialStore, SyncController } from './sync';
+import { importNotionInto, readZipEntries } from './notion-import';
 import { exportVaultSite, renderNoteDocument, type ExportContext } from './export';
 import { addRow, createDatabase, editSchema, exportCsv, importCsvApply, importCsvPreview, updateCell } from './db';
 
@@ -303,6 +304,24 @@ function registerHandlers() {
     if (format === 'html') atomicWrite(r.filePath, doc);
     else atomicWrite(r.filePath, await htmlToPdf(doc));
     return { saved: r.filePath };
+  });
+  handle('import.notion', async (_i, e) => {
+    const v = requireVault();
+    const parent = BrowserWindow.fromWebContents(e.sender);
+    const opts = { title: 'Notion 내보내기 ZIP 선택', properties: ['openFile' as const], filters: [{ name: 'ZIP', extensions: ['zip'] }] };
+    const r = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
+    const file = r.filePaths[0];
+    if (r.canceled || !file) return { folder: null, notes: 0, databases: 0, rows: 0, assets: 0, unresolvedLinks: 0, issues: [] };
+    const res = importNotionInto(v.info.path, readZipEntries(readFileSync(file)));
+    return {
+      folder: res.folder,
+      notes: res.stats.notes,
+      databases: res.stats.databases,
+      rows: res.stats.rows,
+      assets: res.stats.assets,
+      unresolvedLinks: res.stats.unresolvedLinks,
+      issues: res.issues.slice(0, 30),
+    };
   });
   handle('export.vault', async (_i, e) => {
     const v = requireVault();

@@ -38,6 +38,7 @@
     "@tanstack/react-virtual": "^3.14.15",
     "better-sqlite3": "^13.0.3",
     "dompurify": "^3.4.16",
+    "fflate": "^0.8.3",
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",
     "graphology-types": "^0.24.8",

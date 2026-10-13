@@ -1,6 +1,7 @@
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { strToU8, zipSync } from 'fflate';
 import path from 'node:path';
 
 // `pnpm package` 로 만든 앱을 실행한다(Fuses·asar·네이티브 모듈까지 함께 검증).
@@ -1410,6 +1411,32 @@ views:
     expect(existsSync(path.join(site, 'index.html'))).toBe(true);
   });
 
+  test('Notion 가져오기: ZIP → 새 폴더, 링크·데이터베이스 변환', async () => {
+    const page = await app.firstWindow();
+    const id1 = '0123456789abcdef0123456789abcdef';
+    const id2 = 'fedcba9876543210fedcba9876543210';
+    const zip = zipSync({
+      [`노션 허브 ${id1}.md`]: strToU8(`# 노션 허브\n\n[하위](노션%20허브%20${id1}/하위%20${id2}.md)\n`),
+      [`노션 허브 ${id1}/하위 ${id2}.md`]: strToU8('# 하위\n\n하위 내용\n'),
+      [`노션 표 ${id2}.csv`]: strToU8('Name,Status\n행하나,진행\n행둘,완료\n'),
+      [`노션 표 ${id2}/행하나 ${id1}.md`]: strToU8('# 행하나\n\nStatus: 진행\n\n행 본문\n'),
+    });
+    const zipFile = path.join(mkdtempSync(path.join(tmpdir(), 'nops-e2e-zip-')), 'notion.zip');
+    writeFileSync(zipFile, zip);
+    await app.evaluate(({ dialog }, f) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [f] })) as typeof dialog.showOpenDialog;
+    }, zipFile);
+    await page.keyboard.press('Meta+p');
+    await page.getByTestId('command-palette').locator('input').fill('Notion 내보내기');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.toast')).toContainText('Notion에서', { timeout: 15000 });
+    const folder = readdirSync(vaultDir).find((d) => d.startsWith('Notion 가져오기'))!;
+    expect(readFileSync(path.join(vaultDir, folder, '노션 허브.md'), 'utf8')).toContain('[[하위]]');
+    expect(readFileSync(path.join(vaultDir, folder, '노션 표/_db.yaml'), 'utf8')).toContain('Status');
+    expect(readFileSync(path.join(vaultDir, folder, '노션 표/행하나.md'), 'utf8')).toContain('Status: 진행');
+    await expect(page.getByRole('button', { name: '노션 허브', exact: true })).toBeVisible({ timeout: 10000 });
+  });
+
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
     const page = await app.firstWindow();
     const today = await page.evaluate(() => {
@@ -1432,7 +1459,7 @@ views:
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'graph', 'history', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'graph', 'history', 'import', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

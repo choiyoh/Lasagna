@@ -257,6 +257,19 @@ export const contract = {
   'export.note': { input: z.object({ path: relPath, format: z.enum(['html', 'pdf']) }), output: z.object({ saved: z.string().nullable() }) },
   /** 볼트 전체를 정적 HTML 사이트로 폴더에 내보낸다(폴더 선택 대화상자) */
   'export.vault': { input: z.undefined(), output: z.object({ dir: z.string().nullable(), notes: z.number(), assets: z.number() }) },
+  /** Notion 내보내기 ZIP(Markdown & CSV)을 골라 볼트의 새 폴더로 가져온다. 취소하면 folder 가 null */
+  'import.notion': {
+    input: z.undefined(),
+    output: z.object({
+      folder: z.string().nullable(),
+      notes: z.number(),
+      databases: z.number(),
+      rows: z.number(),
+      assets: z.number(),
+      unresolvedLinks: z.number(),
+      issues: z.array(z.string()),
+    }),
+  },
   'link.backlinks': { input: z.object({ path: relPath }), output: z.array(backlinkContext) },
   'link.outgoing': { input: z.object({ path: relPath }), output: z.array(outgoingLink) },
   'link.unlinked': { input: z.object({ path: relPath }), output: z.array(unlinkedMention) },

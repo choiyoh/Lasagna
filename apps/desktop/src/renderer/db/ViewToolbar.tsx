@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CALC_FNS, FilterNode, View } from '@nopsidian/core/db';
 import { FilterBuilder } from './FilterBuilder';
 import { TITLE, type DbData } from './types';
@@ -21,6 +21,8 @@ interface Props {
   onChange: (v: View) => void;
   onSave: () => void;
   onReset: () => void;
+  /** 값이 바뀔 때마다 필터 창을 연다(표 열 머리 메뉴의 "필터 추가") */
+  openFilterRequest?: number;
 }
 
 const VIEW_TYPES: { type: View['type']; label: string }[] = [
@@ -28,8 +30,12 @@ const VIEW_TYPES: { type: View['type']; label: string }[] = [
 ];
 
 /** 필터·정렬·그룹·표시 속성 조절 막대. 바꾸면 저장 전의 임시 뷰가 되고, "보기 저장"으로 `_db.yaml` 에 쓴다. */
-export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Props) {
+export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset, openFilterRequest }: Props) {
   const [open, setOpen] = useState<'filter' | 'sort' | 'group' | 'cols' | 'calc' | null>(null);
+  useEffect(() => {
+    if (openFilterRequest) setOpen('filter');
+  }, [openFilterRequest]);
+  const filesProps = Object.entries(data.schema.properties).filter(([, p]) => p.type === 'files').map(([n]) => n);
   const props = [TITLE, ...Object.keys(data.schema.properties)];
   const toggle = (k: NonNullable<typeof open>) => setOpen(open === k ? null : k);
   const dateProps = Object.entries(data.schema.properties).filter(([, p]) => p.type === 'date' || p.type === 'created_time' || p.type === 'updated_time').map(([n]) => n);
@@ -48,6 +54,15 @@ export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Pr
         </select>
       </label>
 
+      {(view.type === 'board' || view.type === 'gallery') && (
+        <label className="dbtoolbar__type">
+          <span className="muted small">커버</span>
+          <select value={view.cover ?? ''} onChange={(e) => onChange({ ...view, cover: e.target.value || undefined })} aria-label="커버 속성">
+            <option value="">본문 첫 이미지</option>
+            {filesProps.map((p) => <option key={p}>{p}</option>)}
+          </select>
+        </label>
+      )}
       {(view.type === 'calendar' || view.type === 'timeline') && (
         <label className="dbtoolbar__type">
           <span className="muted small">날짜 속성</span>

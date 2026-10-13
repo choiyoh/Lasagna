@@ -11,6 +11,17 @@ interface Props {
 const IMG = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
 const vaultUrl = (vaultId: string, p: string) => `vault://${vaultId}/${p.split('/').map(encodeURIComponent).join('/')}`;
 
+/** 카드 커버 URL: 뷰의 `cover`(files 속성)가 있으면 그 첫 이미지, 없으면 본문 첫 이미지 */
+export function coverOf(data: DbData, r: DbRowDto, vaultId: string): string | null {
+  const coverProp = data.view.cover;
+  if (!coverProp && r.cover) return vaultUrl(vaultId, r.cover);
+  const v = coverProp ? cellOf(r, coverProp) : null;
+  const first = Array.isArray(v) ? v.find((x) => IMG.test(x)) : typeof v === 'string' && IMG.test(v) ? v : undefined;
+  if (!first) return null;
+  const name = first.replace(/^!?\[\[|\]\]$/g, '').split('|')[0]!;
+  return name.includes('/') ? vaultUrl(vaultId, name) : vaultUrl(vaultId, `attachments/${name}`);
+}
+
 /** 목록 뷰: 제목과 보조 속성을 한 줄씩. */
 export function ListView({ data, rows, onOpen }: Props) {
   const cols = visibleColumns(data).filter((c) => c !== TITLE).slice(0, 4);
@@ -35,15 +46,7 @@ export function ListView({ data, rows, onOpen }: Props) {
 /** 갤러리 뷰: 커버(files 속성의 첫 이미지)가 있는 카드. */
 export function GalleryView({ data, rows, vaultId, onOpen }: Props) {
   const cols = visibleColumns(data).filter((c) => c !== TITLE).slice(0, 3);
-  const coverProp = data.view.cover;
-  const cover = (r: DbRowDto): string | null => {
-    if (!coverProp && r.cover) return vaultUrl(vaultId, r.cover);
-    const v = coverProp ? cellOf(r, coverProp) : null;
-    const first = Array.isArray(v) ? v.find((x) => IMG.test(x)) : typeof v === 'string' && IMG.test(v) ? v : undefined;
-    if (!first) return null;
-    const name = first.replace(/^!?\[\[|\]\]$/g, '').split('|')[0]!;
-    return name.includes('/') ? vaultUrl(vaultId, name) : vaultUrl(vaultId, `attachments/${name}`);
-  };
+  const cover = (r: DbRowDto) => coverOf(data, r, vaultId);
   return (
     <div className="dbgallery" data-testid="db-gallery">
       {rows.map((r) => {

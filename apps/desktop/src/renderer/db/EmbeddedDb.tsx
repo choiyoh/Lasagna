@@ -6,7 +6,8 @@ import { CalendarView } from './CalendarView';
 import { GalleryView, ListView } from './ListGalleryViews';
 import { TableView } from './TableView';
 import { TimelineView } from './TimelineView';
-import type { CellValue, DbData, DbRowDto } from './types';
+import type { CellValue, DbData, DbRowDto, View } from './types';
+import { hiddenColumnView, sortedView } from './view-edit';
 
 export interface DbEmbedHost {
   vaultId: string;
@@ -25,6 +26,8 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
   const [error, setError] = useState('');
   /** 보기 탭에서 고른 보기(파일에는 쓰지 않는다. 노트에 적힌 보기가 기본) */
   const [picked, setPicked] = useState<string | null>(null);
+  /** 열 머리 메뉴로 바꾼 임시 정렬·열(저장하지 않는다. 보기 탭을 바꾸면 사라진다) */
+  const [tmp, setTmp] = useState<Partial<View> | null>(null);
   const parsed = parseDbEmbed(source);
   const cfg = parsed.ok ? parsed.config : null;
 
@@ -49,13 +52,14 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
           setError(`보기를 찾을 수 없어요: ${want}`);
         }
       }
+      if (tmp) r = (await window.nops.db.query({ folder: found.folder, view: { ...(r.view as View), ...tmp }, limit: cfg.limit ?? 100, groupLimit: 50 })) as DbQueryResult;
       setFolder(found.folder);
       setData(r as unknown as DbData);
       if (!want || (r.schema as DbData['schema']).views.some((x) => x.id === want || x.name === want)) setError('');
     } catch (e) {
       setError(clean(e));
     }
-  }, [cfg?.db, cfg?.view, cfg?.limit, picked]);
+  }, [cfg?.db, cfg?.view, cfg?.limit, picked, tmp]);
 
   useEffect(() => {
     void load();
@@ -112,7 +116,10 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
         <strong>{data.schema.title ?? '데이터베이스'}</strong>
         <div className="dbembed__views" role="tablist" aria-label="보기">
           {data.schema.views.map((v) => (
-            <button key={v.id} role="tab" aria-selected={v.id === data.view.id} className={v.id === data.view.id ? 'active' : ''} onClick={() => setPicked(v.id)}>
+            <button key={v.id} role="tab" aria-selected={v.id === data.view.id} className={v.id === data.view.id ? 'active' : ''} onClick={() => {
+                setTmp(null);
+                setPicked(v.id);
+              }}>
               {v.name}
             </button>
           ))}
@@ -122,7 +129,22 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
         <button onClick={() => folder !== null && host.openDb(folder)}>전체 화면</button>
       </div>
       {error && <p className="warn small pad" role="alert">⚠ {error}</p>}
-      {t === 'table' && <TableView data={data} rows={flat} onOpen={host.openNote} onEdit={(r, p, v) => void updateCell(r, p, v)} onWidth={() => undefined} notes={host.notes} />}
+      {t === 'table' && (
+        <TableView
+          data={data}
+          rows={flat}
+          onOpen={host.openNote}
+          onEdit={(r, p, v) => void updateCell(r, p, v)}
+          onWidth={() => undefined}
+          notes={host.notes}
+          onSort={(prop, dir) => {
+            const v = sortedView(data.view, prop, dir);
+            setTmp({ sort: v.sort, manualOrder: undefined });
+          }}
+          onHide={(prop) => setTmp({ columns: hiddenColumnView(data, data.view, prop).columns })}
+          onColumns={(cols) => setTmp({ columns: cols })}
+        />
+      )}
       {(t === 'table' || t === 'list' || t === 'gallery' || t === 'timeline') && (
         <button className="dbembed__add" onClick={() => void addRow()} data-testid="embed-add-row">
           + 새로 만들기

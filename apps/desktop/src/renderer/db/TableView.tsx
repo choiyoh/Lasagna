@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CellEditor, CellView, isEditable } from './CellEditor';
+import { movedColumns, movedRows } from './view-edit';
 import { cellOf, TITLE, visibleColumns, type CellValue, type DbData, type DbGroupDto, type DbRowDto } from './types';
 
 type Item = { kind: 'row'; row: DbRowDto } | { kind: 'group'; key: string; label: string; count: number; hidden: number; depth: number };
@@ -32,6 +33,12 @@ interface Props {
   /** 열 머리 메뉴: 정렬(null = 정렬 해제)·숨기기. 없으면 메뉴가 없다 */
   onSort?: (prop: string, dir: 'asc' | 'desc' | null) => void;
   onHide?: (prop: string) => void;
+  /** 열 머리를 끌어 순서를 바꾼다 */
+  onColumns?: (cols: string[]) => void;
+  /** 열 머리 메뉴 "필터 추가" */
+  onFilter?: (prop: string) => void;
+  /** 행 앞 손잡이를 끌어 순서를 바꾼다(그룹이 없을 때만). 새 경로 순서 */
+  onReorderRows?: (order: string[]) => void;
 }
 
 const CALC_LABEL: Record<string, string> = {
@@ -43,7 +50,10 @@ const ROW_H = 32;
 const DEFAULT_W = 180;
 
 /** 표 뷰: 행을 가상화해(2만 행도 보이는 만큼만 그림) 셀을 눌러 바로 고친다. */
-export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide }: Props) {
+export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide, onColumns, onFilter, onReorderRows }: Props) {
+  const [dragCol, setDragCol] = useState<string | null>(null);
+  const [dragRow, setDragRow] = useState<string | null>(null);
+  const rowsMovable = !!onReorderRows && !data.groups;
   const [menu, setMenu] = useState<string | null>(null);
   const sortOf = (c: string) => data.view.sort.find((r) => r.prop === c)?.dir ?? null;
   const cols = visibleColumns(data);
@@ -75,7 +85,21 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
       <div className="dbtable__inner" style={{ width: total }}>
         <div className="dbtable__head" role="row">
           {cols.map((c) => (
-            <div key={c} className="dbtable__th" style={{ width: w(c) }} role="columnheader" aria-sort={sortOf(c) === 'asc' ? 'ascending' : sortOf(c) === 'desc' ? 'descending' : 'none'}>
+            <div
+              key={c}
+              className={dragCol && dragCol !== c ? 'dbtable__th dropable' : 'dbtable__th'}
+              style={{ width: w(c) }}
+              draggable={!!onColumns && c !== TITLE}
+              onDragStart={() => setDragCol(c)}
+              onDragEnd={() => setDragCol(null)}
+              onDragOver={(e) => dragCol && e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragCol && onColumns) onColumns(movedColumns(cols, dragCol, c));
+                setDragCol(null);
+              }}
+              role="columnheader"
+              aria-sort={sortOf(c) === 'asc' ? 'ascending' : sortOf(c) === 'desc' ? 'descending' : 'none'}>
               {onSort || onHide ? (
                 <button className="dbtable__thbtn" onClick={() => setMenu(menu === c ? null : c)} aria-haspopup="menu" aria-expanded={menu === c} data-testid={`th-${c}`}>
                   {c === TITLE ? '제목' : c}
@@ -93,6 +117,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                       {sortOf(c) && <button role="menuitem" onClick={() => { onSort(c, null); setMenu(null); }}>정렬 해제</button>}
                     </>
                   )}
+                  {onFilter && <button role="menuitem" onClick={() => { onFilter(c); setMenu(null); }}>이 열로 필터 추가</button>}
                   {onHide && c !== TITLE && <button role="menuitem" onClick={() => { onHide(c); setMenu(null); }}>이 열 숨기기</button>}
                 </div>
               )}
@@ -113,7 +138,24 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
             }
             const row = item.row;
             return (
-              <div key={`${vi.index}:${row.path}`} className="dbtable__row" role="row" style={{ transform: `translateY(${vi.start}px)`, height: ROW_H }}>
+              <div
+                key={`${vi.index}:${row.path}`}
+                className={dragRow && dragRow !== row.path ? 'dbtable__row dropable' : 'dbtable__row'}
+                role="row"
+                style={{ transform: `translateY(${vi.start}px)`, height: ROW_H }}
+                onDragOver={(e) => rowsMovable && dragRow && e.preventDefault()}
+                onDrop={(e) => {
+                  if (!rowsMovable || !dragRow) return;
+                  e.preventDefault();
+                  onReorderRows!(movedRows(rows.map((r) => r.path), dragRow, row.path));
+                  setDragRow(null);
+                }}
+              >
+                {rowsMovable && (
+                  <span className="dbtable__rowgrip" draggable title="끌어서 행 순서 바꾸기" aria-label="행 순서 바꾸기" onDragStart={() => setDragRow(row.path)} onDragEnd={() => setDragRow(null)}>
+                    ⋮⋮
+                  </span>
+                )}
                 {cols.map((c) => {
                   const prop = c === TITLE ? undefined : data.schema.properties[c];
                   const value = cellOf(row, c);

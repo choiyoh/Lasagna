@@ -10,7 +10,10 @@ import { PropertyManager } from './PropertyManager';
 import { TableView } from './TableView';
 import { TemplateSettings } from './TemplateSettings';
 import { ViewToolbar } from './ViewToolbar';
-import { visibleColumns, type CellValue, type DbData, type DbRowDto } from './types';
+import { type CellValue, type DbData, type DbRowDto } from './types';
+import { hiddenColumnView, sortedView } from './view-edit';
+import { addConditionTo, normalizeRoot, simplify } from './filter-tree';
+import { defaultOp } from './filter-ops';
 
 interface Props {
   folder: string;
@@ -45,6 +48,8 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   const [data, setData] = useState<DbData | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
   const [draft, setDraft] = useState<View | null>(null);
+  /** 열 머리 메뉴에서 "필터 추가"를 누르면 올라가 필터 창을 연다 */
+  const [filterRequest, setFilterRequest] = useState(0);
   const [error, setError] = useState('');
   const [adding, setAdding] = useState<{ title: string; values: Record<string, unknown>; template?: string | null } | null>(null);
   const [showProps, setShowProps] = useState(false);
@@ -290,6 +295,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           if (draft) void edit({ kind: 'upsertView', view: draft }).then(() => setDraft(null));
         }}
         onReset={() => setDraft(null)}
+        openFilterRequest={filterRequest}
       />
       {data.issues.length > 0 && (
         <details className="dbissues">
@@ -345,8 +351,16 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             onEdit={(r, p, v) => void updateCell(r, p, v)}
             onRenameTitle={onRenameNote ? (r, t) => onRenameNote(r.path, t) : undefined}
             onWidth={(prop, w) => setDraft({ ...view, widths: { ...(view.widths ?? {}), [prop]: w } })}
-            onSort={(prop, dir) => setDraft({ ...view, sort: dir ? [{ prop, dir }, ...view.sort.filter((r) => r.prop !== prop)] : view.sort.filter((r) => r.prop !== prop), manualOrder: undefined })}
-            onHide={(prop) => setDraft({ ...view, columns: visibleColumns(current).filter((c) => c !== prop) })}
+            onSort={(prop, dir) => setDraft(sortedView(view, prop, dir))}
+            onHide={(prop) => setDraft(hiddenColumnView(current, view, prop))}
+            onColumns={(cols) => setDraft({ ...view, columns: cols })}
+            onFilter={(prop) => {
+              const def = prop === 'title' ? undefined : data!.schema.properties[prop];
+              const next = addConditionTo(normalizeRoot(view.filter), [], { prop, op: defaultOp(def), value: '' });
+              setDraft({ ...view, filter: simplify(next) as View['filter'] });
+              setFilterRequest((n) => n + 1);
+            }}
+            onReorderRows={(order) => setDraft({ ...view, sort: [], manualOrder: order })}
             notes={notes}
           />
         )}

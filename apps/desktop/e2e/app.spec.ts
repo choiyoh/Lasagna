@@ -864,6 +864,40 @@ test.describe('링크 코어', () => {
     await expect(table.getByTestId('th-상태')).toHaveCount(0);
     await page.getByRole('button', { name: '되돌리기' }).click();
     await expect(table.getByTestId('th-상태')).toHaveCount(1);
+    const drag = (selFrom: string, selTo: string) =>
+      page.evaluate(
+        async ([from, to]) => {
+          const tick = () => new Promise((r) => setTimeout(r, 50));
+          const a = document.querySelector(from!)!;
+          const b = document.querySelector(to!)!;
+          const dt = new DataTransfer();
+          const fire = (el: Element, type: string) => el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+          fire(a, 'dragstart');
+          await tick();
+          fire(b, 'dragover');
+          await tick();
+          fire(b, 'drop');
+          await tick();
+          fire(a, 'dragend');
+        },
+        [selFrom, selTo],
+      );
+    // 열 머리를 끌어 순서 바꾸기: 점수를 상태 앞으로
+    const heads = () => table.locator('.dbtable__th').allTextContents();
+    expect((await heads()).map((t) => t.trim())).toEqual(['제목', '상태', '점수']);
+    await drag('[data-testid="th-점수"]', '[data-testid="th-상태"]');
+    await expect.poll(async () => (await heads()).map((t) => t.trim())).toEqual(['제목', '점수', '상태']);
+    // 열 머리 메뉴로 필터 추가 → 필터 창이 열린다
+    await table.getByTestId('th-점수').click();
+    await page.getByRole('menuitem', { name: '이 열로 필터 추가' }).click();
+    await expect(page.getByRole('dialog', { name: '필터' })).toBeVisible();
+    // 행 손잡이를 끌어 행 순서 바꾸기
+    await page.getByRole('button', { name: '되돌리기' }).click();
+    const firstTitle = () => table.locator('.dbtable__row').first().locator('.dbtable__title').innerText();
+    const firstBefore = await firstTitle();
+    await drag('.dbtable__row:nth-of-type(2) .dbtable__rowgrip', '.dbtable__row:nth-of-type(1)');
+    await expect.poll(firstTitle).not.toBe(firstBefore);
+    await page.getByRole('button', { name: '되돌리기' }).click();
 
     // 6) 보드 뷰: 상태별 열, 카드를 다른 열로 끌면 값이 바뀐다
     await screen.getByLabel('보기 형태').selectOption('board');
@@ -1519,8 +1553,13 @@ views:
     await expect(embed).toBeVisible();
     await embed.getByTestId('embed-add-row').click();
     await expect(embed.locator('.dbtable__row')).toHaveCount(1, { timeout: 8000 });
+    // 노트 안의 표도 열 머리 메뉴로 열을 숨길 수 있다(저장하지 않는 임시 보기)
+    await embed.getByTestId('th-날짜').click();
+    await page.getByRole('menuitem', { name: '이 열 숨기기' }).click();
+    await expect(embed.getByTestId('th-날짜')).toHaveCount(0, { timeout: 8000 });
     // 새 행은 첫 상태 옵션('할 일')으로 시작하고, 보드로 바꾸면 그 열에 보인다
     await embed.getByRole('tab', { name: '보드' }).click();
+    await expect(embed.getByLabel('커버 속성')).toHaveCount(0); // 커버 속성 선택은 데이터베이스 화면의 도구 막대에 있다
     await expect(embed.getByTestId('board-col-할 일')).toContainText('제목 없음', { timeout: 8000 });
 
     // 본문 첫 이미지는 보드 카드의 커버가 된다

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { optionsOf } from '@nopsidian/core/db/values';
-import { vaultUrl } from '@nopsidian/core/assets';
+import { coverOf } from './ListGalleryViews';
 import { CellView } from './CellEditor';
 import { cellOf, TITLE, visibleColumns, type CellValue, type DbData, type DbRowDto } from './types';
 
@@ -78,7 +78,7 @@ export function BoardView({ data, onOpen, onMove, onAdd, onReorder, vaultId }: P
                   setDragging(null);
                 }}
               >
-                {vaultId && r.cover && <img className="dbcard__cover" src={vaultUrl(vaultId, r.cover)} alt="" loading="lazy" draggable={false} />}
+                {vaultId && coverOf(data, r, vaultId) && <img className="dbcard__cover" src={coverOf(data, r, vaultId)!} alt="" loading="lazy" draggable={false} />}
                 <button className="dbcard__title" onClick={() => onOpen(r.path)}>
                   {r.title}
                 </button>

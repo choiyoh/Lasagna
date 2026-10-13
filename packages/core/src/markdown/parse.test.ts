@@ -114,3 +114,14 @@ describe('바이트 보존', () => {
     expect(out).toBe('# A\n\n\n바뀐 본문\n\n- x\n');
   });
 });
+
+describe('CRLF 줄바꿈(윈도우에서 만든 파일)', () => {
+  it('줄 끝 ^블록ID 와 제목을 LF 때와 똑같이 찾는다', () => {
+    const lf = '# 제목\n\n- [ ] 할 일 ^c91x\n\n문단 ^p1\n';
+    const a = parseNote(lf);
+    const b = parseNote(lf.replace(/\n/g, '\r\n'));
+    expect(b.meta.blockIds.map((x) => x.id)).toEqual(a.meta.blockIds.map((x) => x.id));
+    expect(b.meta.blockIds.map((x) => x.id).sort()).toEqual(['c91x', 'p1']);
+    expect(b.meta.headings.map((h) => h.text)).toEqual(['제목']);
+  });
+});

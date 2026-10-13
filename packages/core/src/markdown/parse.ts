@@ -65,7 +65,7 @@ function kindOf(node: RootContent, source: string): BlockKind {
   }
 }
 
-const BLOCK_ID_LINE = /(?:^|\s)\^([A-Za-z0-9-]+)[ \t]*$/;
+const BLOCK_ID_LINE = /(?:^|\s)\^([A-Za-z0-9-]+)[ \t]*\r?$/;
 // 표·코드 같은 블록 뒤에 단독 줄로 붙는 `^id`
 const STANDALONE_ID = /^\^([A-Za-z0-9-]+)\s*$/;
 

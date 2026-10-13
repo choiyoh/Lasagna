@@ -16,7 +16,11 @@ export class IndexClient {
     root: string,
     onEvent: Listener,
   ) {
-    this.worker = new Worker(path.join(__dirname, 'index-worker.cjs'), { workerData: { root } });
+    this.worker = new Worker(path.join(__dirname, 'index-worker.cjs'), {
+      workerData: { root },
+      // 대량 인덱싱 때 파서가 만든 쓰레기가 쌓여 RSS 가 커지지 않게 한다(큰 노트 하나는 수 MB 라 충분)
+      resourceLimits: { maxOldGenerationSizeMb: 256 },
+    });
     this.ready = new Promise((resolve, reject) => {
       this.worker.on('message', (m: WorkerResponse | WorkerEvent) => {
         if (m.type === 'ready') resolve();

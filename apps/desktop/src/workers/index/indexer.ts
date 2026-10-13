@@ -219,13 +219,25 @@ export class Indexer {
     const seen = new Set<string>();
     let changed = 0;
     let done = 0;
-    for (const f of found) {
-      seen.add(f.rel);
-      const k = known.get(f.rel);
-      if (!k || k.mtime !== f.mtime || k.size !== f.size) {
-        if (this.indexFile(f.rel)) changed++;
+    // 파일마다 따로 커밋하면 디스크 동기화가 파일 수만큼 일어난다 → 250개씩 묶어 커밋한다
+    let pending = 0;
+    const commit = () => {
+      if (this.db.inTransaction) this.db.exec('COMMIT');
+      pending = 0;
+    };
+    try {
+      for (const f of found) {
+        seen.add(f.rel);
+        const k = known.get(f.rel);
+        if (!k || k.mtime !== f.mtime || k.size !== f.size) {
+          if (!this.db.inTransaction) this.db.exec('BEGIN');
+          if (this.indexFile(f.rel)) changed++;
+          if (++pending >= 250) commit();
+        }
+        onProgress?.(++done, found.length);
       }
-      onProgress?.(++done, found.length);
+    } finally {
+      commit();
     }
     let removed = 0;
     for (const p of known.keys()) {
@@ -236,6 +248,11 @@ export class Indexer {
     }
     this.resolveLinks();
     this.syncAssets();
+    if (changed > 500) {
+      // 대량 인덱싱 뒤에는 WAL 을 비우고 SQLite 가 쥔 캐시를 돌려준다
+      this.db.pragma('wal_checkpoint(TRUNCATE)');
+      this.db.pragma('shrink_memory');
+    }
     return { changed, removed };
   }
 

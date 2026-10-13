@@ -275,7 +275,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes }: 
             onOpenDaily={(date) => void window.nops.daily.open({ date }).then((r) => onOpenNote(r.path))}
           />
         )}
-        {view.type === 'timeline' && <TimelineView data={current} rows={data.groups ? flat : rows} onOpen={onOpenNote} />}
+        {view.type === 'timeline' && <TimelineView data={current} rows={data.groups ? flat : rows} onOpen={onOpenNote} onChange={(r, p, v) => void updateCell(r, p, v)} />}
         {data.matched === 0 && <p className="muted pad">조건에 맞는 행이 없어요.</p>}
       </div>
     </div>

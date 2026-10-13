@@ -32,6 +32,8 @@ export interface OpenVault {
   bases: Map<string, { hash: string; content: string }>;
   /** 앱이 방금 쓴 파일의 해시 — 감시 이벤트가 자기 쓰기인지 구분하는 데 쓴다 */
   selfWrites: Map<string, string>;
+  /** 자기 쓰기를 한 창(웹콘텐츠 id) — 다른 창에는 외부 변경처럼 알려 다시 불러오게 한다 */
+  selfOrigins: Map<string, number>;
 }
 
 /** 동기화 같은 부가 기능이 볼트 수명주기에 끼어드는 지점 */
@@ -42,7 +44,8 @@ export const vaultHooks: {
 } = {};
 
 let current: OpenVault | null = null;
-let broadcast: (name: EventName, payload: unknown) => void = () => {};
+/** `exceptOrigin` 창(웹콘텐츠 id)에는 `external: false`, 나머지 창에는 `external: true` 로 보낸다(자기 쓰기 알림용). */
+let broadcast: (name: EventName, payload: unknown, selfOrigin?: number) => void = () => {};
 
 export function setBroadcaster(fn: typeof broadcast) {
   broadcast = fn;
@@ -72,17 +75,22 @@ export async function openVaultAt(root: string): Promise<VaultInfo> {
   const info: VaultInfo = { id: vaultIdFor(real), name: path.basename(real), path: real };
   const bases = new Map<string, { hash: string; content: string }>();
   const selfWrites = new Map<string, string>();
+  const selfOrigins = new Map<string, number>();
   const index = new IndexClient(real, (e) => {
     if (e.name === 'note.changed' || e.name === 'asset.changed') vaultHooks.changed?.();
     if (e.name === 'note.changed') {
       const mine = e.payload.hash !== undefined && selfWrites.get(e.payload.path) === e.payload.hash;
-      if (mine) selfWrites.delete(e.payload.path);
-      broadcast(e.name, { path: e.payload.path, kind: e.payload.kind, external: !mine });
+      const origin = selfOrigins.get(e.payload.path);
+      if (mine) {
+        selfWrites.delete(e.payload.path);
+        selfOrigins.delete(e.payload.path);
+      }
+      broadcast(e.name, { path: e.payload.path, kind: e.payload.kind, external: !mine }, mine ? origin : undefined);
     } else {
       broadcast(e.name, e.payload);
     }
   });
-  current = { info, index, bases, selfWrites };
+  current = { info, index, bases, selfWrites, selfOrigins };
   pushRecent(info);
   await vaultHooks.opened?.(info);
   return info;

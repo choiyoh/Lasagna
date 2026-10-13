@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { NoteSummary, SearchHit, SyncStatus, VaultInfo } from '@nopsidian/ipc-contract';
 import { createLinkResolver } from '@nopsidian/core/links';
 import type { WikiLinkTarget } from '@nopsidian/editor/nops';
@@ -11,6 +11,8 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { flushAll } from './flush';
 import { LinkPanel } from './LinkPanel';
 import { HistoryPanel } from './HistoryPanel';
+import { Panes } from './Panes';
+import { initialTabs, parseTabs, selectedOf, tabsReducer } from './tabs';
 import { DatabaseScreen } from './db/DatabaseScreen';
 import { DbList } from './db/DbList';
 import { SyncDialog, syncStateText } from './SyncDialog';
@@ -92,7 +94,11 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [tabs, dispatchTabs] = useReducer(tabsReducer, undefined, initialTabs);
+  const selected = selectedOf(tabs);
+  /** 현재 탭에서 노트를 연다(이미 다른 탭에 열려 있으면 그 탭으로 간다) */
+  const setSelected = useCallback((path: string) => dispatchTabs({ type: 'open', path }), []);
+  const openInNewTab = useCallback((path: string) => dispatchTabs({ type: 'open', path, newTab: true }), []);
   /** 링크로 열 때 이동할 제목/블록 */
   const [focus, setFocus] = useState<{ heading: string | null; block: string | null } | null>(null);
   const [creating, setCreating] = useState(false);
@@ -111,6 +117,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   }, []);
   const [panelOpen, setPanelOpen] = useState(true);
   const [switcher, setSwitcher] = useState(false);
+  /** 전환기에서 고른 노트를 새 탭으로 열 때 */
+  const [switcherNewTab, setSwitcherNewTab] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const [dbOpen, setDbOpen] = useState<string | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
@@ -229,7 +237,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       const plan = await window.nops.note.renamePlan({ from, to: target });
       const apply = async () => {
         const done = await window.nops.note.rename({ from, to: target });
-        setSelected((cur) => (cur ? remap(cur, from, target) : cur));
+        dispatchTabs({ type: 'remap', from, to: target });
         setDbOpen((cur) => (cur === null ? cur : remap(cur, from, target)));
         remapBookmarks(from, target);
         refresh();
@@ -238,7 +246,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           undo: async () => {
             await flushAll();
             await window.nops.note.undoRename({ undoId: done.undoId });
-            setSelected((cur) => (cur ? remap(cur, target, from) : cur));
+            dispatchTabs({ type: 'remap', from: target, to: from });
             setDbOpen((cur) => (cur === null ? cur : remap(cur, target, from)));
             remapBookmarks(target, from);
             refresh();
@@ -290,6 +298,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       } else if (e.key === 'F2') {
         e.preventDefault();
         void renameCurrent();
+      } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
+        e.preventDefault();
+        if (selected) dispatchTabs({ type: 'close', pane: tabs.activePane, path: selected });
       } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         setPalette(true);
@@ -303,7 +314,29 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [renameCurrent, openDaily, graphOpen, dbOpen, selected, toggleBookmark]);
+  }, [renameCurrent, openDaily, graphOpen, dbOpen, selected, toggleBookmark, tabs.activePane]);
+
+  // 시작: `?open=` 로 열린 창이면 그 노트, 아니면 저장된 탭·분할 배치를 복원한다
+  const restored = useRef(false);
+  const openedWith = useMemo(() => new URLSearchParams(window.location.search).get('open'), []);
+  useEffect(() => {
+    if (restored.current || notes.length === 0) return;
+    restored.current = true;
+    if (openedWith) {
+      dispatchTabs({ type: 'open', path: openedWith });
+      return;
+    }
+    const known = new Set(notes.map((n) => n.path));
+    void window.nops.workspace.get().then((raw) => {
+      const state = parseTabs(raw, (p) => known.has(p));
+      if (state) dispatchTabs({ type: 'load', state });
+    });
+  }, [notes, openedWith]);
+  useEffect(() => {
+    if (!restored.current || openedWith) return; // 새 창은 배치를 덮어쓰지 않는다
+    const t = setTimeout(() => void window.nops.workspace.set(tabs), 400);
+    return () => clearTimeout(t);
+  }, [tabs, openedWith]);
 
   const exportNote = useCallback(
     async (format: 'html' | 'pdf') => {
@@ -361,9 +394,15 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'export-pdf', label: '현재 노트를 PDF로 내보내기', keywords: ['export', 'pdf', '내보내기'], enabled: !!selected, run: () => void exportNote('pdf') },
       { id: 'export-vault', label: '볼트 전체를 HTML 사이트로 내보내기', keywords: ['export', 'site', 'html', '내보내기', '사이트'], run: () => void exportVault() },
       { id: 'import-notion', label: 'Notion 내보내기(ZIP) 가져오기', keywords: ['import', 'notion', '노션', '가져오기'], run: () => void importNotion() },
+      { id: 'tab-new', label: '새 탭에서 노트 열기', keywords: ['tab', '탭'], run: () => { setSwitcherNewTab(true); setSwitcher(true); } },
+      { id: 'tab-close', label: '현재 탭 닫기', hint: '⌘W', keywords: ['close', 'tab', '탭', '닫기'], enabled: !!selected, run: () => selected && dispatchTabs({ type: 'close', pane: tabs.activePane, path: selected }) },
+      { id: 'split-right', label: '오른쪽으로 분할', keywords: ['split', '분할', '좌우'], run: () => dispatchTabs({ type: 'split', dir: 'row' }) },
+      { id: 'split-down', label: '아래로 분할', keywords: ['split', '분할', '상하'], run: () => dispatchTabs({ type: 'split', dir: 'col' }) },
+      { id: 'unsplit', label: '분할 합치기', keywords: ['unsplit', 'merge', '분할', '합치기'], enabled: tabs.panes.length > 1, run: () => dispatchTabs({ type: 'unsplit' }) },
+      { id: 'new-window', label: '새 창에서 열기', keywords: ['window', '창', '새 창'], enabled: !!selected, run: () => selected && void window.nops.window.new({ path: selected }) },
       { id: 'close', label: '다른 볼트 열기', keywords: ['vault', '볼트', '닫기'], run: onClose },
     ],
-    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, onClose],
+    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, onClose, tabs.activePane, tabs.panes.length],
   );
 
   useEffect(() => {
@@ -496,7 +535,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           ) : sideTab === 'db' ? (
             <DbList onOpen={(f) => { setGraphOpen(false); setDbOpen(f); }} />
           ) : (
-            <TreeView nodes={tree} selected={selected} onSelect={setSelected} onRenameFolder={(f) => void renameEntry(f, true)} />
+            <TreeView nodes={tree} selected={selected} onSelect={(p, newTab) => (newTab ? openInNewTab(p) : setSelected(p))} onRenameFolder={(f) => void renameEntry(f, true)} />
           )}
         </nav>
       </aside>
@@ -541,22 +580,32 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             }}
             onClose={() => setGraphOpen(false)}
           />
-        ) : selected ? (
-          <NoteEditor
-            key={selected}
-            path={selected}
-            vaultId={vault.id}
-            assets={assets}
-            links={linkHost}
-            focus={focus}
-            noteLinkName={linkNameFor(selected, notes.map((n) => n.path))}
-            onOpenLink={openLink}
-            onRename={() => void renameCurrent()}
-            dbHost={dbHost}
-            peek={peekHost}
-          />
         ) : (
-          <p className="muted pad">왼쪽에서 노트를 선택하세요. ({notes.length}개) · ⌘O로 빠르게 찾을 수 있어요.</p>
+          <Panes
+            tabs={tabs}
+            dispatch={dispatchTabs}
+            titleOf={(p) => notes.find((n) => n.path === p)?.title ?? p.replace(/\.md$/i, '').split('/').pop()!}
+            onPopOut={(p) => {
+              dispatchTabs({ type: 'close', pane: tabs.panes.findIndex((x) => x.tabs.includes(p)), path: p });
+              void window.nops.window.new({ path: p });
+            }}
+            empty={<p className="muted pad">왼쪽에서 노트를 선택하세요. ({notes.length}개) · ⌘O로 빠르게 찾을 수 있어요.</p>}
+            renderEditor={(p, pane) => (
+              <NoteEditor
+                key={p}
+                path={p}
+                vaultId={vault.id}
+                assets={assets}
+                links={linkHost}
+                focus={pane === tabs.activePane ? focus : null}
+                noteLinkName={linkNameFor(p, notes.map((n) => n.path))}
+                onOpenLink={openLink}
+                onRename={() => void renameEntry(p, false)}
+                dbHost={dbHost}
+                peek={peekHost}
+              />
+            )}
+          />
         )}
       </main>
       {selected && (
@@ -583,7 +632,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         </div>
       )}
       {switcher && (
-        <QuickSwitcher notes={notes} onOpen={setSelected} onCreate={(n) => void createNote(n)} onClose={() => setSwitcher(false)} />
+        <QuickSwitcher notes={notes} onOpen={(p) => (switcherNewTab ? openInNewTab(p) : setSelected(p))} onCreate={(n) => void createNote(n)} onClose={() => { setSwitcher(false); setSwitcherNewTab(false); }} />
       )}
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       {syncOpen && <SyncDialog status={sync} onClose={() => setSyncOpen(false)} onOpenNote={setSelected} />}
@@ -648,7 +697,7 @@ function TreeView({
 }: {
   nodes: TreeNode[];
   selected: string | null;
-  onSelect: (p: string) => void;
+  onSelect: (p: string, newTab?: boolean) => void;
   onRenameFolder: (folder: string) => void;
   depth?: number;
 }) {
@@ -660,7 +709,7 @@ function TreeView({
             <button
               className={n.path === selected ? 'row active' : 'row'}
               style={{ paddingLeft: 8 + depth * 14 }}
-              onClick={() => onSelect(n.path)}
+              onClick={(e) => onSelect(n.path, e.metaKey || e.ctrlKey)}
             >
               {n.note.title}
             </button>

@@ -604,7 +604,7 @@ test.describe('링크 코어', () => {
     await expect(tags).toContainText('#개발', { timeout: 8000 });
     await tags.getByRole('button', { name: /#개발/ }).first().click();
     await expect(tags.getByRole('button', { name: '클린 코드' }).or(tags.getByRole('button', { name: '리팩터링' })).first()).toBeVisible();
-    await page.getByRole('tab', { name: '파일' }).click();
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
   });
 
   test('빠른 전환기(⌘O): 한글 초성으로 찾아 열고, 없으면 새 노트를 만든다', async () => {
@@ -923,7 +923,7 @@ test.describe('링크 코어', () => {
     // Esc 로 닫힌다(속성 창이 열려 있어도)
     await page.keyboard.press('Escape');
     await expect(screen).toHaveCount(0);
-    await page.getByRole('tab', { name: '파일' }).click();
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
   });
 
   test('데이터베이스: CSV 가져오기(열 형식 추정)와 내보내기', async () => {
@@ -970,7 +970,7 @@ test.describe('링크 코어', () => {
     expect(text.charCodeAt(0)).toBe(0xfeff);
     expect(text).toContain('클린 코드,"마틴, 로버트",5,true,2026-10-01');
     await page.keyboard.press('Escape');
-    await page.getByRole('tab', { name: '파일' }).click();
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
   });
 
   test('데이터베이스 고급: 관계·롤업·수식, 양방향 관계, 캘린더·타임라인', async () => {
@@ -1083,7 +1083,7 @@ views:
     await expect(page.getByTestId('db-timeline').locator('.dbtl__barx')).toHaveCount(2);
 
     await page.keyboard.press('Escape');
-    await page.getByRole('tab', { name: '파일' }).click();
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
   });
 
   test('미뤄 둔 기능: 폴더 이름 변경·중첩 필터·옆 창·제목 이름 변경·템플릿·CSV 기존 DB·노트 안의 데이터베이스 뷰', async () => {
@@ -1100,7 +1100,7 @@ views:
     put('보는곳.md', '# 보는곳\n\n```dbview\ndb: 책장\nview: 표\n```\n');
 
     // 1) 폴더 이름 변경 — 열린 데이터베이스와 행 경로가 따라간다
-    await page.getByRole('tab', { name: '파일' }).click();
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
     const summary = page.locator('summary', { hasText: '옛폴더' });
     await summary.hover();
     await page.getByRole('button', { name: '옛폴더 폴더 이름 변경' }).click();
@@ -1191,7 +1191,7 @@ views:
     expect(readFileSync(path.join(vaultDir, '새폴더/추가1.md'), 'utf8')).toContain('쪽수: 42');
 
     await page.keyboard.press('Escape');
-    await page.getByRole('tab', { name: '파일' }).click();
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
   });
 
   test('블록 메뉴: 키보드로 열고(⌘/) 방향키로 고르고, 여러 블록 선택은 묶음으로 처리한다', async () => {
@@ -1329,7 +1329,7 @@ views:
     await page.getByTestId('bookmark-toggle').click();
     await expect(marks).not.toContainText('발췌사용');
     await expect.poll(() => readFileSync(path.join(vaultDir, '.nopsidian/bookmarks.json'), 'utf8'), { timeout: 5000 }).not.toContain('발췌사용.md');
-    await page.getByRole('tab', { name: '파일' }).click();
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
   });
 
   test('버전 기록: 저장할 때마다 이전 버전이 남고, 현재와 비교해 복원할 수 있다', async () => {
@@ -1345,7 +1345,7 @@ views:
     await page.keyboard.type(' 고침2');
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('고침2');
 
-    const historyTab = page.getByRole('tab', { name: '기록' });
+    const historyTab = page.getByRole('tab', { name: '기록', exact: true });
     if (!(await historyTab.isVisible())) await page.getByTitle('링크 패널 열기/닫기').click();
     await historyTab.click();
     const panel = page.getByTestId('panel-history');
@@ -1356,7 +1356,7 @@ views:
     await panel.getByTestId('history-restore').click();
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toBe('# 기록노트\n\n처음 내용\n');
     await expect(page.locator('.ProseMirror p', { hasText: '처음 내용' })).not.toContainText('고침', { timeout: 8000 });
-    await page.getByRole('tab', { name: '링크' }).click();
+    await page.getByRole('tab', { name: '링크', exact: true }).click();
   });
 
   test('명령 팔레트(⌘P)와 내보내기: 노트 HTML·PDF, 볼트 전체 사이트', async () => {
@@ -1374,7 +1374,7 @@ views:
     await palette.locator('input').fill('북마크 목록');
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('bookmarks')).toBeVisible();
-    await page.getByRole('tab', { name: '파일' }).click();
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
 
     // 저장 대화상자는 테스트에서 고정 경로로 대신한다
     const outDir = mkdtempSync(path.join(tmpdir(), 'nops-e2e-export-'));
@@ -1437,6 +1437,55 @@ views:
     await expect(page.getByRole('button', { name: '노션 허브', exact: true })).toBeVisible({ timeout: 10000 });
   });
 
+  test('탭·분할·새 창: 탭 쌓기, 오른쪽 분할, 배치 저장, 새 창에서 편집이 다른 창에 반영', async () => {
+    const page = await app.firstWindow();
+    const fa = note('탭A', '# 탭A\n\n에이 내용\n');
+    note('탭B', '# 탭B\n\n비 내용\n');
+    note('탭C', '# 탭C\n\n씨 내용\n');
+    await open(page, '탭A');
+    // ⌘-클릭이면 새 탭
+    await page.getByRole('button', { name: '탭B', exact: true }).first().click({ modifiers: ['Meta'] });
+    await expect(page.locator('.ProseMirror h1')).toHaveText('탭B');
+    const tabs = page.getByTestId('note-tab');
+    await expect(tabs).toHaveCount(2);
+    await tabs.filter({ hasText: '탭A' }).click();
+    await expect(page.locator('.ProseMirror h1')).toHaveText('탭A');
+
+    // 오른쪽 분할: 새 칸이 활성이고, 거기로 노트가 열린다
+    await page.keyboard.press('Meta+p');
+    await page.getByTestId('command-palette').locator('input').fill('오른쪽으로 분할');
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('pane-1')).toBeVisible();
+    await page.getByRole('button', { name: '탭C', exact: true }).first().click();
+    await expect(page.getByTestId('pane-1').locator('.ProseMirror h1')).toHaveText('탭C');
+    await expect(page.getByTestId('pane-0').locator('.ProseMirror h1')).toHaveText('탭A');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '.nopsidian/workspace.json'), 'utf8'), { timeout: 5000 }).toContain('탭C.md');
+
+    // 같은 노트를 다른 칸에서 열려 하면 그 칸으로 간다(한 노트는 한 곳에서만 편집)
+    await page.getByRole('button', { name: '탭A', exact: true }).first().click();
+    await expect(page.getByTestId('pane-0').locator('.ProseMirror h1')).toHaveText('탭A');
+
+    // 새 창에서 열기 → 거기서 고친 내용이 이 창에도 반영된다
+    await page.keyboard.press('Meta+p');
+    await page.getByTestId('command-palette').locator('input').fill('새 창에서 열기');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => app.windows().length, { timeout: 10000 }).toBe(2);
+    const second = app.windows().find((w) => w !== page)!;
+    await expect(second.locator('.ProseMirror h1')).toHaveText('탭A', { timeout: 15000 });
+    await second.locator('.ProseMirror p', { hasText: '에이 내용' }).click();
+    await second.waitForTimeout(150);
+    await second.keyboard.press('End');
+    await second.keyboard.type(' 둘째창');
+    await expect.poll(() => readFileSync(fa, 'utf8'), { timeout: 5000 }).toContain('둘째창');
+    await expect(page.locator('.ProseMirror p', { hasText: '에이 내용' })).toContainText('둘째창', { timeout: 8000 });
+    await second.close();
+    await expect.poll(() => app.windows().length).toBe(1);
+
+    // 분할 칸의 마지막 탭을 닫으면 분할이 풀린다
+    await page.getByTestId('pane-1').getByRole('button', { name: '탭C 탭 닫기' }).click();
+    await expect(page.getByTestId('pane-1')).toHaveCount(0);
+  });
+
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
     const page = await app.firstWindow();
     const today = await page.evaluate(() => {
@@ -1459,7 +1508,7 @@ views:
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'graph', 'history', 'import', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'graph', 'history', 'import', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault', 'window', 'workspace']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

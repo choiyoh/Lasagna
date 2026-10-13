@@ -50,7 +50,7 @@ button.link { color: var(--muted); }
 .row.active { background: var(--hover); color: var(--accent); }
 .hit { display: flex; flex-direction: column; width: 100%; padding: 6px 12px; }
 .snippet { color: var(--fg); opacity: 0.8; }
-.content { flex: 1; overflow: auto; }
+.content { flex: 1; overflow: auto; min-width: 0; }
 .preview { max-width: 760px; margin: 0 auto; padding: 40px 32px 80px; }
 .preview pre, .preview code { background: var(--bg-side); border-radius: 4px; }
 .preview pre { padding: 12px; overflow: auto; }
@@ -343,3 +343,19 @@ button.link { color: var(--muted); }
 .history__diff pre { margin: 0; font-size: 12px; line-height: 1.5; overflow: auto; white-space: pre-wrap; word-break: break-word; }
 .diff-add { background: rgba(48, 164, 108, 0.18); }
 .diff-del { background: rgba(229, 72, 77, 0.18); }
+
+.panes { display: flex; flex: 1; min-height: 0; min-width: 0; height: 100%; }
+.panes--col { flex-direction: column; }
+.pane { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; position: relative; }
+.panes--row .pane + .pane { border-left: 1px solid var(--border, rgba(128,128,128,.3)); }
+.panes--col .pane + .pane { border-top: 1px solid var(--border, rgba(128,128,128,.3)); }
+.pane.is-active::after { content: ''; position: absolute; inset: 0 0 auto 0; height: 2px; background: var(--accent, #5b5bd6); z-index: 2; pointer-events: none; }
+.pane__body { flex: 1; min-height: 0; overflow: auto; }
+.tabbar { display: flex; align-items: stretch; gap: 1px; padding: 30px 8px 0 8px; overflow-x: auto; flex: none; border-bottom: 1px solid var(--border, rgba(128,128,128,.25)); -webkit-app-region: drag; }
+.tabbar > * { -webkit-app-region: no-drag; }
+.tab { display: flex; align-items: center; gap: 6px; max-width: 200px; padding: 4px 6px 4px 10px; border-radius: 6px 6px 0 0; color: var(--muted); cursor: default; font-size: 13px; }
+.tab.active { background: var(--hover); color: var(--fg); }
+.tab__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab__close { color: var(--muted); border-radius: 4px; padding: 0 4px; line-height: 1.2; }
+.tab__close:hover { background: rgba(128,128,128,.25); }
+.tabbar__empty { align-self: center; padding: 0 8px; }

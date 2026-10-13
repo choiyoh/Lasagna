@@ -47,6 +47,14 @@ export const graphOptions = z.object({
   includeOrphans: z.boolean().optional(),
 });
 
+/** 탭·분할 배치. 칸은 1~2개 */
+export const workspaceLayout = z.object({
+  panes: z.array(z.object({ tabs: z.array(relPath).max(200), active: relPath.nullable() })).min(1).max(2),
+  activePane: z.number().int().min(0).max(1),
+  dir: z.enum(['row', 'col']),
+});
+export type WorkspaceLayout = z.infer<typeof workspaceLayout>;
+
 /** `.nopsidian/graph.json` — 그래프 뷰 설정(볼트와 함께 동기화되는 쪽) */
 export const graphSettings = z.object({
   filter: z.string().max(500),
@@ -270,6 +278,11 @@ export const contract = {
       issues: z.array(z.string()),
     }),
   },
+  /** 이 기기의 탭·분할 배치(`.nopsidian/workspace.json`, 동기화하지 않음) */
+  'workspace.get': { input: z.undefined(), output: workspaceLayout.nullable() },
+  'workspace.set': { input: workspaceLayout, output: z.undefined() },
+  /** 같은 볼트를 새 창에서 연다(`path` 가 있으면 그 노트를 연다) */
+  'window.new': { input: z.object({ path: relPath.optional() }), output: z.undefined() },
   'link.backlinks': { input: z.object({ path: relPath }), output: z.array(backlinkContext) },
   'link.outgoing': { input: z.object({ path: relPath }), output: z.array(outgoingLink) },
   'link.unlinked': { input: z.object({ path: relPath }), output: z.array(unlinkedMention) },

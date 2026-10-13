@@ -21,7 +21,7 @@ import {
   uniqueName,
 } from '@nopsidian/core';
 import { existsSync, readFileSync } from 'node:fs';
-import { events, graphSettings, type EventName } from '@nopsidian/ipc-contract';
+import { events, graphSettings, workspaceLayout, type EventName } from '@nopsidian/ipc-contract';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { installProtocols, registerSchemes } from './protocols';
 import {
@@ -64,7 +64,7 @@ registerSchemes();
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
-function createWindow() {
+function createWindow(openPath?: string) {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -80,14 +80,19 @@ function createWindow() {
   registerWebContents(win.webContents);
   hardenWebContents(win.webContents, devServerUrl);
   win.once('ready-to-show', () => win.show());
-  void win.loadURL(devServerUrl ?? `${APP_ORIGIN}/index.html`);
+  const query = openPath ? `?open=${encodeURIComponent(openPath)}` : '';
+  void win.loadURL(`${devServerUrl ?? `${APP_ORIGIN}/index.html`}${query}`);
   if (!app.isPackaged && process.env.NOPS_DEVTOOLS === '1') win.webContents.openDevTools({ mode: 'detach' });
   return win;
 }
 
-function broadcast(name: EventName, payload: unknown) {
+function broadcast(name: EventName, payload: unknown, selfOrigin?: number) {
   const parsed = events[name].parse(payload);
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send(name, parsed);
+  for (const w of BrowserWindow.getAllWindows()) {
+    // 자기 쓰기는 쓴 창에만 "다시 불러올 필요 없음", 다른 창에는 외부 변경으로 알린다
+    const out = selfOrigin !== undefined && name === 'note.changed' ? { ...(parsed as object), external: w.webContents.id !== selfOrigin } : parsed;
+    w.webContents.send(name, out);
+  }
 }
 
 /** 이름 변경 계획을 세우려고 볼트의 모든 노트 내용과 첨부 목록을 읽는다. */
@@ -175,7 +180,7 @@ function registerHandlers() {
     v.bases.set(rel, { hash, content });
     return { content, hash };
   });
-  handle('note.save', ({ path: rel, content, baseHash }) => {
+  handle('note.save', ({ path: rel, content, baseHash }, e) => {
     const v = requireVault();
     const base = v.bases.get(rel);
     const result = saveNote({
@@ -188,6 +193,7 @@ function registerHandlers() {
     // 디스크에 실제로 있는 내용이 새 공통 조상이 된다(copy면 디스크는 그대로)
     v.bases.set(rel, { hash: result.hash, content: result.content });
     v.selfWrites.set(rel, result.hash);
+    v.selfOrigins.set(rel, e.sender.id);
     return result;
   });
   handle('note.renamePlan', async ({ from, to }) => {
@@ -333,6 +339,25 @@ function registerHandlers() {
     if (r.canceled || !dir) return { dir: null, notes: 0, assets: 0 };
     const out = path.join(dir, `${v.info.name} (HTML)`);
     return { dir: out, ...exportVaultSite(await exportContext(v), out) };
+  });
+  handle('workspace.get', () => {
+    const v = requireVault();
+    try {
+      const parsed = workspaceLayout.safeParse(JSON.parse(readFileSync(path.join(v.info.path, '.nopsidian', 'workspace.json'), 'utf8')));
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
+  });
+  handle('workspace.set', (layout) => {
+    const v = requireVault();
+    atomicWrite(path.join(v.info.path, '.nopsidian', 'workspace.json'), JSON.stringify(layout));
+    return undefined;
+  });
+  handle('window.new', ({ path: rel }) => {
+    requireVault();
+    createWindow(rel);
+    return undefined;
   });
   handle('history.list', ({ path: rel }) => listHistory(requireVault().info.path, rel));
   handle('history.read', ({ path: rel, id }) => ({ content: readHistory(requireVault().info.path, rel, id) }));

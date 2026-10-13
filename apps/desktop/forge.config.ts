@@ -1,7 +1,4 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
-import { MakerDMG } from '@electron-forge/maker-dmg';
-import { MakerSquirrel } from '@electron-forge/maker-squirrel';
-import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
@@ -35,9 +32,14 @@ const config: ForgeConfig = {
   // 설치 파일: macOS = dmg + zip, Windows = Squirrel 설치 exe + zip(휴대용). 네이티브 모듈이 플랫폼별이라
   // 각 OS 에서 빌드해야 한다(.github/workflows/build.yml 이 두 OS 에서 돌린다).
   makers: [
-    new MakerDMG({ name: 'Nopsidian', format: 'ULFO' }, ['darwin']),
-    new MakerSquirrel({ name: 'Nopsidian', setupExe: 'Nopsidian-Setup.exe', noMsi: true, description: 'Nopsidian — 로컬 Markdown 블록 편집기' }, ['win32']),
-    new MakerZIP({}, ['darwin', 'win32']),
+    // 문자열로 지정한다: 클래스를 import 하면 forge 설정을 읽을 때 다른 OS 용 메이커의 의존성 트리까지 불러온다.
+    { name: '@electron-forge/maker-dmg', platforms: ['darwin'], config: { name: 'Nopsidian', format: 'ULFO' } },
+    {
+      name: '@electron-forge/maker-squirrel',
+      platforms: ['win32'],
+      config: { name: 'Nopsidian', setupExe: 'Nopsidian-Setup.exe', noMsi: true, description: 'Nopsidian — 로컬 Markdown 블록 편집기' },
+    },
+    { name: '@electron-forge/maker-zip', platforms: ['darwin', 'win32'], config: {} },
   ],
   plugins: [
     new VitePlugin({

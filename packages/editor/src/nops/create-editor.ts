@@ -6,7 +6,7 @@ import { createCodeHighlightPlugin } from './code-highlight';
 import { type BlockLinkOptions, createBlockHandlePlugin, createBlockKeymapPlugin } from './block-handle';
 import { insertCallout, insertColumns, insertMathBlock, insertToggle } from './commands';
 import { type NopsAssetHost, resolveImageSrc } from './asset-host';
-import { createDbViewNodeView, dbViewSlashItem, type NopsDbViewHost } from './db-view';
+import { createDbViewNodeView, dbViewSlashItem, createHideCodeChipPlugin, newDbSlashItem, type NopsDbViewHost } from './db-view';
 import { createEmbedView } from './embed-view';
 import { createFilesPlugin } from './files-plugin';
 import { createFlashPlugin } from './flash';
@@ -65,7 +65,7 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
   return createEditor(host, {
     schema: nopsSchema,
     table: { ...table, schema: nopsSchema },
-    toolbar: createNotionSupport({ slashItems: [...nopsSlashItems, ...(options.dbView ? [dbViewSlashItem(options.dbView)] : []), ...(options.slashItems ?? [])] }),
+    toolbar: createNotionSupport({ slashItems: [...nopsSlashItems, ...(options.dbView?.create ? [newDbSlashItem(options.dbView)] : []), ...(options.dbView ? [dbViewSlashItem(options.dbView)] : []), ...(options.slashItems ?? [])] }),
     style: 'notion',
     messages: messagesKo,
     placeholder: options.placeholder ?? "'/'를 눌러 블록을 추가하세요",
@@ -99,6 +99,7 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
       createCodeHighlightPlugin(),
       createFlashPlugin(),
       createToggleHeadingPlugin(),
+      ...(options.dbView ? [createHideCodeChipPlugin()] : []),
       ...(options.peek ? [createLinkPreviewPlugin(options.peek)] : []),
     ],
   });

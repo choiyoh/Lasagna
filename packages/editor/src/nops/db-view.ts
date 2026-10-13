@@ -1,3 +1,4 @@
+import { Plugin } from 'prosemirror-state';
 import type { Node as PMNode } from 'prosemirror-model';
 import type { EditorView, NodeView } from 'prosemirror-view';
 import type { SlashItemSpec } from '@oh-new-editor/core';
@@ -11,6 +12,8 @@ export interface NopsDbViewHost {
   mount(container: HTMLElement, source: string): { update(source: string): void; destroy(): void };
   /** 슬래시 "데이터베이스 보기": 데이터베이스·보기를 고르게 하고 펜스 안의 YAML 을 돌려준다(취소하면 null) */
   pick(): Promise<string | null>;
+  /** 슬래시 "새 데이터베이스": 이름을 묻고 데이터베이스를 만든 뒤 그 보기를 가리키는 YAML 을 돌려준다(취소하면 null) */
+  create?(): Promise<string | null>;
 }
 
 export const DBVIEW_LANG = 'dbview';
@@ -93,4 +96,36 @@ export function dbViewSlashItem(host: NopsDbViewHost): SlashItemSpec {
       });
     },
   };
+}
+
+export function newDbSlashItem(host: NopsDbViewHost): SlashItemSpec {
+  return {
+    icon: '▦',
+    label: '새 데이터베이스',
+    description: '이 노트 안에 표·보드·캘린더로 볼 수 있는 새 데이터베이스를 만들어요',
+    category: 'advanced',
+    keywords: ['database', 'db', 'table', 'board', 'new', '데이터베이스', '디비', '표', '테이블', '보드', '칸반', '새'],
+    run: (v) => {
+      void host.create?.().then((src) => {
+        if (src) insertMarkdown(v, `\`\`\`${DBVIEW_LANG}\n${src.replace(/\n+$/, '')}\n\`\`\`\n`);
+      });
+    },
+  };
+}
+
+/** 업스트림이 코드 블록 안에 커서가 있으면 띄우는 "언어" 선택 칩은 dbview 에서는 의미가 없어 숨긴다. */
+export function createHideCodeChipPlugin(): Plugin {
+  return new Plugin({
+    view: (view) => ({
+      update: (v) => {
+        const { $from } = v.state.selection;
+        if ($from.parent.type.name !== 'code_block' || $from.parent.attrs.language !== DBVIEW_LANG) return;
+        // 업스트림의 같은 갱신이 끝난 뒤에 숨긴다
+        requestAnimationFrame(() => {
+          const chip = view.dom.closest('.oh-editor')?.querySelector<HTMLElement>('.oh-editor__code-language-chip');
+          if (chip) chip.hidden = true;
+        });
+      },
+    }),
+  });
 }

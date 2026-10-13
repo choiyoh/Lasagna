@@ -161,3 +161,18 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 .nops-toggle-heading { position: relative; }
 .nops-toggle-heading__arrow { display: inline-block; width: 1.1em; margin-right: 0.15em; cursor: pointer; opacity: 0.55; font-size: 0.7em; user-select: none; text-align: center; vertical-align: middle; }
 .nops-toggle-heading__arrow:hover { opacity: 1; }
+
+/* ── 노션처럼: 카드 테두리·그림자·툴바 영역 없이 본문이 페이지에 바로 놓인다 ───────────────── */
+.note-editor .oh-editor,
+.note-editor .oh-editor:focus-within { border: 0; border-radius: 0; box-shadow: none; background: transparent; min-height: 0; }
+.note-editor .oh-editor__content { background: none; min-height: 50vh; }
+.note-editor .oh-editor { --oh-editor-content-padding: 0; }
+.note-editor .ProseMirror { padding: 4px 0 40vh; font-size: 16px; line-height: 1.75; outline: none; }
+.note-editor .ProseMirror > * + * { margin-top: 0.35em; }
+.note-editor .ProseMirror h1 { font-size: 2.1em; line-height: 1.25; margin: 0.2em 0 0.4em; font-weight: 700; }
+.note-editor .ProseMirror h2 { font-size: 1.55em; line-height: 1.3; margin: 1.1em 0 0.3em; font-weight: 650; }
+.note-editor .ProseMirror h3 { font-size: 1.25em; line-height: 1.35; margin: 0.9em 0 0.25em; font-weight: 650; }
+
+.nops-dbview { margin: 0.8em 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--oh-editor-border-muted, rgba(128,128,128,.25)); background: var(--oh-editor-bg, #fff); }
+.nops-dbview__bar { display: none; }
+.nops-dbview:has(.nops-dbview__src:not([hidden])) .nops-dbview__bar, .nops-dbview:hover .nops-dbview__bar, .nops-dbview:focus-within .nops-dbview__bar, .nops-dbview.is-editing .nops-dbview__bar { display: flex; }

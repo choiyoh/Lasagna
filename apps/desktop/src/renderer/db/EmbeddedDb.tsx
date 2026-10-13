@@ -23,6 +23,8 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
   const [data, setData] = useState<DbData | null>(null);
   const [folder, setFolder] = useState<string | null>(null);
   const [error, setError] = useState('');
+  /** 보기 탭에서 고른 보기(파일에는 쓰지 않는다. 노트에 적힌 보기가 기본) */
+  const [picked, setPicked] = useState<string | null>(null);
   const parsed = parseDbEmbed(source);
   const cfg = parsed.ok ? parsed.config : null;
 
@@ -38,21 +40,22 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
       }
       // 보기 이름 → id: 먼저 한 번 질의해 스키마의 보기 목록에서 찾는다
       let r = (await window.nops.db.query({ folder: found.folder, limit: cfg.limit ?? 100, groupLimit: 50 })) as DbQueryResult;
-      if (cfg.view) {
+      const want = picked ?? cfg.view;
+      if (want) {
         const views = (r.schema as DbData['schema']).views;
-        const v = views.find((x) => x.id === cfg.view) ?? views.find((x) => x.name === cfg.view);
+        const v = views.find((x) => x.id === want) ?? views.find((x) => x.name === want);
         if (v && v.id !== (r.view as { id: string }).id) r = (await window.nops.db.query({ folder: found.folder, viewId: v.id, limit: cfg.limit ?? 100, groupLimit: 50 })) as DbQueryResult;
         else if (!v) {
-          setError(`보기를 찾을 수 없어요: ${cfg.view}`);
+          setError(`보기를 찾을 수 없어요: ${want}`);
         }
       }
       setFolder(found.folder);
       setData(r as unknown as DbData);
-      if (!cfg.view || (r.schema as DbData['schema']).views.some((x) => x.id === cfg.view || x.name === cfg.view)) setError('');
+      if (!want || (r.schema as DbData['schema']).views.some((x) => x.id === want || x.name === want)) setError('');
     } catch (e) {
       setError(clean(e));
     }
-  }, [cfg?.db, cfg?.view, cfg?.limit]);
+  }, [cfg?.db, cfg?.view, cfg?.limit, picked]);
 
   useEffect(() => {
     void load();
@@ -84,6 +87,20 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
     [load],
   );
 
+  const addRow = async (values?: Record<string, unknown>) => {
+    if (folder === null || !data) return;
+    // 새 행은 첫 번째 선택(상태) 속성의 첫 옵션으로 시작한다(노션처럼 보드에서 바로 보이게)
+    const firstSelect = Object.entries(data.schema.properties).find(([, p]) => p.type === 'select' || p.type === 'status');
+    const first = firstSelect && 'options' in firstSelect[1] ? (firstSelect[1] as { options: { name: string }[] }).options[0]?.name : undefined;
+    const base: Record<string, unknown> = firstSelect && first ? { [firstSelect[0]]: first } : {};
+    try {
+      await window.nops.db.addRow({ folder, title: '제목 없음', values: { ...base, ...(values ?? {}) } });
+      void load();
+    } catch (e) {
+      setError(clean(e));
+    }
+  };
+
   if (!parsed.ok) return <p className="warn small pad" role="alert">⚠ {parsed.error}</p>;
   if (!data) return <p className={error ? 'warn small pad' : 'muted small pad'} role={error ? 'alert' : undefined}>{error ? `⚠ ${error}` : '불러오는 중…'}</p>;
 
@@ -93,16 +110,28 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
     <div className="dbembed" data-testid="db-embed">
       <div className="dbembed__head">
         <strong>{data.schema.title ?? '데이터베이스'}</strong>
-        <span className="muted small"> · {data.view.name} · {data.matched}행</span>
+        <div className="dbembed__views" role="tablist" aria-label="보기">
+          {data.schema.views.map((v) => (
+            <button key={v.id} role="tab" aria-selected={v.id === data.view.id} className={v.id === data.view.id ? 'active' : ''} onClick={() => setPicked(v.id)}>
+              {v.name}
+            </button>
+          ))}
+        </div>
+        <span className="muted small">{data.matched}행</span>
         <span className="spacer" />
         <button onClick={() => folder !== null && host.openDb(folder)}>전체 화면</button>
       </div>
       {error && <p className="warn small pad" role="alert">⚠ {error}</p>}
       {t === 'table' && <TableView data={data} rows={flat} onOpen={host.openNote} onEdit={(r, p, v) => void updateCell(r, p, v)} onWidth={() => undefined} notes={host.notes} />}
-      {t === 'board' && <BoardView data={data} onOpen={host.openNote} onMove={(r, p, v) => void updateCell(r, p, v)} onAdd={() => host.openDb(folder ?? '')} />}
+      {(t === 'table' || t === 'list' || t === 'gallery' || t === 'timeline') && (
+        <button className="dbembed__add" onClick={() => void addRow()} data-testid="embed-add-row">
+          + 새로 만들기
+        </button>
+      )}
+      {t === 'board' && <BoardView data={data} onOpen={host.openNote} onMove={(r, p, v) => void updateCell(r, p, v)} onAdd={(key) => void addRow(data.view.groupBy && key ? { [data.view.groupBy]: key } : undefined)} />}
       {t === 'list' && <ListView data={data} rows={flat} vaultId={host.vaultId} onOpen={host.openNote} />}
       {t === 'gallery' && <GalleryView data={data} rows={flat} vaultId={host.vaultId} onOpen={host.openNote} />}
-      {t === 'calendar' && <CalendarView data={data} rows={flat} onOpen={host.openNote} onMove={(r, p, v) => void updateCell(r, p, v)} onAdd={() => host.openDb(folder ?? '')} onOpenDaily={() => undefined} />}
+      {t === 'calendar' && <CalendarView data={data} rows={flat} onOpen={host.openNote} onMove={(r, p, v) => void updateCell(r, p, v)} onAdd={(date) => void addRow(data.view.dateProp ? { [data.view.dateProp]: date } : undefined)} onOpenDaily={() => undefined} />}
       {t === 'timeline' && <TimelineView data={data} rows={flat} onOpen={host.openNote} onChange={(r, p, v) => void updateCell(r, p, v)} />}
     </div>
   );

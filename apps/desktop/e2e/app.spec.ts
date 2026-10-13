@@ -1118,6 +1118,7 @@ views:
     await embed.locator('.dbtable__row', { hasText: '나' }).getByRole('combobox').selectOption('읽음');
     await expect.poll(() => readFileSync(path.join(vaultDir, '새폴더/나.md'), 'utf8'), { timeout: 5000 }).toContain('상태: 읽음');
     // 설정 편집 토글로 YAML 이 보이고, 문법이 틀리면 알린다
+    await page.locator('.nops-dbview').hover();
     await page.locator('.nops-dbview__bar button').click();
     await expect(page.locator('.nops-dbview__src')).toBeVisible();
 
@@ -1484,6 +1485,30 @@ views:
     // 분할 칸의 마지막 탭을 닫으면 분할이 풀린다
     await page.getByTestId('pane-1').getByRole('button', { name: '탭C 탭 닫기' }).click();
     await expect(page.getByTestId('pane-1')).toHaveCount(0);
+  });
+
+  test('노트 안에서 새 데이터베이스 만들기(/데이터베이스): 표·보드 보기 전환과 새 행', async () => {
+    const page = await app.firstWindow();
+    const file = note('디비노트', '# 디비노트\n\n앞 문단\n');
+    await open(page, '디비노트');
+    await page.locator('.ProseMirror p', { hasText: '앞 문단' }).click();
+    await page.waitForTimeout(300);
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('/데이터베이스');
+    await page.keyboard.press('Enter');
+    const dialogInput = page.locator('input').last();
+    await dialogInput.fill('인라인할일');
+    await dialogInput.press('Enter');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toContain('db: 인라인할일');
+    expect(readFileSync(path.join(vaultDir, '인라인할일/_db.yaml'), 'utf8')).toContain('보드');
+    const embed = page.getByTestId('db-embed');
+    await expect(embed).toBeVisible();
+    await embed.getByTestId('embed-add-row').click();
+    await expect(embed.locator('.dbtable__row')).toHaveCount(1, { timeout: 8000 });
+    // 새 행은 첫 상태 옵션('할 일')으로 시작하고, 보드로 바꾸면 그 열에 보인다
+    await embed.getByRole('tab', { name: '보드' }).click();
+    await expect(embed.getByTestId('board-col-할 일')).toContainText('제목 없음', { timeout: 8000 });
   });
 
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {

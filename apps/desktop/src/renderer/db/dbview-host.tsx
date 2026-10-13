@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { useEffect, useState } from 'react';
 import { dbEmbedSource } from '@nopsidian/core/db/embed';
+import { showTextPrompt } from '@nopsidian/editor/nops';
 import type { NopsDbViewHost } from '@nopsidian/editor/nops';
 import { EmbeddedDb, type DbEmbedHost } from './EmbeddedDb';
 
@@ -70,6 +71,25 @@ export function createDbViewHost(host: DbEmbedHost): NopsDbViewHost {
         // 에디터가 노드 뷰를 정리하는 도중에 동기적으로 unmount 하면 React 가 경고하므로 한 틱 미룬다
         destroy: () => void setTimeout(() => root.unmount(), 0),
       };
+    },
+    async create() {
+      const raw = await showTextPrompt('새 데이터베이스 이름', '할 일');
+      const name = raw?.trim().replace(/[\\/:*?"<>|]/g, ' ').trim();
+      if (!name) return null;
+      // 이름이 겹치면 번호를 붙인다(폴더 = 데이터베이스)
+      const taken = new Set((await window.nops.db.list()).flatMap((d) => [d.folder, d.title]));
+      let folder = name;
+      for (let n = 2; taken.has(folder); n++) folder = `${name} ${n}`;
+      await window.nops.db.create({ folder, title: folder });
+      const edit = (op: Parameters<typeof window.nops.db.editSchema>[0]['op']) => window.nops.db.editSchema({ folder, op });
+      // 노션처럼 바로 쓸 수 있게 기본 속성과 보기를 둔다
+      await edit({ kind: 'setProperty', name: '상태', def: { type: 'select', options: [{ name: '할 일', color: '#e3e2e0' }, { name: '진행 중', color: '#d3e5ef' }, { name: '완료', color: '#dbeddb' }] } });
+      await edit({ kind: 'setProperty', name: '날짜', def: { type: 'date' } });
+      await edit({ kind: 'setProperty', name: '태그', def: { type: 'multi_select', options: [] } });
+      await edit({ kind: 'upsertView', view: { id: 'v1', name: '표', type: 'table', sort: [] } });
+      await edit({ kind: 'upsertView', view: { id: 'v2', name: '보드', type: 'board', groupBy: '상태', sort: [] } });
+      await edit({ kind: 'upsertView', view: { id: 'v3', name: '캘린더', type: 'calendar', dateProp: '날짜', sort: [] } });
+      return dbEmbedSource(folder, '표');
     },
     pick() {
       return new Promise((resolve) => {

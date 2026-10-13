@@ -94,6 +94,8 @@ export const view = z.object({
   cover: z.string().optional(),
   /** 캘린더·타임라인이 쓸 날짜 속성 */
   dateProp: z.string().optional(),
+  /** 직접 끌어 정한 행 순서(노트 경로). 정렬 규칙이 없을 때만 쓴다 */
+  manualOrder: z.array(z.string()).optional(),
   widths: z.record(z.string(), z.number()).optional(),
   /** 왼쪽에서 고정할 열 수 */
   frozen: z.number().int().min(0).optional(),

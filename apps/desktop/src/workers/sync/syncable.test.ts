@@ -20,6 +20,7 @@ const CASES: [string, boolean, string][] = [
   ['.nopsidian', true, '메타 폴더 자체는 들어가야 한다'],
   ['.nopsidian/config.json', true, '설정'],
   ['.nopsidian/graph.json', true, '그래프'],
+  ['.nopsidian/bookmarks.json', true, '북마크'],
   ['.nopsidian/comments', true, '주석 폴더'],
   ['.nopsidian/comments/a.md', true, '주석 파일'],
   ['.nopsidian/comments/2026/a.md', true, '주석 하위 파일'],

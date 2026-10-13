@@ -526,3 +526,12 @@ describe('롤업·수식 값의 필터·정렬(값의 모양으로 종류를 정
     expect(rows.filter((r) => evalFilter(schema, { prop: '라벨', op: 'empty' }, r)).map((r) => r.title)).toEqual(['c']);
   });
 });
+
+describe('manualOrder', () => {
+  it('정렬 규칙이 없으면 직접 정한 순서를 따르고, 없는 행은 뒤에 둔다', () => {
+    const rows = ['a', 'b', 'c', 'd'].map((n) => ({ path: `${n}.md`, title: n, values: {} }));
+    const schema = { version: 1, rowsFolder: '.', properties: {}, views: [], templates: [] } as never;
+    const v = { id: 'v', name: 'v', type: 'board', sort: [], manualOrder: ['c.md', 'a.md'] } as never;
+    expect(queryRows(schema, v, rows).rows.map((r) => r.title)).toEqual(['c', 'a', 'b', 'd']);
+  });
+});

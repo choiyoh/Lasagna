@@ -575,12 +575,19 @@ export function calcColumn(schema: DbSchema, rows: DbRow[], prop: string, fn: Ca
   }
 }
 
+/** `manualOrder` 에 있는 행은 그 순서대로, 없는 행은 원래 순서로 뒤에 둔다 */
+export function applyManualOrder(rows: DbRow[], order: string[]): DbRow[] {
+  const idx = new Map(order.map((p, i) => [p, i]));
+  const known = rows.filter((r) => idx.has(r.path)).sort((a, b) => idx.get(a.path)! - idx.get(b.path)!);
+  return [...known, ...rows.filter((r) => !idx.has(r.path))];
+}
+
 // ── 질의 ─────────────────────────────────────────────────────────
 
 export function queryRows(schema: DbSchema, view: View, rows: DbRow[], opts: { now?: Date } = {}): QueryResult {
   const now = opts.now ?? new Date();
   const matched = rows.filter((row) => evalFilter(schema, view.filter, row, now));
-  const sorted = sortRows(schema, matched, view.sort);
+  const sorted = view.sort.length === 0 && view.manualOrder?.length ? applyManualOrder(matched, view.manualOrder) : sortRows(schema, matched, view.sort);
   const groups = view.groupBy ? groupRows(schema, sorted, view.groupBy, view.subGroupBy) : null;
   const calc: Record<string, CellValue> = {};
   const spec = view.calc ?? {};

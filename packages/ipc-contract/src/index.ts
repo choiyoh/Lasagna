@@ -286,6 +286,9 @@ export const contract = {
     }),
     output: graphData,
   },
+  /** `.nopsidian/bookmarks.json` — 북마크한 노트 경로(볼트와 함께 동기화) */
+  'bookmarks.get': { input: z.undefined(), output: z.array(relPath) },
+  'bookmarks.set': { input: z.array(relPath).max(500), output: z.undefined() },
   'graph.getSettings': { input: z.undefined(), output: graphSettings.nullable() },
   'graph.setSettings': { input: graphSettings, output: z.undefined() },
   'sync.status': { input: z.undefined(), output: syncStatus },

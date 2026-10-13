@@ -257,6 +257,10 @@ button.link { color: var(--muted); }
 .dbcal__num { border: 0; padding: 0 6px; font-size: 12px; }
 .dbcal__add { border: 0; opacity: 0; color: var(--muted); }
 .dbcal__day:hover .dbcal__add { opacity: 1; }
+.dbcal__item { display: flex; align-items: stretch; gap: 1px; min-width: 0; }
+.dbcal__item .dbcal__chip { flex: 1; min-width: 0; }
+.dbcal__handle { width: 6px; flex: none; border-radius: 0 4px 4px 0; background: var(--border, #888); opacity: 0.35; cursor: ew-resize; }
+.dbcal__item:hover .dbcal__handle { opacity: 0.9; }
 .dbcal__chip { text-align: left; border: 0; border-radius: 4px; padding: 1px 6px; background: var(--hover); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; }
 .dbtl { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .dbtl__bar { display: flex; gap: 8px; align-items: center; padding: 6px 16px; }
@@ -321,3 +325,12 @@ button.link { color: var(--muted); }
 .filterb__head { display: flex; gap: 6px; align-items: center; }
 .filterb__children { display: flex; flex-direction: column; gap: 6px; }
 .filterb__children .filterb__group:not(.filterb__group--root) { margin-left: 14px; padding-left: 10px; border-left: 2px solid var(--border); }
+
+.marks { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; }
+.marks__toggle { text-align: left; padding: 5px 8px; border-radius: 6px; color: var(--muted); }
+.marks__toggle:hover, .marks__open:hover { background: var(--hover); }
+.marks__row { display: flex; align-items: center; }
+.marks__row.missing { opacity: 0.5; }
+.marks__open { flex: 1; min-width: 0; text-align: left; padding: 4px 8px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.marks__x { color: var(--muted); padding: 2px 6px; border-radius: 4px; }
+.marks__x:hover { background: var(--hover); }

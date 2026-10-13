@@ -15,12 +15,41 @@ interface Props {
   onOpen: (path: string) => void;
   /** E2E·디버그용 식별자 */
   testId: string;
+  /** 있으면 레이아웃 위치를 localStorage 에 캐시해 다음에 열 때 바로 보여 준다 */
+  cacheKey?: string;
+}
+
+const CACHE_PREFIX = 'nops.graph.layout.';
+
+function loadLayout(key: string | undefined): Map<string, [number, number]> {
+  const out = new Map<string, [number, number]>();
+  if (!key) return out;
+  try {
+    const raw = JSON.parse(localStorage.getItem(CACHE_PREFIX + key) ?? '{}') as Record<string, [number, number]>;
+    for (const [id, p] of Object.entries(raw)) if (Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])) out.set(id, p);
+  } catch {
+    /* 캐시는 없어도 된다 */
+  }
+  return out;
+}
+
+function saveLayout(key: string | undefined, graph: Graph): void {
+  if (!key) return;
+  try {
+    const raw: Record<string, [number, number]> = {};
+    graph.forEachNode((id, a) => {
+      raw[id] = [Math.round((a.x as number) * 100) / 100, Math.round((a.y as number) * 100) / 100];
+    });
+    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(raw));
+  } catch {
+    /* 용량 초과 등은 무시 */
+  }
 }
 
 const DIM = '#3a3a44';
 
 /** sigma + graphology 로 그래프를 그린다. 레이아웃은 워커에서 돌고, 위치만 받아 갱신한다. */
-export function GraphView({ data, settings, current, onOpen, testId }: Props) {
+export function GraphView({ data, settings, current, onOpen, testId, cacheKey }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
@@ -41,8 +70,10 @@ export function GraphView({ data, settings, current, onOpen, testId }: Props) {
     const prev = graphRef.current;
     const graph = new Graph({ type: 'directed', multi: false });
     const n = data.nodes.length;
+    const cached = prev ? new Map<string, [number, number]>() : loadLayout(cacheKey);
     data.nodes.forEach((node, i) => {
-      const old = prev?.hasNode(node.id) ? prev.getNodeAttributes(node.id) : null;
+      const hit = cached.get(node.id);
+      const old = prev?.hasNode(node.id) ? prev.getNodeAttributes(node.id) : hit ? { x: hit[0], y: hit[1] } : null;
       const angle = (i / Math.max(n, 1)) * Math.PI * 2;
       const radius = 10 + Math.sqrt(n) * 3;
       graph.addNode(node.id, {
@@ -132,6 +163,7 @@ export function GraphView({ data, settings, current, onOpen, testId }: Props) {
         graph.mergeNodeAttributes(id, { x: positions[i * 2]!, y: positions[i * 2 + 1]! });
       });
       sigma.refresh();
+      if (done) saveLayout(cacheKey, graph);
       setStats(`${ids.length}개 노드 · ${graph.size}개 링크${done ? '' : ' · 배치 중…'}`);
     };
     const init: LayoutIn = { type: 'init', ids, positions: pos, edges: new Uint32Array(edgeArr), forces: live.current.settings.forces };
@@ -139,6 +171,7 @@ export function GraphView({ data, settings, current, onOpen, testId }: Props) {
     setStats(`${ids.length}개 노드 · ${graph.size}개 링크`);
 
     return () => {
+      saveLayout(cacheKey, graph);
       worker.postMessage({ type: 'stop' } satisfies LayoutIn);
       worker.terminate();
       sigma.kill();

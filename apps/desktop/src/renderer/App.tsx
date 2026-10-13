@@ -3,6 +3,8 @@ import type { NoteSummary, SearchHit, SyncStatus, VaultInfo } from '@nopsidian/i
 import { createLinkResolver } from '@nopsidian/core/links';
 import type { WikiLinkTarget } from '@nopsidian/editor/nops';
 import { showTextPrompt } from '@nopsidian/editor/nops';
+import type { NopsPeekHost } from '@nopsidian/editor/nops';
+import { extractExcerpt } from '@nopsidian/core/markdown';
 import { NoteEditor } from './NoteEditor';
 import { useAssetStore } from './assets';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -92,7 +94,18 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   /** 링크로 열 때 이동할 제목/블록 */
   const [focus, setFocus] = useState<{ heading: string | null; block: string | null } | null>(null);
   const [creating, setCreating] = useState(false);
-  const [sideTab, setSideTab] = useState<'files' | 'tags' | 'db'>('files');
+  const [sideTab, setSideTab] = useState<'files' | 'tags' | 'db' | 'marks'>('files');
+  const [bookmarks, setBookmarks] = useState<string[]>([]);
+  useEffect(() => {
+    void window.nops.bookmarks.get().then(setBookmarks);
+  }, [vault.id]);
+  const toggleBookmark = useCallback((p: string) => {
+    setBookmarks((cur) => {
+      const next = cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p];
+      void window.nops.bookmarks.set(next);
+      return next;
+    });
+  }, []);
   const [panelOpen, setPanelOpen] = useState(true);
   const [switcher, setSwitcher] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
@@ -143,6 +156,19 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     [resolver, notes, selected],
   );
 
+  const peekHost = useMemo<NopsPeekHost>(
+    () => ({
+      async peek({ target, heading, block }) {
+        const id = resolver(target, selected ?? '');
+        const note = id === undefined ? undefined : notes[id];
+        if (!note) return null;
+        const { content } = await window.nops.note.read({ path: note.path });
+        return { title: note.title, ...extractExcerpt(content, { heading, block }) };
+      },
+    }),
+    [resolver, notes, selected],
+  );
+
   // `[[` 자동완성은 항상 최신 노트·첨부 목록을 봐야 하므로 ref로 읽는 안정적인 호스트를 하나만 만든다
   const live = useRef({ notes, selected, assets });
   live.current = { notes, selected, assets };
@@ -190,12 +216,19 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     await flushAll();
     /** 이동된 경로를 현재 선택·열린 DB 에 반영한다 */
     const remap = (p: string, a: string, b: string) => (p === a ? b : p.startsWith(`${a}/`) ? `${b}${p.slice(a.length)}` : p);
+    const remapBookmarks = (a: string, b: string) =>
+      setBookmarks((cur) => {
+        const next = cur.map((p) => remap(p, a, b));
+        if (next.some((p, i) => p !== cur[i])) void window.nops.bookmarks.set(next);
+        return next;
+      });
     try {
       const plan = await window.nops.note.renamePlan({ from, to: target });
       const apply = async () => {
         const done = await window.nops.note.rename({ from, to: target });
         setSelected((cur) => (cur ? remap(cur, from, target) : cur));
         setDbOpen((cur) => (cur === null ? cur : remap(cur, from, target)));
+        remapBookmarks(from, target);
         refresh();
         setToast({
           message: done.totalChanges > 0 ? `이름을 바꾸고 링크 ${done.totalChanges}개를 고쳤어요.` : '이름을 바꿨어요.',
@@ -204,6 +237,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             await window.nops.note.undoRename({ undoId: done.undoId });
             setSelected((cur) => (cur ? remap(cur, target, from) : cur));
             setDbOpen((cur) => (cur === null ? cur : remap(cur, target, from)));
+            remapBookmarks(target, from);
             refresh();
             setToast({ message: '되돌렸어요.' });
           },
@@ -253,6 +287,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       } else if (e.key === 'F2') {
         e.preventDefault();
         void renameCurrent();
+      } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyB') {
+        e.preventDefault();
+        if (selected) toggleBookmark(selected);
       } else if (mod && e.altKey && e.code === 'KeyD') {
         e.preventDefault();
         void openDaily();
@@ -260,7 +297,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [renameCurrent, openDaily, graphOpen, dbOpen]);
+  }, [renameCurrent, openDaily, graphOpen, dbOpen, selected, toggleBookmark]);
 
   useEffect(() => {
     if (!toast) return;
@@ -334,6 +371,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           <button role="tab" aria-selected={sideTab === 'files'} className={sideTab === 'files' ? 'active' : ''} onClick={() => setSideTab('files')}>
             파일
           </button>
+          <button role="tab" aria-selected={sideTab === 'marks'} className={sideTab === 'marks' ? 'active' : ''} onClick={() => setSideTab('marks')} title="북마크 (⌘⇧B로 현재 노트 추가·해제)">
+            ★
+          </button>
           <button role="tab" aria-selected={sideTab === 'db'} className={sideTab === 'db' ? 'active' : ''} onClick={() => setSideTab('db')}>
             DB
           </button>
@@ -362,6 +402,28 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 </button>
               ))
             )
+          ) : sideTab === 'marks' ? (
+            <div className="marks" data-testid="bookmarks">
+              {selected && (
+                <button className="marks__toggle" onClick={() => toggleBookmark(selected)} data-testid="bookmark-toggle">
+                  {bookmarks.includes(selected) ? '★ 현재 노트 북마크 해제' : '☆ 현재 노트 북마크'}
+                </button>
+              )}
+              {bookmarks.length === 0 && <p className="muted small pad">북마크한 노트가 없어요.</p>}
+              {bookmarks.map((p) => {
+                const note = notes.find((n) => n.path === p);
+                return (
+                  <div key={p} className={note ? 'marks__row' : 'marks__row missing'}>
+                    <button className="marks__open" disabled={!note} onClick={() => setSelected(p)} title={p}>
+                      {note?.title ?? `${p} (없음)`}
+                    </button>
+                    <button className="marks__x" onClick={() => toggleBookmark(p)} aria-label={`${p} 북마크 해제`}>
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           ) : sideTab === 'tags' ? (
             <TagPanel onOpen={setSelected} />
           ) : sideTab === 'db' ? (
@@ -399,6 +461,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 onOpenLink={openLink}
                 onRename={() => void renameEntry(p, false)}
                 dbHost={dbHost}
+                peek={peekHost}
               />
             )}
           />
@@ -423,6 +486,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             onOpenLink={openLink}
             onRename={() => void renameCurrent()}
             dbHost={dbHost}
+            peek={peekHost}
           />
         ) : (
           <p className="muted pad">왼쪽에서 노트를 선택하세요. ({notes.length}개) · ⌘O로 빠르게 찾을 수 있어요.</p>

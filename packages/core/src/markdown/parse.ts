@@ -92,7 +92,7 @@ export function parseNote(source: string): ParsedNote {
       source: text,
       lineStart: pos.start.line + lineBase,
       lineEnd: pos.end.line + lineBase,
-      text: toString(node),
+      text: node.type === 'heading' ? toString(node).replace(/\s*\{\.toggle\}(?=\s*(?:\^[A-Za-z0-9-]+\s*)?$)/, '') : toString(node),
     };
     if (node.type === 'heading') block.headingLevel = node.depth;
     if (kind === 'fence-open') {
@@ -163,7 +163,7 @@ function extractMeta(
 
   visit(tree, (node) => {
     if (node.type === 'heading') {
-      const text = toString(node).replace(/\s+\^[A-Za-z0-9-]+\s*$/, '').trim();
+      const text = toString(node).replace(/\s+\^[A-Za-z0-9-]+\s*$/, '').replace(/\s*\{\.toggle\}\s*$/, '').trim();
       headings.push({
         level: node.depth,
         text,

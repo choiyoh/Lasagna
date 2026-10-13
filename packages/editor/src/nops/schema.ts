@@ -213,13 +213,39 @@ function withAttrs(spec: NodeSpec | undefined, attrs: NonNullable<NodeSpec['attr
   return { ...spec, attrs: { ...(spec.attrs ?? {}), ...attrs } };
 }
 
+/** 접이식 제목(`## 제목 {.toggle}`): `toggle` 이 켜진 제목은 다음 같은/높은 단계 제목 전까지를 접을 수 있다 */
+function headingSpec(spec: NodeSpec): NodeSpec {
+  const toDOM = spec.toDOM;
+  return {
+    ...spec,
+    attrs: { ...(spec.attrs ?? {}), toggle: { default: false } },
+    parseDOM: spec.parseDOM?.map((rule) => {
+      const getAttrs = 'getAttrs' in rule ? rule.getAttrs : undefined;
+      return {
+        ...rule,
+        getAttrs: (dom: HTMLElement | string) => {
+          const base = typeof getAttrs === 'function' ? getAttrs(dom as never) : null;
+          if (base === false) return false;
+          return { ...(base ?? {}), toggle: typeof dom !== 'string' && dom.hasAttribute('data-toggle-heading') };
+        },
+      };
+    }),
+    toDOM: toDOM
+      ? (node) => {
+          const out = toDOM(node) as unknown as [string, Record<string, string>, 0];
+          return node.attrs.toggle ? [out[0], { ...(out[1] ?? {}), 'data-toggle-heading': '1' }, 0] : (out as never);
+        }
+      : undefined,
+  };
+}
+
 function buildNodes() {
   let nodes = baseNodes as import('orderedmap').default<NodeSpec>;
 
   // 블록 ID(`^id`)와 목록 속성
   nodes = nodes
     .update('paragraph', withAttrs(nodes.get('paragraph'), blockIdAttr))
-    .update('heading', withAttrs(nodes.get('heading'), blockIdAttr))
+    .update('heading', headingSpec(withAttrs(nodes.get('heading'), blockIdAttr)))
     .update('bullet_list', withAttrs(nodes.get('bullet_list'), { tight: { default: true } }))
     .update('ordered_list', withAttrs(nodes.get('ordered_list'), { tight: { default: true } }))
     .update('list_item', {

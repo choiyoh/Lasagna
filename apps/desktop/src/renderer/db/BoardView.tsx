@@ -9,10 +9,12 @@ interface Props {
   /** 카드를 다른 열로 옮기면 그룹 속성 값을 바꾼다(key null = 비우기) */
   onMove: (row: DbRowDto, prop: string, value: CellValue) => void;
   onAdd: (groupKey: string | null) => void;
+  /** 카드를 다른 카드 앞에 놓았을 때 보드 전체의 새 순서(노트 경로) */
+  onReorder?: (order: string[]) => void;
 }
 
 /** 보드(칸반) 뷰: 그룹 속성의 값마다 열, 카드를 끌어다 놓으면 값이 바뀐다. */
-export function BoardView({ data, onOpen, onMove, onAdd }: Props) {
+export function BoardView({ data, onOpen, onMove, onAdd, onReorder }: Props) {
   const prop = data.view.groupBy;
   const def = prop ? data.schema.properties[prop] : undefined;
   const [over, setOver] = useState<string | null | undefined>(undefined);
@@ -46,7 +48,33 @@ export function BoardView({ data, onOpen, onMove, onAdd }: Props) {
           </h4>
           <div className="dbboard__cards">
             {g.rows.map((r) => (
-              <article key={r.path} className="dbcard" draggable onDragStart={() => setDragging(r)} onDragEnd={() => setDragging(null)}>
+              <article
+                key={r.path}
+                className="dbcard"
+                data-testid="board-card"
+                draggable
+                onDragStart={() => setDragging(r)}
+                onDragEnd={() => setDragging(null)}
+                onDragOver={(e) => {
+                  if (!dragging || !onReorder) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setOver(g.key);
+                }}
+                onDrop={(e) => {
+                  if (!dragging || !onReorder) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setOver(undefined);
+                  if (dragging.path !== r.path) {
+                    const order = data.groups!.flatMap((x) => x.rows.map((y) => y.path)).filter((p) => p !== dragging.path);
+                    order.splice(order.indexOf(r.path), 0, dragging.path);
+                    onReorder(order);
+                    if (cellOf(dragging, prop) !== g.key) onMove(dragging, prop, g.key);
+                  }
+                  setDragging(null);
+                }}
+              >
                 <button className="dbcard__title" onClick={() => onOpen(r.path)}>
                   {r.title}
                 </button>

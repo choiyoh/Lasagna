@@ -353,6 +353,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             data={current}
             onOpen={openRow}
             onMove={(r, p, v) => void updateCell(r, p, v)}
+            onReorder={(order) => setDraft({ ...view, sort: [], manualOrder: order })}
             onAdd={(key) => setAdding({ title: '', values: view.groupBy && key ? { [view.groupBy]: key } : {} })}
           />
         )}

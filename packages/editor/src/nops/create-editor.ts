@@ -10,6 +10,9 @@ import { createDbViewNodeView, dbViewSlashItem, type NopsDbViewHost } from './db
 import { createEmbedView } from './embed-view';
 import { createFilesPlugin } from './files-plugin';
 import { createFlashPlugin } from './flash';
+import { createToggleHeadingPlugin, toggleHeadingCommand } from './toggle-heading';
+import { createLinkPreviewPlugin } from './link-preview';
+import type { NopsPeekHost } from './peek-host';
 import { createLinkSuggestPlugin, type NopsLinkHost } from './link-suggest';
 import { nopsNodeViews } from './node-views';
 import { showTextPrompt } from './prompt';
@@ -29,6 +32,8 @@ export interface NopsEditorOptions {
   blockLink?: BlockLinkOptions;
   /** 첨부(이미지·파일) 저장·표시. 없으면 첨부 기능이 꺼진다 */
   assets?: NopsAssetHost;
+  /** 위키링크 호버 미리보기·노트 임베드 발췌. 없으면 둘 다 꺼진다 */
+  peek?: NopsPeekHost;
   /** 추가 슬래시 항목 (예: DB 뷰) */
   slashItems?: SlashItemSpec[];
   /** ```dbview 펜스를 데이터베이스 뷰로 그리는 호스트. 없으면 평범한 코드 블록으로 보인다 */
@@ -43,6 +48,9 @@ export const nopsSlashItems: SlashItemSpec[] = [
   { icon: '💡', label: '팁 콜아웃', description: '팁·힌트용 콜아웃', category: 'advanced', keywords: ['tip', '팁', '힌트', 'callout', '콜아웃'], run: (v) => insertCallout('tip')(v.state, v.dispatch) },
   { icon: '⚠', label: '경고 콜아웃', description: '주의할 내용', category: 'advanced', keywords: ['warning', '경고', '주의', 'callout', '콜아웃'], run: (v) => insertCallout('warning')(v.state, v.dispatch) },
   { icon: '▸', label: '토글', description: '접었다 펼 수 있는 블록', category: 'advanced', keywords: ['toggle', '토글', '접기', '펼치기', '접이식'], run: (v) => insertToggle()(v.state, v.dispatch) },
+  { icon: '▾', label: '토글 제목 1', description: '접었다 펼 수 있는 큰 제목', category: 'advanced', keywords: ['toggle', 'heading', '토글', '제목', '접기', 'h1', '토글제목1'], run: (v) => toggleHeadingCommand(1)(v.state, v.dispatch) },
+  { icon: '▾', label: '토글 제목 2', description: '접었다 펼 수 있는 중간 제목', category: 'advanced', keywords: ['toggle', 'heading', '토글', '제목', '접기', 'h2', '토글제목2'], run: (v) => toggleHeadingCommand(2)(v.state, v.dispatch) },
+  { icon: '▾', label: '토글 제목 3', description: '접었다 펼 수 있는 작은 제목', category: 'advanced', keywords: ['toggle', 'heading', '토글', '제목', '접기', 'h3', '토글제목3'], run: (v) => toggleHeadingCommand(3)(v.state, v.dispatch) },
   { icon: '▥', label: '2열', description: '나란히 두 열로 배치', category: 'advanced', keywords: ['columns', '열', '컬럼', '2열', '두열', '레이아웃'], run: (v) => insertColumns(2)(v.state, v.dispatch) },
   { icon: '▥', label: '3열', description: '나란히 세 열로 배치', category: 'advanced', keywords: ['columns', '열', '컬럼', '3열', '세열', '레이아웃'], run: (v) => insertColumns(3)(v.state, v.dispatch) },
   { icon: '∑', label: '수식 블록', description: 'LaTeX 수식', category: 'advanced', keywords: ['math', 'latex', '수식', '공식', 'katex'], run: (v) => insertMathBlock()(v.state, v.dispatch) },
@@ -74,7 +82,7 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
     prompt: showTextPrompt,
     nodeViews: {
       ...nopsNodeViews,
-      ...(assets ? { embed: createEmbedView(assets, options.onOpenLink) } : {}),
+      ...(assets ? { embed: createEmbedView(assets, options.onOpenLink, options.peek) } : {}),
       ...(options.dbView ? { code_block: createDbViewNodeView(options.dbView) } : {}),
     },
     // 자동완성은 Enter/Tab/방향키를 기본 키맵보다 먼저 받아야 한다
@@ -90,6 +98,8 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
       ...createBlockHandlePlugin(options.blockLink),
       createCodeHighlightPlugin(),
       createFlashPlugin(),
+      createToggleHeadingPlugin(),
+      ...(options.peek ? [createLinkPreviewPlugin(options.peek)] : []),
     ],
   });
 }

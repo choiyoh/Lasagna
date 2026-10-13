@@ -874,6 +874,25 @@ test.describe('링크 코어', () => {
       fire(card, 'dragend');
     });
     await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 5000 }).toContain('상태: 완료');
+    // 같은 열 안에서 카드를 다른 카드 앞에 놓으면 순서가 바뀐다(직접 정한 순서)
+    const titles = () => page.locator('[data-testid="board-col-완료"] .dbcard__title').allTextContents();
+    await expect.poll(titles).toHaveLength(2);
+    const before = await titles();
+    await page.evaluate(async () => {
+      const tick = () => new Promise((r) => setTimeout(r, 50));
+      const cards = [...document.querySelectorAll('[data-testid="board-col-완료"] .dbcard')];
+      const [a, b] = [cards[0]!, cards[1]!];
+      const dt = new DataTransfer();
+      const fire = (el: Element, type: string) => el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+      fire(b, 'dragstart');
+      await tick();
+      fire(a, 'dragover');
+      await tick();
+      fire(a, 'drop');
+      await tick();
+      fire(b, 'dragend');
+    });
+    await expect.poll(titles).toEqual([before[1], before[0]]);
 
     // 7) 필터를 걸고 보기를 저장하면 _db.yaml 의 뷰가 바뀐다
     await screen.getByLabel('보기 형태').selectOption('table');
@@ -887,6 +906,7 @@ test.describe('링크 코어', () => {
     await expect(page.getByTestId('db-table')).not.toContainText('밖에서 만든');
     await screen.getByRole('button', { name: '보기 저장' }).click();
     await expect.poll(() => readFileSync(path.join(dbDir, '_db.yaml'), 'utf8'), { timeout: 5000 }).toContain('>=');
+    expect(readFileSync(path.join(dbDir, '_db.yaml'), 'utf8')).toContain('manualOrder');
 
     // 8) 속성 이름 변경은 모든 행의 키도 바꾼다
     await screen.getByRole('button', { name: '속성', exact: true }).click();
@@ -1038,6 +1058,24 @@ views:
       fire(chip, 'dragend');
     });
     await expect.poll(() => readFileSync(path.join(vaultDir, '과제/보고서.md'), 'utf8'), { timeout: 5000 }).toContain('마감: 2026-10-16');
+    // 칩 끝의 손잡이를 다른 날로 끌면 종료일이 늘어난다
+    await expect(cal.locator('[data-date="2026-10-16"] [data-testid="cal-resize"]')).toBeVisible({ timeout: 8000 });
+    await page.evaluate(async () => {
+      const tick = () => new Promise((r) => setTimeout(r, 50));
+      const handle = document.querySelector('[data-date="2026-10-16"] [data-testid="cal-resize"]')!;
+      const target = document.querySelector('[data-date="2026-10-18"]')!;
+      const dt = new DataTransfer();
+      const fire = (el: Element, type: string) => el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+      fire(handle, 'dragstart');
+      await tick();
+      fire(target, 'dragover');
+      await tick();
+      fire(target, 'drop');
+      await tick();
+      fire(handle, 'dragend');
+    });
+    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/보고서.md'), 'utf8'), { timeout: 5000 }).toMatch(/2026-10-16[\s\S]*2026-10-18/);
+    await expect(cal.locator('[data-date="2026-10-17"] .dbcal__chip', { hasText: '보고서' })).toBeVisible({ timeout: 8000 });
 
     // 타임라인
     await screen.getByLabel('보기 형태').selectOption('timeline');
@@ -1235,6 +1273,64 @@ views:
     await expect(page.locator('.nops-flash')).toContainText('복사할 문단', { timeout: 5000 });
   });
 
+  test('접이식 제목·링크 호버 미리보기·노트 블록 임베드·북마크', async () => {
+    const page = await app.firstWindow();
+    const src = note('발췌원본', '# 발췌원본\n\n소개 문단\n\n## 세부 {.toggle}\n\n세부 내용 하나\n\n세부 내용 둘\n\n## 다음 절\n\n다음 절 내용\n\n인용할 문장 ^quote1\n');
+    const user = note('발췌사용', '# 발췌사용\n\n미리보기: [[발췌원본#^quote1]]\n\n![[발췌원본#^quote1]]\n\n![[발췌원본#세부]]\n');
+
+    // 1) 접이식 제목: 화살표를 누르면 다음 같은 단계 제목 전까지 숨고, 파일에는 접힘이 남지 않는다
+    await open(page, '발췌원본');
+    const arrow = page.getByTestId('toggle-heading-arrow');
+    await expect(arrow).toBeVisible();
+    await expect(page.locator('.ProseMirror p', { hasText: '세부 내용 하나' })).toBeVisible();
+    await arrow.click();
+    await expect(page.locator('.ProseMirror p', { hasText: '세부 내용 하나' })).toBeHidden();
+    await expect(page.locator('.ProseMirror p', { hasText: '다음 절 내용' })).toBeVisible();
+    await arrow.click();
+    await expect(page.locator('.ProseMirror p', { hasText: '세부 내용 둘' })).toBeVisible();
+    expect(readFileSync(src, 'utf8')).toContain('## 세부 {.toggle}\n');
+
+    // 2) 슬래시로 토글 제목을 만들면 ` {.toggle}` 가 붙어 저장된다
+    await page.locator('.ProseMirror p', { hasText: '소개 문단' }).click();
+    await page.waitForTimeout(150);
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('/토글제목2');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('새 접이식');
+    await expect.poll(() => readFileSync(src, 'utf8'), { timeout: 5000 }).toContain('## 새 접이식 {.toggle}');
+
+    // 3) 위키링크에 마우스를 올리면 대상 블록의 발췌가 뜬다
+    await open(page, '발췌사용');
+    await page.locator('.ProseMirror p .nops-wikilink').first().hover();
+    const card = page.getByTestId('link-preview');
+    await expect(card).toContainText('인용할 문장', { timeout: 5000 });
+    await expect(card).toContainText('발췌원본');
+    await page.locator('.ProseMirror h1').hover();
+    await expect(card).toHaveCount(0);
+
+    // 4) ![[노트#^블록]] / ![[노트#제목]] 임베드는 발췌를 인용 상자로 보여 준다
+    const embeds = page.getByTestId('note-embed');
+    await expect(embeds).toHaveCount(2);
+    await expect(embeds.first()).toContainText('인용할 문장');
+    await expect(embeds.nth(1)).toContainText('세부 내용 하나');
+    await expect(embeds.nth(1)).not.toContainText('다음 절 내용');
+    expect(readFileSync(user, 'utf8')).toContain('![[발췌원본#^quote1]]');
+
+    // 5) 북마크: ⌘⇧B 로 현재 노트를 추가·해제하고, 별 탭에서 열 수 있으며 .nopsidian/bookmarks.json 에 저장된다
+    await page.keyboard.press('Meta+Shift+B');
+    await page.getByRole('tab', { name: '★' }).click();
+    const marks = page.getByTestId('bookmarks');
+    await expect(marks).toContainText('발췌사용');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '.nopsidian/bookmarks.json'), 'utf8'), { timeout: 5000 }).toContain('발췌사용.md');
+    await marks.locator('.marks__open', { hasText: '발췌사용' }).click();
+    await expect(page.locator('.ProseMirror h1')).toHaveText('발췌사용');
+    await page.getByTestId('bookmark-toggle').click();
+    await expect(marks).not.toContainText('발췌사용');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '.nopsidian/bookmarks.json'), 'utf8'), { timeout: 5000 }).not.toContain('발췌사용.md');
+    await page.getByRole('tab', { name: '파일' }).click();
+  });
+
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
     const page = await app.firstWindow();
     const today = await page.evaluate(() => {
@@ -1257,7 +1353,7 @@ views:
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'daily', 'db', 'graph', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'graph', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

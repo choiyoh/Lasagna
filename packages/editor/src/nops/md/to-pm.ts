@@ -144,6 +144,19 @@ function extractBlockId(nodes: PMNode[]): { nodes: PMNode[]; blockId: string | n
   return { nodes: kept, blockId: m[2] ?? null };
 }
 
+/** 제목 끝의 ` {.toggle}` 표시를 떼어 낸다(블록 ID를 뗀 뒤에 쓴다) */
+function extractToggle(nodes: PMNode[]): { nodes: PMNode[]; toggle: boolean } {
+  const last = nodes[nodes.length - 1];
+  if (!last?.isText) return { nodes, toggle: false };
+  const m = /\s*\{\.toggle\}$/.exec(last.text ?? '');
+  if (!m) return { nodes, toggle: false };
+  const rest = (last.text ?? '').slice(0, m.index);
+  const kept = nodes.slice(0, -1);
+  if (rest) kept.push(last.type.schema.text(rest, last.marks));
+  if (kept.length === 0) return { nodes, toggle: false };
+  return { nodes: kept, toggle: true };
+}
+
 // ───────────────────────── 블록 ─────────────────────────
 
 function raw(ctx: Ctx, node: RootContent): PMNode {
@@ -259,8 +272,9 @@ export function blockToPm(ctx: Ctx, node: RootContent): PMNode {
     case 'paragraph':
       return paragraphToPm(ctx, node);
     case 'heading': {
-      const { nodes, blockId } = extractBlockId(inlineToPm(ctx, node.children));
-      return schema.nodes.heading!.create({ level: node.depth, blockId }, nodes);
+      const { nodes: afterId, blockId } = extractBlockId(inlineToPm(ctx, node.children));
+      const { nodes, toggle } = extractToggle(afterId);
+      return schema.nodes.heading!.create({ level: node.depth, blockId, toggle }, nodes);
     }
     case 'list':
       return listToPm(ctx, node);

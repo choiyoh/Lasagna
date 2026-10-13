@@ -134,7 +134,7 @@ export function blockToMdast(node: PMNode): Any | null {
     case 'paragraph':
       return isEmptyParagraph(node) ? null : { type: 'paragraph', children: withBlockId(inlineToMdast(node), a.blockId) };
     case 'heading':
-      return { type: 'heading', depth: a.level, children: withBlockId(inlineToMdast(node), a.blockId) };
+      return { type: 'heading', depth: a.level, children: withBlockId([...inlineToMdast(node), ...(a.toggle ? [raw(' {.toggle}')] : [])], a.blockId) };
     case 'blockquote':
       return { type: 'blockquote', children: kids() };
     case 'horizontal_rule':

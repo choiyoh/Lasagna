@@ -294,3 +294,15 @@ describe('_db.yaml 편집', () => {
     expect(setDbMeta('', { title: 'X' })).toBe('title: X\n');
   });
 });
+
+describe('setFrontmatter: 스칼라 자리에 날짜 기간(맵)', () => {
+  it('날짜 하나를 기간으로 바꾸고 다시 하나로 되돌린다', () => {
+    const a = setFrontmatter('---\n마감: 2026-10-16\n제목: x\n---\n본문\n', { 마감: { start: '2026-10-16', end: '2026-10-18' } });
+    expect(a).toBe('---\n마감: { start: 2026-10-16, end: 2026-10-18 }\n제목: x\n---\n본문\n');
+    const b = setFrontmatter(a, { 마감: '2026-10-16' });
+    expect(b).toBe('---\n마감: 2026-10-16\n제목: x\n---\n본문\n');
+  });
+  it('없던 키로 기간을 새로 쓴다', () => {
+    expect(setFrontmatter('본문\n', { 기간: { start: '2026-01-01', end: '2026-01-02' } })).toBe('---\n기간: { start: 2026-01-01, end: 2026-01-02 }\n---\n본문\n');
+  });
+});

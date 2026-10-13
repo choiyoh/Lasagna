@@ -3,6 +3,7 @@ import type { EditorView, NodeView } from 'prosemirror-view';
 import { assetKind, parseSizeSpec } from '@nopsidian/core/assets';
 import type { NopsAssetHost } from './asset-host';
 import type { WikiLinkTarget } from './plugins';
+import type { NopsPeekHost } from './peek-host';
 
 const MIN_WIDTH = 40;
 const FILE_ICON: Record<string, string> = { pdf: '📕', audio: '🎵', video: '🎬', file: '📎', note: '📄' };
@@ -15,7 +16,7 @@ const FILE_ICON: Record<string, string> = { pdf: '📕', audio: '🎵', video: '
  *  - 노트: 노트 칩(클릭하면 이동)
  *  - 찾을 수 없는 파일: 빨간 칩
  */
-export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLinkTarget) => void) {
+export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLinkTarget) => void, peek?: NopsPeekHost) {
   return (node: PMNode, view: EditorView, getPos: () => number | undefined): NodeView => {
     const dom = document.createElement('span');
     dom.className = 'nops-embed';
@@ -43,6 +44,35 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
       const { target, heading, block, alias } = n.attrs as { target: string; heading: string | null; block: string | null; alias: string | null };
       const kind = assetKind(target);
       const size = parseSizeSpec(alias);
+
+      if (kind === 'note' && peek) {
+        // 노트·제목·블록 임베드: 발췌를 인용 상자로 보여 준다(읽기 전용, 클릭하면 원본으로 이동)
+        const open = () => onOpenLink?.({ target, heading, block, embed: true });
+        const box = document.createElement('span');
+        box.className = 'nops-embed__note';
+        box.setAttribute('data-testid', 'note-embed');
+        box.textContent = '불러오는 중…';
+        box.addEventListener('click', (e) => (e.preventDefault(), open()));
+        dom.classList.add('is-note');
+        dom.append(box);
+        void peek.peek({ target, heading, block }).then((r) => {
+          if (!box.isConnected) return;
+          if (!r) {
+            dom.classList.add('is-missing');
+            box.textContent = `⚠ 노트를 찾을 수 없어요: ${target}`;
+            return;
+          }
+          box.replaceChildren();
+          const head = document.createElement('span');
+          head.className = 'nops-embed__note-title';
+          head.textContent = `📄 ${alias || r.title}${heading ? ` › ${heading}` : block ? ` › ^${block}` : ''}`;
+          const body = document.createElement('span');
+          body.className = 'nops-embed__note-body';
+          body.textContent = r.found ? r.text || '(내용 없음)' : `(${heading ? '제목' : '블록'}을 찾을 수 없어 노트 앞부분을 보여 줘요)\n${r.text}`;
+          box.append(head, body);
+        });
+        return;
+      }
 
       if (kind === 'note') {
         dom.append(

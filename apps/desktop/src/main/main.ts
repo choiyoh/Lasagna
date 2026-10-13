@@ -257,6 +257,20 @@ function registerHandlers() {
     await v.index.ready;
     return v.index.query('localGraph', rel, { ...opts, depth, direction });
   });
+  handle('bookmarks.get', () => {
+    const v = requireVault();
+    try {
+      const raw: unknown = JSON.parse(readFileSync(path.join(v.info.path, '.nopsidian', 'bookmarks.json'), 'utf8'));
+      return Array.isArray(raw) ? raw.filter((p): p is string => typeof p === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
+  handle('bookmarks.set', (paths) => {
+    const v = requireVault();
+    atomicWrite(path.join(v.info.path, '.nopsidian', 'bookmarks.json'), JSON.stringify(paths, null, 2));
+    return undefined;
+  });
   handle('graph.getSettings', async () => {
     const v = requireVault();
     try {

@@ -127,7 +127,7 @@ export function GraphScreen({ current, onOpen, onClose }: ScreenProps) {
             + 그룹 추가
           </button>
         </aside>
-        <GraphView data={data} settings={settings} current={current} onOpen={onOpen} testId="graph-global" />
+        <GraphView data={data} settings={settings} current={current} onOpen={onOpen} testId="graph-global" cacheKey="global" />
       </div>
     </div>
   );

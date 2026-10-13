@@ -183,12 +183,13 @@ function usesFlowStyle(map: ParsedNodeMap): boolean {
  * 흐름 스타일이면 새 컬렉션도 흐름 스타일로 써서 `a: { type: text }` 모양을 유지한다.
  */
 function replaceValue(doc: Document, pair: ParsedPair, value: unknown): void {
-  if (!isCollection(pair.value)) {
+  if (!isCollection(pair.value) && (value === null || typeof value !== 'object')) {
     pair.value = retarget(pair.value, value);
     return;
   }
+  // 컬렉션이거나, 스칼라였던 자리에 맵·배열(날짜 기간 `{ start, end }` 등)이 들어오는 경우
   const node = doc.createNode(value);
-  if (isCollection(node) && pair.value.flow) node.flow = true;
+  if (isCollection(node) && isCollection(pair.value) && pair.value.flow) node.flow = true;
   pair.value = node;
 }
 
@@ -433,6 +434,9 @@ export function setFrontmatter(content: string, changes: Record<string, unknown>
     }
     if (sameValue(map.get(key, true), value)) continue; // 같은 값이면 원문 노드를 그대로 둔다
     setKey(doc, map, key, value);
+    // 날짜 기간 같은 작은 맵은 한 줄(`{ start: …, end: … }`)로 쓴다
+    const written = map.items.find((it) => keyOf(it) === key);
+    if (written && written.value instanceof YAMLMap) written.value.flow = true;
     changed = true;
   }
   if (!changed) return content;

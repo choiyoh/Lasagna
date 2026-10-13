@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { addDays, daysBetween, parseYmd, rowSpan, shiftValue, startOfWeek, ymd } from './date-util';
+import { spanToValue } from './timeline-math';
 import type { CellValue, DbData, DbRowDto } from './types';
 
 interface Props {
@@ -19,6 +20,8 @@ export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily }:
   const [anchor, setAnchor] = useState(() => new Date());
   const [mode, setMode] = useState<'month' | 'week'>('month');
   const [drag, setDrag] = useState<DbRowDto | null>(null);
+  /** 칩 끝의 손잡이를 끌고 있는 행 — 놓은 날이 새 종료일 */
+  const [resize, setResize] = useState<DbRowDto | null>(null);
   const today = ymd(new Date());
 
   const days = useMemo(() => {
@@ -76,6 +79,12 @@ export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily }:
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
+                if (resize) {
+                  const rs = rowSpan(resize, prop);
+                  if (rs && d >= rs.start && ymd(d) !== ymd(rs.end)) onMove(resize, prop, spanToValue({ start: rs.start, end: d }, rs.time));
+                  setResize(null);
+                  return;
+                }
                 if (!drag) return;
                 const s = rowSpan(drag, prop);
                 if (s) {
@@ -89,11 +98,30 @@ export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily }:
                 <button className="dbcal__num" onClick={() => onOpenDaily(k)} title="데일리 노트 열기">{d.getDate()}</button>
                 <button className="dbcal__add" onClick={() => onAdd(k)} aria-label={`${k} 새 행`}>+</button>
               </div>
-              {items.slice(0, mode === 'month' ? 4 : 30).map((r) => (
-                <button key={r.path} className="dbcal__chip" draggable onDragStart={() => setDrag(r)} onDragEnd={() => setDrag(null)} onClick={() => onOpen(r.path)} title={r.title}>
-                  {r.title}
-                </button>
-              ))}
+              {items.slice(0, mode === 'month' ? 4 : 30).map((r) => {
+                const sp = rowSpan(r, prop);
+                const isEnd = !!sp && ymd(sp.end) === k;
+                return (
+                  <div key={r.path} className="dbcal__item">
+                    <button className="dbcal__chip" draggable onDragStart={() => setDrag(r)} onDragEnd={() => setDrag(null)} onClick={() => onOpen(r.path)} title={r.title}>
+                      {r.title}
+                    </button>
+                    {isEnd && (
+                      <span
+                        className="dbcal__handle"
+                        draggable
+                        title="끌어서 종료일 늘이기"
+                        data-testid="cal-resize"
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          setResize(r);
+                        }}
+                        onDragEnd={() => setResize(null)}
+                      />
+                    )}
+                  </div>
+                );
+              })}
               {mode === 'month' && items.length > 4 && <span className="muted small">+{items.length - 4}</span>}
             </div>
           );

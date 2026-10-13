@@ -12,6 +12,8 @@ const config: ForgeConfig = {
     asar: { unpack: '**/*.node' },
     name: 'Nopsidian',
     executableName: 'nopsidian',
+    // 확장자는 플랫폼에 맞게 붙는다(.icns / .ico)
+    icon: path.join(process.cwd(), 'assets', 'icon'),
   },
   // better-sqlite3(N-API prebuild)와 @parcel/watcher(플랫폼별 prebuilt 패키지)는 Electron 헤더로 재빌드하지 않는다.
   rebuildConfig: { onlyModules: [] },
@@ -33,11 +35,11 @@ const config: ForgeConfig = {
   // 각 OS 에서 빌드해야 한다(.github/workflows/build.yml 이 두 OS 에서 돌린다).
   makers: [
     // 문자열로 지정한다: 클래스를 import 하면 forge 설정을 읽을 때 다른 OS 용 메이커의 의존성 트리까지 불러온다.
-    { name: '@electron-forge/maker-dmg', platforms: ['darwin'], config: { name: 'Nopsidian', format: 'ULFO' } },
+    { name: '@electron-forge/maker-dmg', platforms: ['darwin'], config: { name: 'Nopsidian', format: 'ULFO', icon: path.join(process.cwd(), 'assets', 'icon.icns') } },
     {
       name: '@electron-forge/maker-squirrel',
       platforms: ['win32'],
-      config: { name: 'Nopsidian', setupExe: 'Nopsidian-Setup.exe', noMsi: true, description: 'Nopsidian — 로컬 Markdown 블록 편집기' },
+      config: { name: 'Nopsidian', setupExe: 'Nopsidian-Setup.exe', noMsi: true, setupIcon: path.join(process.cwd(), 'assets', 'icon.ico'), description: 'Nopsidian — 로컬 Markdown 블록 편집기' },
     },
     { name: '@electron-forge/maker-zip', platforms: ['darwin', 'win32'], config: {} },
   ],

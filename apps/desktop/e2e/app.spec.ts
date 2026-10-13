@@ -58,7 +58,7 @@ test('볼트를 열고 목록·검색·미리보기가 동작한다', async () =
   await page.getByRole('button', { name: '폴더 열기 / 만들기' }).click();
 
   await expect(page.getByRole('button', { name: 'Nopsidian', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '위험' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '위험', exact: true })).toBeVisible();
 
   await page.getByPlaceholder('전문 검색').fill('읽기 쉬운');
   const hit = page.locator('.hit', { hasText: 'Nopsidian' });
@@ -77,7 +77,7 @@ test('렌더러는 Node에 접근할 수 없고 악성 HTML은 실행되지 않�
   expect(flags).toEqual({ require: 'undefined', process: 'undefined', nops: 'object' });
 
   await page.getByPlaceholder('전문 검색').fill('');
-  await page.getByRole('button', { name: '위험' }).click();
+  await page.getByRole('button', { name: '위험', exact: true }).click();
   await expect(page.locator('.ProseMirror h1')).toHaveText('위험');
   await page.waitForTimeout(300);
   expect(await page.evaluate(() => (window as unknown as { __pwned?: number }).__pwned)).toBeUndefined();

@@ -11,7 +11,9 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { flushAll } from './flush';
 import { LinkPanel } from './LinkPanel';
 import { HistoryPanel } from './HistoryPanel';
+import { Logo } from './Logo';
 import { Panes } from './Panes';
+import { applyTheme, loadTheme, nextTheme, THEME_ICON, THEME_LABEL, type ThemeChoice } from './theme';
 import { initialTabs, parseTabs, selectedOf, tabsReducer } from './tabs';
 import { DatabaseScreen } from './db/DatabaseScreen';
 import { DbList } from './db/DbList';
@@ -41,6 +43,7 @@ function stripBlockId(source: string, id: string): string {
 function VaultPicker({ onOpen }: { onOpen: (v: VaultInfo) => void }) {
   const [recent, setRecent] = useState<VaultInfo[]>([]);
   const [error, setError] = useState('');
+  const [theme, setTheme] = useState<ThemeChoice>(() => loadTheme());
   useEffect(() => {
     void window.nops.vault.listRecent().then(setRecent);
   }, []);
@@ -55,29 +58,100 @@ function VaultPicker({ onOpen }: { onOpen: (v: VaultInfo) => void }) {
   };
 
   return (
-    <main className="picker">
-      <h1>Nopsidian</h1>
-      <p className="muted">Markdown 폴더를 볼트로 엽니다. 폴더가 없으면 새로 만들 수 있어요.</p>
-      <button className="primary" onClick={() => run(() => window.nops.vault.pick())}>
-        폴더 열기 / 만들기
+    <main className="start">
+      <div className="start__drag drag" />
+      <button
+        className="start__theme"
+        title={`테마: ${THEME_LABEL[theme]} (눌러서 바꾸기)`}
+        aria-label={`테마 ${THEME_LABEL[theme]}`}
+        onClick={() => {
+          const next = nextTheme(theme);
+          applyTheme(next);
+          setTheme(next);
+        }}
+      >
+        {THEME_ICON[theme]}
       </button>
-      {recent.length > 0 && (
-        <>
-          <h2>최근 볼트</h2>
-          <ul className="recent">
-            {recent.map((v) => (
-              <li key={v.id}>
-                <button onClick={() => run(() => window.nops.vault.open({ id: v.id }))}>
-                  <strong>{v.name}</strong>
-                  <span className="muted">{v.path}</span>
+      <div className="start__card">
+        <Logo size={88} />
+        <h1>Nopsidian</h1>
+        <p className="start__tagline">내 컴퓨터의 Markdown 폴더가 곧 노트가 됩니다.</p>
+        <button className="primary start__cta" onClick={() => run(() => window.nops.vault.pick())}>
+          폴더 열기 / 만들기
+        </button>
+        <p className="start__hint">기존 Obsidian 볼트나 Markdown 폴더도 그대로 열려요. 파일은 어디로도 옮겨지지 않아요.</p>
+        {error && <p className="error">{error}</p>}
+        {recent.length > 0 ? (
+          <section className="start__recent" aria-label="최근 볼트">
+            <h2>최근 볼트</h2>
+            <ul className="recent">
+              {recent.map((v) => (
+                <li key={v.id}>
+                  <button onClick={() => run(() => window.nops.vault.open({ id: v.id }))}>
+                    <span className="recent__icon" aria-hidden>📁</span>
+                    <span className="recent__text">
+                      <strong>{v.name}</strong>
+                      <span className="muted recent__path" title={v.path}>{v.path}</span>
+                    </span>
+                    <span className="recent__go" aria-hidden>열기 →</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <ul className="start__features" aria-label="주요 기능">
+            <li><strong>블록 편집기</strong><span>슬래시(/)로 제목·표·콜아웃·수식을 바로 넣어요</span></li>
+            <li><strong>링크와 그래프</strong><span>[[위키링크]], 백링크, 노트 사이의 연결 그래프</span></li>
+            <li><strong>데이터베이스</strong><span>표·보드·캘린더로 보는 속성 있는 노트</span></li>
+          </ul>
+        )}
+      </div>
+    </main>
+  );
+}
+
+interface WelcomeAction {
+  icon: string;
+  label: string;
+  hint: string;
+  run: () => void;
+}
+
+/** 열린 노트가 없을 때의 첫 화면: 자주 쓰는 동작과 최근 고친 노트 */
+function Welcome({ notes, onOpen, actions }: { notes: NoteSummary[]; onOpen: (path: string) => void; actions: WelcomeAction[] }) {
+  const recent = [...notes].sort((a, b) => b.mtime - a.mtime).slice(0, 6);
+  return (
+    <div className="welcome" data-testid="welcome">
+      <Logo size={56} />
+      <h2>무엇을 할까요?</h2>
+      <div className="welcome__actions">
+        {actions.map((a) => (
+          <button key={a.label} onClick={a.run}>
+            <span className="welcome__icon" aria-hidden>{a.icon}</span>
+            <span>{a.label}</span>
+            {a.hint && <kbd>{a.hint}</kbd>}
+          </button>
+        ))}
+      </div>
+      {recent.length > 0 ? (
+        <section className="welcome__recent">
+          <h3>최근에 고친 노트</h3>
+          <ul>
+            {recent.map((n) => (
+              <li key={n.path}>
+                <button onClick={() => onOpen(n.path)}>
+                  <span>{n.title}</span>
+                  <span className="muted small">{n.path}</span>
                 </button>
               </li>
             ))}
           </ul>
-        </>
+        </section>
+      ) : (
+        <p className="muted">아직 노트가 없어요. “새 노트”로 시작해 보세요.</p>
       )}
-      {error && <p className="error">{error}</p>}
-    </main>
+    </div>
   );
 }
 
@@ -110,6 +184,14 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [sideTab, setSideTab] = useState<'files' | 'tags' | 'db' | 'marks'>('files');
   const [bookmarks, setBookmarks] = useState<string[]>([]);
   const [palette, setPalette] = useState(false);
+  const [theme, setTheme] = useState<ThemeChoice>(() => loadTheme());
+  const cycleTheme = useCallback(() => {
+    setTheme((cur) => {
+      const next = nextTheme(cur);
+      applyTheme(next);
+      return next;
+    });
+  }, []);
   useEffect(() => {
     void window.nops.bookmarks.get().then(setBookmarks);
   }, [vault.id]);
@@ -439,9 +521,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'split-down', label: '아래로 분할', keywords: ['split', '분할', '상하'], run: () => dispatchTabs({ type: 'split', dir: 'col' }) },
       { id: 'unsplit', label: '분할 합치기', keywords: ['unsplit', 'merge', '분할', '합치기'], enabled: tabs.panes.length > 1, run: () => dispatchTabs({ type: 'unsplit' }) },
       { id: 'new-window', label: '새 창에서 열기', keywords: ['window', '창', '새 창'], enabled: !!selected, run: () => selected && void window.nops.window.new({ path: selected }) },
+      { id: 'theme', label: '테마 바꾸기 (시스템 → 라이트 → 다크)', keywords: ['theme', 'dark', 'light', '다크', '라이트', '테마', '다크모드'], run: cycleTheme },
       { id: 'close', label: '다른 볼트 열기', keywords: ['vault', '볼트', '닫기'], run: onClose },
     ],
-    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, onClose, tabs.activePane, tabs.panes.length],
+    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, cycleTheme, onClose, tabs.activePane, tabs.panes.length],
   );
 
   useEffect(() => {
@@ -477,9 +560,14 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       <aside className="sidebar">
         <header className="drag">
           <strong>{vault.name}</strong>
-          <button className="link" onClick={onClose} title="다른 볼트 열기">
-            ⇄
-          </button>
+          <span className="sidebar__headbtns">
+            <button className="link" onClick={cycleTheme} title={`테마: ${THEME_LABEL[theme]} (눌러서 바꾸기)`} aria-label={`테마 ${THEME_LABEL[theme]}`} data-testid="theme-toggle">
+              {THEME_ICON[theme]}
+            </button>
+            <button className="link" onClick={onClose} title="다른 볼트 열기">
+              ⇄
+            </button>
+          </span>
         </header>
         <nav className="sidebar__nav" aria-label="빠른 메뉴">
           <button className="navitem" onClick={() => setSwitcher(true)} title="빠른 전환기 (⌘O)" aria-label="노트 찾기">
@@ -631,7 +719,20 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               dispatchTabs({ type: 'close', pane: tabs.panes.findIndex((x) => x.tabs.includes(p)), path: p });
               void window.nops.window.new({ path: p });
             }}
-            empty={<p className="muted pad">왼쪽에서 노트를 선택하세요. ({notes.length}개) · ⌘O로 빠르게 찾을 수 있어요.</p>}
+            empty={
+              <Welcome
+                notes={notes}
+                onOpen={setSelected}
+                actions={[
+                  { icon: '＋', label: '새 노트', hint: '', run: () => setCreating(true) },
+                  { icon: '☀', label: '오늘의 노트', hint: '⌘⌥D', run: () => void openDaily() },
+                  { icon: '⌕', label: '노트 찾기', hint: '⌘O', run: () => setSwitcher(true) },
+                  { icon: '⌘', label: '명령 팔레트', hint: '⌘P', run: () => setPalette(true) },
+                  { icon: '◎', label: '그래프', hint: '⌘⇧G', run: () => { setDbOpen(null); setGraphOpen(true); } },
+                  { icon: '⇪', label: 'Notion 가져오기', hint: '', run: () => void importNotion() },
+                ]}
+              />
+            }
             renderEditor={(p, pane) => (
               <NoteEditor
                 key={p}

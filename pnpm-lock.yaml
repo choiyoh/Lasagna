@@ -38,6 +38,9 @@ importers:
       '@nopsidian/editor':
         specifier: workspace:*
         version: link:../../packages/editor
+      '@nopsidian/formula':
+        specifier: workspace:*
+        version: link:../../packages/formula
       '@nopsidian/ipc-contract':
         specifier: workspace:*
         version: link:../../packages/ipc-contract

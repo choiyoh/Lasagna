@@ -233,3 +233,39 @@ button.link { color: var(--muted); }
 .dbgallery__cover { height: 110px; border-radius: 6px; background: var(--hover); display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 6px; font-size: 28px; color: var(--muted); }
 .dbgallery__cover img { width: 100%; height: 100%; object-fit: cover; }
 .dblistpanel { padding: 4px 0; }
+
+/* 6단계: 관계·계산·캘린더·타임라인 */
+.dbprops__details { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; border-radius: 8px; background: var(--hover); }
+.dbprops__details textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 12.5px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); padding: 6px; }
+.dbpop__row { flex-wrap: wrap; }
+.cell__error { color: #d99a1b; font-size: 12px; }
+.cell__relation { display: inline-flex; flex-wrap: wrap; gap: 3px; align-items: center; position: relative; }
+.cell__relation input { width: 90px; border: 0; background: transparent; color: inherit; outline: none; }
+.cell__relation .chip button { border: 0; background: transparent; color: inherit; padding: 0 0 0 4px; }
+.cell__relhits { position: absolute; z-index: 30; top: 100%; left: 0; list-style: none; margin: 2px 0 0; padding: 4px; min-width: 220px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
+.cell__relhits button { display: block; width: 100%; text-align: left; padding: 3px 6px; border: 0; border-radius: 4px; }
+.cell__relhits button:hover { background: var(--hover); }
+.dbcal { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.dbcal__bar { display: flex; gap: 8px; align-items: center; padding: 6px 16px; }
+.dbcal__grid { flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: minmax(88px, auto); gap: 1px; background: var(--border); margin: 0 16px 12px; border: 1px solid var(--border); overflow: auto; }
+.dbcal__grid.week { grid-auto-rows: minmax(260px, auto); }
+.dbcal__dow { background: var(--bg-side); padding: 3px 6px; font-size: 12px; color: var(--muted); grid-row: 1; min-height: 0; height: 24px; }
+.dbcal__day { background: var(--bg); padding: 3px 4px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dbcal__day.dim { opacity: 0.5; }
+.dbcal__day.today .dbcal__num { background: var(--accent); color: #fff; border-radius: 10px; }
+.dbcal__head { display: flex; justify-content: space-between; align-items: center; }
+.dbcal__num { border: 0; padding: 0 6px; font-size: 12px; }
+.dbcal__add { border: 0; opacity: 0; color: var(--muted); }
+.dbcal__day:hover .dbcal__add { opacity: 1; }
+.dbcal__chip { text-align: left; border: 0; border-radius: 4px; padding: 1px 6px; background: var(--hover); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; }
+.dbtl { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.dbtl__bar { display: flex; gap: 8px; align-items: center; padding: 6px 16px; }
+.dbtl__scroll { flex: 1; overflow: auto; }
+.dbtl__inner { position: relative; }
+.dbtl__axis { position: relative; height: 22px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+.dbtl__axis span { position: absolute; top: 3px; transform: translateX(-2px); white-space: nowrap; }
+.dbtl__today { position: absolute; top: 0; bottom: 0; width: 2px; background: #e5484d; opacity: 0.6; pointer-events: none; }
+.dbtl__row { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+.dbtl__label { flex: none; text-align: left; padding: 0 10px; border: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
+.dbtl__bar-wrap { position: relative; flex: 1; height: 100%; }
+.dbtl__barx { position: absolute; top: 6px; height: 18px; border-radius: 9px; background: var(--accent); opacity: 0.85; cursor: pointer; }

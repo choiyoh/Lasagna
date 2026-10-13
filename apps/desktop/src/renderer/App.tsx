@@ -354,6 +354,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               setDbOpen(null);
             }}
             onClose={() => setDbOpen(null)}
+            notes={notes.map((n) => ({ path: n.path, title: n.title }))}
           />
         ) : graphOpen ? (
           <GraphScreen

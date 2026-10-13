@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { compileFormula } from '@nopsidian/formula';
+import { ROLLUP_FNS } from '@nopsidian/core/db/rollup';
 import type { Property } from '@nopsidian/core/db';
 import { optionsOf } from '@nopsidian/core/db/values';
 import type { DbData } from './types';
@@ -8,7 +10,7 @@ const TYPE_LABEL: Record<string, string> = {
   url: 'URL', email: '이메일', phone: '전화', files: '파일', created_time: '만든 시각', updated_time: '수정 시각', unique_id: '고유 ID',
   relation: '관계', rollup: '롤업', formula: '수식',
 };
-const CREATABLE = ['text', 'number', 'select', 'multi_select', 'status', 'date', 'checkbox', 'url', 'email', 'phone', 'files', 'created_time', 'updated_time'];
+const CREATABLE = ['text', 'number', 'select', 'multi_select', 'status', 'date', 'checkbox', 'url', 'email', 'phone', 'files', 'created_time', 'updated_time', 'relation', 'rollup', 'formula'];
 const WITH_OPTIONS = new Set(['select', 'multi_select', 'status']);
 
 const parseOptions = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean).map((name) => ({ name }));
@@ -17,7 +19,78 @@ const parseOptions = (s: string) => s.split(',').map((x) => x.trim()).filter(Boo
 function makeDef(type: string, optionsText: string): Property {
   if (WITH_OPTIONS.has(type)) return { type, options: parseOptions(optionsText) } as Property;
   if (type === 'number') return { type: 'number', format: 'number' };
+  if (type === 'relation') return { type: 'relation', target: '*', twoWay: false };
+  if (type === 'rollup') return { type: 'rollup', relation: '', property: 'title', fn: 'count' };
+  if (type === 'formula') return { type: 'formula', expr: '' };
   return { type } as Property;
+}
+
+const ROLLUP_LABEL: Record<string, string> = {
+  show_original: '원본 보기', count: '개수', count_values: '값 개수', count_unique: '고유 값 개수', count_empty: '빈 값 수', percent_empty: '빈 값 비율',
+  percent_not_empty: '채워진 비율', sum: '합계', avg: '평균', median: '중앙값', min: '최소', max: '최대', range: '범위', earliest: '가장 이른 날짜',
+  latest: '가장 늦은 날짜', date_range: '날짜 범위', checked: '체크됨 수', unchecked: '체크 안 됨 수', percent_checked: '체크 비율', percent_unchecked: '체크 안 됨 비율',
+};
+
+/** 관계·롤업·수식 속성의 세부 설정 */
+function Details({ name, def, data, dbs, onApply }: { name: string; def: Property; data: DbData; dbs: { folder: string; title: string }[]; onApply: (d: Property) => void }) {
+  const [draft, setDraft] = useState<Property>(def);
+  useEffect(() => setDraft(def), [def]);
+  if (draft.type === 'formula') {
+    const r = draft.expr.trim() ? compileFormula(draft.expr) : null;
+    const err = r && !r.ok ? r.error : null;
+    return (
+      <div className="dbprops__details">
+        <textarea
+          aria-label={`${name} 수식`}
+          rows={3}
+          value={draft.expr}
+          placeholder='예: prop("평점") * 20'
+          onChange={(e) => setDraft({ ...draft, expr: e.target.value })}
+          spellCheck={false}
+        />
+        {err ? (
+          <p className="warn small" role="alert">
+            ⚠ {err.message}
+            <br />
+            <code>{draft.expr.slice(0, err.pos)}<mark>{draft.expr.slice(err.pos, Math.max(err.end, err.pos + 1)) || ' '}</mark>{draft.expr.slice(Math.max(err.end, err.pos + 1))}</code>
+          </p>
+        ) : (
+          <p className="muted small">{r && r.ok && r.compiled.deps.length ? `쓰는 속성: ${r.compiled.deps.join(', ')}` : '속성은 prop("이름") 으로 읽어요. 함수: if, round, concat, dateAdd, map …'}</p>
+        )}
+        <button className="primary" disabled={!!err || !draft.expr.trim() || draft.expr === (def.type === 'formula' ? def.expr : '')} onClick={() => onApply(draft)}>수식 적용</button>
+      </div>
+    );
+  }
+  if (draft.type === 'rollup') {
+    const rels = Object.entries(data.schema.properties).filter(([, p]) => p.type === 'relation').map(([n]) => n);
+    return (
+      <div className="dbprops__details">
+        <label className="small">관계 <select value={draft.relation} onChange={(e) => setDraft({ ...draft, relation: e.target.value })} aria-label={`${name} 관계`}>
+          <option value="" />
+          {rels.map((r) => <option key={r}>{r}</option>)}
+        </select></label>
+        <label className="small">대상 속성 <input value={draft.property} onChange={(e) => setDraft({ ...draft, property: e.target.value })} aria-label={`${name} 대상 속성`} placeholder="title 또는 속성 이름" /></label>
+        <label className="small">집계 <select value={draft.fn} onChange={(e) => setDraft({ ...draft, fn: e.target.value })} aria-label={`${name} 집계`}>
+          {ROLLUP_FNS.map((f) => <option key={f} value={f}>{ROLLUP_LABEL[f] ?? f}</option>)}
+        </select></label>
+        <button className="primary" disabled={!draft.relation || !draft.property.trim()} onClick={() => onApply({ ...draft, property: draft.property.trim() })}>적용</button>
+      </div>
+    );
+  }
+  if (draft.type === 'relation') {
+    return (
+      <div className="dbprops__details">
+        <label className="small">대상 <select value={draft.target} onChange={(e) => setDraft({ ...draft, target: e.target.value })} aria-label={`${name} 대상`}>
+          <option value="*">모든 노트</option>
+          {dbs.map((d) => <option key={d.folder} value={d.folder}>{d.title}</option>)}
+        </select></label>
+        <label className="small"><input type="checkbox" checked={draft.twoWay} onChange={(e) => setDraft({ ...draft, twoWay: e.target.checked })} /> 양방향(반대쪽 노트에도 기록)</label>
+        {draft.twoWay && <label className="small">반대쪽 속성 <input value={draft.reverse ?? ''} onChange={(e) => setDraft({ ...draft, reverse: e.target.value })} aria-label={`${name} 반대쪽 속성`} placeholder="대상 노트의 관계 속성 이름" /></label>}
+        <button className="primary" disabled={draft.twoWay && !draft.reverse?.trim()} onClick={() => onApply({ ...draft, reverse: draft.twoWay ? draft.reverse?.trim() : undefined })}>적용</button>
+      </div>
+    );
+  }
+  return null;
 }
 
 interface Props {
@@ -33,6 +106,9 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename }: Pro
   const [type, setType] = useState('text');
   const [opts, setOpts] = useState('');
   const [renaming, setRenaming] = useState<{ from: string; to: string } | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
+  const [dbs, setDbs] = useState<{ folder: string; title: string }[]>([]);
+  useEffect(() => void window.nops.db.list().then((l) => setDbs(l.map((d) => ({ folder: d.folder, title: d.title })))).catch(() => undefined), []);
   const names = Object.keys(data.schema.properties);
   const taken = (n: string) => n === 'title' || names.includes(n);
 
@@ -86,7 +162,11 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename }: Pro
                 aria-label={`${n} 옵션`}
               />
             )}
+            {(p.type === 'relation' || p.type === 'rollup' || p.type === 'formula') && (
+              <button onClick={() => setDetail(detail === n ? null : n)} aria-label={`${n} 설정`} aria-expanded={detail === n}>설정</button>
+            )}
             <button onClick={() => onRemove(n)} aria-label={`${n} 삭제`} title="속성 삭제(노트의 값은 남아요)">×</button>
+            {detail === n && <Details name={n} def={p} data={data} dbs={dbs} onApply={(d) => onSetProperty(n, d)} />}
           </div>
         );
       })}
@@ -103,6 +183,7 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename }: Pro
           disabled={!name.trim() || taken(name.trim())}
           onClick={() => {
             onSetProperty(name.trim(), makeDef(type, opts));
+            if (type === 'relation' || type === 'rollup' || type === 'formula') setDetail(name.trim());
             setName('');
             setOpts('');
           }}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { linkNameFor } from '@nopsidian/core/links';
 import { cellText, optionsOf } from '@nopsidian/core/db/values';
 import type { CellValue, Property } from './types';
 
@@ -8,6 +9,49 @@ interface Props {
   onCommit: (v: CellValue) => void;
   /** 편집 상태로 시작(표에서 셀을 눌렀을 때) */
   autoFocus?: boolean;
+  /** 관계 속성의 노트 고르기에 쓰는 볼트의 노트 경로·제목 */
+  notes?: { path: string; title: string }[];
+}
+
+const relName = (raw: string) => (/^\[\[(.+)\]\]$/.exec(raw.trim())?.[1] ?? raw).split('|')[0]!.split('#')[0]!.trim();
+
+/** 관계 셀: 연결된 노트를 칩으로 보여 주고, 검색해서 추가·제거한다. */
+function RelationEditor({ value, onCommit, notes = [] }: { value: CellValue; onCommit: (v: CellValue) => void; notes: { path: string; title: string }[] }) {
+  const cur = Array.isArray(value) ? value : [];
+  const [q, setQ] = useState('');
+  const hits = q.trim()
+    ? notes.filter((n) => n.title.toLowerCase().includes(q.trim().toLowerCase()) && !cur.some((c) => relName(c).toLowerCase() === n.title.toLowerCase() || relName(c) === linkNameFor(n.path, notes.map((x) => x.path)))).slice(0, 8)
+    : [];
+  const set = (next: string[]) => onCommit(next.length ? next : null);
+  return (
+    <span className="cell__relation">
+      {cur.map((c) => (
+        <span key={c} className="chip on">
+          {relName(c)}
+          <button onClick={() => set(cur.filter((x) => x !== c))} aria-label={`${relName(c)} 연결 해제`}>×</button>
+        </span>
+      ))}
+      <input value={q} placeholder="노트 연결…" onChange={(e) => setQ(e.target.value)} aria-label="관계 노트 검색" />
+      {hits.length > 0 && (
+        <ul className="cell__relhits" role="listbox">
+          {hits.map((n) => (
+            <li key={n.path}>
+              <button
+                role="option"
+                aria-selected={false}
+                onClick={() => {
+                  set([...cur, `[[${linkNameFor(n.path, notes.map((x) => x.path))}]]`]);
+                  setQ('');
+                }}
+              >
+                {n.title} <span className="muted small">{n.path}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </span>
+  );
 }
 
 const EDITABLE = new Set(['text', 'number', 'select', 'multi_select', 'status', 'date', 'checkbox', 'url', 'email', 'phone', 'files', 'relation']);
@@ -20,6 +64,15 @@ export function CellView({ prop, value }: { prop: Property | undefined; value: C
   if (value === null || (Array.isArray(value) && !value.length)) return <span className="cell__empty" />;
   if (prop && (prop.type === 'select' || prop.type === 'status')) {
     return <span className="chip" style={{ background: optionColor(prop, String(value)) }}>{String(value)}</span>;
+  }
+  if (prop?.type === 'relation' && Array.isArray(value)) {
+    return (
+      <>
+        {value.map((v) => (
+          <span key={v} className="chip on">{relName(v)}</span>
+        ))}
+      </>
+    );
   }
   if (prop?.type === 'multi_select' && Array.isArray(value)) {
     return (
@@ -36,7 +89,7 @@ export function CellView({ prop, value }: { prop: Property | undefined; value: C
 }
 
 /** 형식별 편집기. 값을 바꾸면(엔터·포커스 이동·선택) `onCommit` 으로 한 번 알린다. */
-export function CellEditor({ prop, value, onCommit, autoFocus }: Props) {
+export function CellEditor({ prop, value, onCommit, autoFocus, notes }: Props) {
   const ref = useRef<HTMLInputElement | HTMLSelectElement>(null);
   const [draft, setDraft] = useState(() => (Array.isArray(value) ? value.join(', ') : typeof value === 'object' && value && !Array.isArray(value) ? value.start : (value ?? '').toString()));
   const [end, setEnd] = useState(() => (value && typeof value === 'object' && !Array.isArray(value) ? (value.end ?? '') : ''));
@@ -66,6 +119,8 @@ export function CellEditor({ prop, value, onCommit, autoFocus }: Props) {
   };
 
   switch (prop.type) {
+    case 'relation':
+      return <RelationEditor value={value} onCommit={onCommit} notes={notes ?? []} />;
     case 'checkbox':
       return <input type="checkbox" checked={value === true} onChange={(e) => onCommit(e.target.checked)} aria-label="체크" />;
     case 'select':

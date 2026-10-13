@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
+import { createLinkResolver } from '@nopsidian/core/links';
+import { ComputeContext } from './db-compute';
 import {
   DB_FILE,
   normalizeValue,
@@ -113,6 +115,8 @@ export interface DbQueryOutput {
   rows: DbRow[];
   groups: (Omit<RowGroup, 'rows' | 'sub'> & { rows: DbRow[]; hidden: number; count: number; sub?: DbQueryOutput['groups'] })[] | null;
   calc: QueryResult['calc'];
+  /** 계산 속성(롤업·수식)의 오류: 행 경로 → 속성 → 메시지 (돌려준 행만) */
+  errors: Record<string, Record<string, string>>;
 }
 
 function trimGroups(groups: RowGroup[], limit: number): NonNullable<DbQueryOutput['groups']> {
@@ -140,7 +144,9 @@ export function queryDatabase(db: Database.Database, root: string, p: DbQueryPar
   }
   if (!view) throw new Error('뷰가 없어요');
   const folders = dbFolders(db);
-  const rows = rawRows(db, p.folder, schema.rowsFolder === '**', folders).map((r) => toDbRow(schema, r));
+  const ctx = computeContext(db, root, folders);
+  const computed = ctx.db(p.folder)!;
+  const rows = computed.rows;
   const result = queryRows(schema, view, rows);
   const offset = Math.max(0, p.offset ?? 0);
   const limit = Math.min(5000, Math.max(1, p.limit ?? 500));
@@ -154,6 +160,7 @@ export function queryDatabase(db: Database.Database, root: string, p: DbQueryPar
     rows: result.groups ? [] : result.rows.slice(offset, offset + limit),
     groups: result.groups ? trimGroups(result.groups, Math.max(1, p.groupLimit ?? 100)) : null,
     calc: result.calc,
+    errors: pickErrors(computed.errors, result.groups ? result.groups.flatMap((g) => g.rows) : result.rows.slice(offset, offset + limit)),
   };
 }
 
@@ -162,4 +169,44 @@ export function databaseRowPaths(db: Database.Database, root: string, folder: st
   const parsed = readSchema(root, folder);
   if (!parsed) return [];
   return rawRows(db, folder, parsed.schema.rowsFolder === '**', dbFolders(db)).map((r) => r.path).sort();
+}
+
+function pickErrors(all: Record<string, Record<string, string>>, rows: DbRow[]) {
+  const out: Record<string, Record<string, string>> = {};
+  for (const r of rows) if (all[r.path]) out[r.path] = all[r.path]!;
+  return out;
+}
+
+/** 질의 한 번에 쓰는 계산 문맥: 관계 해석기·다른 데이터베이스 행·롤업/수식 */
+function computeContext(db: Database.Database, root: string, folders: string[]): ComputeContext {
+  let resolver: ReturnType<typeof createLinkResolver> | null = null;
+  let pathById: Map<number, string> | null = null;
+  const ensure = () => {
+    if (resolver) return;
+    const pages = db.prepare(`SELECT id, path, title FROM pages`).all() as { id: number; path: string; title: string }[];
+    const aliases = db.prepare(`SELECT page_id AS pageId, alias FROM aliases`).all() as { pageId: number; alias: string }[];
+    resolver = createLinkResolver(pages, aliases);
+    pathById = new Map(pages.map((p) => [p.id, p.path]));
+  };
+  return new ComputeContext({
+    baseDb(folder) {
+      const parsed = readSchema(root, folder);
+      if (!parsed) return null;
+      const rows = rawRows(db, folder, parsed.schema.rowsFolder === '**', folders).map((r) => toDbRow(parsed.schema, r));
+      return { schema: parsed.schema, rows };
+    },
+    dbFolderOf(p) {
+      const dir = path.posix.dirname(p) === '.' ? '' : path.posix.dirname(p);
+      let best: string | null = null;
+      for (const f of folders) if ((f === '' || dir === f || dir.startsWith(`${f}/`)) && (best === null || f.length > best.length)) best = f;
+      return best;
+    },
+    resolve(raw, from) {
+      ensure();
+      const name = raw.trim().replace(/^\[\[|\]\]$/g, '').split('|')[0]!.split('#')[0]!.trim();
+      const id = resolver!(name, from);
+      return id === undefined ? undefined : pathById!.get(id);
+    },
+    now: new Date(),
+  });
 }

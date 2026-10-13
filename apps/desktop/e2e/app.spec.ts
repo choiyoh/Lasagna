@@ -945,6 +945,101 @@ test.describe('링크 코어', () => {
     await page.getByRole('tab', { name: '파일' }).click();
   });
 
+  test('데이터베이스 고급: 관계·롤업·수식, 양방향 관계, 캘린더·타임라인', async () => {
+    const page = await app.firstWindow();
+    const put = (rel: string, body: string) => {
+      mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
+      writeFileSync(path.join(vaultDir, rel), body);
+    };
+    put(
+      '과제/_db.yaml',
+      `title: 과제
+properties:
+  마감: { type: date }
+  단계: { type: relation, target: 단계, twoWay: true, reverse: 과제 }
+  단계 수: { type: rollup, relation: 단계, property: title, fn: count }
+  비용합: { type: rollup, relation: 단계, property: 비용, fn: sum }
+  요약: { type: formula, expr: 'prop("title") + ": " + prop("비용합") + "원"' }
+  깨짐: { type: formula, expr: '1 / 0' }
+views:
+  - { id: t, name: 표, type: table }
+`,
+    );
+    put('단계/_db.yaml', 'title: 단계\nproperties:\n  비용: { type: number }\n  과제: { type: relation, target: 과제, twoWay: true, reverse: 단계 }\nviews:\n  - { id: t, type: table }\n');
+    put('과제/보고서.md', '---\n마감: 2026-10-14\n단계: ["[[기획]]", "[[집필]]"]\n---\n');
+    put('과제/발표.md', '---\n마감: 2026-10-20\n---\n');
+    put('단계/기획.md', '---\n비용: 30\n---\n');
+    put('단계/집필.md', '---\n비용: 70\n---\n');
+    put('단계/검토.md', '---\n비용: 5\n---\n');
+
+    await page.getByRole('tab', { name: 'DB' }).click();
+    await page.getByRole('button', { name: /과제/ }).first().click();
+    const screen = page.getByTestId('db-screen');
+    const table = page.getByTestId('db-table');
+
+    // 롤업·수식 계산
+    const row = table.locator('.dbtable__row', { hasText: '보고서' });
+    await expect(row).toContainText('2', { timeout: 8000 }); // 단계 수
+    await expect(row).toContainText('100'); // 비용 합
+    await expect(row).toContainText('보고서: 100원'); // 수식
+    await expect(row.locator('.cell__error')).toContainText('0으로 나눌 수 없어요'); // 수식 오류
+
+    // 수식 편집: 잘못된 식은 위치와 함께 막고, 올바른 식은 적용
+    await screen.getByRole('button', { name: '속성', exact: true }).click();
+    const props = page.getByRole('dialog', { name: '속성 관리' });
+    await props.getByRole('button', { name: '요약 설정' }).click();
+    await props.getByLabel('요약 수식').fill('prop("비용합") +');
+    await expect(props.getByRole('alert')).toContainText('⚠');
+    await expect(props.getByRole('button', { name: '수식 적용' })).toBeDisabled();
+    await props.getByLabel('요약 수식').fill('round(prop("비용합") / 3, 1)');
+    await props.getByRole('button', { name: '수식 적용' }).click();
+    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/_db.yaml'), 'utf8'), { timeout: 5000 }).toContain('round(');
+    await expect(row).toContainText('33.3', { timeout: 8000 });
+    await screen.getByRole('button', { name: '속성', exact: true }).click();
+
+    // 양방향 관계: 발표에 단계 '검토' 를 연결하면 단계/검토.md 의 과제에도 되돌아오는 링크가 생긴다
+    const talk = table.locator('.dbtable__row', { hasText: '발표' });
+    await talk.getByLabel('관계 노트 검색').fill('검토');
+    await page.getByRole('option', { name: /검토/ }).click();
+    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/발표.md'), 'utf8'), { timeout: 5000 }).toContain('[[검토]]');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '단계/검토.md'), 'utf8'), { timeout: 8000 }).toMatch(/과제:[\s\S]*\[\[발표\]\]/);
+    await expect(talk).toContainText('5', { timeout: 8000 }); // 롤업(비용합)이 따라 바뀜
+
+    // 캘린더: 마감일 칩이 그 날짜 칸에 있고, 다른 날로 끌면 날짜가 바뀐다
+    await screen.getByLabel('보기 형태').selectOption('calendar');
+    await screen.getByLabel('날짜 속성').selectOption('마감');
+    const cal = page.getByTestId('db-calendar');
+    await expect(cal).toBeVisible();
+    // 보고서(2026-10-14) 가 보이는 달로 이동한다
+    for (let i = 0; i < 24 && !(await cal.locator('[data-date="2026-10-14"]').count()); i++) {
+      await cal.getByRole('button', { name: /이전|다음/ }).first().click();
+    }
+    const dayChip = cal.locator('[data-date="2026-10-14"] .dbcal__chip', { hasText: '보고서' });
+    await expect(dayChip).toBeVisible();
+    await page.evaluate(async () => {
+      const tick = () => new Promise((r) => setTimeout(r, 50));
+      const chip = document.querySelector('[data-date="2026-10-14"] .dbcal__chip')!;
+      const target = document.querySelector('[data-date="2026-10-16"]')!;
+      const dt = new DataTransfer();
+      const fire = (el: Element, type: string) => el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+      fire(chip, 'dragstart');
+      await tick();
+      fire(target, 'dragover');
+      await tick();
+      fire(target, 'drop');
+      await tick();
+      fire(chip, 'dragend');
+    });
+    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/보고서.md'), 'utf8'), { timeout: 5000 }).toContain('마감: 2026-10-16');
+
+    // 타임라인
+    await screen.getByLabel('보기 형태').selectOption('timeline');
+    await expect(page.getByTestId('db-timeline').locator('.dbtl__barx')).toHaveCount(2);
+
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: '파일' }).click();
+  });
+
   test('블록 링크: 메뉴로 복사하고, [[노트#^ 자동완성으로 넣고, 링크를 열면 그 블록으로 간다', async () => {
     const page = await app.firstWindow();
     const target = note('블록대상', '# 블록대상\n\n첫 문단\n\n복사할 문단\n\n마지막 문단\n');

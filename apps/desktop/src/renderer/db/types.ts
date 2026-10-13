@@ -12,6 +12,8 @@ export interface DbData {
   rows: DbRowDto[];
   groups: DbGroupDto[] | null;
   calc: Record<string, CellValue>;
+  /** 롤업·수식 오류: 행 경로 → 속성 → 메시지 */
+  errors: Record<string, Record<string, string>>;
 }
 
 export type { DbGroupDto, DbRowDto, Property, View, DbSchema, CellValue };

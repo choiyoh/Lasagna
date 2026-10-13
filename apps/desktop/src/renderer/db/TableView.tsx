@@ -9,13 +9,14 @@ interface Props {
   onOpen: (path: string) => void;
   onEdit: (row: DbRowDto, prop: string, value: CellValue) => void;
   onWidth: (prop: string, width: number) => void;
+  notes: { path: string; title: string }[];
 }
 
 const ROW_H = 32;
 const DEFAULT_W = 180;
 
 /** 표 뷰: 행을 가상화해(2만 행도 보이는 만큼만 그림) 셀을 눌러 바로 고친다. */
-export function TableView({ data, rows, onOpen, onEdit, onWidth }: Props) {
+export function TableView({ data, rows, onOpen, onEdit, onWidth, notes }: Props) {
   const cols = visibleColumns(data);
   const widths = data.view.widths ?? {};
   const w = (c: string) => widths[c] ?? (c === TITLE ? 260 : DEFAULT_W);
@@ -72,10 +73,14 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth }: Props) {
                         <button className="dbtable__title" onClick={() => onOpen(row.path)} title={row.path}>
                           {row.title}
                         </button>
-                      ) : prop && isEditable(prop) && (isEd || prop.type === 'checkbox' || prop.type === 'select' || prop.type === 'status' || prop.type === 'multi_select' || (prop.type === 'number' && prop.format === 'stars')) ? (
+                      ) : prop && isEditable(prop) && (isEd || prop.type === 'checkbox' || prop.type === 'select' || prop.type === 'status' || prop.type === 'multi_select' || prop.type === 'relation' || (prop.type === 'number' && prop.format === 'stars')) ? (
                         <div onBlurCapture={() => !isEd || setEditing(null)} onKeyDownCapture={() => undefined}>
-                          <CellEditor prop={prop} value={value} autoFocus={isEd} onCommit={(nv) => { onEdit(row, c, nv); if (isEd && prop.type !== 'date') setEditing(null); }} />
+                          <CellEditor prop={prop} value={value} notes={notes} autoFocus={isEd} onCommit={(nv) => { onEdit(row, c, nv); if (isEd && prop.type !== 'date') setEditing(null); }} />
                         </div>
+                      ) : data.errors[row.path]?.[c] ? (
+                        <span className="cell__error" title={data.errors[row.path]![c]} role="img" aria-label={`오류: ${data.errors[row.path]![c]}`}>
+                          ⚠ {data.errors[row.path]![c]}
+                        </span>
                       ) : (
                         <CellView prop={prop} value={value} />
                       )}

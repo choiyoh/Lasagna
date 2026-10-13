@@ -184,7 +184,11 @@ function emptyOrder(a: CellValue, b: CellValue): number | undefined {
 
 /** 값이 있는 셀끼리의 오름차순 비교(속성 타입별 규칙) */
 function compareNonNull(prop: Property | undefined, a: CellValue, b: CellValue): number {
-  const type = prop?.type;
+  let type: Property['type'] | undefined = prop?.type;
+  // 롤업·수식은 값의 모양으로 비교 방식을 정한다
+  if (type === 'rollup' || type === 'formula') {
+    type = typeof a === 'number' && typeof b === 'number' ? 'number' : typeof a === 'boolean' ? 'checkbox' : typeof a === 'object' && !Array.isArray(a) && typeof b === 'object' && !Array.isArray(b) ? 'date' : undefined;
+  }
   if (type === 'number' || (type === 'unique_id' && (typeof a === 'number' || typeof b === 'number'))) {
     return (numOf(a) ?? 0) - (numOf(b) ?? 0);
   }
@@ -317,7 +321,17 @@ function isEffectivelyEmpty(kind: Kind, cell: CellValue): boolean {
   return isEmptyCell(cell) || (kind === 'checkbox' && cell === false);
 }
 
-function matchCondition(prop: Property | undefined, kind: Kind, op: FilterOp, raw: unknown, cell: CellValue, now: Date): boolean {
+/** 롤업·수식은 정의된 형식이 없으므로 계산된 값의 모양으로 종류를 정한다 */
+function inferKind(cell: CellValue): Kind {
+  if (typeof cell === 'number') return 'number';
+  if (typeof cell === 'boolean') return 'checkbox';
+  if (Array.isArray(cell)) return 'multi_select';
+  if (cell !== null && typeof cell === 'object') return 'date';
+  return 'text';
+}
+
+function matchCondition(prop: Property | undefined, kindIn: Kind, op: FilterOp, raw: unknown, cell: CellValue, now: Date): boolean {
+  const kind: Kind = kindIn === 'rollup' || kindIn === 'formula' ? inferKind(cell) : kindIn;
   if (op === 'empty') return isEffectivelyEmpty(kind, cell);
   if (op === '!empty') return !isEffectivelyEmpty(kind, cell);
   if (kind === 'number') return matchNumber(op, cell, raw);

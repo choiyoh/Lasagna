@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { View } from '@nopsidian/core/db';
 import type { DbQueryResult } from '@nopsidian/ipc-contract';
 import { BoardView } from './BoardView';
+import { CalendarView } from './CalendarView';
+import { TimelineView } from './TimelineView';
 import { GalleryView, ListView } from './ListGalleryViews';
 import { PropertyManager } from './PropertyManager';
 import { TableView } from './TableView';
@@ -13,6 +15,8 @@ interface Props {
   vaultId: string;
   onOpenNote: (path: string) => void;
   onClose: () => void;
+  /** 관계 속성에서 고를 수 있는 볼트의 노트 */
+  notes: { path: string; title: string }[];
 }
 
 const asData = (r: DbQueryResult): DbData => r as unknown as DbData;
@@ -20,7 +24,7 @@ const sameView = (a: View, b: View) => JSON.stringify(a) === JSON.stringify(b);
 const uid = () => `v${Math.random().toString(36).slice(2, 7)}`;
 
 /** 데이터베이스 한 개의 화면: 보기 탭 · 필터/정렬/그룹 · 표/보드/목록/갤러리 · 속성 관리 · 새 행. */
-export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose }: Props) {
+export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes }: Props) {
   const [data, setData] = useState<DbData | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
   const [draft, setDraft] = useState<View | null>(null);
@@ -245,6 +249,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose }: Props) 
             onOpen={onOpenNote}
             onEdit={(r, p, v) => void updateCell(r, p, v)}
             onWidth={(prop, w) => setDraft({ ...view, widths: { ...(view.widths ?? {}), [prop]: w } })}
+            notes={notes}
           />
         )}
         {view.type === 'board' && (
@@ -257,7 +262,20 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose }: Props) 
         )}
         {view.type === 'list' && <ListView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={onOpenNote} />}
         {view.type === 'gallery' && <GalleryView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={onOpenNote} />}
-        {(view.type === 'calendar' || view.type === 'timeline') && <p className="muted pad">캘린더·타임라인 뷰는 6단계에서 지원해요. 위에서 다른 형태를 골라 주세요.</p>}
+        {view.type === 'calendar' && (
+          <CalendarView
+            data={current}
+            rows={data.groups ? flat : rows}
+            onOpen={onOpenNote}
+            onMove={(r, p, v) => void updateCell(r, p, v)}
+            onAdd={(date) => {
+              const dp = view.dateProp ?? Object.entries(data.schema.properties).find(([, p]) => p.type === 'date')?.[0];
+              setAdding({ title: '', values: dp ? { [dp]: { start: date } } : {} });
+            }}
+            onOpenDaily={(date) => void window.nops.daily.open({ date }).then((r) => onOpenNote(r.path))}
+          />
+        )}
+        {view.type === 'timeline' && <TimelineView data={current} rows={data.groups ? flat : rows} onOpen={onOpenNote} />}
         {data.matched === 0 && <p className="muted pad">조건에 맞는 행이 없어요.</p>}
       </div>
     </div>

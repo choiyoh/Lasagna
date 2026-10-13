@@ -33,9 +33,12 @@ export function flatConditions(f: FilterNode | undefined): Cond[] | null {
   if (!f) return [];
   if ('prop' in f) return [f];
   if ('and' in f && f.and.every((c) => 'prop' in c)) return f.and as Cond[];
+  if ('or' in f && f.or.every((c) => 'prop' in c)) return f.or as Cond[];
   return null;
 }
-const toFilter = (conds: Cond[]): FilterNode | undefined => (conds.length ? { and: conds } : undefined);
+/** 조건 목록의 결합 방식: `or` 로 저장돼 있으면 'or' */
+const modeOf = (f: FilterNode | undefined): 'and' | 'or' => (f && 'or' in f ? 'or' : 'and');
+const toFilter = (conds: Cond[], mode: 'and' | 'or' = 'and'): FilterNode | undefined => (conds.length ? (mode === 'or' ? { or: conds } : { and: conds }) : undefined);
 
 interface Props {
   data: DbData;
@@ -47,7 +50,7 @@ interface Props {
 }
 
 const VIEW_TYPES: { type: View['type']; label: string }[] = [
-  { type: 'table', label: '표' }, { type: 'board', label: '보드' }, { type: 'list', label: '목록' }, { type: 'gallery', label: '갤러리' },
+  { type: 'table', label: '표' }, { type: 'board', label: '보드' }, { type: 'list', label: '목록' }, { type: 'gallery', label: '갤러리' }, { type: 'calendar', label: '캘린더' }, { type: 'timeline', label: '타임라인' },
 ];
 
 /** 필터·정렬·그룹·표시 속성 조절 막대. 바꾸면 저장 전의 임시 뷰가 되고, "보기 저장"으로 `_db.yaml` 에 쓴다. */
@@ -56,7 +59,9 @@ export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Pr
   const props = [TITLE, ...Object.keys(data.schema.properties)];
   const conds = flatConditions(view.filter);
   const toggle = (k: NonNullable<typeof open>) => setOpen(open === k ? null : k);
-  const setConds = (next: Cond[]) => onChange({ ...view, filter: toFilter(next) });
+  const mode = modeOf(view.filter);
+  const setConds = (next: Cond[], m: 'and' | 'or' = mode) => onChange({ ...view, filter: toFilter(next, m) });
+  const dateProps = Object.entries(data.schema.properties).filter(([, p]) => p.type === 'date' || p.type === 'created_time' || p.type === 'updated_time').map(([n]) => n);
   const sorts = view.sort;
   const groupable = props.filter((p) => p !== TITLE);
   const cols = view.columns ?? props;
@@ -72,6 +77,15 @@ export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Pr
         </select>
       </label>
 
+      {(view.type === 'calendar' || view.type === 'timeline') && (
+        <label className="dbtoolbar__type">
+          <span className="muted small">날짜 속성</span>
+          <select value={view.dateProp ?? dateProps[0] ?? ''} onChange={(e) => onChange({ ...view, dateProp: e.target.value || undefined })} aria-label="날짜 속성">
+            {dateProps.length === 0 && <option value="">(날짜 속성 없음)</option>}
+            {dateProps.map((p) => <option key={p}>{p}</option>)}
+          </select>
+        </label>
+      )}
       <button className={view.filter ? 'on' : ''} onClick={() => toggle('filter')} aria-expanded={open === 'filter'}>
         필터{conds && conds.length ? ` ${conds.length}` : ''}
       </button>
@@ -94,7 +108,16 @@ export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Pr
           {conds === null ? (
             <p className="muted small">OR·중첩 조건은 <code>_db.yaml</code> 에서 편집해 주세요. 아래 버튼으로 지울 수 있어요.</p>
           ) : (
-            conds.map((c, i) => {
+            <>
+              {conds.length > 1 && (
+                <label className="small">
+                  <select value={mode} onChange={(e) => setConds(conds, e.target.value as 'and' | 'or')} aria-label="조건 결합">
+                    <option value="and">모든 조건을 만족</option>
+                    <option value="or">하나라도 만족</option>
+                  </select>
+                </label>
+              )}
+            {conds.map((c, i) => {
               const def = c.prop === TITLE ? undefined : data.schema.properties[c.prop];
               const kind = kindOf(def);
               const ops = OPS_BY_KIND[kind]!;
@@ -131,7 +154,8 @@ export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Pr
                   <button onClick={() => setConds(conds.filter((_, j) => j !== i))} aria-label="조건 삭제">×</button>
                 </div>
               );
-            })
+            })}
+            </>
           )}
           <div className="dbpop__actions">
             {conds !== null && (

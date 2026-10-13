@@ -506,3 +506,23 @@ describe('성능', () => {
     expect(elapsed).toBeLessThan(300);
   });
 });
+
+describe('롤업·수식 값의 필터·정렬(값의 모양으로 종류를 정한다)', () => {
+  const schema: DbSchema = {
+    version: 1,
+    rowsFolder: '.',
+    properties: { 합: { type: 'rollup', relation: 'r', property: 'p', fn: 'sum' }, 라벨: { type: 'formula', expr: '1' } },
+    views: [],
+    templates: [],
+  };
+  const row = (title: string, 합: number | null, 라벨: string | null): DbRow => ({ path: `${title}.md`, title, values: { 합, 라벨 } });
+  const rows = [row('a', 10, 'x'), row('b', 2, 'y'), row('c', null, null)];
+  it('숫자 롤업은 숫자로 비교하고 정렬한다(문자열 순서가 아니다)', () => {
+    expect(rows.filter((r) => evalFilter(schema, { prop: '합', op: '>=', value: 5 }, r)).map((r) => r.title)).toEqual(['a']);
+    expect(sortRows(schema, rows, [{ prop: '합', dir: 'asc' }]).map((r) => r.title)).toEqual(['b', 'a', 'c']);
+  });
+  it('문자열 수식은 문자열 연산을 쓴다', () => {
+    expect(rows.filter((r) => evalFilter(schema, { prop: '라벨', op: 'contains', value: 'x' }, r)).map((r) => r.title)).toEqual(['a']);
+    expect(rows.filter((r) => evalFilter(schema, { prop: '라벨', op: 'empty' }, r)).map((r) => r.title)).toEqual(['c']);
+  });
+});

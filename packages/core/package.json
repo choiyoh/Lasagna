@@ -33,6 +33,7 @@
     "./links": "./src/link-resolve.ts",
     "./assets": "./src/assets.ts",
     "./db": "./src/db/index.ts",
-    "./db/values": "./src/db/values.ts"
+    "./db/values": "./src/db/values.ts",
+    "./db/rollup": "./src/db/rollup.ts"
   }
 }

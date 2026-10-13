@@ -145,6 +145,8 @@ export const dbQueryOutput = z.object({
   rows: z.array(dbRowSchema),
   groups: z.array(dbGroup).nullable(),
   calc: z.record(z.string(), z.unknown()),
+  /** 롤업·수식 계산 오류: 행 경로 → 속성 → 메시지 */
+  errors: z.record(z.string(), z.record(z.string(), z.string())),
 });
 export type DbQueryResult = z.infer<typeof dbQueryOutput>;
 

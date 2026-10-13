@@ -31,6 +31,7 @@
   "dependencies": {
     "@nopsidian/core": "workspace:*",
     "@nopsidian/editor": "workspace:*",
+    "@nopsidian/formula": "workspace:*",
     "@nopsidian/ipc-contract": "workspace:*",
     "@nopsidian/sync-gdrive": "workspace:*",
     "@parcel/watcher": "^2.6.0",

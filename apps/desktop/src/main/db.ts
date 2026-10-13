@@ -2,7 +2,8 @@ import { dialog, BrowserWindow } from 'electron';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { atomicWrite, resolveInVault, saveNote } from '@nopsidian/core';
+import { atomicWrite, resolveInVault, saveNote, splitFrontmatter } from '@nopsidian/core';
+import { createLinkResolver, linkNameFor } from '@nopsidian/core/links';
 import {
   DB_FILE,
   STORED_TYPES,
@@ -73,6 +74,51 @@ export async function updateCell(v: OpenVault, notePath: string, prop: string, v
   const next = setFrontmatter(disk, { [prop]: fmValue });
   if (next === disk) return;
   saveNote({ root: v.info.path, rel: notePath, content: next, baseHash: sha(disk), baseContent: disk });
+  if (def.type === 'relation' && def.twoWay && def.reverse) {
+    const before = asNames(splitFrontmatter(disk)?.data[prop]);
+    const after = asNames(fmValue);
+    await syncReverse(v, notePath, def.reverse, before, after);
+  }
+}
+
+const asNames = (raw: unknown): string[] =>
+  (Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : []).filter((x): x is string => typeof x === 'string').map(relationNameOf);
+
+const relationNameOf = (raw: string): string => (/^\[\[(.+)\]\]$/.exec(raw.trim())?.[1] ?? raw).split('|')[0]!.split('#')[0]!.trim();
+
+/**
+ * 양방향 관계: 이 노트가 새로 가리키게 된 노트에는 되돌아오는 링크를 추가하고, 더 이상 가리키지 않는 노트에서는 뺀다.
+ * 반대쪽 속성(`reverse`)에 쓴다. 다른 노트의 파일을 바꾸므로 값이 실제로 달라질 때만 쓴다.
+ */
+async function syncReverse(v: OpenVault, notePath: string, reverse: string, before: string[], after: string[]): Promise<void> {
+  const list = await v.index.list();
+  const resolver = createLinkResolver(
+    list.map((n, i) => ({ id: i, path: n.path, title: n.title })),
+    list.flatMap((n, i) => n.aliases.map((alias) => ({ pageId: i, alias }))),
+  );
+  const pathOf = (name: string) => {
+    const id = resolver(name, notePath);
+    return id === undefined ? undefined : list[id]?.path;
+  };
+  const me = `[[${linkNameFor(notePath, list.map((n) => n.path))}]]`;
+  const meName = relationNameOf(me);
+  const changes: [string, 'add' | 'remove'][] = [
+    ...after.filter((n) => !before.includes(n)).map((n): [string, 'add'] => [n, 'add']),
+    ...before.filter((n) => !after.includes(n)).map((n): [string, 'remove'] => [n, 'remove']),
+  ];
+  for (const [name, op] of changes) {
+    const target = pathOf(name);
+    if (!target || target === notePath) continue;
+    const disk = readFileSync(resolveInVault(v.info.path, target), 'utf8');
+    const cur = splitFrontmatter(disk)?.data[reverse];
+    const items = (Array.isArray(cur) ? cur : typeof cur === 'string' ? [cur] : []).filter((x): x is string => typeof x === 'string');
+    const has = items.some((x) => relationNameOf(x).toLowerCase() === meName.toLowerCase());
+    if (op === 'add' && has) continue;
+    if (op === 'remove' && !has) continue;
+    const nextItems = op === 'add' ? [...items, me] : items.filter((x) => relationNameOf(x).toLowerCase() !== meName.toLowerCase());
+    const content = setFrontmatter(disk, { [reverse]: nextItems.length ? nextItems : undefined });
+    if (content !== disk) saveNote({ root: v.info.path, rel: target, content, baseHash: sha(disk), baseContent: disk });
+  }
 }
 
 const unsafeName = /[\\/:*?"<>|]/g;

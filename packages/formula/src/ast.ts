@@ -8,6 +8,7 @@ export type Node =
   | (Loc & { kind: 'num'; value: number })
   | (Loc & { kind: 'str'; value: string })
   | (Loc & { kind: 'bool'; value: boolean })
+  | (Loc & { kind: 'null' })
   | (Loc & { kind: 'list'; items: Node[] })
   /** `current` `index` 같은 이름(콜백 안의 변수, let 변수) */
   | (Loc & { kind: 'ident'; name: string })

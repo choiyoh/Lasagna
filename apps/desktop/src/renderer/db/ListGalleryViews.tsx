@@ -37,6 +37,7 @@ export function GalleryView({ data, rows, vaultId, onOpen }: Props) {
   const cols = visibleColumns(data).filter((c) => c !== TITLE).slice(0, 3);
   const coverProp = data.view.cover;
   const cover = (r: DbRowDto): string | null => {
+    if (!coverProp && r.cover) return vaultUrl(vaultId, r.cover);
     const v = coverProp ? cellOf(r, coverProp) : null;
     const first = Array.isArray(v) ? v.find((x) => IMG.test(x)) : typeof v === 'string' && IMG.test(v) ? v : undefined;
     if (!first) return null;

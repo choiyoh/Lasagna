@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { compileFormula } from '@nopsidian/formula';
+import { useEffect, useRef, useState } from 'react';
+import { compileFormula, suggestAt, type SuggestResult } from '@nopsidian/formula';
 import { ROLLUP_FNS } from '@nopsidian/core/db/rollup';
 import type { Property } from '@nopsidian/core/db';
 import { optionsOf } from '@nopsidian/core/db/values';
@@ -34,8 +34,22 @@ const ROLLUP_LABEL: Record<string, string> = {
 /** 관계·롤업·수식 속성의 세부 설정 */
 function Details({ name, def, data, dbs, onApply }: { name: string; def: Property; data: DbData; dbs: { folder: string; title: string }[]; onApply: (d: Property) => void }) {
   const [draft, setDraft] = useState<Property>(def);
+  const [sug, setSug] = useState<SuggestResult | null>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => setDraft(def), [def]);
   if (draft.type === 'formula') {
+    const refresh = (text: string, caret: number) => setSug(suggestAt(text, caret, Object.keys(data.schema.properties).filter((p) => p !== name)));
+    const accept = (item: { insert: string }) => {
+      if (!sug) return;
+      const next = draft.expr.slice(0, sug.from) + item.insert + draft.expr.slice(sug.to);
+      setDraft({ ...draft, expr: next });
+      setSug(null);
+      const pos = sug.from + item.insert.length;
+      requestAnimationFrame(() => {
+        taRef.current?.focus();
+        taRef.current?.setSelectionRange(pos, pos);
+      });
+    };
     const r = draft.expr.trim() ? compileFormula(draft.expr) : null;
     const err = r && !r.ok ? r.error : null;
     return (
@@ -45,9 +59,34 @@ function Details({ name, def, data, dbs, onApply }: { name: string; def: Propert
           rows={3}
           value={draft.expr}
           placeholder='예: prop("평점") * 20'
-          onChange={(e) => setDraft({ ...draft, expr: e.target.value })}
+          ref={taRef}
+          onChange={(e) => {
+            setDraft({ ...draft, expr: e.target.value });
+            refresh(e.target.value, e.target.selectionStart);
+          }}
+          onKeyDown={(e) => {
+            if (sug && (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey))) {
+              e.preventDefault();
+              accept(sug.items[0]!);
+            } else if (e.key === 'Escape' && sug) {
+              e.stopPropagation();
+              setSug(null);
+            }
+          }}
+          onBlur={() => setTimeout(() => setSug(null), 150)}
           spellCheck={false}
         />
+        {sug && (
+          <ul className="fsuggest" role="listbox" aria-label="수식 자동 완성">
+            {sug.items.map((it) => (
+              <li key={`${it.kind}:${it.label}`}>
+                <button role="option" aria-selected={false} onMouseDown={(e) => { e.preventDefault(); accept(it); }}>
+                  <strong>{it.label}</strong> <span className="muted small">{it.detail}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {err ? (
           <p className="warn small" role="alert">
             ⚠ {err.message}

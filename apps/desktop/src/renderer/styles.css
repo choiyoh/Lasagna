@@ -269,3 +269,10 @@ button.link { color: var(--muted); }
 .dbtl__label { flex: none; text-align: left; padding: 0 10px; border: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
 .dbtl__bar-wrap { position: relative; flex: 1; height: 100%; }
 .dbtl__barx { position: absolute; top: 6px; height: 18px; border-radius: 9px; background: var(--accent); opacity: 0.85; cursor: pointer; }
+
+.tree summary { display: flex; justify-content: space-between; align-items: center; }
+.treerename { opacity: 0; border: 0; padding: 0 6px; color: var(--muted); }
+.tree summary:hover .treerename, .treerename:focus { opacity: 1; }
+.fsuggest { list-style: none; margin: 0; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); max-height: 180px; overflow: auto; }
+.fsuggest button { display: block; width: 100%; text-align: left; border: 0; padding: 2px 6px; border-radius: 4px; }
+.fsuggest button:hover, .fsuggest li:first-child button { background: var(--hover); }

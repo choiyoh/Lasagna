@@ -153,6 +153,17 @@ export async function addRow(
     const out = toFrontmatterValue(def, normalizeValue(def, raw));
     if (out !== undefined) fm[name] = out;
   }
+  // 고유 ID 속성은 현재 최댓값 + 1 을 자동으로 붙인다
+  for (const [name, def] of Object.entries(schema.properties)) {
+    if (def.type !== 'unique_id' || fm[name] !== undefined) continue;
+    const top = await v.index.query<{ rows: { values: Record<string, unknown> }[] }>('queryDatabase', {
+      folder,
+      view: { id: '_uid', type: 'table', sort: [{ prop: name, dir: 'desc' }] },
+      limit: 1,
+    });
+    const max = top.rows[0]?.values[name];
+    fm[name] = (typeof max === 'number' ? max : 0) + 1;
+  }
   const now = new Date();
   fm.created = localIso(now);
   const tpl = template ?? schema.defaultTemplate;

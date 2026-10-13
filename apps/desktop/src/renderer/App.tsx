@@ -178,27 +178,32 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     refresh();
   }, [refresh]);
 
-  /** 이름 변경/이동: 미리보기(바뀌는 링크 수) → 확인 → 실행 → 되돌리기 */
-  const renameCurrent = useCallback(async () => {
-    if (!selected) return;
-    const from = selected;
-    const answer = await showTextPrompt('새 이름 (폴더/이름 형식으로 쓰면 이동도 해요)', from.replace(/\.md$/i, ''));
+  /** 이름 변경/이동(노트 또는 폴더): 미리보기(바뀌는 링크 수) → 확인 → 실행 → 되돌리기 */
+  const renameEntry = useCallback(async (from: string, isFolder: boolean) => {
+    const answer = await showTextPrompt(
+      isFolder ? '폴더의 새 이름 (상위/이름 형식으로 쓰면 이동도 해요)' : '새 이름 (폴더/이름 형식으로 쓰면 이동도 해요)',
+      isFolder ? from : from.replace(/\.md$/i, ''),
+    );
     const to = answer?.trim().replace(/^\/+|\/+$/g, '');
-    if (!to || `${to}.md` === from || to === from) return;
-    const target = /\.md$/i.test(to) ? to : `${to}.md`;
+    if (!to || to === from || `${to}.md` === from) return;
+    const target = isFolder || /\.md$/i.test(to) ? to : `${to}.md`;
     await flushAll();
+    /** 이동된 경로를 현재 선택·열린 DB 에 반영한다 */
+    const remap = (p: string, a: string, b: string) => (p === a ? b : p.startsWith(`${a}/`) ? `${b}${p.slice(a.length)}` : p);
     try {
       const plan = await window.nops.note.renamePlan({ from, to: target });
       const apply = async () => {
         const done = await window.nops.note.rename({ from, to: target });
-        setSelected(done.moves[0]?.to ?? target);
+        setSelected((cur) => (cur ? remap(cur, from, target) : cur));
+        setDbOpen((cur) => (cur === null ? cur : remap(cur, from, target)));
         refresh();
         setToast({
           message: done.totalChanges > 0 ? `이름을 바꾸고 링크 ${done.totalChanges}개를 고쳤어요.` : '이름을 바꿨어요.',
           undo: async () => {
             await flushAll();
             await window.nops.note.undoRename({ undoId: done.undoId });
-            setSelected(from);
+            setSelected((cur) => (cur ? remap(cur, target, from) : cur));
+            setDbOpen((cur) => (cur === null ? cur : remap(cur, target, from)));
             refresh();
             setToast({ message: '되돌렸어요.' });
           },
@@ -222,7 +227,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     } catch (e) {
       setToast({ message: `이름을 바꿀 수 없어요: ${e instanceof Error ? e.message : String(e)}` });
     }
-  }, [selected, refresh]);
+  }, [refresh]);
+  const renameCurrent = useCallback(async () => {
+    if (selected) await renameEntry(selected, false);
+  }, [selected, renameEntry]);
 
   useEffect(() => {
     void window.nops.sync.status().then(setSync);
@@ -339,7 +347,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           ) : sideTab === 'db' ? (
             <DbList onOpen={(f) => { setGraphOpen(false); setDbOpen(f); }} />
           ) : (
-            <TreeView nodes={tree} selected={selected} onSelect={setSelected} />
+            <TreeView nodes={tree} selected={selected} onSelect={setSelected} onRenameFolder={(f) => void renameEntry(f, true)} />
           )}
         </nav>
       </aside>
@@ -461,11 +469,13 @@ function TreeView({
   nodes,
   selected,
   onSelect,
+  onRenameFolder,
   depth = 0,
 }: {
   nodes: TreeNode[];
   selected: string | null;
   onSelect: (p: string) => void;
+  onRenameFolder: (folder: string) => void;
   depth?: number;
 }) {
   return (
@@ -482,8 +492,22 @@ function TreeView({
             </button>
           ) : (
             <details open>
-              <summary style={{ paddingLeft: 8 + depth * 14 }}>{n.name}</summary>
-              <TreeView nodes={n.children} selected={selected} onSelect={onSelect} depth={depth + 1} />
+              <summary style={{ paddingLeft: 8 + depth * 14 }}>
+                <span>{n.name}</span>
+                <button
+                  className="treerename"
+                  title="폴더 이름 변경/이동"
+                  aria-label={`${n.name} 폴더 이름 변경`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onRenameFolder(n.path);
+                  }}
+                >
+                  ✎
+                </button>
+              </summary>
+              <TreeView nodes={n.children} selected={selected} onSelect={onSelect} onRenameFolder={onRenameFolder} depth={depth + 1} />
             </details>
           )}
         </li>

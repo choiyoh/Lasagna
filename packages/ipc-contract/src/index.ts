@@ -104,6 +104,7 @@ export const dbRowSchema = z.object({
   values: z.record(z.string(), z.unknown()),
   created: z.string().optional(),
   updated: z.string().optional(),
+  cover: z.string().optional(),
 });
 export type DbRowDto = z.infer<typeof dbRowSchema>;
 const dbGroup: z.ZodType<DbGroupDto> = z.lazy(() =>

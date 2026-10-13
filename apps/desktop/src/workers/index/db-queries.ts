@@ -34,6 +34,7 @@ function readSchema(root: string, folder: string): { schema: DbSchema; issues: D
 }
 
 interface RawRow {
+  cover: string | null;
   path: string;
   title: string;
   folder: string;
@@ -47,9 +48,9 @@ function rawRows(db: Database.Database, folder: string, recursive: boolean, othe
   const rows = (
     recursive
       ? folder === ''
-        ? db.prepare(`SELECT path,title,folder,mtime,frontmatter FROM pages`).all()
-        : db.prepare(`SELECT path,title,folder,mtime,frontmatter FROM pages WHERE folder = ? OR folder LIKE ? ESCAPE '\\'`).all(folder, like)
-      : db.prepare(`SELECT path,title,folder,mtime,frontmatter FROM pages WHERE folder = ?`).all(folder)
+        ? db.prepare(`SELECT path,title,folder,mtime,frontmatter,cover FROM pages`).all()
+        : db.prepare(`SELECT path,title,folder,mtime,frontmatter,cover FROM pages WHERE folder = ? OR folder LIKE ? ESCAPE '\\'`).all(folder, like)
+      : db.prepare(`SELECT path,title,folder,mtime,frontmatter,cover FROM pages WHERE folder = ?`).all(folder)
   ) as RawRow[];
   const nested = otherDbs.filter((f) => f !== folder && (folder === '' || f.startsWith(`${folder}/`)));
   return nested.length ? rows.filter((r) => !nested.some((n) => r.folder === n || r.folder.startsWith(`${n}/`))) : rows;
@@ -130,7 +131,10 @@ function trimGroups(groups: RowGroup[], limit: number): NonNullable<DbQueryOutpu
   }));
 }
 
-export function queryDatabase(db: Database.Database, root: string, p: DbQueryParams): DbQueryOutput {
+/** 질의마다 계산을 다시 하지 않도록 (인덱스 세대, 분) 이 같으면 문맥을 재사용한다 */
+const ctxCache = new WeakMap<Database.Database, { gen: number; minute: number; ctx: ComputeContext }>();
+
+export function queryDatabase(db: Database.Database, root: string, p: DbQueryParams, generation = -1): DbQueryOutput {
   const parsed = readSchema(root, p.folder);
   if (!parsed) throw new Error(`데이터베이스를 찾을 수 없어요: ${p.folder || '(루트)'}`);
   const { schema, issues } = parsed;
@@ -144,12 +148,20 @@ export function queryDatabase(db: Database.Database, root: string, p: DbQueryPar
   }
   if (!view) throw new Error('뷰가 없어요');
   const folders = dbFolders(db);
-  const ctx = computeContext(db, root, folders);
+  const minute = Math.floor(Date.now() / 60_000);
+  const hit = ctxCache.get(db);
+  let ctx: ComputeContext;
+  if (hit && generation >= 0 && hit.gen === generation && hit.minute === minute) ctx = hit.ctx;
+  else {
+    ctx = computeContext(db, root, folders);
+    if (generation >= 0) ctxCache.set(db, { gen: generation, minute, ctx });
+  }
   const computed = ctx.db(p.folder)!;
   const rows = computed.rows;
   const result = queryRows(schema, view, rows);
   const offset = Math.max(0, p.offset ?? 0);
   const limit = Math.min(5000, Math.max(1, p.limit ?? 500));
+  if (view.type === 'gallery' && !view.cover) attachCovers(db, result.groups ? result.groups.flatMap((g) => g.rows) : result.rows.slice(offset, offset + limit));
   return {
     folder: p.folder,
     schema,
@@ -209,4 +221,17 @@ function computeContext(db: Database.Database, root: string, folders: string[]):
     },
     now: new Date(),
   });
+}
+
+/** 갤러리 커버: 본문 첫 이미지의 이름을 볼트 안 경로로 푼다(`attachments/` 등 어디에 있어도 이름으로 찾는다) */
+function attachCovers(db: Database.Database, rows: DbRow[]): void {
+  const stmt = db.prepare(`SELECT path FROM assets WHERE path = ? OR path LIKE ? ESCAPE '\\' ORDER BY length(path) LIMIT 1`);
+  const cover = db.prepare(`SELECT cover FROM pages WHERE path = ?`);
+  for (const r of rows) {
+    const name = (cover.get(r.path) as { cover: string | null } | undefined)?.cover;
+    if (!name) continue;
+    const like = `%/${name.replace(/[\\%_]/g, (c) => `\\${c}`)}`;
+    const hit = stmt.get(name, like) as { path: string } | undefined;
+    if (hit) r.cover = hit.path;
+  }
 }

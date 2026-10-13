@@ -85,4 +85,23 @@ describe('데이터베이스 질의(인덱서)', () => {
     expect(r.rows).toHaveLength(1);
     expect(r.matched).toBe(3);
   });
+
+  it('갤러리는 본문 첫 이미지를 커버로 풀어 준다(첨부 폴더 위치와 무관)', () => {
+    put('독서/그림.md', '---\n저자: x\n---\n앞글 ![[표지.png|200]] 뒤 ![](다른.jpg)\n');
+    put('attachments/표지.png', 'png');
+    ix.indexFile('독서/그림.md');
+    ix.syncAssets();
+    const r = ix.queryDatabase({ folder: '독서', view: { id: 'g', type: 'gallery', sort: [] } });
+    expect(r.rows.find((x) => x.title === '그림')!.cover).toBe('attachments/표지.png');
+    expect(r.rows.find((x) => x.title === '메모')!.cover).toBeUndefined();
+  });
+
+  it('인덱스가 바뀌면 캐시된 계산 결과를 다시 만든다', () => {
+    const before = ix.queryDatabase({ folder: '독서', viewId: 'all' });
+    expect(before.rows.find((x) => x.title === '메모')!.values['평점']).toBeNull();
+    put('독서/메모.md', '---\n상태: 읽을 예정\n평점: 3\n---\n');
+    ix.indexFile('독서/메모.md');
+    const after = ix.queryDatabase({ folder: '독서', viewId: 'all' });
+    expect(after.rows.find((x) => x.title === '메모')!.values['평점']).toBe(3);
+  });
 });

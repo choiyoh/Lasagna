@@ -201,6 +201,7 @@ class Parser {
       case 'str':
         return { kind: 'str', value: t.v, pos: t.pos, end: t.end };
       case 'id': {
+        if (t.v === 'null' && !this.isOp('(')) return { kind: 'null', pos: t.pos, end: t.end };
         if (t.v === 'true' || t.v === 'false') return { kind: 'bool', value: t.v === 'true', pos: t.pos, end: t.end };
         if (this.isOp('(')) {
           const { args, end } = this.args();

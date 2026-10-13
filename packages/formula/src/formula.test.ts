@@ -32,6 +32,15 @@ describe('수식 통합(파서 + 평가기 + 함수 라이브러리)', () => {
     expect(run('[3, 1, 2].sort().first()')).toBe(1);
   });
 
+  it('null 리터럴', () => {
+    expect(run('null')).toBeNull();
+    expect(run('[1, null].count()')).toBe(2);
+    expect(run('empty(null)')).toBe(true);
+    expect(run('prop("평점") == null')).toBe(false);
+    expect(run('prop("비어") == null')).toBe(true);
+    expect(run('if(prop("비어") == null, 0, 1)')).toBe(0);
+  });
+
   it('콜백(map·filter·find·some·every)과 current·index', () => {
     expect(run('[1, 2, 3].map(current * 2)')).toEqual([2, 4, 6]);
     expect(run('[1, 2, 3, 4].filter(current % 2 == 0)')).toEqual([2, 4]);

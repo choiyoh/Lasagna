@@ -30,6 +30,7 @@ export function compileFormula(source: string): CompileResult {
         case 'num':
         case 'str':
         case 'bool':
+        case 'null':
           return;
         case 'list':
           return n.items.forEach((i) => walk(i, names));

@@ -20,6 +20,8 @@ export interface DbRow {
   /** ISO 문자열(없을 수 있음). `created_time` 속성 값이 이미 `values` 에 담긴다. 정렬 보조용 */
   created?: string;
   updated?: string;
+  /** 본문의 첫 이미지(볼트 안 경로). 갤러리 커버용 — 질의 결과에만 채워진다 */
+  cover?: string;
 }
 
 export interface RowGroup {

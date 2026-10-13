@@ -158,6 +158,8 @@ export function evaluate(root: Node, env: Env): FValue {
       case 'str':
       case 'bool':
         return node.value;
+      case 'null':
+        return null;
       case 'list':
         return node.items.map((i) => run(i, scope));
       case 'ident':

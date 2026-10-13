@@ -13,7 +13,7 @@ import {
   type ParsedNote,
 } from '@nopsidian/core';
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS pages (
   size INTEGER NOT NULL,
   hash TEXT NOT NULL,
   note_id TEXT,
-  frontmatter TEXT
+  frontmatter TEXT,
+  cover TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_pages_path ON pages(path);
 CREATE TABLE IF NOT EXISTS aliases (page_id INTEGER NOT NULL, alias TEXT NOT NULL);
@@ -150,9 +151,23 @@ export function deriveTitle(rel: string, content: string): string {
   return parseNote(content).meta.title || path.posix.basename(rel, path.posix.extname(rel));
 }
 
+const IMG_EXT = '(?:png|jpe?g|gif|webp|avif|svg)';
+const WIKI_IMG = new RegExp(`!\\[\\[([^\\]|#]+\\.${IMG_EXT})`, 'i');
+const MD_IMG = new RegExp(`!\\[[^\\]]*\\]\\(<?([^)>\\s]+\\.${IMG_EXT})`, 'i');
+
+/** 본문에서 처음 나오는 이미지 참조(`![[a.png]]` 또는 `![](a.png)`) — 갤러리 커버용 */
+export function firstImage(body: string): string | null {
+  const a = WIKI_IMG.exec(body);
+  const b = MD_IMG.exec(body);
+  const hit = a && b ? (a.index <= b.index ? a : b) : (a ?? b);
+  return hit ? decodeURI(hit[1]!.trim()) : null;
+}
+
 export class Indexer {
   readonly db: Database.Database;
   private resolveDirty = true;
+  /** 인덱스 내용이 바뀔 때마다 늘어난다(계산 결과 캐시의 키) */
+  generation = 0;
 
   constructor(
     private readonly root: string,
@@ -226,6 +241,7 @@ export class Indexer {
 
   /** 첨부 목록을 디스크와 맞춘다(경로·크기만 저장 — 내용 해시는 저장할 때만 필요하다). */
   syncAssets() {
+    this.generation++;
     const found = walkAssets(this.root);
     const known = new Set(
       (this.db.prepare(`SELECT path FROM assets`).all() as { path: string }[]).map((r) => r.path),
@@ -246,6 +262,7 @@ export class Indexer {
 
   /** 첨부 하나의 변화를 반영한다. 파일이 없으면 지우고 false. */
   syncAssetFile(rel: string): boolean {
+    this.generation++;
     try {
       const st = statSync(path.join(this.root, rel));
       if (!st.isFile()) throw new Error('not a file');
@@ -286,6 +303,7 @@ export class Indexer {
     const title = note.meta.title || path.posix.basename(rel, path.posix.extname(rel));
     const folder = path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel);
     const fm = JSON.stringify(note.frontmatter?.data ?? {});
+    const cover = firstImage(content.slice(note.frontmatter?.end ?? 0));
     this.db.transaction(() => {
       const existing = this.db.prepare(`SELECT id FROM pages WHERE path=?`).get(rel) as
         | { id: number }
@@ -294,20 +312,21 @@ export class Indexer {
       if (existing) {
         id = existing.id;
         this.db
-          .prepare(`UPDATE pages SET title=?, folder=?, mtime=?, size=?, hash=?, note_id=?, frontmatter=? WHERE id=?`)
-          .run(title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null, fm, id);
+          .prepare(`UPDATE pages SET title=?, folder=?, mtime=?, size=?, hash=?, note_id=?, frontmatter=?, cover=? WHERE id=?`)
+          .run(title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null, fm, cover, id);
         this.clearDerived(id);
       } else {
         id = Number(
           this.db
-            .prepare(`INSERT INTO pages(path,title,folder,mtime,size,hash,note_id,frontmatter) VALUES(?,?,?,?,?,?,?,?)`)
-            .run(rel, title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null, fm).lastInsertRowid,
+            .prepare(`INSERT INTO pages(path,title,folder,mtime,size,hash,note_id,frontmatter,cover) VALUES(?,?,?,?,?,?,?,?,?)`)
+            .run(rel, title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null, fm, cover).lastInsertRowid,
         );
       }
       this.db.prepare(`INSERT INTO fts(rowid,title,body) VALUES(?,?,?)`).run(id, title, content);
       this.storeDerived(id, note);
     })();
     this.resolveDirty = true;
+    this.generation++;
     return true;
   }
 
@@ -395,6 +414,7 @@ export class Indexer {
       this.db.prepare(`DELETE FROM pages WHERE id=?`).run(row.id);
     })();
     this.resolveDirty = true;
+    this.generation++;
   }
 
   /** 이 노트를 가리키는 링크(해석된 것만)의 경로·종류. 줄 번호·문맥은 backlinkContexts를 쓴다. */
@@ -556,7 +576,7 @@ export class Indexer {
 
   /** 데이터베이스 뷰 질의(필터·정렬·그룹·계산 행) */
   queryDatabase(params: DbQueryParams) {
-    return queryDatabase(this.db, this.root, params);
+    return queryDatabase(this.db, this.root, params, this.generation);
   }
 
   globalGraph(opts: GlobalGraphOptions = {}) {

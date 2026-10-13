@@ -4,7 +4,8 @@ packages:
 allowBuilds:
   esbuild: true
   electron: true
-  better-sqlite3: true
+  # 13.x 는 플랫폼별 .node 를 패키지에 담아 보낸다(prebuilds/). 소스 빌드(node-gyp)는 필요 없고, Windows 에서 Visual Studio 없이도 설치되게 끈다.
+  better-sqlite3: false
   '@parcel/watcher': true
   macos-alias: true
   fs-xattr: true

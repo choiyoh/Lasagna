@@ -176,3 +176,7 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 .nops-dbview { margin: 0.8em 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--oh-editor-border-muted, rgba(128,128,128,.25)); background: var(--oh-editor-bg, #fff); }
 .nops-dbview__bar { display: none; }
 .nops-dbview:has(.nops-dbview__src:not([hidden])) .nops-dbview__bar, .nops-dbview:hover .nops-dbview__bar, .nops-dbview:focus-within .nops-dbview__bar, .nops-dbview.is-editing .nops-dbview__bar { display: flex; }
+
+/* 데이터베이스 행의 속성 패널 */
+.nops-rowprops { margin: 0 0 1.2em; padding: 2px 0 10px; border-bottom: 1px solid var(--oh-editor-border-muted, rgba(128,128,128,.2)); font-size: 14px; line-height: 1.4; user-select: none; }
+.nops-rowprops:empty { display: none; }

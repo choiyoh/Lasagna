@@ -411,6 +411,11 @@ function registerHandlers() {
     await v.index.ready;
     return v.index.query('databases');
   });
+  handle('db.row', async ({ path: rel }) => {
+    const v = requireVault();
+    await v.index.ready;
+    return v.index.query('rowDatabase', rel) as never;
+  });
   handle('db.query', async (input) => {
     const v = requireVault();
     await v.index.ready;

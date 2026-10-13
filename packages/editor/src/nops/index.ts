@@ -5,6 +5,7 @@ export * from './md';
 export { insertCallout, insertToggle, insertColumns, insertMathBlock, insertMarkdown } from './commands';
 export type { WikiLinkTarget } from './plugins';
 export * from './blocks';
+export type { NopsRowPropsHost } from './row-props';
 export type { NopsPeekHost } from './peek-host';
 export type { NopsAssetHost } from './asset-host';
 export { showTextPrompt } from './prompt';

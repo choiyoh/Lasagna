@@ -1509,6 +1509,17 @@ views:
     // 새 행은 첫 상태 옵션('할 일')으로 시작하고, 보드로 바꾸면 그 열에 보인다
     await embed.getByRole('tab', { name: '보드' }).click();
     await expect(embed.getByTestId('board-col-할 일')).toContainText('제목 없음', { timeout: 8000 });
+
+    // 행을 열면 제목 아래에 속성 패널이 있고, 값을 고치면 프런트매터에 쓰인다
+    await embed.getByRole('tab', { name: '표' }).click();
+    await embed.getByRole('button', { name: '제목 없음' }).first().click();
+    const props = page.getByTestId('row-props-panel');
+    await expect(props).toBeVisible({ timeout: 8000 });
+    await expect(props.locator('[data-prop="상태"]')).toContainText('할 일');
+    await props.locator('[data-prop="상태"] .rowprops__cell').click();
+    await props.locator('[data-prop="상태"] select').selectOption('완료');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '인라인할일/제목 없음.md'), 'utf8'), { timeout: 8000 }).toContain('상태: 완료');
+    await expect(props.locator('[data-prop="상태"]')).toContainText('완료', { timeout: 8000 });
   });
 
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {

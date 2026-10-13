@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { databaseRowPaths, dbFolders, listDatabases, queryDatabase, type DbQueryParams } from './db-queries';
+import { databaseRowPaths, dbFolders, listDatabases, queryDatabase, rowDatabase, type DbQueryParams } from './db-queries';
 import { globalGraph, localGraph, type GlobalGraphOptions, type LocalGraphOptions } from './graph-queries';
 import {
   NO_INLINE_SCAN,
@@ -592,6 +592,9 @@ export class Indexer {
   }
 
   /** 데이터베이스 뷰 질의(필터·정렬·그룹·계산 행) */
+  rowDatabase(notePath: string) {
+    return rowDatabase(this.db, this.root, notePath, this.generation);
+  }
   queryDatabase(params: DbQueryParams) {
     return queryDatabase(this.db, this.root, params, this.generation);
   }

@@ -385,3 +385,16 @@ button.link { color: var(--muted); }
 /* 데이터베이스 셀의 기본 select 를 칩처럼 */
 .dbtable select, .dbembed select { border: 0; border-radius: 4px; background: var(--hover); color: inherit; padding: 2px 6px; font: inherit; max-width: 100%; }
 .dbtable select:focus, .dbembed select:focus { outline: 2px solid var(--accent); }
+
+/* 데이터베이스 행 속성 패널 */
+.rowprops { display: flex; flex-direction: column; gap: 1px; }
+.rowprops__head { align-self: flex-start; padding: 2px 6px; margin-left: -6px; color: var(--muted); font-size: 12px; border-radius: var(--radius); }
+.rowprops__head:hover { background: var(--hover); color: var(--fg); }
+.rowprops__row { display: flex; align-items: center; gap: 12px; min-height: 30px; }
+.rowprops__name { flex: 0 0 120px; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rowprops__value { flex: 1; min-width: 0; }
+.rowprops__cell { display: block; width: 100%; min-height: 26px; padding: 3px 6px; border-radius: var(--radius); }
+.rowprops__cell:hover { background: var(--hover); }
+.rowprops .chip { display: inline-block; padding: 0 8px; border-radius: 4px; margin-right: 4px; font-size: 13px; }
+
+.rowprops__title { margin: 0 0 12px; font-size: 2.1em; line-height: 1.25; font-weight: 700; cursor: text; }

@@ -10,6 +10,7 @@ import { createDbViewNodeView, dbViewSlashItem, createHideCodeChipPlugin, newDbS
 import { createEmbedView } from './embed-view';
 import { createFilesPlugin } from './files-plugin';
 import { createFlashPlugin } from './flash';
+import { createRowPropsPlugin, type NopsRowPropsHost } from './row-props';
 import { createToggleHeadingPlugin, toggleHeadingCommand } from './toggle-heading';
 import { createLinkPreviewPlugin } from './link-preview';
 import type { NopsPeekHost } from './peek-host';
@@ -34,6 +35,8 @@ export interface NopsEditorOptions {
   assets?: NopsAssetHost;
   /** 위키링크 호버 미리보기·노트 임베드 발췌. 없으면 둘 다 꺼진다 */
   peek?: NopsPeekHost;
+  /** 데이터베이스 행 노트의 속성 패널(제목 아래). 없으면 패널이 없다 */
+  rowProps?: NopsRowPropsHost;
   /** 추가 슬래시 항목 (예: DB 뷰) */
   slashItems?: SlashItemSpec[];
   /** ```dbview 펜스를 데이터베이스 뷰로 그리는 호스트. 없으면 평범한 코드 블록으로 보인다 */
@@ -100,6 +103,7 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
       createFlashPlugin(),
       createToggleHeadingPlugin(),
       ...(options.dbView ? [createHideCodeChipPlugin()] : []),
+      ...(options.rowProps ? [createRowPropsPlugin(options.rowProps)] : []),
       ...(options.peek ? [createLinkPreviewPlugin(options.peek)] : []),
     ],
   });

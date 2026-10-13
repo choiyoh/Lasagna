@@ -12,6 +12,7 @@ export type IndexQuery =
   | 'localGraph'
   | 'databases'
   | 'queryDatabase'
+  | 'rowDatabase'
   | 'databaseRowPaths'
   | 'databaseFolders';
 

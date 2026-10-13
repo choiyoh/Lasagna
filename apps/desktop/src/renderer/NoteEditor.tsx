@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Editor, NopsPeekHost } from '@nopsidian/editor/nops';
 import { createDbViewHost } from './db/dbview-host';
+import { createRowPropsHost } from './db/RowProps';
 import type { DbEmbedHost } from './db/EmbeddedDb';
 import { relativePath, vaultUrl } from '@nopsidian/core/assets';
 import { TextSelection } from 'prosemirror-state';
@@ -108,6 +109,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   nameRef.current = noteLinkName;
   const dbHostRef = useRef(dbHost);
   dbHostRef.current = dbHost;
+  const onRenameRef = useRef(onRename);
+  onRenameRef.current = onRename;
   const peekRef = useRef(peek);
   peekRef.current = peek;
   const toggleRef = useRef<() => void>(() => undefined);
@@ -137,6 +140,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       onError: (m) => setNotice(m),
     };
     const editor: Editor = createNopsEditor(host, { onOpenLink: (l) => linkRef.current(l), assets: assetHost,
+      rowProps: createRowPropsHost(path, () => dbHostRef.current?.notes ?? [], () => onRenameRef.current?.()),
       peek: { peek: (l) => (peekRef.current ? peekRef.current.peek(l) : Promise.resolve(null)) },
       links: linksRef.current,
       dbView: dbHostRef.current

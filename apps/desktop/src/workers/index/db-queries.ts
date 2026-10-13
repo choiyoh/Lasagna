@@ -235,3 +235,34 @@ function attachCovers(db: Database.Database, rows: DbRow[]): void {
     if (hit) r.cover = hit.path;
   }
 }
+
+export interface RowDatabaseOutput {
+  folder: string;
+  schema: DbSchema;
+  row: DbRow;
+  errors: Record<string, string>;
+}
+
+/** 노트가 어떤 데이터베이스의 행이면 그 데이터베이스와 계산이 끝난 행 값을 돌려준다. */
+export function rowDatabase(db: Database.Database, root: string, notePath: string, generation = -1): RowDatabaseOutput | null {
+  const folders = [...dbFolders(db)].sort((a, b) => b.length - a.length);
+  for (const folder of folders) {
+    const dir = folder === '' ? '' : `${folder}/`;
+    if (!notePath.startsWith(dir) || !databaseRowPaths(db, root, folder).includes(notePath)) continue;
+    const parsed = readSchema(root, folder);
+    if (!parsed) return null;
+    const minute = Math.floor(Date.now() / 60_000);
+    const hit = ctxCache.get(db);
+    let ctx: ComputeContext;
+    if (hit && generation >= 0 && hit.gen === generation && hit.minute === minute) ctx = hit.ctx;
+    else {
+      ctx = computeContext(db, root, dbFolders(db));
+      if (generation >= 0) ctxCache.set(db, { gen: generation, minute, ctx });
+    }
+    const computed = ctx.db(folder);
+    const row = computed?.rows.find((r) => r.path === notePath);
+    if (!computed || !row) return null;
+    return { folder, schema: parsed.schema, row, errors: computed.errors[notePath] ?? {} };
+  }
+  return null;
+}

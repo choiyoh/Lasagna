@@ -340,6 +340,11 @@ export const contract = {
   'sync.run': { input: z.object({ force: z.boolean().default(false) }), output: syncRunSummary },
   'db.list': { input: z.undefined(), output: z.array(dbInfo) },
   'db.query': { input: dbQueryInput, output: dbQueryOutput },
+  /** 노트가 데이터베이스의 행이면 그 데이터베이스(스키마)와 계산이 끝난 행 값. 아니면 null */
+  'db.row': {
+    input: z.object({ path: relPath }),
+    output: z.object({ folder: z.string(), schema: z.unknown(), row: dbRowSchema, errors: z.record(z.string(), z.string()) }).nullable(),
+  },
   /** 행 노트의 속성 하나를 고친다(프런트매터의 그 키만 바뀐다). value null = 비움. */
   'db.updateCell': {
     input: z.object({ path: relPath, prop: z.string().min(1).max(100), value: z.unknown() }),

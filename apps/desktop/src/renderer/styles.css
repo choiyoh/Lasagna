@@ -398,3 +398,20 @@ button.link { color: var(--muted); }
 .rowprops .chip { display: inline-block; padding: 0 8px; border-radius: 4px; margin-right: 4px; font-size: 13px; }
 
 .rowprops__title { margin: 0 0 12px; font-size: 2.1em; line-height: 1.25; font-weight: 700; cursor: text; }
+
+.rowprops__add { align-self: flex-start; padding: 4px 6px; margin-left: -6px; color: var(--muted); font-size: 13px; border-radius: var(--radius); }
+.rowprops__add:hover { background: var(--hover); color: var(--fg); }
+.rowprops__new { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 0; }
+.rowprops__new input, .rowprops__new select { padding: 3px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: inherit; font: inherit; font-size: 13px; }
+.rowprops__new button { padding: 3px 10px; border-radius: var(--radius); border: 1px solid var(--border); font-size: 13px; }
+.rowprops__new button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+
+/* 표 열 머리 메뉴 */
+.dbtable__th { position: relative; }
+.dbtable__thbtn { width: calc(100% - 8px); padding: 0; text-align: left; font: inherit; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dbtable__thbtn:hover { color: var(--accent); }
+.dbtable__menu { position: absolute; z-index: 20; top: 100%; left: 0; min-width: 160px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); display: flex; flex-direction: column; }
+.dbtable__menu button { padding: 5px 10px; border-radius: var(--radius); font-size: 13px; white-space: nowrap; }
+.dbtable__menu button:hover { background: var(--hover); }
+
+.dbcard__cover { display: block; width: calc(100% + 16px); margin: -8px -8px 8px; max-height: 120px; object-fit: cover; border-radius: 8px 8px 0 0; }

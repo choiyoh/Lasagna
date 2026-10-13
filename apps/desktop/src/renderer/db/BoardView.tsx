@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { optionsOf } from '@nopsidian/core/db/values';
+import { vaultUrl } from '@nopsidian/core/assets';
 import { CellView } from './CellEditor';
 import { cellOf, TITLE, visibleColumns, type CellValue, type DbData, type DbRowDto } from './types';
 
@@ -9,12 +10,14 @@ interface Props {
   /** 카드를 다른 열로 옮기면 그룹 속성 값을 바꾼다(key null = 비우기) */
   onMove: (row: DbRowDto, prop: string, value: CellValue) => void;
   onAdd: (groupKey: string | null) => void;
+  /** 있으면 본문의 첫 이미지를 카드 위에 커버로 보인다 */
+  vaultId?: string;
   /** 카드를 다른 카드 앞에 놓았을 때 보드 전체의 새 순서(노트 경로) */
   onReorder?: (order: string[]) => void;
 }
 
 /** 보드(칸반) 뷰: 그룹 속성의 값마다 열, 카드를 끌어다 놓으면 값이 바뀐다. */
-export function BoardView({ data, onOpen, onMove, onAdd, onReorder }: Props) {
+export function BoardView({ data, onOpen, onMove, onAdd, onReorder, vaultId }: Props) {
   const prop = data.view.groupBy;
   const def = prop ? data.schema.properties[prop] : undefined;
   const [over, setOver] = useState<string | null | undefined>(undefined);
@@ -75,6 +78,7 @@ export function BoardView({ data, onOpen, onMove, onAdd, onReorder }: Props) {
                   setDragging(null);
                 }}
               >
+                {vaultId && r.cover && <img className="dbcard__cover" src={vaultUrl(vaultId, r.cover)} alt="" loading="lazy" draggable={false} />}
                 <button className="dbcard__title" onClick={() => onOpen(r.path)}>
                   {r.title}
                 </button>

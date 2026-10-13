@@ -10,7 +10,7 @@ import { PropertyManager } from './PropertyManager';
 import { TableView } from './TableView';
 import { TemplateSettings } from './TemplateSettings';
 import { ViewToolbar } from './ViewToolbar';
-import type { CellValue, DbData, DbRowDto } from './types';
+import { visibleColumns, type CellValue, type DbData, type DbRowDto } from './types';
 
 interface Props {
   folder: string;
@@ -345,11 +345,14 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             onEdit={(r, p, v) => void updateCell(r, p, v)}
             onRenameTitle={onRenameNote ? (r, t) => onRenameNote(r.path, t) : undefined}
             onWidth={(prop, w) => setDraft({ ...view, widths: { ...(view.widths ?? {}), [prop]: w } })}
+            onSort={(prop, dir) => setDraft({ ...view, sort: dir ? [{ prop, dir }, ...view.sort.filter((r) => r.prop !== prop)] : view.sort.filter((r) => r.prop !== prop), manualOrder: undefined })}
+            onHide={(prop) => setDraft({ ...view, columns: visibleColumns(current).filter((c) => c !== prop) })}
             notes={notes}
           />
         )}
         {view.type === 'board' && (
           <BoardView
+            vaultId={vaultId}
             data={current}
             onOpen={openRow}
             onMove={(r, p, v) => void updateCell(r, p, v)}

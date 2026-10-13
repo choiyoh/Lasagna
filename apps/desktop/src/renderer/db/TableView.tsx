@@ -29,6 +29,9 @@ interface Props {
   notes: { path: string; title: string }[];
   /** 제목 칸을 두 번 눌러 이름(=파일 이름)을 바꾼다 */
   onRenameTitle?: (row: DbRowDto, title: string) => void;
+  /** 열 머리 메뉴: 정렬(null = 정렬 해제)·숨기기. 없으면 메뉴가 없다 */
+  onSort?: (prop: string, dir: 'asc' | 'desc' | null) => void;
+  onHide?: (prop: string) => void;
 }
 
 const CALC_LABEL: Record<string, string> = {
@@ -40,7 +43,9 @@ const ROW_H = 32;
 const DEFAULT_W = 180;
 
 /** 표 뷰: 행을 가상화해(2만 행도 보이는 만큼만 그림) 셀을 눌러 바로 고친다. */
-export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle }: Props) {
+export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide }: Props) {
+  const [menu, setMenu] = useState<string | null>(null);
+  const sortOf = (c: string) => data.view.sort.find((r) => r.prop === c)?.dir ?? null;
   const cols = visibleColumns(data);
   const widths = data.view.widths ?? {};
   const w = (c: string) => widths[c] ?? (c === TITLE ? 260 : DEFAULT_W);
@@ -70,8 +75,27 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
       <div className="dbtable__inner" style={{ width: total }}>
         <div className="dbtable__head" role="row">
           {cols.map((c) => (
-            <div key={c} className="dbtable__th" style={{ width: w(c) }} role="columnheader">
-              <span>{c === TITLE ? '제목' : c}</span>
+            <div key={c} className="dbtable__th" style={{ width: w(c) }} role="columnheader" aria-sort={sortOf(c) === 'asc' ? 'ascending' : sortOf(c) === 'desc' ? 'descending' : 'none'}>
+              {onSort || onHide ? (
+                <button className="dbtable__thbtn" onClick={() => setMenu(menu === c ? null : c)} aria-haspopup="menu" aria-expanded={menu === c} data-testid={`th-${c}`}>
+                  {c === TITLE ? '제목' : c}
+                  {sortOf(c) && <span className="dbtable__sort" aria-hidden>{sortOf(c) === 'asc' ? ' ↑' : ' ↓'}</span>}
+                </button>
+              ) : (
+                <span>{c === TITLE ? '제목' : c}</span>
+              )}
+              {menu === c && (
+                <div className="dbtable__menu" role="menu" onMouseLeave={() => setMenu(null)}>
+                  {onSort && (
+                    <>
+                      <button role="menuitem" onClick={() => { onSort(c, 'asc'); setMenu(null); }}>↑ 오름차순 정렬</button>
+                      <button role="menuitem" onClick={() => { onSort(c, 'desc'); setMenu(null); }}>↓ 내림차순 정렬</button>
+                      {sortOf(c) && <button role="menuitem" onClick={() => { onSort(c, null); setMenu(null); }}>정렬 해제</button>}
+                    </>
+                  )}
+                  {onHide && c !== TITLE && <button role="menuitem" onClick={() => { onHide(c); setMenu(null); }}>이 열 숨기기</button>}
+                </div>
+              )}
               <i className="dbtable__grip" onPointerDown={(e) => drag(c, e)} />
             </div>
           ))}

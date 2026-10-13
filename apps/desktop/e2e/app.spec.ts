@@ -852,6 +852,19 @@ test.describe('링크 코어', () => {
     writeFileSync(path.join(dbDir, '밖에서 만든.md'), '---\n상태: 완료\n점수: 7\n---\n본문\n');
     await expect(page.getByTestId('db-table')).toContainText('밖에서 만든', { timeout: 8000 });
 
+    // 5-2) 열 머리 메뉴: 점수로 오름차순 → 7(밖에서 만든)이 먼저, 해제하면 원래대로. 숨기기도 된다
+    const table = page.getByTestId('db-table');
+    await table.getByTestId('th-점수').click();
+    await page.getByRole('menuitem', { name: '오름차순 정렬' }).click();
+    await expect(table.locator('.dbtable__row').first()).toContainText('밖에서 만든', { timeout: 5000 });
+    await table.getByTestId('th-점수').click();
+    await page.getByRole('menuitem', { name: '정렬 해제' }).click();
+    await table.getByTestId('th-상태').click();
+    await page.getByRole('menuitem', { name: '이 열 숨기기' }).click();
+    await expect(table.getByTestId('th-상태')).toHaveCount(0);
+    await page.getByRole('button', { name: '되돌리기' }).click();
+    await expect(table.getByTestId('th-상태')).toHaveCount(1);
+
     // 6) 보드 뷰: 상태별 열, 카드를 다른 열로 끌면 값이 바뀐다
     await screen.getByLabel('보기 형태').selectOption('board');
     await screen.getByRole('button', { name: /^그룹/ }).click();
@@ -1510,6 +1523,13 @@ views:
     await embed.getByRole('tab', { name: '보드' }).click();
     await expect(embed.getByTestId('board-col-할 일')).toContainText('제목 없음', { timeout: 8000 });
 
+    // 본문 첫 이미지는 보드 카드의 커버가 된다
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    writeFileSync(path.join(vaultDir, '커버.png'), png);
+    const rowFile = path.join(vaultDir, '인라인할일/제목 없음.md');
+    writeFileSync(rowFile, `${readFileSync(rowFile, 'utf8')}\n![[커버.png]]\n`);
+    await expect(embed.locator('.dbcard__cover').first()).toBeVisible({ timeout: 15000 });
+
     // 행을 열면 제목 아래에 속성 패널이 있고, 값을 고치면 프런트매터에 쓰인다
     await embed.getByRole('tab', { name: '표' }).click();
     await embed.getByRole('button', { name: '제목 없음' }).first().click();
@@ -1520,6 +1540,14 @@ views:
     await props.locator('[data-prop="상태"] select').selectOption('완료');
     await expect.poll(() => readFileSync(path.join(vaultDir, '인라인할일/제목 없음.md'), 'utf8'), { timeout: 8000 }).toContain('상태: 완료');
     await expect(props.locator('[data-prop="상태"]')).toContainText('완료', { timeout: 8000 });
+
+    // + 속성 추가: 행 패널에서 새 속성을 만들면 _db.yaml 에 생기고 바로 편집할 수 있다
+    await props.getByTestId('row-prop-add').click();
+    await props.getByLabel('새 속성 이름').fill('메모');
+    await props.getByLabel('새 속성 형식').selectOption('text');
+    await props.getByRole('button', { name: '추가', exact: true }).click();
+    await expect.poll(() => readFileSync(path.join(vaultDir, '인라인할일/_db.yaml'), 'utf8'), { timeout: 8000 }).toContain('메모');
+    await expect(props.locator('[data-prop="메모"]')).toBeVisible({ timeout: 8000 });
   });
 
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {

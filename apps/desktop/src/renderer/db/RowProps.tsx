@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { NopsRowPropsHost } from '@nopsidian/editor/nops';
 import { CellEditor, CellView } from './CellEditor';
+import { makeDef, TYPE_LABEL, WITH_OPTIONS } from './PropertyManager';
 import type { CellValue, DbRowDto, DbSchema, Property } from './types';
+
+/** 행 패널에서 바로 만들 수 있는 속성 형식(관계·롤업·수식은 데이터베이스 화면의 속성 관리에서) */
+const QUICK_TYPES = ['text', 'number', 'select', 'multi_select', 'status', 'date', 'checkbox', 'url', 'email', 'phone'];
 
 interface RowInfo {
   folder: string;
@@ -18,6 +22,8 @@ function RowProps({ path, notes, hasTitle, onRename }: { path: string; notes: ()
   const [info, setInfo] = useState<RowInfo | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [open, setOpen] = useState(true);
+  const [adding, setAdding] = useState<{ name: string; type: string; opts: string } | null>(null);
+  const [addError, setAddError] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -52,6 +58,24 @@ function RowProps({ path, notes, hasTitle, onRename }: { path: string; notes: ()
       await window.nops.db.updateCell({ path, prop, value });
     } finally {
       void load();
+    }
+  };
+
+  const addProperty = async () => {
+    if (!adding || !info) return;
+    const name = adding.name.trim();
+    if (!name || name === 'title' || name in (info.schema.properties as Record<string, unknown>)) {
+      setAddError(!name ? '이름을 입력해 주세요' : '이미 있는 이름이에요');
+      return;
+    }
+    try {
+      await window.nops.db.editSchema({ folder: info.folder, op: { kind: 'setProperty', name, def: makeDef(adding.type, adding.opts) } });
+      setAdding(null);
+      setAddError('');
+      await load();
+      setEditing(name);
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
     }
   };
 
@@ -96,6 +120,40 @@ function RowProps({ path, notes, hasTitle, onRename }: { path: string; notes: ()
             </div>
           );
         })}
+      {open &&
+        (adding ? (
+          <div className="rowprops__new" data-testid="row-prop-add-form">
+            <input
+              autoFocus
+              value={adding.name}
+              placeholder="속성 이름"
+              aria-label="새 속성 이름"
+              onChange={(e) => setAdding({ ...adding, name: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return;
+                if (e.key === 'Enter') void addProperty();
+                if (e.key === 'Escape') setAdding(null);
+              }}
+            />
+            <select value={adding.type} aria-label="새 속성 형식" onChange={(e) => setAdding({ ...adding, type: e.target.value })}>
+              {QUICK_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {TYPE_LABEL[t]}
+                </option>
+              ))}
+            </select>
+            {WITH_OPTIONS.has(adding.type) && (
+              <input value={adding.opts} placeholder="옵션(쉼표로 구분)" aria-label="새 속성 옵션" onChange={(e) => setAdding({ ...adding, opts: e.target.value })} />
+            )}
+            <button className="primary" onClick={() => void addProperty()}>추가</button>
+            <button onClick={() => setAdding(null)}>취소</button>
+            {addError && <span className="warn small">{addError}</span>}
+          </div>
+        ) : (
+          <button className="rowprops__add" onClick={() => setAdding({ name: '', type: 'text', opts: '' })} data-testid="row-prop-add">
+            + 속성 추가
+          </button>
+        ))}
     </div>
   );
 }

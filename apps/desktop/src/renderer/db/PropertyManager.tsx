@@ -5,18 +5,18 @@ import type { Property } from '@nopsidian/core/db';
 import { optionsOf } from '@nopsidian/core/db/values';
 import type { DbData } from './types';
 
-const TYPE_LABEL: Record<string, string> = {
+export const TYPE_LABEL: Record<string, string> = {
   text: '텍스트', number: '숫자', select: '선택', multi_select: '다중 선택', status: '상태', date: '날짜', checkbox: '체크박스',
   url: 'URL', email: '이메일', phone: '전화', files: '파일', created_time: '만든 시각', updated_time: '수정 시각', unique_id: '고유 ID',
   relation: '관계', rollup: '롤업', formula: '수식',
 };
 const CREATABLE = ['text', 'number', 'select', 'multi_select', 'status', 'date', 'checkbox', 'url', 'email', 'phone', 'files', 'created_time', 'updated_time', 'relation', 'rollup', 'formula'];
-const WITH_OPTIONS = new Set(['select', 'multi_select', 'status']);
+export const WITH_OPTIONS = new Set(['select', 'multi_select', 'status']);
 
 const parseOptions = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean).map((name) => ({ name }));
 
 /** 새 속성의 정의. 숫자는 `format`, 선택류는 옵션 목록을 채운다. */
-function makeDef(type: string, optionsText: string): Property {
+export function makeDef(type: string, optionsText: string): Property {
   if (WITH_OPTIONS.has(type)) return { type, options: parseOptions(optionsText) } as Property;
   if (type === 'number') return { type: 'number', format: 'number' };
   if (type === 'relation') return { type: 'relation', target: '*', twoWay: false };

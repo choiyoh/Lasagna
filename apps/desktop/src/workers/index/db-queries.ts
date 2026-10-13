@@ -161,7 +161,7 @@ export function queryDatabase(db: Database.Database, root: string, p: DbQueryPar
   const result = queryRows(schema, view, rows);
   const offset = Math.max(0, p.offset ?? 0);
   const limit = Math.min(5000, Math.max(1, p.limit ?? 500));
-  if (view.type === 'gallery' && !view.cover) attachCovers(db, result.groups ? result.groups.flatMap((g) => g.rows) : result.rows.slice(offset, offset + limit));
+  if ((view.type === 'gallery' || view.type === 'board') && !view.cover) attachCovers(db, result.groups ? result.groups.flatMap((g) => g.rows) : result.rows.slice(offset, offset + limit));
   return {
     folder: p.folder,
     schema,

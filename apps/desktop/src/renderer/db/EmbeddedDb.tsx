@@ -128,7 +128,7 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
           + 새로 만들기
         </button>
       )}
-      {t === 'board' && <BoardView data={data} onOpen={host.openNote} onMove={(r, p, v) => void updateCell(r, p, v)} onAdd={(key) => void addRow(data.view.groupBy && key ? { [data.view.groupBy]: key } : undefined)} />}
+      {t === 'board' && <BoardView vaultId={host.vaultId} data={data} onOpen={host.openNote} onMove={(r, p, v) => void updateCell(r, p, v)} onAdd={(key) => void addRow(data.view.groupBy && key ? { [data.view.groupBy]: key } : undefined)} />}
       {t === 'list' && <ListView data={data} rows={flat} vaultId={host.vaultId} onOpen={host.openNote} />}
       {t === 'gallery' && <GalleryView data={data} rows={flat} vaultId={host.vaultId} onOpen={host.openNote} />}
       {t === 'calendar' && <CalendarView data={data} rows={flat} onOpen={host.openNote} onMove={(r, p, v) => void updateCell(r, p, v)} onAdd={(date) => void addRow(data.view.dateProp ? { [data.view.dateProp]: date } : undefined)} onOpenDaily={() => undefined} />}

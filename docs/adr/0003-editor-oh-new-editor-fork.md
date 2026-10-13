@@ -38,3 +38,5 @@ Electron 안에서 스파이크로 비교했다(콜아웃 > 목록 > 토글 > �
 업스트림에 호스트 확장 훅(`priorityPlugins`, `nodeViews`, `resolveImageSrc`, `prompt`, `image.altText`, `getView/getDocument/setDocument`,
 `createNotionSupport({slashItems})`)을 반영하고 `@oh-new-editor/core@0.2.1`로 배포했다(의존성은 번들에서 외부화).
 `packages/editor`는 포크 소스와 `UPSTREAM.md`를 지우고 Nopsidian 확장(`nops/`)만 남겼으며, 코어는 `@oh-new-editor/core ^0.2.1`을 쓴다.
+
+2026-10-14: 업스트림 `@oh-new-editor/core` 0.2.2 로 올렸다(비동기 수명 주기 보호·문서 교체 때 AI 요청 취소·스키마 검증). 자체 패키지는 `minimumReleaseAgeExclude` 에 이름으로 넣어 새 버전을 바로 쓸 수 있게 했다.

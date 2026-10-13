@@ -1554,6 +1554,8 @@ views:
     const page = await app.firstWindow();
     const pdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]>>endobj\ntrailer<</Root 1 0 R/Size 4>>\n%%EOF`;
     writeFileSync(path.join(vaultDir, '뷰어.pdf'), pdf);
+    // 첨부 목록(인덱스)에 올라온 뒤에 열어야 임베드가 파일을 찾는다
+    await expect.poll(() => page.evaluate(() => window.nops.asset.list().then((a) => a.some((x) => x.path === '뷰어.pdf'))), { timeout: 10000 }).toBe(true);
     const origin = note('동기원본', '# 동기원본\n\n고칠 문장입니다 ^sync1\n');
     note('동기사용', '# 동기사용\n\n수식 $a^2+b^2$ 입니다\n\n$$\n\\frac{1}{2}\n$$\n\n```toc\n```\n\n## 둘째 제목\n\n![[뷰어.pdf]]\n\n![[동기원본#^sync1]]\n');
     await open(page, '동기사용');

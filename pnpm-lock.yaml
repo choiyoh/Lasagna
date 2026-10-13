@@ -263,8 +263,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@oh-new-editor/core':
-        specifier: ^0.2.1
-        version: 0.2.1
+        specifier: ^0.2.2
+        version: 0.2.2
       katex:
         specifier: ^0.16.47
         version: 0.16.47
@@ -981,8 +981,8 @@ packages:
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
 
-  '@oh-new-editor/core@0.2.1':
-    resolution: {integrity: sha512-PTPehEvZyiFUk5WreWBFzZfObLJZcXoVTeuHpcITozoCHL3Op3GTzajpfNXb2oPN0QvMho6+9IO8zpfLpaovCg==}
+  '@oh-new-editor/core@0.2.2':
+    resolution: {integrity: sha512-looVxEX2+VNGETkJpMWTUbcdtRI31eslF/3EmNB0Tz60gMl70oakBWVxhFzJWdB6XYZMsgj/EYz5GGn3tvGm+A==}
 
   '@oxc-project/types@0.153.0':
     resolution: {integrity: sha512-jSNrRIyvPVLL5E1z/tS5zLAprosGz/FuI1PWwEOz59j3E4TTTzSpqKb/RDGqJhhW0QHYISGXxq582wGx6T11Tw==}
@@ -3835,7 +3835,7 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
-  '@oh-new-editor/core@0.2.1':
+  '@oh-new-editor/core@0.2.2':
     dependencies:
       dompurify: 3.4.16
       marked: 16.4.2

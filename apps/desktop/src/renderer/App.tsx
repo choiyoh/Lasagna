@@ -17,6 +17,7 @@ import { SyncDialog, syncStateText } from './SyncDialog';
 import { GraphScreen, LocalGraph } from './graph/GraphScreen';
 import { createLinkHost, linkNameFor } from './link-host';
 import { QuickSwitcher } from './QuickSwitcher';
+import { CommandPalette, type PaletteCommand } from './CommandPalette';
 import { TagPanel } from './TagPanel';
 
 export function App() {
@@ -97,6 +98,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [creating, setCreating] = useState(false);
   const [sideTab, setSideTab] = useState<'files' | 'tags' | 'db' | 'marks'>('files');
   const [bookmarks, setBookmarks] = useState<string[]>([]);
+  const [palette, setPalette] = useState(false);
   useEffect(() => {
     void window.nops.bookmarks.get().then(setBookmarks);
   }, [vault.id]);
@@ -288,6 +290,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       } else if (e.key === 'F2') {
         e.preventDefault();
         void renameCurrent();
+      } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        setPalette(true);
       } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyB') {
         e.preventDefault();
         if (selected) toggleBookmark(selected);
@@ -299,6 +304,53 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [renameCurrent, openDaily, graphOpen, dbOpen, selected, toggleBookmark]);
+
+  const exportNote = useCallback(
+    async (format: 'html' | 'pdf') => {
+      if (!selected) return;
+      try {
+        await flushAll();
+        const r = await window.nops.export.note({ path: selected, format });
+        if (r.saved) setToast({ message: `내보냈어요: ${r.saved}` });
+      } catch (e) {
+        setToast({ message: `내보내기 실패: ${e instanceof Error ? e.message : String(e)}` });
+      }
+    },
+    [selected],
+  );
+  const exportVault = useCallback(async () => {
+    try {
+      await flushAll();
+      const r = await window.nops.export.vault();
+      if (r.dir) setToast({ message: `노트 ${r.notes}개·첨부 ${r.assets}개를 내보냈어요: ${r.dir}` });
+    } catch (e) {
+      setToast({ message: `내보내기 실패: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }, []);
+
+  const commands = useMemo<PaletteCommand[]>(
+    () => [
+      { id: 'quick', label: '노트 열기 (빠른 전환기)', hint: '⌘O', keywords: ['open', '열기', '전환', 'ㅇㄱ'], run: () => setSwitcher(true) },
+      { id: 'new', label: '새 노트', keywords: ['new', '새로', '만들기'], run: () => setCreating(true) },
+      { id: 'daily', label: '오늘의 노트', hint: '⌘⌥D', keywords: ['daily', 'today', '일기', '데일리'], run: () => void openDaily() },
+      { id: 'graph', label: '그래프 보기', hint: '⌘⇧G', keywords: ['graph', '그래프'], run: () => { setDbOpen(null); setGraphOpen((o) => !o); } },
+      { id: 'bookmark', label: '현재 노트 북마크 추가·해제', hint: '⌘⇧B', keywords: ['bookmark', '북마크', '즐겨찾기'], enabled: !!selected, run: () => selected && toggleBookmark(selected) },
+      { id: 'bookmarks', label: '북마크 목록 보기', keywords: ['bookmarks', '북마크'], run: () => setSideTab('marks') },
+      { id: 'rename', label: '현재 노트 이름 바꾸기', hint: 'F2', keywords: ['rename', '이름', '이동'], enabled: !!selected, run: () => void renameCurrent() },
+      { id: 'source', label: '소스 모드 전환', hint: '⌘E', keywords: ['source', 'markdown', '소스', '원문'], enabled: !!selected, run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', metaKey: true })) },
+      { id: 'links', label: '링크·기록 패널 열기', keywords: ['panel', '패널', '백링크', '기록', '링크'], enabled: !!selected, run: () => setPanelOpen(true) },
+      { id: 'history', label: '버전 기록 보기', keywords: ['history', '기록', '버전', '복원'], enabled: !!selected, run: () => { setPanelOpen(true); setDockTab('history'); } },
+      { id: 'tags', label: '태그 목록', keywords: ['tags', '태그'], run: () => setSideTab('tags') },
+      { id: 'dbs', label: '데이터베이스 목록', keywords: ['database', 'db', '데이터베이스'], run: () => setSideTab('db') },
+      { id: 'files', label: '파일 목록', keywords: ['files', '파일', '탐색기'], run: () => setSideTab('files') },
+      { id: 'sync', label: 'Google Drive 동기화', keywords: ['sync', 'drive', '동기화', '구글'], run: () => setSyncOpen(true) },
+      { id: 'export-html', label: '현재 노트를 HTML로 내보내기', keywords: ['export', 'html', '내보내기'], enabled: !!selected, run: () => void exportNote('html') },
+      { id: 'export-pdf', label: '현재 노트를 PDF로 내보내기', keywords: ['export', 'pdf', '내보내기'], enabled: !!selected, run: () => void exportNote('pdf') },
+      { id: 'export-vault', label: '볼트 전체를 HTML 사이트로 내보내기', keywords: ['export', 'site', 'html', '내보내기', '사이트'], run: () => void exportVault() },
+      { id: 'close', label: '다른 볼트 열기', keywords: ['vault', '볼트', '닫기'], run: onClose },
+    ],
+    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, onClose],
+  );
 
   useEffect(() => {
     if (!toast) return;
@@ -519,6 +571,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       {switcher && (
         <QuickSwitcher notes={notes} onOpen={setSelected} onCreate={(n) => void createNote(n)} onClose={() => setSwitcher(false)} />
       )}
+      {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       {syncOpen && <SyncDialog status={sync} onClose={() => setSyncOpen(false)} onOpenNote={setSelected} />}
       {confirm && <ConfirmDialog {...confirm} onCancel={() => setConfirm(null)} />}
       {toast && (

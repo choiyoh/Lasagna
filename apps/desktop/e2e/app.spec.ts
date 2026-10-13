@@ -1358,6 +1358,58 @@ views:
     await page.getByRole('tab', { name: '링크' }).click();
   });
 
+  test('명령 팔레트(⌘P)와 내보내기: 노트 HTML·PDF, 볼트 전체 사이트', async () => {
+    const page = await app.firstWindow();
+    note('내보낼노트', '# 내보낼노트\n\n본문 [[내보낼대상]] ==강조== 입니다\n\n> [!tip] 팁\n> 콜아웃 내용\n');
+    note('내보낼대상', '# 내보낼대상\n\n대상 내용\n');
+    await open(page, '내보낼노트');
+
+    // 팔레트: 초성으로 찾아 실행
+    await page.keyboard.press('Meta+p');
+    const palette = page.getByTestId('command-palette');
+    await expect(palette).toBeVisible();
+    await palette.locator('input').fill('ㅂㅋㅁ');
+    await expect(palette.getByRole('option').first()).toContainText('북마크');
+    await palette.locator('input').fill('북마크 목록');
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('bookmarks')).toBeVisible();
+    await page.getByRole('tab', { name: '파일' }).click();
+
+    // 저장 대화상자는 테스트에서 고정 경로로 대신한다
+    const outDir = mkdtempSync(path.join(tmpdir(), 'nops-e2e-export-'));
+    const htmlOut = path.join(outDir, '노트.html');
+    const pdfOut = path.join(outDir, '노트.pdf');
+    await app.evaluate(({ dialog }, [h, p]) => {
+      let n = 0;
+      dialog.showSaveDialog = (async () => ({ canceled: false, filePath: n++ === 0 ? h : p })) as typeof dialog.showSaveDialog;
+    }, [htmlOut, pdfOut]);
+    for (const label of ['HTML', 'PDF']) {
+      await page.keyboard.press('Meta+p');
+      await palette.locator('input').fill(`현재 노트를 ${label}`);
+      await page.keyboard.press('Enter');
+      await expect.poll(() => existsSync(label === 'HTML' ? htmlOut : pdfOut), { timeout: 20000 }).toBe(true);
+    }
+    const html = readFileSync(htmlOut, 'utf8');
+    expect(html).toContain('<mark>강조</mark>');
+    expect(html).toContain('callout-tip');
+    expect(html).toContain('class="wikilink"');
+    expect(readFileSync(pdfOut).subarray(0, 5).toString()).toBe('%PDF-');
+
+    // 볼트 전체: 폴더 선택도 대신한다
+    const siteBase = mkdtempSync(path.join(tmpdir(), 'nops-e2e-site-'));
+    await app.evaluate(({ dialog }, dir) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as typeof dialog.showOpenDialog;
+    }, siteBase);
+    await page.keyboard.press('Meta+p');
+    await palette.locator('input').fill('볼트 전체');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => readdirSync(siteBase).length, { timeout: 20000 }).toBe(1);
+    const site = readdirSync(siteBase).map((d) => path.join(siteBase, d))[0]!;
+    await expect.poll(() => existsSync(path.join(site, 'index.html')), { timeout: 10000 }).toBe(true);
+    expect(readFileSync(path.join(site, '내보낼노트.html'), 'utf8')).toContain('href="%EB%82%B4%EB%B3%B4%EB%82%BC%EB%8C%80%EC%83%81.html"');
+    expect(existsSync(path.join(site, 'index.html'))).toBe(true);
+  });
+
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
     const page = await app.firstWindow();
     const today = await page.evaluate(() => {
@@ -1380,7 +1432,7 @@ views:
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'graph', 'history', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'graph', 'history', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

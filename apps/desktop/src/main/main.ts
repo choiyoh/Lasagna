@@ -1,4 +1,4 @@
-import { app, BrowserWindow, safeStorage, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, safeStorage, session, shell } from 'electron';
 import { createHash } from 'node:crypto';
 import { applyRename, planRename, undoRename } from './rename';
 import { linkMention } from '../workers/index/mention-link';
@@ -42,9 +42,11 @@ import {
   requireVault,
   setBroadcaster,
   vaultHooks,
+  type OpenVault,
 } from './vault';
 import { readFile } from 'node:fs/promises';
 import { CredentialStore, SyncController } from './sync';
+import { exportVaultSite, renderNoteDocument, type ExportContext } from './export';
 import { addRow, createDatabase, editSchema, exportCsv, importCsvApply, importCsvPreview, updateCell } from './db';
 
 // Forge Vite 플러그인이 주입하는 전역
@@ -129,6 +131,30 @@ const syncController = new SyncController({
 vaultHooks.opened = (info) => syncController.attachVault(info.path, info.name);
 vaultHooks.closing = () => syncController.detachVault();
 vaultHooks.changed = () => syncController.notifyLocalChange();
+
+async function exportContext(v: OpenVault): Promise<ExportContext> {
+  const [notes, assets] = await Promise.all([v.index.list(), v.index.assets()]);
+  return {
+    root: v.info.path,
+    notes: notes.map((n) => ({ path: n.path, title: n.title, aliases: n.aliases })),
+    assets: assets.map((a) => a.path),
+  };
+}
+
+/** 정적 HTML 을 보이지 않는 창(스크립트·네트워크 없음)에 띄워 PDF 로 만든다. */
+async function htmlToPdf(doc: string): Promise<Uint8Array> {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false, webSecurity: true },
+  });
+  try {
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    await win.loadURL(`data:text/html;charset=utf-8;base64,${Buffer.from(doc, 'utf8').toString('base64')}`);
+    return await win.webContents.printToPDF({ printBackground: true, pageSize: 'A4' });
+  } finally {
+    win.destroy();
+  }
+}
 
 function registerHandlers() {
   handle('vault.listRecent', () => listRecent());
@@ -258,6 +284,36 @@ function registerHandlers() {
     const v = requireVault();
     await v.index.ready;
     return v.index.query('localGraph', rel, { ...opts, depth, direction });
+  });
+  handle('export.note', async ({ path: rel, format }, e) => {
+    const v = requireVault();
+    await v.index.ready;
+    const ctx = await exportContext(v);
+    const title = ctx.notes.find((n) => n.path === rel)?.title ?? rel;
+    const parent = BrowserWindow.fromWebContents(e.sender);
+    const opts = {
+      title: format === 'pdf' ? 'PDF로 내보내기' : 'HTML로 내보내기',
+      defaultPath: `${title.replace(/[\\/:*?"<>|]/g, '_')}.${format}`,
+      filters: [format === 'pdf' ? { name: 'PDF', extensions: ['pdf'] } : { name: 'HTML', extensions: ['html'] }],
+    };
+    const r = parent ? await dialog.showSaveDialog(parent, opts) : await dialog.showSaveDialog(opts);
+    if (r.canceled || !r.filePath) return { saved: null };
+    const content = readFileSync(resolveInVault(v.info.path, rel), 'utf8');
+    const doc = renderNoteDocument(ctx, rel, content, { inlineAssets: true, siteLinks: false });
+    if (format === 'html') atomicWrite(r.filePath, doc);
+    else atomicWrite(r.filePath, await htmlToPdf(doc));
+    return { saved: r.filePath };
+  });
+  handle('export.vault', async (_i, e) => {
+    const v = requireVault();
+    await v.index.ready;
+    const parent = BrowserWindow.fromWebContents(e.sender);
+    const opts = { title: '내보낼 폴더 선택', properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[] };
+    const r = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
+    const dir = r.filePaths[0];
+    if (r.canceled || !dir) return { dir: null, notes: 0, assets: 0 };
+    const out = path.join(dir, `${v.info.name} (HTML)`);
+    return { dir: out, ...exportVaultSite(await exportContext(v), out) };
   });
   handle('history.list', ({ path: rel }) => listHistory(requireVault().info.path, rel));
   handle('history.read', ({ path: rel, id }) => ({ content: readHistory(requireVault().info.path, rel, id) }));

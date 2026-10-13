@@ -253,6 +253,10 @@ export const contract = {
   /** 노트의 버전 기록(저장 때마다 이전 내용을 남긴 스냅샷), 최신 순 */
   'history.list': { input: z.object({ path: relPath }), output: z.array(z.object({ id: z.string(), time: z.string(), size: z.number() })) },
   'history.read': { input: z.object({ path: relPath, id: z.string().max(100) }), output: z.object({ content: z.string() }) },
+  /** 노트를 HTML 또는 PDF 파일로 내보낸다(저장 대화상자). 취소하면 saved 가 null */
+  'export.note': { input: z.object({ path: relPath, format: z.enum(['html', 'pdf']) }), output: z.object({ saved: z.string().nullable() }) },
+  /** 볼트 전체를 정적 HTML 사이트로 폴더에 내보낸다(폴더 선택 대화상자) */
+  'export.vault': { input: z.undefined(), output: z.object({ dir: z.string().nullable(), notes: z.number(), assets: z.number() }) },
   'link.backlinks': { input: z.object({ path: relPath }), output: z.array(backlinkContext) },
   'link.outgoing': { input: z.object({ path: relPath }), output: z.array(outgoingLink) },
   'link.unlinked': { input: z.object({ path: relPath }), output: z.array(unlinkedMention) },

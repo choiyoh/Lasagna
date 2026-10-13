@@ -6,6 +6,9 @@ allowBuilds:
   electron: true
   better-sqlite3: true
   '@parcel/watcher': true
+  macos-alias: true
+  fs-xattr: true
+  electron-winstaller: true
 minimumReleaseAgeExclude:
   - '@oh-new-editor/core@0.2.1'
 # Electron Forge는 pnpm에서 hoisted 레이아웃을 요구한다.

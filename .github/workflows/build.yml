@@ -1,0 +1,81 @@
+name: build
+
+# 테스트는 macOS·Windows·Linux 에서, 설치 파일은 macOS(dmg)와 Windows(Squirrel 설치 exe)에서 만든다.
+# 네이티브 모듈(better-sqlite3, @parcel/watcher)이 플랫폼별이라 설치 파일은 각 OS 러너에서 빌드해야 한다.
+# `v*` 태그를 푸시하면 만든 설치 파일을 GitHub 릴리스(초안)에 붙인다.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+        if: matrix.os == 'ubuntu-latest'
+      - run: pnpm typecheck
+      - run: pnpm -r test
+
+  make:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @nopsidian/desktop make
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nopsidian-${{ matrix.os }}
+          path: |
+            apps/desktop/out/make/**/*.dmg
+            apps/desktop/out/make/**/*.zip
+            apps/desktop/out/make/**/*.exe
+            apps/desktop/out/make/**/*.nupkg
+            apps/desktop/out/make/**/RELEASES
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: make
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: |
+            dist/**/*.dmg
+            dist/**/*.exe
+            dist/**/*.zip

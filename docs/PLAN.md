@@ -381,6 +381,14 @@ nopsidian/
 - 그래프 레이아웃 위치 캐시: 전역 그래프 노드 위치를 localStorage 에 저장해 다음에 열 때 이어서 시작한다(SQLite `graph_layout` 테이블은 쓰지 않음).
 - 개발 메모(macOS E2E): 재패키징 직후엔 Playwright 가 첫 창을 놓치는 일이 있어 `.scratch/warm.sh`(앱을 직접 한 번 띄웠다 닫기)를 먼저 실행하면 안정적이다.
 
+### 7단계 진행 (2026-10-13~)
+- [x] 버전 기록: 저장 때 남기는 스냅샷(`.nopsidian/history/`) 목록·줄 단위 비교·복원("기록" 탭), 보존 정책(2일 전부·30일 하루 하나·그 이후 삭제).
+- [x] 명령 팔레트(⌘P, 한글 초성 검색), 내보내기: 노트 → HTML(이미지 data URI, 스크립트 차단 CSP)·PDF(`printToPDF`), 볼트 전체 → 정적 사이트(상대 링크·첨부 복사·index.html).
+- [x] Notion ZIP 가져오기(Markdown & CSV): ID 이름 정리, 페이지 링크 → 위키링크, 첨부 경로, CSV+행 노트 → `_db.yaml`+프런트매터, `<aside>` → 콜아웃, 안쪽 ZIP·경로 탈출 방어.
+- [x] 탭·분할·새 창: 창당 분할 칸 1~2개(좌우/상하), 칸마다 탭, 같은 노트는 한 곳에서만, 배치는 `.nopsidian/workspace.json`(기기별), ⌘W/⌘-클릭, 새 창(`?open=`)에서 고친 내용은 다른 창에 외부 변경으로 전달.
+- [x] 패키징: macOS dmg·zip, Windows Squirrel 설치 exe·zip 설정과 CI(`docs/packaging.md`). Windows 설치 파일은 CI 첫 실행 후 실제 확인 필요.
+- [ ] 남음: 성능 튜닝(1만 노트 합성 볼트 프로파일링), 미디어 P1(PDF 뷰어·열 레이아웃 드래그 생성), 동기화 블록(편집 가능한 임베드), 언링크드 멘션 고도화, 앱 아이콘·서명.
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

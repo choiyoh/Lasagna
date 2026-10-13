@@ -11,10 +11,14 @@
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p .",
     "e2e": "NOPS_E2E=1 electron-forge package && playwright test",
-    "e2e:run": "playwright test"
+    "e2e:run": "playwright test",
+    "make": "electron-forge make"
   },
   "devDependencies": {
     "@electron-forge/cli": "^8.0.1",
+    "@electron-forge/maker-dmg": "^8.0.1",
+    "@electron-forge/maker-squirrel": "^8.0.1",
+    "@electron-forge/maker-zip": "^8.0.1",
     "@electron-forge/plugin-fuses": "^8.0.1",
     "@electron-forge/plugin-vite": "^8.0.1",
     "@electron-forge/shared-types": "^8.0.1",
@@ -38,6 +42,7 @@
     "@tanstack/react-virtual": "^3.14.15",
     "better-sqlite3": "^13.0.3",
     "dompurify": "^3.4.16",
+    "electron-squirrel-startup": "^1.0.1",
     "fflate": "^0.8.3",
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",
@@ -53,5 +58,8 @@
     "sigma": "^3.0.3",
     "unified": "^11.0.5",
     "zod": "^4.6.5"
-  }
+  },
+  "description": "Nopsidian — 로컬 Markdown 블록 편집기",
+  "author": "choiyoh",
+  "license": "UNLICENSED"
 }

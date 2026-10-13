@@ -1,3 +1,4 @@
+import squirrelStartup from 'electron-squirrel-startup';
 import { app, BrowserWindow, dialog, safeStorage, session, shell } from 'electron';
 import { createHash } from 'node:crypto';
 import { applyRename, planRename, undoRename } from './rename';
@@ -59,6 +60,9 @@ const devServerUrl =
 
 /** 기본 앱으로 열어도 안전한 문서·미디어 형식 */
 const OPENABLE = /\.(pdf|txt|csv|png|jpe?g|gif|webp|svg|avif|bmp|mp3|m4a|wav|ogg|flac|mp4|webm|mov|m4v|docx?|xlsx?|pptx?|hwp|hwpx|rtf)$/i;
+
+// Windows 설치·업데이트·제거 중에 Squirrel 이 앱을 잠깐 띄운다. 바로가기를 만들고 종료한다.
+if (process.platform === 'win32' && squirrelStartup) app.quit();
 
 registerSchemes();
 

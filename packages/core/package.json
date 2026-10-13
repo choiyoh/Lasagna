@@ -32,6 +32,7 @@
     "./testing": "./src/testing/corpus.ts",
     "./links": "./src/link-resolve.ts",
     "./assets": "./src/assets.ts",
+    "./diff": "./src/diff.ts",
     "./db": "./src/db/index.ts",
     "./db/values": "./src/db/values.ts",
     "./db/rollup": "./src/db/rollup.ts",

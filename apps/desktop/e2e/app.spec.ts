@@ -1331,6 +1331,33 @@ views:
     await page.getByRole('tab', { name: '파일' }).click();
   });
 
+  test('버전 기록: 저장할 때마다 이전 버전이 남고, 현재와 비교해 복원할 수 있다', async () => {
+    const page = await app.firstWindow();
+    const file = note('기록노트', '# 기록노트\n\n처음 내용\n');
+    await open(page, '기록노트');
+    const para = page.locator('.ProseMirror p', { hasText: '처음 내용' });
+    await para.click();
+    await page.waitForTimeout(150);
+    await page.keyboard.press('End');
+    await page.keyboard.type(' 고침1');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('고침1');
+    await page.keyboard.type(' 고침2');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('고침2');
+
+    const historyTab = page.getByRole('tab', { name: '기록' });
+    if (!(await historyTab.isVisible())) await page.getByTitle('링크 패널 열기/닫기').click();
+    await historyTab.click();
+    const panel = page.getByTestId('panel-history');
+    await expect(panel.getByTestId('history-entry')).not.toHaveCount(0, { timeout: 8000 });
+    // 가장 오래된 기록 = 처음 내용 그대로
+    await panel.getByTestId('history-entry').last().click();
+    await expect(panel.getByTestId('history-diff')).toContainText('처음 내용');
+    await panel.getByTestId('history-restore').click();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toBe('# 기록노트\n\n처음 내용\n');
+    await expect(page.locator('.ProseMirror p', { hasText: '처음 내용' })).not.toContainText('고침', { timeout: 8000 });
+    await page.getByRole('tab', { name: '링크' }).click();
+  });
+
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
     const page = await app.firstWindow();
     const today = await page.evaluate(() => {
@@ -1353,7 +1380,7 @@ views:
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'graph', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'graph', 'history', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

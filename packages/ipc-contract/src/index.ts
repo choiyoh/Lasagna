@@ -250,6 +250,9 @@ export const contract = {
     input: z.object({ undoId: z.string().regex(/^[0-9a-z-]+$/) }),
     output: z.object({ restored: z.number(), skipped: z.array(relPath) }),
   },
+  /** 노트의 버전 기록(저장 때마다 이전 내용을 남긴 스냅샷), 최신 순 */
+  'history.list': { input: z.object({ path: relPath }), output: z.array(z.object({ id: z.string(), time: z.string(), size: z.number() })) },
+  'history.read': { input: z.object({ path: relPath, id: z.string().max(100) }), output: z.object({ content: z.string() }) },
   'link.backlinks': { input: z.object({ path: relPath }), output: z.array(backlinkContext) },
   'link.outgoing': { input: z.object({ path: relPath }), output: z.array(outgoingLink) },
   'link.unlinked': { input: z.object({ path: relPath }), output: z.array(unlinkedMention) },

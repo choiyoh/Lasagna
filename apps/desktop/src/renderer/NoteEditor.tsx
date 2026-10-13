@@ -313,12 +313,20 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       void load();
     });
 
+    // 앱 안에서 파일을 바꾼 경우(버전 복원 등)는 자기 쓰기라 `external` 이 아니므로 직접 알린다
+    const onReload = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== path || dirty || saving) return;
+      void load();
+    };
+    window.addEventListener('nops:reload-note', onReload);
+
     void load();
 
     return () => {
       disposed = true;
       unregisterFlush();
       offChanged();
+      window.removeEventListener('nops:reload-note', onReload);
       clearTimeout(timer);
       // 닫기 전에 남은 편집을 저장한다
       if (loaded && dirty && !saving) {

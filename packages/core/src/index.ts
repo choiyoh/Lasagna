@@ -6,3 +6,5 @@ export * from './save.js';
 export * from './link-resolve.js';
 export * from './assets.js';
 export * from './rename-links.js';
+export * from './history.js';
+export * from './diff.js';

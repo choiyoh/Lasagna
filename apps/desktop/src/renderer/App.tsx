@@ -10,6 +10,7 @@ import { useAssetStore } from './assets';
 import { ConfirmDialog } from './ConfirmDialog';
 import { flushAll } from './flush';
 import { LinkPanel } from './LinkPanel';
+import { HistoryPanel } from './HistoryPanel';
 import { DatabaseScreen } from './db/DatabaseScreen';
 import { DbList } from './db/DbList';
 import { SyncDialog, syncStateText } from './SyncDialog';
@@ -112,7 +113,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [dbOpen, setDbOpen] = useState<string | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
   const [sync, setSync] = useState<SyncStatus | null>(null);
-  const [dockTab, setDockTab] = useState<'links' | 'graph'>('links');
+  const [dockTab, setDockTab] = useState<'links' | 'graph' | 'history'>('links');
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const assets = useAssetStore();
@@ -506,8 +507,11 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 <button role="tab" aria-selected={dockTab === 'graph'} className={dockTab === 'graph' ? 'active' : ''} onClick={() => setDockTab('graph')}>
                   로컬 그래프
                 </button>
+                <button role="tab" aria-selected={dockTab === 'history'} className={dockTab === 'history' ? 'active' : ''} onClick={() => setDockTab('history')}>
+                  기록
+                </button>
               </div>
-              {dockTab === 'links' ? <LinkPanel path={selected} onOpen={setSelected} /> : <LocalGraph path={selected} onOpen={setSelected} />}
+              {dockTab === 'links' ? <LinkPanel path={selected} onOpen={setSelected} /> : dockTab === 'history' ? <HistoryPanel path={selected} onRestored={(message) => setToast({ message })} /> : <LocalGraph path={selected} onOpen={setSelected} />}
             </div>
           )}
         </div>

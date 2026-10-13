@@ -8,6 +8,8 @@ import {
   atomicWrite,
   ensureBlockIdAt,
   isGenericName,
+  listHistory,
+  readHistory,
   linkNameFor,
   splitFrontmatter,
   pastedName,
@@ -257,6 +259,8 @@ function registerHandlers() {
     await v.index.ready;
     return v.index.query('localGraph', rel, { ...opts, depth, direction });
   });
+  handle('history.list', ({ path: rel }) => listHistory(requireVault().info.path, rel));
+  handle('history.read', ({ path: rel, id }) => ({ content: readHistory(requireVault().info.path, rel, id) }));
   handle('bookmarks.get', () => {
     const v = requireVault();
     try {

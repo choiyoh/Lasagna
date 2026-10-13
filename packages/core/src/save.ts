@@ -12,6 +12,7 @@ import {
   writeSync,
 } from 'node:fs';
 import path from 'node:path';
+import { pruneHistory } from './history.js';
 import { merge3 } from './merge3.js';
 import { resolveInVault } from './vault-path.js';
 
@@ -61,6 +62,7 @@ export function snapshot(root: string, rel: string, content: string, now = new D
   if (existing.at(-1)?.endsWith(`-${h}.md`)) return;
   const stamp = now.toISOString().replace(/[:.]/g, '-');
   atomicWrite(path.join(dir, `${stamp}-${h}.md`), content);
+  pruneHistory(root, rel, now);
 }
 
 function dateStamp(d: Date) {

@@ -442,7 +442,12 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             ⇄
           </button>
         </header>
-        <div className="sidebar__actions">
+        <nav className="sidebar__nav" aria-label="빠른 메뉴">
+          <button className="navitem" onClick={() => setSwitcher(true)} title="빠른 전환기 (⌘O)" aria-label="노트 찾기">
+            <span className="navitem__icon" aria-hidden>⌕</span>
+            <span className="navitem__label">노트 찾기</span>
+            <kbd>⌘O</kbd>
+          </button>
           {creating ? (
             <input
               className="search"
@@ -456,22 +461,20 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               onBlur={() => setCreating(false)}
             />
           ) : (
-            <>
-              <button className="new-note" onClick={() => setCreating(true)}>
-                + 새 노트
-              </button>
-              <button className="new-note" onClick={() => void openDaily()} title="오늘의 노트 (⌘⌥D)">
-                오늘
-              </button>
-              <button className="new-note" onClick={() => { setDbOpen(null); setGraphOpen((o) => !o); }} title="그래프 (⌘⇧G)">
-                그래프
-              </button>
-              <button className="new-note" onClick={() => setSwitcher(true)} title="빠른 전환기 (⌘O)">
-                ⌘O
-              </button>
-            </>
+            <button className="navitem" onClick={() => setCreating(true)} aria-label="새 노트">
+              <span className="navitem__icon" aria-hidden>＋</span>
+              <span className="navitem__label">새 노트</span>
+            </button>
           )}
-        </div>
+          <button className="navitem" onClick={() => void openDaily()} title="오늘의 노트 (⌘⌥D)" aria-label="오늘">
+            <span className="navitem__icon" aria-hidden>☀</span>
+            <span className="navitem__label">오늘의 노트</span>
+          </button>
+          <button className="navitem" onClick={() => { setDbOpen(null); setGraphOpen((o) => !o); }} title="그래프 (⌘⇧G)" aria-label="그래프">
+            <span className="navitem__icon" aria-hidden>◎</span>
+            <span className="navitem__label">그래프</span>
+          </button>
+        </nav>
         <input className="search" placeholder="전문 검색" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="sidebar__tabs" role="tablist">
           <button role="tab" aria-selected={sideTab === 'files'} className={sideTab === 'files' ? 'active' : ''} onClick={() => setSideTab('files')}>
@@ -487,9 +490,6 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             태그
           </button>
         </div>
-        <button className="syncbar" onClick={() => setSyncOpen(true)} title="Google Drive 동기화" data-testid="sync-bar">
-          ☁ {sync?.enabled ? syncStateText(sync) : '동기화 꺼짐'}
-        </button>
         {progress && (
           <p className="muted small">
             인덱싱 {progress.done}/{progress.total}
@@ -538,6 +538,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             <TreeView nodes={tree} selected={selected} onSelect={(p, newTab) => (newTab ? openInNewTab(p) : setSelected(p))} onRenameFolder={(f) => void renameEntry(f, true)} />
           )}
         </nav>
+        <button className="syncbar" onClick={() => setSyncOpen(true)} title="Google Drive 동기화" data-testid="sync-bar">
+          ☁ {sync?.enabled ? syncStateText(sync) : '동기화 꺼짐'}
+        </button>
       </aside>
       <main className="content">
         {dbOpen !== null ? (

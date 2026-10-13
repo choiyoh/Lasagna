@@ -16,6 +16,7 @@ import {
   type CellValue,
   type DbSchema,
   type DbRow,
+  type Property,
 } from '@nopsidian/core/db';
 import {
   csvToRows,
@@ -166,7 +167,7 @@ export async function addRow(
   }
   const now = new Date();
   fm.created = localIso(now);
-  const tpl = template ?? schema.defaultTemplate;
+  const tpl = template === '' ? undefined : (template ?? schema.defaultTemplate);
   let content: string;
   if (tpl) {
     const body = readFileSync(resolveInVault(v.info.path, tpl), 'utf8');
@@ -241,6 +242,7 @@ export async function editSchema(v: OpenVault, folder: string, op: SchemaOp): Pr
         ...(op.title !== undefined ? { title: op.title } : {}),
         ...(op.rowsFolder !== undefined ? { rowsFolder: op.rowsFolder } : {}),
         ...(op.defaultTemplate !== undefined ? { defaultTemplate: op.defaultTemplate ?? undefined } : {}),
+        ...(op.templates !== undefined ? { templates: op.templates } : {}),
       });
       break;
   }
@@ -279,8 +281,21 @@ async function queryAll(v: OpenVault, folder: string, viewId: string | undefined
   );
 }
 
-/** CSV 파일을 골라 새 데이터베이스(폴더)로 만든다: 열 형식은 값을 보고 추정한다. */
-export async function importCsv(v: OpenVault): Promise<{ folder: string; rows: number; issues: string[] } | null> {
+interface CsvSession {
+  table: string[][];
+  fileName: string;
+}
+const csvSessions = new Map<string, CsvSession>();
+
+export interface CsvPreview {
+  token: string;
+  fileName: string;
+  rowCount: number;
+  columns: { index: number; header: string; name: string; type: string; options: string[]; sample: string[] }[];
+}
+
+/** CSV 파일을 고르게 하고 열 이름·추정 형식·미리보기를 돌려준다. 취소하면 null. */
+export async function importCsvPreview(): Promise<CsvPreview | null> {
   const opts = { title: 'CSV 가져오기', properties: ['openFile' as const], filters: [{ name: 'CSV', extensions: ['csv', 'tsv', 'txt'] }] };
   const win = dlgParent();
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
@@ -288,24 +303,93 @@ export async function importCsv(v: OpenVault): Promise<{ folder: string; rows: n
   if (r.canceled || !file) return null;
   const table = parseCsv(readFileSync(file, 'utf8'), { delimiter: 'auto' });
   if (table.length < 2) throw new Error('가져올 행이 없어요(첫 줄은 열 이름이에요)');
-  const columns = guessColumns(table);
-  const imported = csvToRows(table, columns);
-  const base = path.basename(file).replace(/\.[^.]+$/, '').replace(unsafeName, ' ').trim() || '가져온 데이터';
-  let folder = base;
-  for (let n = 2; existsSync(resolveInVault(v.info.path, folder)); n++) folder = `${base} ${n}`;
-  await createDatabase(v, folder, base);
+  const token = createHash('sha256').update(`${file}:${Date.now()}:${Math.random()}`).digest('hex').slice(0, 16);
+  while (csvSessions.size >= 3) csvSessions.delete(csvSessions.keys().next().value!);
+  const fileName = path.basename(file);
+  csvSessions.set(token, { table, fileName });
+  const guesses = guessColumns(table);
+  return {
+    token,
+    fileName,
+    rowCount: table.length - 1,
+    columns: guesses.map((g, index) => ({
+      index,
+      header: g.header,
+      name: g.name,
+      type: g.isTitle ? 'title' : (g.prop?.type ?? 'skip'),
+      options: g.prop && 'options' in g.prop ? g.prop.options.map((o) => o.name) : [],
+      sample: table.slice(1, 4).map((row) => row[index] ?? ''),
+    })),
+  };
+}
+
+export interface CsvColumnChoice {
+  index: number;
+  name: string;
+  type: string;
+}
+
+const IMPORT_TYPES = new Set(['text', 'number', 'select', 'multi_select', 'date', 'checkbox', 'url', 'email', 'phone']);
+
+/** 사용자가 고른 열 대응으로 가져온다: 새 데이터베이스를 만들거나 기존 데이터베이스에 행을 더한다. */
+export async function importCsvApply(
+  v: OpenVault,
+  token: string,
+  target: { mode: 'new'; name: string } | { mode: 'existing'; folder: string },
+  choices: CsvColumnChoice[],
+): Promise<{ folder: string; rows: number; issues: string[] }> {
+  const session = csvSessions.get(token);
+  if (!session) throw new Error('가져오기 세션이 만료됐어요. 파일을 다시 골라 주세요');
+  const { table } = session;
+  const titleCols = choices.filter((c) => c.type === 'title');
+  if (titleCols.length !== 1) throw new Error('제목으로 쓸 열을 하나만 골라 주세요');
+
+  let folder: string;
+  let schema: DbSchema | null = null;
+  if (target.mode === 'new') {
+    const base = target.name.replace(unsafeName, ' ').trim() || session.fileName.replace(/\.[^.]+$/, '');
+    folder = base;
+    for (let n = 2; existsSync(resolveInVault(v.info.path, folder)); n++) folder = `${base} ${n}`;
+    await createDatabase(v, folder, base);
+  } else {
+    folder = target.folder;
+    schema = readDbSchema(v, folder);
+  }
   const yamlFile = resolveInVault(v.info.path, path.posix.join(folder, DB_FILE));
   let yamlText = readFileSync(yamlFile, 'utf8');
-  for (const c of columns) if (c.prop && !c.isTitle) yamlText = setDbProperty(yamlText, c.name, c.prop);
+
+  // 열 정의: 기존 속성이 있으면 그 형식을 따르고, 없으면 고른 형식으로 새로 만든다
+  const guesses = guessColumns(table);
+  const columns = guesses.map((g, index) => {
+    const c = choices.find((x) => x.index === index);
+    if (!c || c.type === 'skip') return { ...g, prop: null, isTitle: false };
+    if (c.type === 'title') return { ...g, name: c.name, prop: null, isTitle: true };
+    const existing = schema?.properties[c.name];
+    let prop: Property | undefined = existing;
+    if (!prop) {
+      if (!IMPORT_TYPES.has(c.type)) throw new Error(`지원하지 않는 형식: ${c.type}`);
+      const distinct = [...new Set(table.slice(1).flatMap((row) => (c.type === 'multi_select' ? (row[index] ?? '').split(',') : [row[index] ?? ''])).map((x) => x.trim()).filter(Boolean))].slice(0, 100);
+      const def = propertySchema.parse(
+        c.type === 'select' || c.type === 'multi_select'
+          ? { type: c.type, options: distinct.map((name) => ({ name })) }
+          : c.type === 'number'
+            ? { type: 'number', format: 'number' }
+            : { type: c.type },
+      );
+      prop = def;
+      yamlText = setDbProperty(yamlText, c.name, def);
+    }
+    return { ...g, name: c.name, prop, isTitle: false };
+  });
   atomicWrite(yamlFile, yamlText);
-  const seen = new Set<string>();
+
+  const imported = csvToRows(table, columns);
   const issues: string[] = [];
   for (const row of imported) {
     issues.push(...row.issues);
-    let rel = freeNotePath(v.info.path, folder, row.title);
-    for (let n = 2; seen.has(rel); n++) rel = path.posix.join(folder, `${row.title.replace(unsafeName, ' ').trim()} ${n}.md`);
-    seen.add(rel);
+    const rel = freeNotePath(v.info.path, folder, row.title);
     atomicWrite(resolveInVault(v.info.path, rel), buildRowNote(row.values, ''));
   }
+  csvSessions.delete(token);
   return { folder, rows: imported.length, issues: issues.slice(0, 30) };
 }

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Editor } from '@nopsidian/editor';
+import { createDbViewHost } from './db/dbview-host';
+import type { DbEmbedHost } from './db/EmbeddedDb';
 import { relativePath, vaultUrl } from '@nopsidian/core/assets';
 import { TextSelection } from 'prosemirror-state';
 import {
@@ -31,6 +33,8 @@ interface Props {
   onOpenLink: (link: WikiLinkTarget) => void;
   /** 이름 변경(F2) */
   onRename?: () => void;
+  /** ```dbview 펜스(노트 안의 데이터베이스 뷰)를 그릴 때 쓰는 앱 기능. 없으면 평범한 코드 블록 */
+  dbHost?: DbEmbedHost;
   /** 링크로 열었을 때 이동할 제목/블록 */
   focus?: { heading: string | null; block: string | null } | null;
   /** 이 노트를 가리키는 링크 이름(블록 링크 복사에 쓴다) */
@@ -84,7 +88,7 @@ function scrollToFocus(editor: Editor, focus: { heading: string | null; block: s
  * 열기: 읽기(hash) → 파싱 → 표시. 편집 500ms 뒤 `note.save`(baseHash로 외부 변경 감지).
  * 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다.
  */
-export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName }: Props) {
+export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
@@ -100,6 +104,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   focusRef.current = focus;
   const nameRef = useRef(noteLinkName);
   nameRef.current = noteLinkName;
+  const dbHostRef = useRef(dbHost);
+  dbHostRef.current = dbHost;
   const toggleRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
@@ -128,6 +134,19 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     };
     const editor: Editor = createNopsEditor(host, { onOpenLink: (l) => linkRef.current(l), assets: assetHost,
       links: linksRef.current,
+      dbView: dbHostRef.current
+        ? createDbViewHost({
+            // 에디터는 한 번만 만들어지므로 최신 값은 ref 로 읽는다
+            get vaultId() {
+              return dbHostRef.current!.vaultId;
+            },
+            get notes() {
+              return dbHostRef.current!.notes;
+            },
+            openNote: (p) => dbHostRef.current!.openNote(p),
+            openDb: (f) => dbHostRef.current!.openDb(f),
+          })
+        : undefined,
       slashItems: [
         {
           icon: '📋',

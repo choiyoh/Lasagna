@@ -7,6 +7,7 @@ import { createCodeHighlightPlugin } from './code-highlight';
 import { type BlockLinkOptions, createBlockHandlePlugin, createBlockKeymapPlugin } from './block-handle';
 import { insertCallout, insertColumns, insertMathBlock, insertToggle } from './commands';
 import { type NopsAssetHost, resolveImageSrc } from './asset-host';
+import { createDbViewNodeView, dbViewSlashItem, type NopsDbViewHost } from './db-view';
 import { createEmbedView } from './embed-view';
 import { createFilesPlugin } from './files-plugin';
 import { createFlashPlugin } from './flash';
@@ -31,6 +32,8 @@ export interface NopsEditorOptions {
   assets?: NopsAssetHost;
   /** 추가 슬래시 항목 (예: DB 뷰) */
   slashItems?: SlashItemSpec[];
+  /** ```dbview 펜스를 데이터베이스 뷰로 그리는 호스트. 없으면 평범한 코드 블록으로 보인다 */
+  dbView?: NopsDbViewHost;
 }
 
 const NOTE_ICON = '✎';
@@ -55,7 +58,7 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
   return createEditor(host, {
     schema: nopsSchema,
     table: { ...table, schema: nopsSchema },
-    toolbar: createNotionSupport({ slashItems: [...nopsSlashItems, ...(options.slashItems ?? [])] }),
+    toolbar: createNotionSupport({ slashItems: [...nopsSlashItems, ...(options.dbView ? [dbViewSlashItem(options.dbView)] : []), ...(options.slashItems ?? [])] }),
     style: 'notion',
     messages: messagesKo,
     placeholder: options.placeholder ?? "'/'를 눌러 블록을 추가하세요",
@@ -69,7 +72,11 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
       : undefined,
     resolveImageSrc: assets ? (src) => resolveImageSrc(assets, src) : undefined,
     prompt: showTextPrompt,
-    nodeViews: assets ? { ...nopsNodeViews, embed: createEmbedView(assets, options.onOpenLink) } : nopsNodeViews,
+    nodeViews: {
+      ...nopsNodeViews,
+      ...(assets ? { embed: createEmbedView(assets, options.onOpenLink) } : {}),
+      ...(options.dbView ? { code_block: createDbViewNodeView(options.dbView) } : {}),
+    },
     // 자동완성은 Enter/Tab/방향키를 기본 키맵보다 먼저 받아야 한다
     priorityPlugins: [
       ...(options.links ? [createLinkSuggestPlugin(options.links)] : []),

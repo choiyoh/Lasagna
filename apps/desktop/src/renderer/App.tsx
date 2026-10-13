@@ -179,8 +179,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   }, [refresh]);
 
   /** 이름 변경/이동(노트 또는 폴더): 미리보기(바뀌는 링크 수) → 확인 → 실행 → 되돌리기 */
-  const renameEntry = useCallback(async (from: string, isFolder: boolean) => {
-    const answer = await showTextPrompt(
+  const renameEntry = useCallback(async (from: string, isFolder: boolean, preset?: string) => {
+    const answer = preset ?? await showTextPrompt(
       isFolder ? '폴더의 새 이름 (상위/이름 형식으로 쓰면 이동도 해요)' : '새 이름 (폴더/이름 형식으로 쓰면 이동도 해요)',
       isFolder ? from : from.replace(/\.md$/i, ''),
     );
@@ -269,6 +269,26 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   }, [toast]);
 
   const tree = useMemo(() => buildTree(notes), [notes]);
+  /** 노트 안의 ```dbview 가 앱으로 돌아올 때 쓰는 기능 */
+  const dbHost = useMemo(
+    () =>
+      vault
+        ? {
+            vaultId: vault.id,
+            notes: notes.map((n) => ({ path: n.path, title: n.title })),
+            openNote: (p: string) => {
+              setDbOpen(null);
+              setGraphOpen(false);
+              setSelected(p);
+            },
+            openDb: (f: string) => {
+              setGraphOpen(false);
+              setDbOpen(f);
+            },
+          }
+        : undefined,
+    [vault, notes],
+  );
 
   return (
     <div className="workspace">
@@ -363,6 +383,24 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             }}
             onClose={() => setDbOpen(null)}
             notes={notes.map((n) => ({ path: n.path, title: n.title }))}
+            onRenameNote={(p, title) => {
+              const dir = p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '';
+              void renameEntry(p, false, `${dir}${title.replace(/[\\/:*?"<>|]/g, ' ').trim()}`);
+            }}
+            renderNote={(p) => (
+              <NoteEditor
+                key={p}
+                path={p}
+                vaultId={vault.id}
+                assets={assets}
+                links={linkHost}
+                focus={null}
+                noteLinkName={linkNameFor(p, notes.map((n) => n.path))}
+                onOpenLink={openLink}
+                onRename={() => void renameEntry(p, false)}
+                dbHost={dbHost}
+              />
+            )}
           />
         ) : graphOpen ? (
           <GraphScreen
@@ -384,6 +422,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             noteLinkName={linkNameFor(selected, notes.map((n) => n.path))}
             onOpenLink={openLink}
             onRename={() => void renameCurrent()}
+            dbHost={dbHost}
           />
         ) : (
           <p className="muted pad">왼쪽에서 노트를 선택하세요. ({notes.length}개) · ⌘O로 빠르게 찾을 수 있어요.</p>

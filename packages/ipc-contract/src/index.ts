@@ -164,6 +164,7 @@ export const dbSchemaOp = z.discriminatedUnion('kind', [
     title: z.string().max(200).optional(),
     rowsFolder: z.string().max(200).optional(),
     defaultTemplate: z.string().max(1024).nullable().optional(),
+    templates: z.array(relPath).max(50).optional(),
   }),
 ]);
 
@@ -314,7 +315,8 @@ export const contract = {
       folder: z.string().max(1024),
       title: z.string().min(1).max(200),
       values: z.record(z.string(), z.unknown()).optional(),
-      template: relPath.optional(),
+      /** 빈 문자열 = 템플릿 없이(기본 템플릿도 쓰지 않음) */
+      template: z.union([relPath, z.literal('')]).optional(),
     }),
     output: z.object({ path: relPath }),
   },
@@ -324,8 +326,27 @@ export const contract = {
   'db.create': { input: z.object({ folder: z.string().max(1024), title: z.string().min(1).max(200) }), output: z.object({ folder: z.string() }) },
   /** 현재 뷰를 CSV 로 저장(저장 대화상자). 취소하면 null. */
   'db.exportCsv': { input: z.object({ folder: z.string().max(1024), viewId: z.string().max(200).optional() }), output: z.object({ path: z.string(), rows: z.number() }).nullable() },
-  /** CSV 파일을 골라 새 데이터베이스로 만든다(열 형식 자동 추정). 취소하면 null. */
-  'db.importCsv': { input: z.undefined(), output: z.object({ folder: z.string(), rows: z.number(), issues: z.array(z.string()) }).nullable() },
+  /** CSV 파일을 고르고(대화상자) 열 이름·추정 형식·미리보기를 돌려준다. 취소하면 null. */
+  'db.importCsvPreview': {
+    input: z.undefined(),
+    output: z
+      .object({
+        token: z.string(),
+        fileName: z.string(),
+        rowCount: z.number(),
+        columns: z.array(z.object({ index: z.number(), header: z.string(), name: z.string(), type: z.string(), options: z.array(z.string()), sample: z.array(z.string()) })),
+      })
+      .nullable(),
+  },
+  /** 사용자가 고른 열 대응으로 새 데이터베이스를 만들거나 기존 데이터베이스에 행을 더한다. */
+  'db.importCsvApply': {
+    input: z.object({
+      token: z.string().max(100),
+      target: z.discriminatedUnion('mode', [z.object({ mode: z.literal('new'), name: z.string().max(200) }), z.object({ mode: z.literal('existing'), folder: z.string().max(1024) })]),
+      columns: z.array(z.object({ index: z.number().int().min(0), name: z.string().min(1).max(100), type: z.string().max(40) })).max(200),
+    }),
+    output: z.object({ folder: z.string(), rows: z.number(), issues: z.array(z.string()) }),
+  },
   'tag.list': { input: z.undefined(), output: z.array(z.object({ tag: z.string(), count: z.number() })) },
   'tag.notes': {
     input: z.object({ tag: z.string().max(200) }),

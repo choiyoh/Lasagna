@@ -1,9 +1,18 @@
 import { useState } from 'react';
-import type { FilterNode, FilterOp, Property, View } from '@nopsidian/core/db';
+import type { CALC_FNS, FilterNode, FilterOp, Property, View } from '@nopsidian/core/db';
 import { optionsOf } from '@nopsidian/core/db/values';
 import { TITLE, type DbData } from './types';
 
 type Cond = { prop: string; op: FilterOp; value?: unknown };
+
+const CALC_LABEL: Record<string, string> = {
+  count: '개수', count_values: '값 있는 수', count_empty: '빈 수', count_unique: '고유 값 수', sum: '합계', avg: '평균', min: '최소', max: '최대', checked: '체크됨', unchecked: '체크 안 됨',
+};
+const CALC_BY_KIND: Record<string, (typeof CALC_FNS)[number][]> = {
+  any: ['count', 'count_values', 'count_empty', 'count_unique'],
+  number: ['count', 'count_values', 'count_empty', 'sum', 'avg', 'min', 'max'],
+  checkbox: ['count', 'checked', 'unchecked'],
+};
 
 const OPS_BY_KIND: Record<string, FilterOp[]> = {
   text: ['contains', '!contains', '=', '!=', 'startsWith', 'endsWith', 'empty', '!empty'],
@@ -55,7 +64,7 @@ const VIEW_TYPES: { type: View['type']; label: string }[] = [
 
 /** 필터·정렬·그룹·표시 속성 조절 막대. 바꾸면 저장 전의 임시 뷰가 되고, "보기 저장"으로 `_db.yaml` 에 쓴다. */
 export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Props) {
-  const [open, setOpen] = useState<'filter' | 'sort' | 'group' | 'cols' | null>(null);
+  const [open, setOpen] = useState<'filter' | 'sort' | 'group' | 'cols' | 'calc' | null>(null);
   const props = [TITLE, ...Object.keys(data.schema.properties)];
   const conds = flatConditions(view.filter);
   const toggle = (k: NonNullable<typeof open>) => setOpen(open === k ? null : k);
@@ -96,6 +105,9 @@ export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Pr
         그룹{view.groupBy ? `: ${view.groupBy}` : ''}
       </button>
       <button onClick={() => toggle('cols')} aria-expanded={open === 'cols'}>속성 표시</button>
+      {view.type === 'table' && (
+        <button className={view.calc && Object.keys(view.calc).length ? 'on' : ''} onClick={() => toggle('calc')} aria-expanded={open === 'calc'}>계산</button>
+      )}
       {dirty && (
         <span className="dbtoolbar__dirty">
           <button className="primary" onClick={onSave}>보기 저장</button>
@@ -196,6 +208,43 @@ export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Pr
               <option key={p}>{p}</option>
             ))}
           </select>
+          {view.groupBy && (
+            <select value={view.subGroupBy ?? ''} onChange={(e) => { onChange({ ...view, subGroupBy: e.target.value || undefined }); setOpen(null); }} aria-label="하위 그룹 속성">
+              <option value="">하위 그룹 없음</option>
+              {groupable.filter((p) => p !== view.groupBy).map((p) => (
+                <option key={p}>{p}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {open === 'calc' && (
+        <div className="dbpop" role="dialog" aria-label="계산 행">
+          {cols.map((c) => {
+            const def = c === TITLE ? undefined : data.schema.properties[c];
+            const fns = CALC_BY_KIND[def ? (def.type === 'number' ? 'number' : def.type === 'checkbox' ? 'checkbox' : 'any') : 'any']!;
+            return (
+              <label key={c} className="dbpop__row small">
+                <span style={{ minWidth: 100 }}>{c === TITLE ? '제목' : c}</span>
+                <select
+                  value={view.calc?.[c] ?? ''}
+                  onChange={(e) => {
+                    const next = { ...(view.calc ?? {}) };
+                    if (e.target.value) next[c] = e.target.value as (typeof CALC_FNS)[number];
+                    else delete next[c];
+                    onChange({ ...view, calc: Object.keys(next).length ? next : undefined });
+                  }}
+                  aria-label={`${c} 계산`}
+                >
+                  <option value="">없음</option>
+                  {fns.map((f) => (
+                    <option key={f} value={f}>{CALC_LABEL[f]}</option>
+                  ))}
+                </select>
+              </label>
+            );
+          })}
         </div>
       )}
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { CsvImportDialog } from './CsvImportDialog';
 
 interface Props {
   onOpen: (folder: string) => void;
@@ -10,6 +11,7 @@ export function DbList({ onOpen }: Props) {
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+  const [importing, setImporting] = useState<Parameters<typeof CsvImportDialog>[0]['preview'] | null>(null);
 
   useEffect(() => {
     const load = () => void window.nops.db.list().then(setDbs).catch(() => undefined);
@@ -73,8 +75,8 @@ export function DbList({ onOpen }: Props) {
           <button
             className="new-note"
             onClick={() =>
-              void window.nops.db.importCsv().then(
-                (r) => r && onOpen(r.folder),
+              void window.nops.db.importCsvPreview().then(
+                (p) => p && setImporting(p),
                 (e) => setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)),
               )
             }
@@ -84,6 +86,16 @@ export function DbList({ onOpen }: Props) {
         </>
       )}
       {error && <p className="warn small pad">{error}</p>}
+      {importing && (
+        <CsvImportDialog
+          preview={importing}
+          onClose={() => setImporting(null)}
+          onDone={(f) => {
+            setImporting(null);
+            onOpen(f);
+          }}
+        />
+      )}
     </div>
   );
 }

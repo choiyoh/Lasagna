@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { View } from '@nopsidian/core/db';
 import type { DbQueryResult } from '@nopsidian/ipc-contract';
 import { BoardView } from './BoardView';
 import { CalendarView } from './CalendarView';
 import { TimelineView } from './TimelineView';
 import { GalleryView, ListView } from './ListGalleryViews';
+import { CsvImportDialog } from './CsvImportDialog';
 import { PropertyManager } from './PropertyManager';
 import { TableView } from './TableView';
+import { TemplateSettings } from './TemplateSettings';
 import { ViewToolbar } from './ViewToolbar';
 import type { CellValue, DbData, DbRowDto } from './types';
 
@@ -17,21 +19,40 @@ interface Props {
   onClose: () => void;
   /** 관계 속성에서 고를 수 있는 볼트의 노트 */
   notes: { path: string; title: string }[];
+  /** 제목 칸에서 이름을 바꾸면 노트 이름 변경 흐름(링크 갱신 포함)으로 넘긴다 */
+  onRenameNote?: (path: string, title: string) => void;
+  /** 행을 옆/가운데 창에서 열 때 노트 편집기를 그린다 */
+  renderNote?: (path: string) => ReactNode;
 }
+
+type PeekMode = 'full' | 'side' | 'center';
+const PEEK_KEY = 'nops.db.peek';
+const readPeek = (): PeekMode => {
+  try {
+    const v = localStorage.getItem(PEEK_KEY);
+    return v === 'side' || v === 'center' ? v : 'full';
+  } catch {
+    return 'full';
+  }
+};
 
 const asData = (r: DbQueryResult): DbData => r as unknown as DbData;
 const sameView = (a: View, b: View) => JSON.stringify(a) === JSON.stringify(b);
 const uid = () => `v${Math.random().toString(36).slice(2, 7)}`;
 
 /** 데이터베이스 한 개의 화면: 보기 탭 · 필터/정렬/그룹 · 표/보드/목록/갤러리 · 속성 관리 · 새 행. */
-export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes }: Props) {
+export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, onRenameNote, renderNote }: Props) {
   const [data, setData] = useState<DbData | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
   const [draft, setDraft] = useState<View | null>(null);
   const [error, setError] = useState('');
-  const [adding, setAdding] = useState<{ title: string; values: Record<string, unknown> } | null>(null);
+  const [adding, setAdding] = useState<{ title: string; values: Record<string, unknown>; template?: string | null } | null>(null);
   const [showProps, setShowProps] = useState(false);
   const [notice, setNotice] = useState('');
+  const [peekMode, setPeekMode] = useState<PeekMode>(readPeek);
+  const [peek, setPeek] = useState<string | null>(null);
+  const [showTpl, setShowTpl] = useState(false);
+  const [importing, setImporting] = useState<Parameters<typeof CsvImportDialog>[0]['preview'] | null>(null);
   const seq = useRef(0);
 
   const load = useCallback(
@@ -110,7 +131,12 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes }: 
   const addRow = useCallback(async () => {
     if (!adding || !adding.title.trim()) return;
     try {
-      await window.nops.db.addRow({ folder, title: adding.title.trim(), values: adding.values });
+      await window.nops.db.addRow({
+        folder,
+        title: adding.title.trim(),
+        values: adding.values,
+        ...(adding.template !== undefined ? { template: adding.template ?? '' } : {}),
+      });
       setAdding(null);
       await load();
     } catch (e) {
@@ -118,6 +144,22 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes }: 
     }
   }, [adding, folder, load]);
 
+  /** 행 열기: 설정에 따라 옆/가운데 창 또는 전체 화면 */
+  const openRow = useCallback(
+    (path: string) => {
+      if (peekMode === 'full' || !renderNote) onOpenNote(path);
+      else setPeek(path);
+    },
+    [peekMode, renderNote, onOpenNote],
+  );
+  useEffect(() => {
+    if (!peek) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !(e.target instanceof HTMLInputElement) && setPeek(null);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [peek]);
+
+  const rowTitle = (p: string) => notes.find((n) => n.path === p)?.title ?? p.replace(/^.*\//, '').replace(/\.md$/, '');
   const tabs = data?.schema.views ?? [];
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const flat = useMemo(() => (data?.groups ? data.groups.flatMap((g) => g.rows) : rows), [data, rows]);
@@ -145,6 +187,39 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes }: 
         >
           CSV 내보내기
         </button>
+        {renderNote && (
+          <label className="small">
+            <span className="muted">행 열기 </span>
+            <select
+              value={peekMode}
+              onChange={(e) => {
+                const m = e.target.value as PeekMode;
+                setPeekMode(m);
+                try {
+                  localStorage.setItem(PEEK_KEY, m);
+                } catch {
+                  // 저장할 수 없으면 이번 실행에서만 유지
+                }
+              }}
+              aria-label="행 열기 방식"
+            >
+              <option value="full">전체 화면</option>
+              <option value="side">옆 창</option>
+              <option value="center">가운데 창</option>
+            </select>
+          </label>
+        )}
+        <button
+          onClick={() =>
+            void window.nops.db.importCsvPreview().then(
+              (p) => p && setImporting(p),
+              (e) => setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)),
+            )
+          }
+        >
+          CSV 가져오기
+        </button>
+        <button onClick={() => setShowTpl((s) => !s)} aria-expanded={showTpl}>템플릿</button>
         <button onClick={() => setShowProps((s) => !s)} aria-expanded={showProps}>속성</button>
         <button className="primary" onClick={() => setAdding({ title: '', values: {} })}>+ 새 행</button>
         <button onClick={onClose} title="닫기 (Esc)">닫기</button>
@@ -155,6 +230,13 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes }: 
           onSetProperty={(name, def) => void edit({ kind: 'setProperty', name, def })}
           onRemove={(name) => void edit({ kind: 'removeProperty', name })}
           onRename={(from, to) => void edit({ kind: 'renameProperty', from, to })}
+        />
+      )}
+      {showTpl && (
+        <TemplateSettings
+          data={data}
+          notes={notes}
+          onSave={({ templates, defaultTemplate }) => void edit({ kind: 'meta', templates, defaultTemplate })}
         />
       )}
       <nav className="dbtabs" role="tablist" aria-label="보기">
@@ -237,17 +319,31 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes }: 
             }}
             aria-label="새 행 제목"
           />
+          {data.schema.templates.length > 0 && (
+            <select
+              value={adding.template ?? data.schema.defaultTemplate ?? ''}
+              onChange={(e) => setAdding({ ...adding, template: e.target.value || null })}
+              aria-label="새 행 템플릿"
+            >
+              <option value="">템플릿 없음</option>
+              {data.schema.templates.map((t) => (
+                <option key={t} value={t}>{notes.find((n) => n.path === t)?.title ?? t}</option>
+              ))}
+            </select>
+          )}
           <button className="primary" onClick={() => void addRow()} disabled={!adding.title.trim()}>만들기</button>
           <button onClick={() => setAdding(null)}>취소</button>
         </div>
       )}
+      <div className={peek && peekMode === 'side' ? 'dbscreen__split' : 'dbscreen__splitoff'}>
       <div className="dbscreen__body">
         {view.type === 'table' && (
           <TableView
             data={current}
             rows={data.groups ? flat : rows}
-            onOpen={onOpenNote}
+            onOpen={openRow}
             onEdit={(r, p, v) => void updateCell(r, p, v)}
+            onRenameTitle={onRenameNote ? (r, t) => onRenameNote(r.path, t) : undefined}
             onWidth={(prop, w) => setDraft({ ...view, widths: { ...(view.widths ?? {}), [prop]: w } })}
             notes={notes}
           />
@@ -255,18 +351,18 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes }: 
         {view.type === 'board' && (
           <BoardView
             data={current}
-            onOpen={onOpenNote}
+            onOpen={openRow}
             onMove={(r, p, v) => void updateCell(r, p, v)}
             onAdd={(key) => setAdding({ title: '', values: view.groupBy && key ? { [view.groupBy]: key } : {} })}
           />
         )}
-        {view.type === 'list' && <ListView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={onOpenNote} />}
-        {view.type === 'gallery' && <GalleryView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={onOpenNote} />}
+        {view.type === 'list' && <ListView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={openRow} />}
+        {view.type === 'gallery' && <GalleryView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={openRow} />}
         {view.type === 'calendar' && (
           <CalendarView
             data={current}
             rows={data.groups ? flat : rows}
-            onOpen={onOpenNote}
+            onOpen={openRow}
             onMove={(r, p, v) => void updateCell(r, p, v)}
             onAdd={(date) => {
               const dp = view.dateProp ?? Object.entries(data.schema.properties).find(([, p]) => p.type === 'date')?.[0];
@@ -275,9 +371,45 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes }: 
             onOpenDaily={(date) => void window.nops.daily.open({ date }).then((r) => onOpenNote(r.path))}
           />
         )}
-        {view.type === 'timeline' && <TimelineView data={current} rows={data.groups ? flat : rows} onOpen={onOpenNote} onChange={(r, p, v) => void updateCell(r, p, v)} />}
+        {view.type === 'timeline' && <TimelineView data={current} rows={data.groups ? flat : rows} onOpen={openRow} onChange={(r, p, v) => void updateCell(r, p, v)} />}
         {data.matched === 0 && <p className="muted pad">조건에 맞는 행이 없어요.</p>}
       </div>
+      {peek && renderNote && peekMode === 'side' && (
+        <aside className="dbpeek" aria-label="행 미리보기" data-testid="db-peek">
+          <header>
+            <strong>{rowTitle(peek)}</strong>
+            <span className="spacer" />
+            <button onClick={() => onOpenNote(peek)} title="전체 화면으로 열기">⤢</button>
+            <button onClick={() => setPeek(null)} aria-label="닫기">✕</button>
+          </header>
+          <div className="dbpeek__body">{renderNote(peek)}</div>
+        </aside>
+      )}
+      </div>
+      {importing && (
+        <CsvImportDialog
+          preview={importing}
+          existing={{ folder, title: data.schema.title ?? '데이터베이스', properties: data.schema.properties }}
+          onClose={() => setImporting(null)}
+          onDone={() => {
+            setImporting(null);
+            void load();
+          }}
+        />
+      )}
+      {peek && renderNote && peekMode === 'center' && (
+        <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setPeek(null)}>
+          <div className="dbpeek dbpeek--center" role="dialog" aria-modal="true" aria-label="행 미리보기" data-testid="db-peek">
+            <header>
+              <strong>{rowTitle(peek)}</strong>
+              <span className="spacer" />
+              <button onClick={() => onOpenNote(peek)} title="전체 화면으로 열기">⤢</button>
+              <button onClick={() => setPeek(null)} aria-label="닫기">✕</button>
+            </header>
+            <div className="dbpeek__body">{renderNote(peek)}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

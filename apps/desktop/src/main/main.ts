@@ -43,7 +43,7 @@ import {
 } from './vault';
 import { readFile } from 'node:fs/promises';
 import { CredentialStore, SyncController } from './sync';
-import { addRow, createDatabase, editSchema, exportCsv, importCsv, updateCell } from './db';
+import { addRow, createDatabase, editSchema, exportCsv, importCsvApply, importCsvPreview, updateCell } from './db';
 
 // Forge Vite 플러그인이 주입하는 전역
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -302,7 +302,8 @@ function registerHandlers() {
   handle('db.editSchema', async ({ folder, op }) => ({ touchedRows: await editSchema(requireVault(), folder, op) }));
   handle('db.create', async ({ folder, title }) => ({ folder: await createDatabase(requireVault(), folder, title) }));
   handle('db.exportCsv', ({ folder, viewId }) => exportCsv(requireVault(), folder, viewId));
-  handle('db.importCsv', () => importCsv(requireVault()));
+  handle('db.importCsvPreview', () => importCsvPreview());
+  handle('db.importCsvApply', ({ token, target, columns }) => importCsvApply(requireVault(), token, target, columns));
   handle('tag.list', async () => {
     const v = requireVault();
     await v.index.ready;

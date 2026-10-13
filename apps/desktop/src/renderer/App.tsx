@@ -4,7 +4,7 @@ import { createLinkResolver } from '@nopsidian/core/links';
 import type { WikiLinkTarget } from '@nopsidian/editor/nops';
 import { showTextPrompt } from '@nopsidian/editor/nops';
 import type { NopsPeekHost } from '@nopsidian/editor/nops';
-import { extractExcerpt } from '@nopsidian/core/markdown';
+import { extractExcerpt, parseNote, replaceBlock } from '@nopsidian/core/markdown';
 import { NoteEditor } from './NoteEditor';
 import { useAssetStore } from './assets';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -31,6 +31,11 @@ export function App() {
   if (vault === undefined) return null;
   if (!vault) return <VaultPicker onOpen={setVault} />;
   return <Workspace vault={vault} onClose={() => setVault(null)} />;
+}
+
+/** 블록 원문 끝의 ` ^id` 를 뗀다 */
+function stripBlockId(source: string, id: string): string {
+  return source.replace(new RegExp(`[ \\t]*\\^${id}[ \\t]*(\\r?)$`), '$1').replace(/\s+$/, '');
 }
 
 function VaultPicker({ onOpen }: { onOpen: (v: VaultInfo) => void }) {
@@ -168,15 +173,49 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   );
 
   const peekHost = useMemo<NopsPeekHost>(
-    () => ({
-      async peek({ target, heading, block }) {
+    () => {
+      const findNote = (target: string) => {
         const id = resolver(target, selected ?? '');
-        const note = id === undefined ? undefined : notes[id];
+        return id === undefined ? undefined : notes[id];
+      };
+      return {
+      async peek({ target, heading, block }) {
+        const note = findNote(target);
         if (!note) return null;
         const { content } = await window.nops.note.read({ path: note.path });
         return { title: note.title, ...extractExcerpt(content, { heading, block }) };
       },
-    }),
+      // 동기화 블록: `![[노트#^id]]` 를 그 자리에서 고치면 원본 노트의 블록이 바뀐다
+      async source({ target, block }) {
+        const note = findNote(target);
+        if (!note || !block) return null;
+        const { content } = await window.nops.note.read({ path: note.path });
+        const parsed = parseNote(content);
+        const b = parsed.blocks.find((x) => x.blockId === block);
+        if (!b) return null;
+        return stripBlockId(b.source, block);
+      },
+      async save({ target, block }, markdown) {
+        const note = findNote(target);
+        if (!note || !block) return false;
+        await flushAll();
+        const { content, hash } = await window.nops.note.read({ path: note.path });
+        const parsed = parseNote(content);
+        const b = parsed.blocks.find((x) => x.blockId === block);
+        if (!b) return false;
+        // `^id` 가 줄 끝에 붙어 있던 블록이면 새 원문 끝에도 붙이고, 아래 별도 줄이면 그 줄은 그대로 둔다
+        const inline = new RegExp(`(?:^|\\s)\\^${block}[ \\t]*\\r?$`).test(b.source);
+        const next = markdown.replace(/\s+$/, '');
+        const source = inline ? `${next} ^${block}` : next;
+        await window.nops.note.save({ path: note.path, content: replaceBlock(parsed, b.index, source), baseHash: hash });
+        window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: note.path }));
+        return true;
+      },
+      onChange(cb) {
+        return window.nops.on('note.changed', () => cb());
+      },
+      };
+    },
     [resolver, notes, selected],
   );
 

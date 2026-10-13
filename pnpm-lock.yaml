@@ -262,6 +262,9 @@ importers:
       '@oh-new-editor/core':
         specifier: ^0.2.1
         version: 0.2.1
+      katex:
+        specifier: ^0.16.47
+        version: 0.16.47
       mdast-util-gfm:
         specifier: ^3.1.0
         version: 3.1.0
@@ -314,6 +317,9 @@ importers:
         specifier: ^4.5.0
         version: 4.5.0
     devDependencies:
+      '@types/katex':
+        specifier: ^0.16.8
+        version: 0.16.8
       '@types/mdast':
         specifier: ^4.0.4
         version: 4.0.4

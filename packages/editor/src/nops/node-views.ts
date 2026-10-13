@@ -83,7 +83,11 @@ function foldableView(kind: 'callout' | 'toggle') {
   };
 }
 
+import { mathBlockView, mathInlineView } from './math';
+
 export const nopsNodeViews = {
+  math_inline: mathInlineView,
+  math_block: mathBlockView,
   callout: foldableView('callout'),
   toggle: foldableView('toggle'),
 };

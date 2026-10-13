@@ -27,6 +27,7 @@ export function buildCsp(dev: boolean): string {
     `frame-ancestors 'none'`,
     `img-src 'self' vault: data:`,
     `media-src 'self' vault:`,
+    `frame-src vault:`,
     `font-src 'self' data:`,
     `connect-src 'self'${dev ? ' ws://localhost:* http://localhost:*' : ''}`,
   ];

@@ -1550,6 +1550,35 @@ views:
     await expect(props.locator('[data-prop="메모"]')).toBeVisible({ timeout: 8000 });
   });
 
+  test('수식(KaTeX)·자동 목차·PDF 뷰어·동기화 블록(임베드에서 원본 편집)', async () => {
+    const page = await app.firstWindow();
+    const pdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]>>endobj\ntrailer<</Root 1 0 R/Size 4>>\n%%EOF`;
+    writeFileSync(path.join(vaultDir, '뷰어.pdf'), pdf);
+    const origin = note('동기원본', '# 동기원본\n\n고칠 문장입니다 ^sync1\n');
+    note('동기사용', '# 동기사용\n\n수식 $a^2+b^2$ 입니다\n\n$$\n\\frac{1}{2}\n$$\n\n```toc\n```\n\n## 둘째 제목\n\n![[뷰어.pdf]]\n\n![[동기원본#^sync1]]\n');
+    await open(page, '동기사용');
+
+    // 수식은 MathML 로 그려진다
+    await expect(page.locator('.nops-math math').first()).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('.nops-mathblock__render math')).toBeVisible();
+    // 목차는 제목들을 나열한다
+    await expect(page.getByTestId('toc')).toContainText('둘째 제목');
+    // PDF: 펼치면 뷰어 프레임이 생긴다
+    await page.getByTestId('pdf-toggle').click();
+    await expect(page.getByTestId('pdf-frame')).toBeVisible();
+
+    // 동기화 블록: 임베드에서 고치면 원본 노트의 그 블록이 바뀐다(^id 유지)
+    const embed = page.getByTestId('note-embed');
+    await expect(embed).toContainText('고칠 문장입니다', { timeout: 8000 });
+    await embed.hover();
+    await page.getByTestId('note-embed-edit').click();
+    const input = page.getByTestId('note-embed-input');
+    await input.fill('여기서 고친 문장 **굵게**');
+    await input.press('Meta+Enter');
+    await expect.poll(() => readFileSync(origin, 'utf8'), { timeout: 8000 }).toBe('# 동기원본\n\n여기서 고친 문장 **굵게** ^sync1\n');
+    await expect(page.getByTestId('note-embed')).toContainText('여기서 고친 문장', { timeout: 8000 });
+  });
+
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
     const page = await app.firstWindow();
     const today = await page.evaluate(() => {

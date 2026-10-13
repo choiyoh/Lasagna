@@ -10,6 +10,8 @@ import { createDbViewNodeView, dbViewSlashItem, createHideCodeChipPlugin, newDbS
 import { createEmbedView } from './embed-view';
 import { createFilesPlugin } from './files-plugin';
 import { createFlashPlugin } from './flash';
+import { createTocPlugin, tocNodeView, tocSlashItem } from './toc';
+import { createMathActivePlugin } from './math';
 import { createRowPropsPlugin, type NopsRowPropsHost } from './row-props';
 import { createToggleHeadingPlugin, toggleHeadingCommand } from './toggle-heading';
 import { createLinkPreviewPlugin } from './link-preview';
@@ -65,10 +67,11 @@ const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'imag
 export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions = {}): Editor {
   const table = createTableSupport();
   const assets = options.assets;
+  const dbViewNode = options.dbView ? createDbViewNodeView(options.dbView) : null;
   return createEditor(host, {
     schema: nopsSchema,
     table: { ...table, schema: nopsSchema },
-    toolbar: createNotionSupport({ slashItems: [...nopsSlashItems, ...(options.dbView?.create ? [newDbSlashItem(options.dbView)] : []), ...(options.dbView ? [dbViewSlashItem(options.dbView)] : []), ...(options.slashItems ?? [])] }),
+    toolbar: createNotionSupport({ slashItems: [...nopsSlashItems, ...(options.dbView?.create ? [newDbSlashItem(options.dbView)] : []), tocSlashItem, ...(options.dbView ? [dbViewSlashItem(options.dbView)] : []), ...(options.slashItems ?? [])] }),
     style: 'notion',
     messages: messagesKo,
     placeholder: options.placeholder ?? "'/'를 눌러 블록을 추가하세요",
@@ -86,7 +89,12 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
     nodeViews: {
       ...nopsNodeViews,
       ...(assets ? { embed: createEmbedView(assets, options.onOpenLink, options.peek) } : {}),
-      ...(options.dbView ? { code_block: createDbViewNodeView(options.dbView) } : {}),
+      // ```dbview → 데이터베이스 보기, ```toc → 자동 목차, 나머지 코드 블록은 기본 렌더링
+      code_block: (node, view, getPos) => {
+        const toc = tocNodeView(node, view);
+        if (toc) return toc;
+        return dbViewNode ? dbViewNode(node, view) : (undefined as never);
+      },
     },
     // 자동완성은 Enter/Tab/방향키를 기본 키맵보다 먼저 받아야 한다
     priorityPlugins: [
@@ -102,6 +110,8 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
       createCodeHighlightPlugin(),
       createFlashPlugin(),
       createToggleHeadingPlugin(),
+      createMathActivePlugin(),
+      createTocPlugin(),
       ...(options.dbView ? [createHideCodeChipPlugin()] : []),
       ...(options.rowProps ? [createRowPropsPlugin(options.rowProps)] : []),
       ...(options.peek ? [createLinkPreviewPlugin(options.peek)] : []),

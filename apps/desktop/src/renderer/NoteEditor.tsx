@@ -141,7 +141,12 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     };
     const editor: Editor = createNopsEditor(host, { onOpenLink: (l) => linkRef.current(l), assets: assetHost,
       rowProps: createRowPropsHost(path, () => dbHostRef.current?.notes ?? [], () => onRenameRef.current?.()),
-      peek: { peek: (l) => (peekRef.current ? peekRef.current.peek(l) : Promise.resolve(null)) },
+      peek: {
+        peek: (l) => (peekRef.current ? peekRef.current.peek(l) : Promise.resolve(null)),
+        source: (l) => (peekRef.current?.source ? peekRef.current.source(l) : Promise.resolve(null)),
+        save: (l, md) => (peekRef.current?.save ? peekRef.current.save(l, md) : Promise.resolve(false)),
+        onChange: (cb) => peekRef.current?.onChange?.(cb) ?? (() => undefined),
+      },
       links: linksRef.current,
       dbView: dbHostRef.current
         ? createDbViewHost({

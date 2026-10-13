@@ -25,6 +25,9 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
     let img: HTMLImageElement | null = null;
     let handle: HTMLElement | null = null;
     let dragAbort: AbortController | null = null;
+    let editing = false;
+    let offChange: (() => void) | undefined;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
     const chip = (icon: string, label: string, title: string, onClick?: () => void, cls = '') => {
       const el = document.createElement('span');
@@ -70,6 +73,21 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
           body.className = 'nops-embed__note-body';
           body.textContent = r.found ? r.text || '(내용 없음)' : `(${heading ? '제목' : '블록'}을 찾을 수 없어 노트 앞부분을 보여 줘요)\n${r.text}`;
           box.append(head, body);
+          if (block && r.found && peek.source && peek.save) {
+            const edit = document.createElement('button');
+            edit.type = 'button';
+            edit.className = 'nops-embed__note-edit';
+            edit.textContent = '✎ 편집';
+            edit.title = '원본 블록을 여기서 고쳐요 (⌘/Ctrl+Enter 저장, Esc 취소)';
+            edit.setAttribute('data-testid', 'note-embed-edit');
+            edit.addEventListener('mousedown', (e) => e.stopPropagation());
+            edit.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void startEdit(box, body, edit);
+            });
+            head.append(edit);
+          }
         });
         return;
       }
@@ -120,10 +138,78 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
         if (size) media.style.width = `${size.width}px`;
         media.className = `nops-embed__${kind}`;
         dom.append(media);
+      } else if (kind === 'pdf') {
+        // PDF: 칩(누르면 기본 앱으로 열기) + 펼치면 그 자리에서 보는 뷰어(Chromium 내장 PDF 뷰어)
+        dom.classList.add('is-pdf');
+        const head = document.createElement('span');
+        head.className = 'nops-embed__pdfhead';
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'nops-embed__pdftoggle';
+        toggle.textContent = '▸ 미리보기';
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('data-testid', 'pdf-toggle');
+        let frame: HTMLIFrameElement | null = null;
+        toggle.addEventListener('mousedown', (e) => e.preventDefault());
+        toggle.addEventListener('click', () => {
+          const open = toggle.getAttribute('aria-expanded') !== 'true';
+          toggle.setAttribute('aria-expanded', String(open));
+          toggle.textContent = open ? '▾ 접기' : '▸ 미리보기';
+          if (open && !frame) {
+            frame = document.createElement('iframe');
+            frame.className = 'nops-embed__pdfframe';
+            frame.setAttribute('data-testid', 'pdf-frame');
+            frame.title = name;
+            frame.src = size ? `${url}#view=FitH` : url;
+            if (size?.height) frame.style.height = `${size.height}px`;
+            dom.append(frame);
+          } else if (frame) {
+            frame.hidden = !open;
+          }
+        });
+        head.append(chip(FILE_ICON.pdf!, name, `${path} — 클릭하면 기본 앱으로 열기`, () => host.open(path)), toggle);
+        dom.append(head);
       } else {
         dom.append(chip(FILE_ICON[kind] ?? FILE_ICON.file!, name, `${path} — 클릭하면 열기`, () => host.open(path)));
       }
     };
+
+    /** 블록 임베드 편집: 원본 마크다운을 텍스트 상자로 고치고 저장하면 원본 노트의 그 블록이 바뀐다 */
+    async function startEdit(box: HTMLElement, body: HTMLElement, edit: HTMLElement) {
+      const { target, heading, block } = current.attrs as { target: string; heading: string | null; block: string | null };
+      const link = { target, heading, block };
+      const src = await peek?.source?.(link);
+      if (src === null || src === undefined) return;
+      editing = true;
+      edit.hidden = true;
+      const ta = document.createElement('textarea');
+      ta.className = 'nops-embed__note-input';
+      ta.setAttribute('data-testid', 'note-embed-input');
+      ta.value = src;
+      ta.rows = Math.min(12, Math.max(2, src.split('\n').length));
+      body.replaceWith(ta);
+      ta.focus();
+      let done = false;
+      const finish = async (save: boolean) => {
+        if (done) return;
+        done = true;
+        editing = false;
+        if (save && ta.value.trimEnd() !== src.trimEnd()) await peek?.save?.(link, ta.value);
+        if (box.isConnected) render(current);
+      };
+      ta.addEventListener('mousedown', (e) => e.stopPropagation());
+      ta.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          void finish(false);
+        } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          void finish(true);
+        }
+      });
+      ta.addEventListener('blur', () => void finish(true));
+    }
 
     function startResize(event: MouseEvent) {
       event.preventDefault();
@@ -162,6 +248,13 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
     }
 
     render(node);
+    // 원본 노트가 바뀌면(다른 창·탭·밖에서) 임베드를 다시 그린다. 고치는 중에는 건드리지 않는다.
+    offChange = peek?.onChange?.(() => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        if (!editing && dom.isConnected) render(current);
+      }, 350);
+    });
     return {
       dom,
       update(n) {
@@ -179,10 +272,12 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
         dom.classList.remove('is-selected');
         if (handle) handle.hidden = true;
       },
-      stopEvent: (e) => e.target === handle || (e.target instanceof HTMLElement && e.target.closest('audio, video') !== null),
+      stopEvent: (e) => (e.target instanceof HTMLElement && e.target.closest('textarea, .nops-embed__note-edit') !== null) || e.target === handle || (e.target instanceof HTMLElement && e.target.closest('audio, video') !== null),
       ignoreMutation: () => true,
       destroy() {
         dragAbort?.abort();
+        offChange?.();
+        clearTimeout(refreshTimer);
       },
     };
   };

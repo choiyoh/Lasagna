@@ -180,3 +180,37 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 /* 데이터베이스 행의 속성 패널 */
 .nops-rowprops { margin: 0 0 1.2em; padding: 2px 0 10px; border-bottom: 1px solid var(--oh-editor-border-muted, rgba(128,128,128,.2)); font-size: 14px; line-height: 1.4; user-select: none; }
 .nops-rowprops:empty { display: none; }
+
+/* 수식(KaTeX → MathML) */
+.nops-math { font-family: inherit; padding: 0 2px; cursor: pointer; background: none; }
+.nops-math:hover { background: color-mix(in srgb, currentColor 8%, transparent); border-radius: 3px; }
+.nops-math.is-error { color: #d1453b; font-size: 0.85em; font-family: ui-monospace, monospace; }
+.nops-mathblock { margin: 0.6em 0; border-radius: 6px; }
+.nops-mathblock__render { padding: 8px 12px; text-align: center; overflow-x: auto; }
+.nops-mathblock__render.is-empty { color: var(--oh-editor-text-muted, #888); font-style: italic; }
+.nops-mathblock__render.is-error { color: #d1453b; font-family: ui-monospace, monospace; font-size: 0.85em; text-align: left; }
+.nops-mathblock pre[data-math-block] { display: none; margin: 0; }
+.nops-mathblock.is-active pre[data-math-block] { display: block; }
+.nops-mathblock.is-active { background: color-mix(in srgb, currentColor 4%, transparent); }
+.nops-mathblock:has(.is-empty) pre[data-math-block] { display: block; }
+
+/* 자동 목차 */
+.nops-toc { margin: 0.8em 0; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, currentColor 4%, transparent); }
+.nops-toc__title { font-size: 12px; font-weight: 600; opacity: 0.6; margin-bottom: 4px; }
+.nops-toc__item { display: block; padding-top: 2px; padding-bottom: 2px; color: inherit; text-decoration: none; opacity: 0.8; cursor: pointer; }
+.nops-toc__item:hover { opacity: 1; text-decoration: underline; }
+.nops-toc__empty { opacity: 0.5; font-size: 0.9em; }
+
+/* PDF 임베드 */
+.nops-embed.is-pdf { display: block; background: none; padding: 0; font-family: inherit; font-size: inherit; }
+.nops-embed__pdfhead { display: inline-flex; align-items: center; gap: 8px; }
+.nops-embed__pdftoggle { font-size: 12px; opacity: 0.7; padding: 1px 6px; border-radius: 4px; }
+.nops-embed__pdftoggle:hover { opacity: 1; background: color-mix(in srgb, currentColor 10%, transparent); }
+.nops-embed__pdfframe { display: block; width: 100%; height: 560px; margin-top: 6px; border: 1px solid var(--oh-editor-border-muted, rgba(128,128,128,.3)); border-radius: 8px; background: #fff; }
+.nops-embed__pdfframe[hidden] { display: none; }
+
+/* 동기화 블록(편집 가능한 임베드) */
+.nops-embed__note-edit { float: right; font-size: 11px; font-weight: 400; opacity: 0; padding: 0 6px; border-radius: 4px; }
+.nops-embed__note:hover .nops-embed__note-edit { opacity: 0.8; }
+.nops-embed__note-edit:hover { background: color-mix(in srgb, currentColor 12%, transparent); opacity: 1; }
+.nops-embed__note-input { display: block; width: 100%; box-sizing: border-box; font: inherit; font-family: ui-monospace, monospace; font-size: 0.92em; padding: 6px 8px; border: 1px solid var(--oh-editor-primary, #5b5bd6); border-radius: 6px; background: var(--oh-editor-bg, #fff); color: inherit; resize: vertical; }

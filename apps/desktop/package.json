@@ -30,7 +30,8 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "electron": "^44.7.0",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "wrappy": "^1.0.2"
   },
   "dependencies": {
     "@nopsidian/core": "workspace:*",

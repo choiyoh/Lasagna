@@ -156,6 +156,9 @@ importers:
       vite:
         specifier: ^8.3.4
         version: 8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)
+      wrappy:
+        specifier: ^1.0.2
+        version: 1.0.2
 
   packages/core:
     dependencies:
@@ -5865,8 +5868,7 @@ snapshots:
       ansi-styles: 6.2.3
       string-width: 8.3.0
 
-  wrappy@1.0.2:
-    optional: true
+  wrappy@1.0.2: {}
 
   ws@8.22.0: {}
 

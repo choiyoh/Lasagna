@@ -316,3 +316,8 @@ button.link { color: var(--muted); }
 .picker { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow: auto; }
 .picker button { width: 100%; text-align: left; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); }
 .picker button:hover { background: var(--hover); }
+.filterb { display: flex; flex-direction: column; gap: 6px; min-width: 420px; }
+.filterb__group { display: flex; flex-direction: column; gap: 6px; }
+.filterb__head { display: flex; gap: 6px; align-items: center; }
+.filterb__children { display: flex; flex-direction: column; gap: 6px; }
+.filterb__children .filterb__group:not(.filterb__group--root) { margin-left: 14px; padding-left: 10px; border-left: 2px solid var(--border); }

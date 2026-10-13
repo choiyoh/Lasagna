@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import type { CALC_FNS, FilterNode, FilterOp, Property, View } from '@nopsidian/core/db';
-import { optionsOf } from '@nopsidian/core/db/values';
+import type { CALC_FNS, FilterNode, View } from '@nopsidian/core/db';
+import { FilterBuilder } from './FilterBuilder';
 import { TITLE, type DbData } from './types';
 
-type Cond = { prop: string; op: FilterOp; value?: unknown };
+const countConds = (f: FilterNode): number => ('prop' in f ? 1 : ('and' in f ? f.and : f.or).reduce((n, c) => n + countConds(c), 0));
 
 const CALC_LABEL: Record<string, string> = {
   count: '개수', count_values: '값 있는 수', count_empty: '빈 수', count_unique: '고유 값 수', sum: '합계', avg: '평균', min: '최소', max: '최대', checked: '체크됨', unchecked: '체크 안 됨',
@@ -13,41 +13,6 @@ const CALC_BY_KIND: Record<string, (typeof CALC_FNS)[number][]> = {
   number: ['count', 'count_values', 'count_empty', 'sum', 'avg', 'min', 'max'],
   checkbox: ['count', 'checked', 'unchecked'],
 };
-
-const OPS_BY_KIND: Record<string, FilterOp[]> = {
-  text: ['contains', '!contains', '=', '!=', 'startsWith', 'endsWith', 'empty', '!empty'],
-  number: ['=', '!=', '>', '>=', '<', '<=', 'empty', '!empty'],
-  select: ['=', '!=', 'empty', '!empty'],
-  list: ['contains', '!contains', 'empty', '!empty'],
-  date: ['=', '<', '<=', '>', '>=', 'empty', '!empty'],
-  checkbox: ['=', '!='],
-};
-const OP_LABEL: Record<FilterOp, string> = {
-  '=': '같음', '!=': '다름', '>': '초과', '>=': '이상', '<': '미만', '<=': '이하', contains: '포함', '!contains': '포함 안 함',
-  startsWith: '시작', endsWith: '끝', empty: '비어 있음', '!empty': '비어 있지 않음', in: '중 하나',
-};
-
-const kindOf = (p: Property | undefined): keyof typeof OPS_BY_KIND => {
-  if (!p) return 'text';
-  if (p.type === 'number' || p.type === 'unique_id') return 'number';
-  if (p.type === 'select' || p.type === 'status') return 'select';
-  if (p.type === 'multi_select' || p.type === 'files' || p.type === 'relation') return 'list';
-  if (p.type === 'date' || p.type === 'created_time' || p.type === 'updated_time') return 'date';
-  if (p.type === 'checkbox') return 'checkbox';
-  return 'text';
-};
-
-/** 단순 필터: 조건들의 AND 목록. 중첩·OR 이 있으면 편집하지 않고 알려 준다. */
-export function flatConditions(f: FilterNode | undefined): Cond[] | null {
-  if (!f) return [];
-  if ('prop' in f) return [f];
-  if ('and' in f && f.and.every((c) => 'prop' in c)) return f.and as Cond[];
-  if ('or' in f && f.or.every((c) => 'prop' in c)) return f.or as Cond[];
-  return null;
-}
-/** 조건 목록의 결합 방식: `or` 로 저장돼 있으면 'or' */
-const modeOf = (f: FilterNode | undefined): 'and' | 'or' => (f && 'or' in f ? 'or' : 'and');
-const toFilter = (conds: Cond[], mode: 'and' | 'or' = 'and'): FilterNode | undefined => (conds.length ? (mode === 'or' ? { or: conds } : { and: conds }) : undefined);
 
 interface Props {
   data: DbData;
@@ -66,10 +31,7 @@ const VIEW_TYPES: { type: View['type']; label: string }[] = [
 export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Props) {
   const [open, setOpen] = useState<'filter' | 'sort' | 'group' | 'cols' | 'calc' | null>(null);
   const props = [TITLE, ...Object.keys(data.schema.properties)];
-  const conds = flatConditions(view.filter);
   const toggle = (k: NonNullable<typeof open>) => setOpen(open === k ? null : k);
-  const mode = modeOf(view.filter);
-  const setConds = (next: Cond[], m: 'and' | 'or' = mode) => onChange({ ...view, filter: toFilter(next, m) });
   const dateProps = Object.entries(data.schema.properties).filter(([, p]) => p.type === 'date' || p.type === 'created_time' || p.type === 'updated_time').map(([n]) => n);
   const sorts = view.sort;
   const groupable = props.filter((p) => p !== TITLE);
@@ -96,7 +58,7 @@ export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Pr
         </label>
       )}
       <button className={view.filter ? 'on' : ''} onClick={() => toggle('filter')} aria-expanded={open === 'filter'}>
-        필터{conds && conds.length ? ` ${conds.length}` : ''}
+        필터{view.filter ? ` ${countConds(view.filter)}` : ''}
       </button>
       <button className={sorts.length ? 'on' : ''} onClick={() => toggle('sort')} aria-expanded={open === 'sort'}>
         정렬{sorts.length ? ` ${sorts.length}` : ''}
@@ -117,64 +79,7 @@ export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset }: Pr
 
       {open === 'filter' && (
         <div className="dbpop" role="dialog" aria-label="필터">
-          {conds === null ? (
-            <p className="muted small">OR·중첩 조건은 <code>_db.yaml</code> 에서 편집해 주세요. 아래 버튼으로 지울 수 있어요.</p>
-          ) : (
-            <>
-              {conds.length > 1 && (
-                <label className="small">
-                  <select value={mode} onChange={(e) => setConds(conds, e.target.value as 'and' | 'or')} aria-label="조건 결합">
-                    <option value="and">모든 조건을 만족</option>
-                    <option value="or">하나라도 만족</option>
-                  </select>
-                </label>
-              )}
-            {conds.map((c, i) => {
-              const def = c.prop === TITLE ? undefined : data.schema.properties[c.prop];
-              const kind = kindOf(def);
-              const ops = OPS_BY_KIND[kind]!;
-              const needsValue = c.op !== 'empty' && c.op !== '!empty';
-              const opts = optionsOf(def);
-              return (
-                <div key={i} className="dbpop__row">
-                  <select value={c.prop} onChange={(e) => setConds(conds.map((x, j) => (j === i ? { prop: e.target.value, op: OPS_BY_KIND[kindOf(e.target.value === TITLE ? undefined : data.schema.properties[e.target.value])]![0]!, value: undefined } : x)))} aria-label="속성">
-                    {props.map((p) => (
-                      <option key={p} value={p}>{p === TITLE ? '제목' : p}</option>
-                    ))}
-                  </select>
-                  <select value={c.op} onChange={(e) => setConds(conds.map((x, j) => (j === i ? { ...x, op: e.target.value as FilterOp } : x)))} aria-label="조건">
-                    {ops.map((o) => (
-                      <option key={o} value={o}>{OP_LABEL[o]}</option>
-                    ))}
-                  </select>
-                  {needsValue &&
-                    (kind === 'checkbox' ? (
-                      <select value={String(c.value ?? true)} onChange={(e) => setConds(conds.map((x, j) => (j === i ? { ...x, value: e.target.value === 'true' } : x)))} aria-label="값">
-                        <option value="true">체크됨</option>
-                        <option value="false">체크 안 됨</option>
-                      </select>
-                    ) : (kind === 'select' || kind === 'list') && opts.length ? (
-                      <select value={String(c.value ?? '')} onChange={(e) => setConds(conds.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} aria-label="값">
-                        <option value="" />
-                        {opts.map((o) => (
-                          <option key={o.name}>{o.name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input value={String(c.value ?? '')} placeholder={kind === 'date' ? 'YYYY-MM-DD, today, +7d' : '값'} onChange={(e) => setConds(conds.map((x, j) => (j === i ? { ...x, value: kind === 'number' && e.target.value !== '' && !Number.isNaN(Number(e.target.value)) ? Number(e.target.value) : e.target.value } : x)))} aria-label="값" />
-                    ))}
-                  <button onClick={() => setConds(conds.filter((_, j) => j !== i))} aria-label="조건 삭제">×</button>
-                </div>
-              );
-            })}
-            </>
-          )}
-          <div className="dbpop__actions">
-            {conds !== null && (
-              <button onClick={() => setConds([...conds, { prop: props[0]!, op: 'contains', value: '' }])}>+ 조건 추가</button>
-            )}
-            {(conds === null || conds.length > 0) && <button onClick={() => onChange({ ...view, filter: undefined })}>모두 지우기</button>}
-          </div>
+          <FilterBuilder schema={data.schema} value={view.filter} onChange={(f) => onChange({ ...view, filter: f })} />
         </div>
       )}
 

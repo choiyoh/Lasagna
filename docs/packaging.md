@@ -7,6 +7,7 @@
   - Windows → `out/make/squirrel.windows/<arch>/Nopsidian-Setup.exe` (+ `.nupkg`, `RELEASES`) + `out/make/zip/win32/<arch>/*.zip`(설치 없이 쓰는 휴대용)
 - **각 OS 에서 빌드해야 한다.** `better-sqlite3`·`@parcel/watcher` 가 플랫폼별 네이티브 모듈이고 `native-modules.ts` 가 현재 OS 용 바이너리만 앱에 넣는다. 그래서 맥에서 Windows 설치 파일을 만들 수 없다.
 - **빌드 결과물과 문서는 GitHub 에서 만들지 않는다.** 각 PC 에서 `make` 로 만들고(맥: dmg·zip, 윈도우: Setup.exe·zip) 구글 드라이브 `AI Works/Nopsidian/빌드/<버전>/` 에 둔다. 문서 사본은 `AI Works/Nopsidian/문서/`.
+  - 설치 파일은 `node scripts/collect-build.mjs "<구글 드라이브 데스크톱의 AI Works/Nopsidian/빌드 경로>"` 로 `v<버전>/` 폴더에 복사한다(맥·윈도우 공통). 크기가 100MB 이상이라 에이전트 도구로는 못 올려서, 드라이브 데스크톱이 동기화하는 폴더로 복사하는 방식을 쓴다.
 - CI(`.github/workflows/build.yml`): 푸시/PR 에서 Linux 린트·타입·테스트만 돌린다(비공개 저장소 무료 분량 월 2000분, macOS 10배·Windows 2배 계산). 세 OS 전체 테스트는 Actions 탭에서 수동 실행(`all-os`).
 
 ## 알아 둘 것

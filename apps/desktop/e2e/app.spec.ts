@@ -1711,12 +1711,94 @@ views:
     await page.getByRole('button', { name: '오늘', exact: true }).click();
     await expect(page.locator('.ProseMirror')).toContainText('오늘 한 일');
   });
+
+  test('새 폴더·폴더 안 새 노트·휴지통 보기(복원·영구 삭제)·창 제목', async () => {
+    const page = await app.firstWindow();
+    await page.getByRole('button', { name: '새 폴더', exact: true }).click();
+    const input = page.locator('.nops-prompt input');
+    await input.fill('빈폴더');
+    await input.press('Enter');
+    await expect.poll(() => existsSync(path.join(vaultDir, '빈폴더')), { timeout: 8000 }).toBe(true);
+    // 노트가 없어도 사이드바에 보이고, 우클릭으로 안에 노트를 만든다
+    const folder = page.locator('.tree summary', { hasText: '빈폴더' });
+    await expect(folder).toBeVisible({ timeout: 8000 });
+    await folder.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '여기에 새 노트' }).click();
+    await page.locator('.nops-prompt input').fill('폴더안노트');
+    await page.locator('.nops-prompt input').press('Enter');
+    const inner = path.join(vaultDir, '빈폴더/폴더안노트.md');
+    await expect.poll(() => existsSync(inner), { timeout: 8000 }).toBe(true);
+    await expect(page.locator('.ProseMirror h1')).toHaveText('폴더안노트', { timeout: 8000 });
+    await expect.poll(() => page.title(), { timeout: 5000 }).toBe('폴더안노트 — Nopsidian');
+
+    // 삭제 → 휴지통에서 복원
+    await page.getByRole('button', { name: '폴더안노트', exact: true }).first().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '삭제' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: '삭제' }).click();
+    await expect.poll(() => existsSync(inner), { timeout: 8000 }).toBe(false);
+    await page.getByRole('button', { name: '휴지통', exact: true }).click();
+    const trash = page.getByRole('dialog', { name: '휴지통' });
+    const row = trash.locator('li', { hasText: '빈폴더/폴더안노트' });
+    await expect(row).toBeVisible();
+    await row.getByRole('button', { name: '복원' }).click();
+    await expect.poll(() => existsSync(inner), { timeout: 8000 }).toBe(true);
+    await expect(row).toHaveCount(0);
+    await trash.getByRole('button', { name: '닫기' }).click();
+
+    // 다시 지우고 영구 삭제하면 목록과 휴지통 폴더에서 사라진다
+    await page.getByRole('button', { name: '폴더안노트', exact: true }).first().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '삭제' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: '삭제' }).click();
+    await expect.poll(() => existsSync(inner), { timeout: 8000 }).toBe(false);
+    await page.getByRole('button', { name: '휴지통', exact: true }).click();
+    await trash.locator('li', { hasText: '빈폴더/폴더안노트' }).getByRole('button', { name: '영구 삭제' }).click();
+    await expect(trash.locator('li', { hasText: '빈폴더/폴더안노트' })).toHaveCount(0);
+    expect(readdirSync(path.join(vaultDir, '.nopsidian/trash')).some((f) => f.endsWith('폴더안노트.md'))).toBe(false);
+    await page.keyboard.press('Escape');
+    await expect(trash).toHaveCount(0);
+  });
+
+  test('노트 안 찾기·바꾸기(⌘F)와 단축키 목록(F1)', async () => {
+    const page = await app.firstWindow();
+    const file = note('찾기노트', '# 찾기노트\n\n사과 바나나 사과\n\n포도 사과\n');
+    await open(page, '찾기노트');
+    await page.locator('.ProseMirror p').first().click();
+    await page.keyboard.press('ControlOrMeta+f');
+    const bar = page.getByTestId('find-bar');
+    await expect(bar).toBeVisible();
+    await bar.getByLabel('찾을 말').fill('사과');
+    await expect(bar.getByTestId('find-count')).toHaveText(/^[123]\/3$/);
+    await expect(page.locator('.ProseMirror-search-match, .ProseMirror-active-search-match')).toHaveCount(3);
+    const before = await bar.getByTestId('find-count').textContent();
+    await bar.getByLabel('찾을 말').press('Enter');
+    await expect(bar.getByTestId('find-count')).not.toHaveText(before!);
+    await bar.getByLabel('찾을 말').fill('없는말');
+    await expect(bar.getByTestId('find-count')).toHaveText('없음');
+    await bar.getByLabel('찾을 말').fill('사과');
+    // 바꾸기: 모두 바꾸기 → 파일에 반영
+    await bar.getByRole('button', { name: '바꾸기 열기' }).click();
+    await bar.getByLabel('바꿀 말').fill('배');
+    await bar.getByRole('button', { name: '모두 바꾸기' }).click();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toBe('# 찾기노트\n\n배 바나나 배\n\n포도 배\n');
+    await expect(bar.getByTestId('find-count')).toHaveText('없음');
+    await bar.getByLabel('찾을 말').press('Escape');
+    await expect(bar).toHaveCount(0);
+    await expect(page.locator('.ProseMirror-search-match')).toHaveCount(0);
+
+    // F1: 단축키 목록(맥은 ⌘ 표기)
+    await page.keyboard.press('F1');
+    const dlg = page.getByRole('dialog', { name: '단축키' });
+    await expect(dlg).toBeVisible();
+    await expect(dlg).toContainText(process.platform === 'darwin' ? '⌘O' : 'Ctrl+O');
+    await page.keyboard.press('Escape');
+    await expect(dlg).toHaveCount(0);
+  });
 });
 
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'graph', 'history', 'import', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'vault', 'window', 'workspace']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

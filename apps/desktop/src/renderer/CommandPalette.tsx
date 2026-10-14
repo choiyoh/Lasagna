@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { keys } from './keys';
 import { quickSwitch } from '../workers/index/quick-switch';
 
 export interface PaletteCommand {
@@ -83,7 +84,7 @@ export function CommandPalette({ commands, onClose }: Props) {
               }}
             >
               <span className="switcher__title">{c.label}</span>
-              <span className="switcher__path">{c.hint ?? ''}</span>
+              <span className="switcher__path">{c.hint ? keys(c.hint) : ''}</span>
             </div>
           ))}
           {hits.length === 0 && <div className="switcher__item"><span className="muted">일치하는 명령이 없어요</span></div>}

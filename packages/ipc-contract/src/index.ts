@@ -252,6 +252,14 @@ export const contract = {
   /** 이름 변경/이동 미리보기: 파일은 건드리지 않고 어떤 링크가 몇 개 바뀌는지만 계산한다. `from`은 노트·첨부 파일 또는 폴더. */
   'note.renamePlan': { input: z.object({ from: relPath, to: relPath }), output: movePlan },
   /** 이름 변경/이동을 실행하고 볼트 전체의 링크를 갱신한다. 되돌릴 수 있도록 기록을 남긴다. */
+  /** 볼트 안의 모든 폴더(숨김·`.nopsidian` 제외). 빈 폴더도 사이드바에 보이게 하려고 쓴다 */
+  'folder.list': { input: z.undefined(), output: z.array(relPath) },
+  /** 새 폴더를 만든다(이미 있으면 번호를 붙인다). 돌려주는 값은 만든 경로 */
+  'folder.create': { input: z.object({ path: relPath }), output: z.object({ path: relPath }) },
+  /** 휴지통 목록(최근 순) */
+  'trash.list': { input: z.undefined(), output: z.array(z.object({ trashId: z.string(), path: z.string(), isFolder: z.boolean(), at: z.string() })) },
+  /** 휴지통에서 영구 삭제(trashId 없으면 전부 비우기) */
+  'trash.purge': { input: z.object({ trashId: z.string().max(300).optional() }), output: z.object({ removed: z.number() }) },
   /** 노트(또는 폴더)를 볼트의 `.nopsidian/trash/` 로 옮긴다(동기화 중이면 Drive 휴지통으로도 간다). */
   'note.trash': { input: z.object({ path: relPath }), output: z.object({ trashId: z.string(), isFolder: z.boolean() }) },
   /** 휴지통에서 되돌린다. 돌려주는 값은 되돌려진 경로 */

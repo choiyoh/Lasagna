@@ -214,3 +214,7 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 .nops-embed__note:hover .nops-embed__note-edit { opacity: 0.8; }
 .nops-embed__note-edit:hover { background: color-mix(in srgb, currentColor 12%, transparent); opacity: 1; }
 .nops-embed__note-input { display: block; width: 100%; box-sizing: border-box; font: inherit; font-family: ui-monospace, monospace; font-size: 0.92em; padding: 6px 8px; border: 1px solid var(--oh-editor-primary, #5b5bd6); border-radius: 6px; background: var(--oh-editor-bg, #fff); color: inherit; resize: vertical; }
+
+/* 노트 안 찾기(⌘F) */
+.ProseMirror .ProseMirror-search-match { background: rgba(255, 200, 0, 0.35); border-radius: 2px; }
+.ProseMirror .ProseMirror-active-search-match { background: rgba(255, 140, 0, 0.75); border-radius: 2px; box-shadow: 0 0 0 1px rgba(255, 140, 0, 0.9); }

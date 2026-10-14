@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { moveToTrash, restoreFromTrash } from './trash';
+import { createFolder, listFolders, listTrash, moveToTrash, purgeTrash, restoreFromTrash } from './trash';
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -42,5 +42,27 @@ describe('휴지통', () => {
     expect(() => moveToTrash(root, '../밖.md')).toThrow();
     expect(() => moveToTrash(root, '없음.md')).toThrow();
     expect(() => restoreFromTrash(root, '../x')).toThrow();
+  });
+});
+
+describe('휴지통 목록·비우기, 폴더', () => {
+  it('목록은 최근 순, 하나·전부 영구 삭제', () => {
+    const root = vault();
+    writeFileSync(path.join(root, 'b.md'), 'b');
+    const a = moveToTrash(root, '폴더/노트.md', new Date('2026-10-01T00:00:00Z'));
+    moveToTrash(root, 'b.md', new Date('2026-10-02T00:00:00Z'));
+    expect(listTrash(root).map((t) => t.path)).toEqual(['b.md', '폴더/노트.md']);
+    expect(purgeTrash(root, a.trashId)).toBe(1);
+    expect(listTrash(root).map((t) => t.path)).toEqual(['b.md']);
+    expect(purgeTrash(root)).toBe(1);
+    expect(listTrash(root)).toEqual([]);
+  });
+  it('폴더 만들기(겹치면 번호)와 목록(숨김 제외)', () => {
+    const root = vault();
+    expect(createFolder(root, '새 폴더')).toBe('새 폴더');
+    expect(createFolder(root, '새 폴더')).toBe('새 폴더 2');
+    mkdirSync(path.join(root, '.숨김'));
+    expect(listFolders(root)).toEqual(['새 폴더', '새 폴더 2', '폴더']);
+    expect(() => createFolder(root, '../밖')).toThrow();
   });
 });

@@ -19,6 +19,7 @@ import type { NopsPeekHost } from './peek-host';
 import { createLinkSuggestPlugin, type NopsLinkHost } from './link-suggest';
 import { nopsNodeViews } from './node-views';
 import { showTextPrompt } from './prompt';
+import { createFindPlugin } from './find';
 import { createInteractionPlugin, createNopsInputRules, createTitleKeymapPlugin, type WikiLinkTarget } from './plugins';
 import { nopsSchema } from './schema';
 
@@ -118,6 +119,7 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
       ...createBlockHandlePlugin(options.blockLink),
       createCodeHighlightPlugin(),
       createFlashPlugin(),
+      createFindPlugin(),
       createToggleHeadingPlugin(),
       createMathActivePlugin(),
       createTocPlugin(),

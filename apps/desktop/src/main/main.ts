@@ -47,7 +47,7 @@ import {
 } from './vault';
 import { readFile } from 'node:fs/promises';
 import { CredentialStore, SyncController } from './sync';
-import { moveToTrash, restoreFromTrash } from './trash';
+import { createFolder, listFolders, listTrash, moveToTrash, purgeTrash, restoreFromTrash } from './trash';
 import { importNotionInto, readZipEntries } from './notion-import';
 import { exportVaultSite, renderNoteDocument, type ExportContext } from './export';
 import { addRow, createDatabase, editSchema, exportCsv, importCsvApply, importCsvPreview, updateCell } from './db';
@@ -206,6 +206,10 @@ function registerHandlers() {
     v.bases.delete(rel);
     return moveToTrash(v.info.path, rel);
   });
+  handle('folder.list', () => listFolders(requireVault().info.path));
+  handle('folder.create', ({ path: rel }) => ({ path: createFolder(requireVault().info.path, rel) }));
+  handle('trash.list', () => listTrash(requireVault().info.path));
+  handle('trash.purge', ({ trashId }) => ({ removed: purgeTrash(requireVault().info.path, trashId) }));
   handle('note.restore', ({ trashId }) => ({ path: restoreFromTrash(requireVault().info.path, trashId) }));
   handle('note.renamePlan', async ({ from, to }) => {
     const v = requireVault();

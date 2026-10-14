@@ -3,6 +3,8 @@ import type { Editor, NopsPeekHost } from '@nopsidian/editor/nops';
 import { createDbViewHost } from './db/dbview-host';
 import { createRowPropsHost } from './db/RowProps';
 import { EmojiPicker } from './EmojiPicker';
+import { FindBar } from './FindBar';
+import { keys } from './keys';
 import type { DbEmbedHost } from './db/EmbeddedDb';
 import { relativePath, vaultUrl } from '@nopsidian/core/assets';
 import { TextSelection } from 'prosemirror-state';
@@ -119,6 +121,13 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const peekRef = useRef(peek);
   peekRef.current = peek;
   const toggleRef = useRef<() => void>(() => undefined);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<Editor | null>(null);
+  const modeRef = useRef<Mode>('edit');
+  modeRef.current = mode;
+  /** 찾기 막대: 열린 상태·처음 채울 말·초점 다시 주기·문서 변경 횟수 */
+  const [find, setFindState] = useState<{ initial: string; tick: number } | null>(null);
+  const [docTick, setDocTick] = useState(0);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -187,6 +196,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       },
     });
 
+    editorRef.current = editor;
     insertTemplateRef.current = async (templatePath) => {
       const title = path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '');
       const { content } = await window.nops.template.read({ path: templatePath, title });
@@ -281,6 +291,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       schedule();
     };
     editor.on('change', markDirty);
+    editor.on('change', () => setDocTick((t) => t + 1));
     editor.on('blur', () => {
       clearTimeout(timer);
       void save();
@@ -347,6 +358,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         void window.nops.note.save({ path, content: currentContent(), baseHash: hash });
       }
       toggleRef.current = () => undefined;
+      editorRef.current = null;
+      setFindState(null);
       source?.destroy();
       editor.destroy();
     };
@@ -364,8 +377,37 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // ⌘F / Ctrl+F: 노트 안 찾기. 초점이 있는 에디터가 받고, 아무 에디터에도 초점이 없으면 첫 에디터가 받는다.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'f') || e.shiftKey) return;
+      const root = rootRef.current;
+      const editor = editorRef.current;
+      if (!root || !editor || modeRef.current !== 'edit') return;
+      const active = document.activeElement;
+      const mine = active instanceof Node && root.contains(active);
+      const anyEditor = active instanceof Element && active.closest('.note-editor');
+      if (!mine && (anyEditor || document.querySelector('.note-editor') !== root)) return;
+      e.preventDefault();
+      const { state } = editor.getView();
+      const picked = state.selection.empty ? '' : state.doc.textBetween(state.selection.from, state.selection.to, ' ');
+      setFindState((f) => ({ initial: picked.length < 200 && !picked.includes('\n') ? picked : '', tick: (f?.tick ?? 0) + 1 }));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
-    <div className="note-editor" data-mode={mode}>
+    <div className="note-editor" data-mode={mode} ref={rootRef}>
+      {find && mode === 'edit' && editorRef.current && (
+        <FindBar
+          view={editorRef.current.getView()}
+          initial={find.initial}
+          focusTick={find.tick}
+          docTick={docTick}
+          onClose={() => setFindState(null)}
+        />
+      )}
       <div className="note-editor__bar">
         <span className="note-editor__status" data-state={state} aria-live="polite">
           {state === 'saved' ? '저장됨' : state === 'saving' ? '저장 중…' : state === 'error' ? '저장 실패' : '편집 중'}
@@ -378,7 +420,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         <button
           className="note-editor__mode"
           onClick={() => toggleRef.current()}
-          title="편집 모드 ↔ 소스 모드 (⌘E)"
+          title={keys('편집 모드 ↔ 소스 모드 (⌘E)')}
           aria-pressed={mode === 'source'}
         >
           {mode === 'source' ? '편집 모드' : '소스 모드'}

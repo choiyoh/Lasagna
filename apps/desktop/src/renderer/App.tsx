@@ -11,6 +11,9 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { flushAll } from './flush';
 import { LinkPanel } from './LinkPanel';
 import { HistoryPanel } from './HistoryPanel';
+import { keys } from './keys';
+import { ShortcutsDialog } from './ShortcutsDialog';
+import { TrashDialog } from './TrashDialog';
 import { Logo } from './Logo';
 import { withNoteIcon } from './note-icon';
 import { Panes } from './Panes';
@@ -131,7 +134,7 @@ function Welcome({ notes, onOpen, actions }: { notes: NoteSummary[]; onOpen: (pa
           <button key={a.label} onClick={a.run}>
             <span className="welcome__icon" aria-hidden>{a.icon}</span>
             <span>{a.label}</span>
-            {a.hint && <kbd>{a.hint}</kbd>}
+            {a.hint && <kbd>{keys(a.hint)}</kbd>}
           </button>
         ))}
       </div>
@@ -171,6 +174,10 @@ interface ConfirmState {
 
 function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }) {
   const [notes, setNotes] = useState<NoteSummary[]>([]);
+  /** 빈 폴더도 보이게 따로 받는 폴더 목록 */
+  const [folders, setFolders] = useState<string[]>([]);
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
@@ -218,7 +225,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [toast, setToast] = useState<Toast | null>(null);
   const assets = useAssetStore();
 
-  const refresh = useCallback(() => void window.nops.note.list().then(setNotes), []);
+  const refresh = useCallback(() => {
+    void window.nops.note.list().then(setNotes);
+    void window.nops.folder.list().then(setFolders);
+  }, []);
 
   useEffect(() => {
     refresh();
@@ -333,6 +343,29 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     [refresh],
   );
 
+  /** 새 폴더: 이름을 묻고 `parent` 안에 만든다 */
+  const newFolder = useCallback(
+    async (parent: string) => {
+      const name = (await showTextPrompt(parent ? `“${parent}” 안에 만들 폴더 이름` : '새 폴더 이름', '새 폴더'))?.trim().replace(/[\\/:*?"<>|]/g, ' ').trim();
+      if (!name) return;
+      try {
+        await window.nops.folder.create({ path: parent ? `${parent}/${name}` : name });
+        refresh();
+      } catch (e) {
+        setToast({ message: `폴더를 만들지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
+      }
+    },
+    [refresh],
+  );
+  /** 폴더 안에 새 노트 */
+  const newNoteIn = useCallback(
+    async (folder: string) => {
+      const name = (await showTextPrompt(`“${folder}” 안에 만들 노트 이름`, '제목 없음'))?.trim();
+      if (name) await createNote(`${folder}/${name.replace(/\//g, ' ')}`);
+    },
+    [createNote],
+  );
+
   const openDaily = useCallback(async () => {
     const r = await window.nops.daily.open({});
     setSelected(r.path);
@@ -423,6 +456,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       } else if (e.key === 'Escape' && (graphOpen || (dbOpen !== null && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)))) {
         setGraphOpen(false);
         setDbOpen(null);
+      } else if (e.key === 'F1') {
+        e.preventDefault();
+        setShortcutsOpen(true);
       } else if (e.key === 'F2') {
         e.preventDefault();
         void renameCurrent();
@@ -589,6 +625,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const commands = useMemo<PaletteCommand[]>(
     () => [
       { id: 'quick', label: '노트 찾기 (빠른 이동)', hint: '⌘O', keywords: ['open', '열기', '전환', 'ㅇㄱ'], run: () => setSwitcher(true) },
+      { id: 'new-folder', label: '새 폴더', keywords: ['folder', 'new', '폴더', '새로'], run: () => void newFolder('') },
+      { id: 'trash', label: '휴지통 열기', keywords: ['trash', 'restore', '휴지통', '복원'], run: () => setTrashOpen(true) },
+      { id: 'shortcuts', label: '단축키 목록', hint: 'F1', keywords: ['shortcut', 'keys', 'help', '단축키', '도움말'], run: () => setShortcutsOpen(true) },
       { id: 'new', label: '새 노트', keywords: ['new', '새로', '만들기'], run: () => setCreating(true) },
       { id: 'daily', label: '오늘의 노트', hint: '⌘⌥D', keywords: ['daily', 'today', '일기', '데일리'], run: () => void openDaily() },
       { id: 'graph', label: '그래프 보기', hint: '⌘⇧G', keywords: ['graph', '그래프'], run: () => { setDbOpen(null); setGraphOpen((o) => !o); } },
@@ -616,7 +655,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'theme', label: '테마 바꾸기 (시스템 → 라이트 → 다크)', keywords: ['theme', 'dark', 'light', '다크', '라이트', '테마', '다크모드'], run: cycleTheme },
       { id: 'close', label: '다른 볼트 열기', keywords: ['vault', '볼트', '닫기'], run: onClose },
     ],
-    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, cycleTheme, deleteEntry, onClose, tabs.activePane, tabs.panes.length],
+    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, cycleTheme, deleteEntry, newFolder, onClose, tabs.activePane, tabs.panes.length],
   );
 
   useEffect(() => {
@@ -625,7 +664,12 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     return () => clearTimeout(t);
   }, [toast]);
 
-  const tree = useMemo(() => buildTree(notes), [notes]);
+  const tree = useMemo(() => buildTree(notes, folders), [notes, folders]);
+  // 창 제목: 작업 표시줄·창 전환에서 구분되도록 현재 노트 이름을 넣는다
+  useEffect(() => {
+    const n = selected ? notes.find((x) => x.path === selected) : undefined;
+    document.title = n ? `${n.icon ? `${n.icon} ` : ''}${n.title} — Nopsidian` : `${vault.name} — Nopsidian`;
+  }, [selected, notes, vault.name]);
   /** 노트 안의 ```dbview 가 앱으로 돌아올 때 쓰는 기능 */
   const dbHost = useMemo(
     () =>
@@ -658,10 +702,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           </button>
         </header>
         <nav className="sidebar__nav" aria-label="빠른 메뉴">
-          <button className="navitem" onClick={() => setSwitcher(true)} title="노트 찾기 (⌘O)" aria-label="노트 찾기">
+          <button className="navitem" onClick={() => setSwitcher(true)} title={keys('노트 찾기 (⌘O)')} aria-label="노트 찾기">
             <span className="navitem__icon" aria-hidden>⌕</span>
             <span className="navitem__label">노트 찾기</span>
-            <kbd>⌘O</kbd>
+            <kbd>{keys('⌘O')}</kbd>
           </button>
           {creating ? (
             <input
@@ -681,13 +725,21 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               <span className="navitem__label">새 노트</span>
             </button>
           )}
-          <button className="navitem" onClick={() => void openDaily()} title="오늘의 노트 (⌘⌥D)" aria-label="오늘">
+          <button className="navitem" onClick={() => void newFolder('')} aria-label="새 폴더">
+            <span className="navitem__icon" aria-hidden>▤</span>
+            <span className="navitem__label">새 폴더</span>
+          </button>
+          <button className="navitem" onClick={() => void openDaily()} title={keys('오늘의 노트 (⌘⌥D)')} aria-label="오늘">
             <span className="navitem__icon" aria-hidden>☀</span>
             <span className="navitem__label">오늘의 노트</span>
           </button>
-          <button className="navitem" onClick={() => { setDbOpen(null); setGraphOpen((o) => !o); }} title="그래프 (⌘⇧G)" aria-label="그래프">
+          <button className="navitem" onClick={() => { setDbOpen(null); setGraphOpen((o) => !o); }} title={keys('그래프 (⌘⇧G)')} aria-label="그래프">
             <span className="navitem__icon" aria-hidden>◎</span>
             <span className="navitem__label">그래프</span>
+          </button>
+          <button className="navitem" onClick={() => setTrashOpen(true)} aria-label="휴지통">
+            <span className="navitem__icon" aria-hidden>🗑</span>
+            <span className="navitem__label">휴지통</span>
           </button>
         </nav>
         <input className="search" placeholder="전문 검색" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -695,7 +747,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           <button role="tab" aria-selected={sideTab === 'files'} className={sideTab === 'files' ? 'active' : ''} onClick={() => setSideTab('files')}>
             파일
           </button>
-          <button role="tab" aria-selected={sideTab === 'marks'} className={sideTab === 'marks' ? 'active' : ''} onClick={() => setSideTab('marks')} title="북마크 (⌘⇧B로 현재 노트 추가·해제)">
+          <button role="tab" aria-selected={sideTab === 'marks'} className={sideTab === 'marks' ? 'active' : ''} onClick={() => setSideTab('marks')} title={keys('북마크 (⌘⇧B로 현재 노트 추가·해제)')}>
             ★
           </button>
           <button role="tab" aria-selected={sideTab === 'db'} className={sideTab === 'db' ? 'active' : ''} onClick={() => setSideTab('db')}>
@@ -710,7 +762,15 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             인덱싱 {progress.done}/{progress.total}
           </p>
         )}
-        <nav className="list" {...dropProps((from, isFolder) => moveEntry(from, isFolder, ''))}>
+        <nav
+          className="list"
+          {...dropProps((from, isFolder) => moveEntry(from, isFolder, ''))}
+          onContextMenu={(e) => {
+            if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains('tree')) return;
+            e.preventDefault();
+            setMenu({ path: '', isFolder: true, x: e.clientX, y: e.clientY });
+          }}
+        >
           {hits ? (
             hits.length === 0 ? (
               <p className="muted small pad">결과 없음</p>
@@ -876,17 +936,40 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       )}
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       {syncOpen && <SyncDialog status={sync} onClose={() => setSyncOpen(false)} onOpenNote={setSelected} />}
+      {trashOpen && (
+        <TrashDialog
+          onClose={() => setTrashOpen(false)}
+          onRestored={(p, isFolder) => {
+            refresh();
+            if (!isFolder) setSelected(p);
+            setToast({ message: `복원했어요: ${p.replace(/\.md$/i, '')}` });
+          }}
+        />
+      )}
+      {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
       {menu && (
         <div className="ctxmask" onMouseDown={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}>
           <div className="ctxmenu" role="menu" style={{ left: Math.min(menu.x, window.innerWidth - 190), top: Math.min(menu.y, window.innerHeight - 140) }} onMouseDown={(e) => e.stopPropagation()}>
             {!menu.isFolder && (
               <button role="menuitem" onClick={() => { const p = menu.path; setMenu(null); openInNewTab(p); }}>새 탭에서 열기</button>
             )}
-            <button role="menuitem" onClick={() => { const m = menu; setMenu(null); void renameEntry(m.path, m.isFolder); }}>이름 바꾸기</button>
+            {menu.isFolder && menu.path !== '' && (
+              <>
+                <button role="menuitem" onClick={() => { const p = menu.path; setMenu(null); void newNoteIn(p); }}>여기에 새 노트</button>
+                <button role="menuitem" onClick={() => { const p = menu.path; setMenu(null); void newFolder(p); }}>새 하위 폴더</button>
+              </>
+            )}
+            {menu.path === '' && (
+              <>
+                <button role="menuitem" onClick={() => { setMenu(null); setCreating(true); }}>새 노트</button>
+                <button role="menuitem" onClick={() => { setMenu(null); void newFolder(''); }}>새 폴더</button>
+              </>
+            )}
+            {menu.path !== '' && <button role="menuitem" onClick={() => { const m = menu; setMenu(null); void renameEntry(m.path, m.isFolder); }}>이름 바꾸기</button>}
             {!menu.isFolder && (
               <button role="menuitem" onClick={() => { const p = menu.path; setMenu(null); toggleBookmark(p); }}>{bookmarks.includes(menu.path) ? '북마크 해제' : '북마크'}</button>
             )}
-            <button role="menuitem" className="danger" onClick={() => { const m = menu; setMenu(null); deleteEntry(m.path, m.isFolder); }}>삭제</button>
+            {menu.path !== '' && <button role="menuitem" className="danger" onClick={() => { const m = menu; setMenu(null); deleteEntry(m.path, m.isFolder); }}>삭제</button>}
           </div>
         </div>
       )}
@@ -918,8 +1001,22 @@ interface TreeNode {
   children: TreeNode[];
 }
 
-function buildTree(notes: NoteSummary[]): TreeNode[] {
+function buildTree(notes: NoteSummary[], folders: string[] = []): TreeNode[] {
   const root: TreeNode = { name: '', path: '', children: [] };
+  // 빈 폴더도 나무에 넣는다(노트가 있는 폴더는 아래에서 다시 만나도 그대로 쓴다)
+  for (const f of folders) {
+    let cur = root;
+    const parts = f.split('/');
+    parts.forEach((part, i) => {
+      const p = parts.slice(0, i + 1).join('/');
+      let child = cur.children.find((c) => c.path === p && !c.note);
+      if (!child) {
+        child = { name: part, path: p, children: [] };
+        cur.children.push(child);
+      }
+      cur = child;
+    });
+  }
   for (const n of notes) {
     let cur = root;
     const parts = n.path.split('/');

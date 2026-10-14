@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { resolveInVault } from '@nopsidian/core';
 
@@ -51,5 +51,66 @@ export function restoreFromTrash(root: string, trashId: string): string {
   mkdirSync(path.dirname(dest), { recursive: true });
   move(item, dest);
   rmSync(path.join(dir, `${trashId}.json`), { force: true });
+  return target;
+}
+
+export interface TrashItem {
+  trashId: string;
+  path: string;
+  isFolder: boolean;
+  at: string;
+}
+
+/** 휴지통 항목(메타 파일이 있는 것만), 최근 순 */
+export function listTrash(root: string): TrashItem[] {
+  const dir = path.join(root, ...TRASH);
+  if (!existsSync(dir)) return [];
+  const out: TrashItem[] = [];
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith('.json')) continue;
+    const id = f.slice(0, -5);
+    if (!existsSync(path.join(dir, id))) continue;
+    try {
+      const meta = JSON.parse(readFileSync(path.join(dir, f), 'utf8')) as { path: string; isFolder: boolean; at: string };
+      out.push({ trashId: id, path: meta.path, isFolder: !!meta.isFolder, at: meta.at });
+    } catch {
+      /* 깨진 메타는 건너뛴다 */
+    }
+  }
+  return out.sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+
+/** 휴지통에서 영구 삭제. id 가 없으면 전부. 지운 개수 */
+export function purgeTrash(root: string, trashId?: string): number {
+  const items = listTrash(root).filter((t) => !trashId || t.trashId === trashId);
+  const dir = path.join(root, ...TRASH);
+  for (const t of items) {
+    rmSync(path.join(dir, t.trashId), { recursive: true, force: true });
+    rmSync(path.join(dir, `${t.trashId}.json`), { force: true });
+  }
+  return items.length;
+}
+
+/** 볼트 안 폴더 목록(숨김 폴더·`.nopsidian`·`node_modules` 제외) */
+export function listFolders(root: string): string[] {
+  const out: string[] = [];
+  const walk = (rel: string, depth: number) => {
+    if (depth > 30) return;
+    for (const ent of readdirSync(path.join(root, rel), { withFileTypes: true })) {
+      if (!ent.isDirectory() || ent.name.startsWith('.') || ent.name === 'node_modules') continue;
+      const child = rel ? `${rel}/${ent.name}` : ent.name;
+      out.push(child);
+      walk(child, depth + 1);
+    }
+  };
+  walk('', 0);
+  return out.sort();
+}
+
+/** 새 폴더. 같은 이름이 있으면 ` 2`, ` 3`… */
+export function createFolder(root: string, rel: string): string {
+  let target = rel;
+  for (let n = 2; existsSync(resolveInVault(root, target)); n++) target = `${rel} ${n}`;
+  mkdirSync(resolveInVault(root, target), { recursive: true });
   return target;
 }

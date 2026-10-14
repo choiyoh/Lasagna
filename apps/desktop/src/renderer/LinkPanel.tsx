@@ -26,7 +26,7 @@ function groupBy<T extends { path: string }>(items: T[]) {
   return [...map.entries()];
 }
 
-/** 오른쪽 패널: 백링크(문맥 스니펫), 아웃고잉 링크(미해결 표시), 언링크드 멘션. */
+/** 오른쪽 패널: 백링크(문맥 스니펫), 아웃고잉 링크(미해결 표시), 링크 안 된 언급. */
 export function LinkPanel({ path, onOpen }: Props) {
   const [tab, setTab] = useState<Tab>('backlinks');
   const [data, setData] = useState<Data>(EMPTY);
@@ -64,7 +64,7 @@ export function LinkPanel({ path, onOpen }: Props) {
   const tabs: [Tab, string, number][] = [
     ['backlinks', '백링크', data.backlinks.length],
     ['outgoing', '나가는 링크', data.outgoing.length],
-    ['unlinked', '언링크드 멘션', data.unlinked.length],
+    ['unlinked', '링크 안 된 언급', data.unlinked.length],
   ];
 
   return (
@@ -135,7 +135,7 @@ export function LinkPanel({ path, onOpen }: Props) {
                     </button>
                     <button
                       className="linkpanel__convert"
-                      title="이 글자를 [[링크]]로 바꿔요"
+                      title="[[링크]]로 바꾸기"
                       onClick={async () => {
                         await window.nops.link.convertMention({ path: p, line: it.line, targetPath: path });
                         void load();

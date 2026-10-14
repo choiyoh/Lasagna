@@ -46,7 +46,7 @@ interface Props {
 }
 
 const CALC_LABEL: Record<string, string> = {
-  count: '개수', count_values: '값 있는 수', count_empty: '빈 수', count_unique: '고유 값 수', sum: '합계', avg: '평균', min: '최소', max: '최대', checked: '체크됨', unchecked: '체크 안 됨',
+  count: '개수', count_values: '값이 있는 수', count_empty: '빈 값 수', count_unique: '고유 값 수', sum: '합계', avg: '평균', min: '최소', max: '최대', checked: '체크됨', unchecked: '체크 안 됨',
 };
 const fmtCalc = (v: unknown) => (typeof v === 'number' ? String(Math.round(v * 1000) / 1000) : v === null || v === undefined ? '' : String(v));
 

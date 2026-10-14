@@ -185,7 +185,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         <button
           onClick={() =>
             void window.nops.db.exportCsv({ folder, viewId: data.view.id }).then(
-              (r) => r && setNotice(`${r.rows}행을 CSV 로 저장했어요`),
+              (r) => r && setNotice(`${r.rows}행을 CSV로 저장했어요`),
               (e) => setError(String(e)),
             )
           }

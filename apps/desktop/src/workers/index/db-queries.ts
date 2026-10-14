@@ -141,12 +141,12 @@ export function queryDatabase(db: Database.Database, root: string, p: DbQueryPar
   let view: View | undefined;
   if (p.view !== undefined) {
     const r = viewSchema.safeParse(p.view);
-    if (!r.success) throw new Error('뷰 설정이 올바르지 않아요');
+    if (!r.success) throw new Error('보기 설정이 올바르지 않아요');
     view = r.data;
   } else {
     view = schema.views.find((v) => v.id === p.viewId) ?? schema.views[0];
   }
-  if (!view) throw new Error('뷰가 없어요');
+  if (!view) throw new Error('보기가 없어요');
   const folders = dbFolders(db);
   const minute = Math.floor(Date.now() / 60_000);
   const hit = ctxCache.get(db);

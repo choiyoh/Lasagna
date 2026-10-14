@@ -46,9 +46,9 @@ interface Props {
 
 /** 저장 결과가 앱의 내용과 달라졌을 때 사용자에게 알리는 문구 */
 const NOTICES = {
-  merged: '다른 편집기에서 바뀐 내용과 자동으로 합쳤어요.',
-  conflict: '같은 부분을 두 곳에서 고쳐서 양쪽 내용을 모두 남겼어요. 표시(<!-- nopsidian:conflict -->)를 보고 정리해 주세요.',
-  copy: '파일이 밖에서 바뀌어 내 편집본을 "(충돌 …)" 사본으로 저장했어요.',
+  merged: '다른 곳에서 바뀐 내용과 자동으로 합쳤어요.',
+  conflict: '같은 부분을 두 곳에서 고쳐서 양쪽 내용을 모두 남겼어요. 충돌 표시(<!-- nopsidian:conflict -->)를 보고 정리해 주세요.',
+  copy: '파일이 다른 곳에서 바뀌어서, 내가 고친 내용은 ‘(충돌 …)’ 사본으로 따로 저장했어요.',
 } as const;
 
 /** 링크로 열었을 때 그 제목/블록으로 커서와 화면을 옮긴다. */
@@ -175,7 +175,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         noteName: () => nameRef.current,
         copy: (text) => {
           navigator.clipboard.writeText(text).then(
-            () => setNotice(`${text} 를 복사했어요.`),
+            () => setNotice(`복사했어요: ${text}`),
             (e) => setNotice(`복사하지 못했어요: ${e instanceof Error ? e.message : String(e)}`),
           );
         },

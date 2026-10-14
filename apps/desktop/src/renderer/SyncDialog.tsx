@@ -19,9 +19,9 @@ const OP_LABEL: Record<string, string> = {
   pull: '내려받기',
   merge: '병합',
   trashLocal: '이 기기에서 삭제',
-  trashRemote: 'Drive 에서 삭제',
+  trashRemote: 'Drive에서 삭제',
   moveLocal: '이 기기에서 이동',
-  moveRemote: 'Drive 에서 이동',
+  moveRemote: 'Drive에서 이동',
   record: '기록만',
   forget: '기록 정리',
 };
@@ -29,7 +29,7 @@ const OP_LABEL: Record<string, string> = {
 export const syncStateText = (s: SyncStatus | null): string => (s ? STATE_LABEL[s.state] : '');
 
 const ago = (t: number | null) => {
-  if (!t) return '아직 안 했어요';
+  if (!t) return '아직 동기화한 적이 없어요';
   const sec = Math.round((Date.now() - t) / 1000);
   if (sec < 60) return '방금';
   if (sec < 3600) return `${Math.round(sec / 60)}분 전`;
@@ -107,7 +107,7 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
         <section>
           <h3>3. 이 볼트</h3>
           <label className="small">
-            <input type="checkbox" checked={!!s?.enabled} disabled={!s?.connected || !!busy} onChange={(e) => void act('enable', () => window.nops.sync.enable({ enabled: e.target.checked }))} /> 이 볼트를 Drive 와 동기화
+            <input type="checkbox" checked={!!s?.enabled} disabled={!s?.connected || !!busy} onChange={(e) => void act('enable', () => window.nops.sync.enable({ enabled: e.target.checked }))} /> 이 볼트를 Drive와 동기화
           </label>
           <p className="small" data-testid="sync-state">
             {syncStateText(s)}
@@ -123,8 +123,8 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
 
         {plan && (
           <section data-testid="sync-plan">
-            <h3>{plan.firstSync ? '첫 동기화 — 이렇게 할 거예요' : '동기화 계획'}</h3>
-            <p className="small">{Object.entries(plan.counts).map(([k, n]) => `${OP_LABEL[k] ?? k} ${n}`).join(' · ') || '바꿀 것이 없어요'}</p>
+            <h3>{plan.firstSync ? '첫 동기화 계획' : '동기화 계획'}</h3>
+            <p className="small">{Object.entries(plan.counts).map(([k, n]) => `${OP_LABEL[k] ?? k} ${n}`).join(' · ') || '바뀐 내용이 없어요'}</p>
             {plan.blocked && <p className="small warn">{plan.blocked}</p>}
             <ul className="syncdialog__ops">
               {plan.ops.slice(0, 60).map((o, i) => (

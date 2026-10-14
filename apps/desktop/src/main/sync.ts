@@ -152,7 +152,7 @@ export class SyncController {
 
   async connect(): Promise<SyncStatus> {
     const c = this.o.credentials.load();
-    if (!c?.clientId) throw new Error('먼저 Google 클라이언트 ID 를 입력해 주세요');
+    if (!c?.clientId) throw new Error('먼저 Google 클라이언트 ID를 입력해 주세요');
     this.cancelConnect?.();
     const pkce = createPkce();
     const state = randomState();
@@ -169,7 +169,7 @@ export class SyncController {
         verifier: pkce.verifier,
         redirectUri: loop.redirectUri,
       });
-      if (!tokens.refreshToken) throw new Error('Google 이 refresh token 을 주지 않았어요. 클라이언트 유형이 "데스크톱 앱"인지 확인해 주세요');
+      if (!tokens.refreshToken) throw new Error('Google이 refresh token을 주지 않았어요. 클라이언트 유형이 "데스크톱 앱"인지 확인해 주세요');
       this.o.credentials.save({ ...c, tokens });
       await this.stopWorker();
       this.state = 'idle';
@@ -193,7 +193,7 @@ export class SyncController {
   }
 
   setEnabled(enabled: boolean): SyncStatus {
-    if (!this.root) throw new Error('열린 볼트가 없음');
+    if (!this.root) throw new Error('열린 볼트가 없어요');
     this.device.enabled = enabled;
     this.saveDevice();
     if (!enabled) void this.stopWorker();

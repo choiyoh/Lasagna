@@ -42,8 +42,8 @@ describe('expandMoves', () => {
     expect(expandMoves(root, 'a.md', '새 이름')).toEqual([{ from: 'a.md', to: '새 이름.md' }]);
     expect(() => expandMoves(root, 'nope.md', 'x.md')).toThrow('없는 경로');
     expect(() => expandMoves(root, 'a.md', 'exists.md')).toThrow('이미 있는 경로');
-    expect(() => expandMoves(root, 'a.md', 'a.md')).toThrow('같습니다');
-    expect(() => expandMoves(root, 'dir', 'dir/sub')).toThrow('자기 안');
+    expect(() => expandMoves(root, 'a.md', 'a.md')).toThrow('이름이 같아요');
+    expect(() => expandMoves(root, 'dir', 'dir/sub')).toThrow('자기 자신 안');
     expect(() => expandMoves(root, 'a.md', '.hidden/x.md')).toThrow('점');
     expect(() => expandMoves(root, 'a.md', '../밖.md')).toThrow();
   });
@@ -123,6 +123,6 @@ describe('undoRename', () => {
   });
 
   it('기록이 없으면 오류', () => {
-    expect(() => undoRename(root, 'nope-123')).toThrow('기록이 없습니다');
+    expect(() => undoRename(root, 'nope-123')).toThrow('기록이 없어요');
   });
 });

@@ -56,7 +56,7 @@ export const getCurrent = () => current;
 export const getVaultRoot = (id: string) => (current?.info.id === id ? current.info.path : undefined);
 
 export function requireVault(): OpenVault {
-  if (!current) throw new Error('열린 볼트가 없음');
+  if (!current) throw new Error('열린 볼트가 없어요');
   return current;
 }
 

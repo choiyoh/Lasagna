@@ -52,7 +52,7 @@ export function HistoryPanel({ path, onRestored }: Props) {
     const cur = await window.nops.note.read({ path });
     await window.nops.note.save({ path, content: old, baseHash: cur.hash });
     window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: path }));
-    onRestored('이전 버전으로 되돌렸어요. 바꾸기 직전 내용도 기록에 남아 있어요.');
+    onRestored('이전 버전으로 되돌렸어요. 되돌리기 직전 내용도 기록에 남아 있어요.');
     setPicked(null);
     void load();
   };
@@ -75,7 +75,7 @@ export function HistoryPanel({ path, onRestored }: Props) {
       {picked && (
         <div className="history__diff">
           <div className="history__bar">
-            <span className="muted small">{changed === 0 ? '현재와 같아요' : `현재와 ${changed}줄 다름 (빨강: 이 버전, 초록: 현재)`}</span>
+            <span className="muted small">{changed === 0 ? '현재와 같아요' : `현재와 ${changed}줄이 달라요 (빨강: 이 버전 / 초록: 현재)`}</span>
             <button onClick={() => void restore()} disabled={changed === 0} data-testid="history-restore">
               이 버전으로 복원
             </button>

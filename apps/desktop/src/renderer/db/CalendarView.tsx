@@ -46,7 +46,7 @@ export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily }:
     return m;
   }, [rows, prop, days]);
 
-  if (!prop) return <p className="muted pad">캘린더 뷰에는 날짜 속성이 필요해요. 속성 관리에서 “날짜” 속성을 추가해 주세요.</p>;
+  if (!prop) return <p className="muted pad">캘린더 보기에는 날짜 속성이 필요해요. 속성 관리에서 “날짜” 속성을 추가해 주세요.</p>;
   const move = (dir: number) => setAnchor((a) => (mode === 'month' ? new Date(a.getFullYear(), a.getMonth() + dir, 1) : addDays(a, dir * 7)));
   const title = mode === 'month' ? `${anchor.getFullYear()}년 ${anchor.getMonth() + 1}월` : `${ymd(days[0]!)} ~ ${ymd(days[6]!)}`;
 

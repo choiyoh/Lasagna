@@ -52,7 +52,7 @@ export function Panes({ tabs, dispatch, titleOf, renderEditor, empty, onPopOut }
                   </button>
                 </div>
               ))}
-              {pane.tabs.length === 0 && <span className="muted small tabbar__empty">노트를 골라 이 칸에 열어요</span>}
+              {pane.tabs.length === 0 && <span className="muted small tabbar__empty">이 칸에 열 노트를 선택하세요</span>}
             </div>
           )}
           <div className="pane__body">{pane.active ? renderEditor(pane.active, i) : <div className="pane__empty">{empty}</div>}</div>

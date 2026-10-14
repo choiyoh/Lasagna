@@ -76,7 +76,7 @@ describe('블록 핸들', () => {
     expect(view.state.selection.$from.parentOffset).toBe(1);
   });
 
-  it('⋮⋮ 클릭 → 메뉴에서 "블록 변환 > 제목 2"와 "복제", "삭제"를 쓴다', async () => {
+  it('⋮⋮ 클릭 → 메뉴에서 "다른 블록으로 바꾸기 > 제목 2"와 "복제", "삭제"를 쓴다', async () => {
     const { view, host } = setup('가\n\n나\n\n다\n');
     hover(view, host, '나');
     await frame();

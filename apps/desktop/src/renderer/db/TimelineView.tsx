@@ -41,7 +41,7 @@ export function TimelineView({ data, rows, onOpen, onChange }: Props) {
   }, [rows, prop]);
 
   const ticks = useTicks(first, span, scale);
-  if (!prop) return <p className="muted pad">타임라인 뷰에는 날짜 속성이 필요해요. 속성 관리에서 “날짜” 속성을 추가해 주세요.</p>;
+  if (!prop) return <p className="muted pad">타임라인 보기에는 날짜 속성이 필요해요. 속성 관리에서 “날짜” 속성을 추가해 주세요.</p>;
   const todayX = daysBetween(first, new Date()) * px;
 
   return (

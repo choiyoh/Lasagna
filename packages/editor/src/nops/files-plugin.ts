@@ -19,7 +19,7 @@ export function createFilesPlugin(host: NopsAssetHost): Plugin {
         const path = await host.save(file);
         nodes.push(embed.create({ target: host.embedTarget(path), heading: null, block: null, alias: null }));
       } catch (e) {
-        host.onError?.(`"${file.name}"을(를) 저장하지 못했어요: ${e instanceof Error ? e.message : String(e)}`);
+        host.onError?.(`저장하지 못했어요: ${file.name} (${e instanceof Error ? e.message : String(e)})`);
       }
     }
     if (nodes.length === 0 || view.isDestroyed) return;

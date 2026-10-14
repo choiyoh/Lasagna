@@ -230,7 +230,7 @@ describe('Indexer', () => {
     });
   });
 
-  describe('언링크드 멘션', () => {
+  describe('링크 안 된 언급', () => {
     it('제목·별칭이 링크 없이 나온 블록을 찾고, 이미 링크한 노트·자기 자신은 뺀다', () => {
       put('클린 코드.md', '---\naliases: [Clean Code]\n---\n# 클린 코드\n\n클린 코드 정리\n');
       put('멘션.md', '# 멘션\n\n클린 코드를 읽었다\n\nClean Code도 읽었다\n');

@@ -22,7 +22,7 @@ export function BoardView({ data, onOpen, onMove, onAdd, onReorder, vaultId }: P
   const def = prop ? data.schema.properties[prop] : undefined;
   const [over, setOver] = useState<string | null | undefined>(undefined);
   const [dragging, setDragging] = useState<DbRowDto | null>(null);
-  if (!prop || !data.groups) return <p className="muted pad">보드 뷰는 그룹 속성이 필요해요. 위의 “그룹”에서 선택/상태 같은 속성을 골라 주세요.</p>;
+  if (!prop || !data.groups) return <p className="muted pad">보드 보기에는 그룹 속성이 필요해요. 위쪽 ‘그룹’에서 선택·상태 같은 속성을 골라 주세요.</p>;
   const cols = visibleColumns(data).filter((c) => c !== TITLE && c !== prop).slice(0, 3);
   const colorOf = (key: string | null) => (key && def ? optionsOf(def).find((o) => o.name === key)?.color : undefined);
   const keyOf = (k: string | null) => k ?? '\u0000';

@@ -206,7 +206,7 @@ export async function editSchema(v: OpenVault, folder: string, op: SchemaOp): Pr
       next = removeDbProperty(text, op.name);
       break;
     case 'renameProperty': {
-      if (op.to === TITLE_PROP) throw new Error('`title` 은 쓸 수 없는 이름이에요');
+      if (op.to === TITLE_PROP) throw new Error('‘title’은 쓸 수 없는 이름이에요');
       next = renameDbProperty(text, op.from, op.to);
       if (next !== text) {
         await v.index.ready;
@@ -227,7 +227,7 @@ export async function editSchema(v: OpenVault, folder: string, op: SchemaOp): Pr
     }
     case 'upsertView': {
       const r = viewSchema.safeParse(op.view);
-      if (!r.success) throw new Error('뷰 설정이 올바르지 않아요');
+      if (!r.success) throw new Error('보기 설정이 올바르지 않아요');
       next = upsertDbView(text, r.data);
       break;
     }
@@ -266,7 +266,7 @@ export async function exportCsv(v: OpenVault, folder: string, viewId?: string): 
   const schema = first!.schema;
   const cols = first!.view.columns?.length ? first!.view.columns : [TITLE_PROP, ...Object.keys(schema.properties)];
   const table = rowsToCsvTable(schema, cols, rows.map((r) => ({ title: r.title, values: r.values as Record<string, CellValue> })));
-  const opts = { title: 'CSV 로 내보내기', defaultPath: `${schema.title ?? 'database'}.csv`, filters: [{ name: 'CSV', extensions: ['csv'] }] };
+  const opts = { title: 'CSV로 내보내기', defaultPath: `${schema.title ?? 'database'}.csv`, filters: [{ name: 'CSV', extensions: ['csv'] }] };
   const win = dlgParent();
   const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
   if (r.canceled || !r.filePath) return null;

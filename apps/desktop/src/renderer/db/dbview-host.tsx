@@ -27,7 +27,7 @@ function Picker({ onDone }: { onDone: (src: string | null) => void }) {
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onDone(null)}>
       <div className="dialog" role="dialog" aria-modal="true" aria-label="데이터베이스 보기 넣기">
-        <h2>{db ? `“${db.title}” 의 보기` : '어떤 데이터베이스를 넣을까요?'}</h2>
+        <h2>{db ? `“${db.title}”의 보기` : '어떤 데이터베이스를 넣을까요?'}</h2>
         {dbs === null ? (
           <p className="muted">불러오는 중…</p>
         ) : !db ? (

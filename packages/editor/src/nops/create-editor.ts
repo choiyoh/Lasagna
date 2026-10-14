@@ -56,8 +56,8 @@ export const nopsSlashItems: SlashItemSpec[] = [
   { icon: '▾', label: '토글 제목 1', description: '접었다 펼 수 있는 큰 제목', category: 'advanced', keywords: ['toggle', 'heading', '토글', '제목', '접기', 'h1', '토글제목1'], run: (v) => toggleHeadingCommand(1)(v.state, v.dispatch) },
   { icon: '▾', label: '토글 제목 2', description: '접었다 펼 수 있는 중간 제목', category: 'advanced', keywords: ['toggle', 'heading', '토글', '제목', '접기', 'h2', '토글제목2'], run: (v) => toggleHeadingCommand(2)(v.state, v.dispatch) },
   { icon: '▾', label: '토글 제목 3', description: '접었다 펼 수 있는 작은 제목', category: 'advanced', keywords: ['toggle', 'heading', '토글', '제목', '접기', 'h3', '토글제목3'], run: (v) => toggleHeadingCommand(3)(v.state, v.dispatch) },
-  { icon: '▥', label: '2열', description: '나란히 두 열로 배치', category: 'advanced', keywords: ['columns', '열', '컬럼', '2열', '두열', '레이아웃'], run: (v) => insertColumns(2)(v.state, v.dispatch) },
-  { icon: '▥', label: '3열', description: '나란히 세 열로 배치', category: 'advanced', keywords: ['columns', '열', '컬럼', '3열', '세열', '레이아웃'], run: (v) => insertColumns(3)(v.state, v.dispatch) },
+  { icon: '▥', label: '2열', description: '두 열로 나란히 배치', category: 'advanced', keywords: ['columns', '열', '컬럼', '2열', '두열', '레이아웃'], run: (v) => insertColumns(2)(v.state, v.dispatch) },
+  { icon: '▥', label: '3열', description: '세 열로 나란히 배치', category: 'advanced', keywords: ['columns', '열', '컬럼', '3열', '세열', '레이아웃'], run: (v) => insertColumns(3)(v.state, v.dispatch) },
   { icon: '∑', label: '수식 블록', description: 'LaTeX 수식', category: 'advanced', keywords: ['math', 'latex', '수식', '공식', 'katex'], run: (v) => insertMathBlock()(v.state, v.dispatch) },
 ];
 
@@ -73,7 +73,16 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
     table: { ...table, schema: nopsSchema },
     toolbar: createNotionSupport({ slashItems: [...nopsSlashItems, ...(options.dbView?.create ? [newDbSlashItem(options.dbView)] : []), tocSlashItem, ...(options.dbView ? [dbViewSlashItem(options.dbView)] : []), ...(options.slashItems ?? [])] }),
     style: 'notion',
-    messages: messagesKo,
+    // 업스트림 한국어 문구 중 어색한 몇 곳만 다듬는다
+    messages: {
+      ...messagesKo,
+      linkInvalid: '올바른 주소를 입력해 주세요. 예: example.com',
+      uploadEmptyUrl: '업로드 함수가 URL을 돌려주지 않았어요',
+      slashImageDescription: '내 기기에서 이미지를 올려요',
+      slashTableDescription: '행과 열 수를 골라 표를 넣어요',
+      slashDividerDescription: '가로 구분선을 넣어요',
+      slashCodeBlockDescription: '코드 블록을 넣어요',
+    },
     placeholder: options.placeholder ?? "'/'를 눌러 블록을 추가하세요",
     readOnly: options.readOnly,
     image: assets

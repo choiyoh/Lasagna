@@ -82,7 +82,7 @@ class BlockHandleView {
     this.grip.className = 'nops-handle__grip';
     this.grip.textContent = '⋮⋮';
     this.grip.draggable = true;
-    this.grip.title = '끌어서 이동 · 클릭해서 메뉴';
+    this.grip.title = '끌어서 이동 · 클릭하면 메뉴';
     this.root.append(this.add, this.grip);
     this.indicator.className = 'nops-drop-side';
     this.indicator.hidden = true;
@@ -278,7 +278,7 @@ class BlockHandleView {
     if (kinds.length) {
       const title = document.createElement('div');
       title.className = 'nops-block-menu__title';
-      title.textContent = '블록 변환';
+      title.textContent = '다른 블록으로 바꾸기';
       menu.append(title);
       const grid = document.createElement('div');
       grid.className = 'nops-block-menu__grid';

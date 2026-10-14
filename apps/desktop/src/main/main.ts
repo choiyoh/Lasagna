@@ -259,7 +259,7 @@ function registerHandlers() {
     const v = requireVault();
     const content = readFileSync(resolveInVault(v.info.path, rel), 'utf8');
     const r = ensureBlockIdAt(content, line);
-    if (!r) throw new Error('그 줄에서 블록을 찾지 못했습니다');
+    if (!r) throw new Error('그 줄에서 블록을 찾지 못했어요');
     if (r.changed) {
       // 대상 노트가 편집기에 열려 있어도 외부 편집과 같은 경로(3-way 병합)로 합쳐진다
       saveNote({ root: v.info.path, rel, content: r.content, baseHash: sha256(content), baseContent: content });
@@ -271,7 +271,7 @@ function registerHandlers() {
     await v.index.ready;
     const notes = await v.index.list();
     const target = notes.find((n) => n.path === targetPath);
-    if (!target) throw new Error('대상 노트를 찾을 수 없습니다');
+    if (!target) throw new Error('대상 노트를 찾을 수 없어요');
     // 목록(`unlinkedMentions`)과 같은 기준: 2글자 이하 말은 쓰지 않는다
     const terms = [target.title, ...target.aliases].filter((t) => [...t].length > 2);
     const content = readFileSync(resolveInVault(v.info.path, rel), 'utf8');

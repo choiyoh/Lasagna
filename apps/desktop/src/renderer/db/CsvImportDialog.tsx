@@ -76,7 +76,7 @@ export function CsvImportDialog({ preview, existing, onClose, onDone }: Props) {
               {mode === 'new' && <input value={name} onChange={(e) => setName(e.target.value)} aria-label="새 데이터베이스 이름" />}
               {existing && (
                 <label className="small">
-                  <input type="radio" checked={mode === 'existing'} onChange={() => setMode('existing')} aria-label="기존 데이터베이스에 추가" /> “{existing.title}” 에 행 추가
+                  <input type="radio" checked={mode === 'existing'} onChange={() => setMode('existing')} aria-label="기존 데이터베이스에 추가" /> “{existing.title}”에 행 추가
                 </label>
               )}
             </div>

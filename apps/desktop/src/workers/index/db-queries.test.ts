@@ -76,7 +76,7 @@ describe('데이터베이스 질의(인덱서)', () => {
     expect(r.rows.map((x) => x.title)).toEqual(['클린 코드']);
     const g = ix.queryDatabase({ folder: '독서', view: { id: 't', type: 'board', sort: [], groupBy: '저자' }, groupLimit: 1 });
     expect(g.groups!.every((x) => x.rows.length <= 1)).toBe(true);
-    expect(() => ix.queryDatabase({ folder: '독서', view: { type: 'nope' } })).toThrow(/뷰 설정/);
+    expect(() => ix.queryDatabase({ folder: '독서', view: { type: 'nope' } })).toThrow(/보기 설정/);
     expect(() => ix.queryDatabase({ folder: '없는폴더' })).toThrow(/찾을 수 없어요/);
   });
 

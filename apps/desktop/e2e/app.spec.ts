@@ -252,7 +252,7 @@ test.describe('블록 핸들', () => {
     return el;
   };
 
-  test('⋮⋮ 메뉴: 블록 변환(제목 2), 복제, 삭제가 파일에 반영된다', async () => {
+  test('⋮⋮ 메뉴: 다른 블록으로 바꾸기(제목 2), 복제, 삭제가 파일에 반영된다', async () => {
     const page = await app.firstWindow();
     const file = await open(page, '핸들메뉴', '# 핸들메뉴\n\n가\n\n나\n\n다\n');
     await hoverBlock(page, '나');
@@ -585,11 +585,11 @@ test.describe('링크 코어', () => {
     await expect(panel.locator('.unresolved')).toHaveText('아직 없는 노트');
   });
 
-  test('언링크드 멘션: 링크 없이 제목이 나온 곳(한글 조사 포함)을 찾는다', async () => {
+  test('링크 안 된 언급: 링크 없이 제목이 나온 곳(한글 조사 포함)을 찾는다', async () => {
     const page = await app.firstWindow();
     note('멘션글', '# 멘션글\n\n요즘 클린 코드를 다시 읽는다. 코드 안의 `클린 코드`는 제외.\n');
     await open(page, '클린 코드');
-    await page.getByRole('tab', { name: /언링크드/ }).click();
+    await page.getByRole('tab', { name: /링크 안 된 언급/ }).click();
     const panel = page.getByTestId('panel-unlinked');
     await expect(panel).toContainText('요즘 클린 코드를 다시 읽는다', { timeout: 8000 });
     await expect(panel.getByRole('button', { name: '멘션글', exact: true })).toBeVisible();
@@ -661,7 +661,7 @@ test.describe('링크 코어', () => {
     await expect(input).toHaveValue('옛이름');
     await input.fill('폴더/새이름');
     await input.press('Enter');
-    const dialog = page.getByRole('dialog', { name: '이름을 바꾸고 링크를 갱신할까요?' });
+    const dialog = page.getByRole('dialog', { name: '이름을 바꾸고 링크도 함께 고칠까요?' });
     await expect(dialog).toContainText('3개');
     await expect(dialog).toContainText('2개 노트');
     await dialog.getByRole('button', { name: '바꾸기' }).click();
@@ -719,12 +719,12 @@ test.describe('링크 코어', () => {
     writeFileSync(path.join(vaultDir, '.nopsidian/config.json'), JSON.stringify({ version: 1 }));
   });
 
-  test('언링크드 멘션 → 링크로 변환', async () => {
+  test('링크 안 된 언급 → 링크로 변환', async () => {
     const page = await app.firstWindow();
     note('변환대상', '# 변환대상 노트\n\n본문\n');
     const mention = note('변환멘션', '# 변환멘션\n\n오늘은 변환대상 노트를 정리했다. 변환대상 노트는 두 번 나온다.\n');
     await open(page, '변환대상 노트');
-    await page.getByRole('tab', { name: /언링크드/ }).click();
+    await page.getByRole('tab', { name: /링크 안 된 언급/ }).click();
     const panel = page.getByTestId('panel-unlinked');
     await expect(panel).toContainText('오늘은 변환대상 노트를 정리했다', { timeout: 8000 });
     await panel.locator('.linkpanel__mention').first().hover();
@@ -1475,7 +1475,7 @@ views:
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [f] })) as typeof dialog.showOpenDialog;
     }, zipFile);
     await page.keyboard.press('Meta+p');
-    await page.getByTestId('command-palette').locator('input').fill('Notion 내보내기');
+    await page.getByTestId('command-palette').locator('input').fill('Notion에서 가져오기');
     await page.keyboard.press('Enter');
     await expect(page.locator('.toast')).toContainText('Notion에서', { timeout: 15000 });
     const folder = readdirSync(vaultDir).find((d) => d.startsWith('Notion 가져오기'))!;

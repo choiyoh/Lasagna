@@ -27,7 +27,7 @@ export interface FilterBuilderProps {
   onChange: (next: FilterNode | undefined) => void;
 }
 
-const GROUP_LIMIT_TITLE = '3단계까지만 만들 수 있어요';
+const GROUP_LIMIT_TITLE = '조건 그룹은 3단계까지만 만들 수 있어요';
 
 /** 새 조건의 기본값: 제목 contains '' (ViewToolbar 의 "+ 조건 추가" 와 같다) */
 const newCondition = (): Condition => ({ prop: TITLE, op: defaultOp(undefined), value: '' });
@@ -121,8 +121,8 @@ function GroupEditor({ root, path, names, def, emit, onClear }: GroupProps) {
     <div className={path.length === 0 ? 'filterb__group filterb__group--root' : 'filterb__group'}>
       <div className="filterb__head">
         <select value={groupKind(g)} onChange={(e) => emit(setGroupKind(root, path, e.target.value as 'and' | 'or'))} aria-label="조건 결합">
-          <option value="and">모든 조건을 만족</option>
-          <option value="or">하나라도 만족</option>
+          <option value="and">모든 조건에 맞음</option>
+          <option value="or">하나라도 맞음</option>
         </select>
         {path.length === 0 ? (
           <button onClick={onClear}>모두 지우기</button>

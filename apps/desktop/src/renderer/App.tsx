@@ -79,7 +79,7 @@ function VaultPicker({ onOpen }: { onOpen: (v: VaultInfo) => void }) {
         <button className="primary start__cta" onClick={() => run(() => window.nops.vault.pick())}>
           폴더 열기 / 만들기
         </button>
-        <p className="start__hint">기존 Obsidian 볼트나 Markdown 폴더도 그대로 열려요. 파일은 어디로도 옮겨지지 않아요.</p>
+        <p className="start__hint">기존 Obsidian 볼트나 Markdown 폴더도 그대로 열 수 있어요. 파일을 옮기거나 복사하지 않아요.</p>
         {error && <p className="error">{error}</p>}
         {recent.length > 0 ? (
           <section className="start__recent" aria-label="최근 볼트">
@@ -102,8 +102,8 @@ function VaultPicker({ onOpen }: { onOpen: (v: VaultInfo) => void }) {
         ) : (
           <ul className="start__features" aria-label="주요 기능">
             <li><strong>블록 편집기</strong><span>슬래시(/)로 제목·표·콜아웃·수식을 바로 넣어요</span></li>
-            <li><strong>링크와 그래프</strong><span>[[위키링크]], 백링크, 노트 사이의 연결 그래프</span></li>
-            <li><strong>데이터베이스</strong><span>표·보드·캘린더로 보는 속성 있는 노트</span></li>
+            <li><strong>링크와 그래프</strong><span>[[위키링크]]와 백링크, 노트가 서로 이어진 모습을 그래프로 보여 줘요</span></li>
+            <li><strong>데이터베이스</strong><span>속성이 있는 노트를 표·보드·캘린더로 한눈에 봐요</span></li>
           </ul>
         )}
       </div>
@@ -344,7 +344,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     const dir = from.includes('/') ? from.slice(0, from.lastIndexOf('/')) : '';
     const currentName = (isFolder ? from : from.replace(/\.md$/i, '')).slice(dir ? dir.length + 1 : 0);
     const answer = preset ?? await showTextPrompt(
-      isFolder ? '폴더 이름 (다른 폴더로 옮기려면 상위/이름 형식으로 쓰세요)' : '새 이름 (다른 폴더로 옮기려면 폴더/이름 형식으로 쓰세요)',
+      isFolder ? '폴더 이름 (다른 곳으로 옮기려면 ‘상위폴더/이름’으로 입력하세요)' : '새 이름 (다른 폴더로 옮기려면 ‘폴더/이름’으로 입력하세요)',
       currentName,
     );
     const typed = answer?.trim().replace(/^\/+|\/+$/g, '');
@@ -383,7 +383,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       };
       if (plan.totalChanges === 0) return await apply();
       setConfirm({
-        title: '이름을 바꾸고 링크를 갱신할까요?',
+        title: '이름을 바꾸고 링크도 함께 고칠까요?',
         lines: [
           `${from} → ${target}`,
           `${plan.edits.length}개 노트의 링크 ${plan.totalChanges}개를 고쳐요.`,
@@ -479,10 +479,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     (target: string, isFolder: boolean) => {
       const name = target.slice(target.lastIndexOf('/') + 1).replace(/\.md$/i, '');
       setConfirm({
-        title: isFolder ? `폴더 “${name}” 를 삭제할까요?` : `“${name}” 를 삭제할까요?`,
+        title: isFolder ? `폴더를 삭제할까요? “${name}”` : `노트를 삭제할까요? “${name}”`,
         lines: [
           isFolder ? '폴더 안의 모든 노트와 첨부가 함께 휴지통(.nopsidian/trash)으로 옮겨져요.' : '휴지통(.nopsidian/trash)으로 옮겨져요. 바로 되돌릴 수 있어요.',
-          '이 노트로 가는 [[링크]] 는 그대로 남아 “없는 노트”로 표시돼요.',
+          '이 노트를 가리키던 [[링크]]는 그대로 남고 ‘없는 노트’로 표시돼요.',
         ],
         confirmLabel: '삭제',
         onConfirm: () => {
@@ -499,7 +499,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               });
               refresh();
               setToast({
-                message: `“${name}” 를 휴지통으로 옮겼어요.`,
+                message: `휴지통으로 옮겼어요: ${name}`,
                 undo: async () => {
                   const back = await window.nops.note.restore({ trashId: r.trashId });
                   refresh();
@@ -555,7 +555,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
 
   const commands = useMemo<PaletteCommand[]>(
     () => [
-      { id: 'quick', label: '노트 열기 (빠른 전환기)', hint: '⌘O', keywords: ['open', '열기', '전환', 'ㅇㄱ'], run: () => setSwitcher(true) },
+      { id: 'quick', label: '노트 찾기 (빠른 이동)', hint: '⌘O', keywords: ['open', '열기', '전환', 'ㅇㄱ'], run: () => setSwitcher(true) },
       { id: 'new', label: '새 노트', keywords: ['new', '새로', '만들기'], run: () => setCreating(true) },
       { id: 'daily', label: '오늘의 노트', hint: '⌘⌥D', keywords: ['daily', 'today', '일기', '데일리'], run: () => void openDaily() },
       { id: 'graph', label: '그래프 보기', hint: '⌘⇧G', keywords: ['graph', '그래프'], run: () => { setDbOpen(null); setGraphOpen((o) => !o); } },
@@ -573,7 +573,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'export-html', label: '현재 노트를 HTML로 내보내기', keywords: ['export', 'html', '내보내기'], enabled: !!selected, run: () => void exportNote('html') },
       { id: 'export-pdf', label: '현재 노트를 PDF로 내보내기', keywords: ['export', 'pdf', '내보내기'], enabled: !!selected, run: () => void exportNote('pdf') },
       { id: 'export-vault', label: '볼트 전체를 HTML 사이트로 내보내기', keywords: ['export', 'site', 'html', '내보내기', '사이트'], run: () => void exportVault() },
-      { id: 'import-notion', label: 'Notion 내보내기(ZIP) 가져오기', keywords: ['import', 'notion', '노션', '가져오기'], run: () => void importNotion() },
+      { id: 'import-notion', label: 'Notion에서 가져오기 (내보낸 ZIP 파일)', keywords: ['import', 'notion', '노션', '가져오기'], run: () => void importNotion() },
       { id: 'tab-new', label: '새 탭에서 노트 열기', keywords: ['tab', '탭'], run: () => { setSwitcherNewTab(true); setSwitcher(true); } },
       { id: 'tab-close', label: '현재 탭 닫기', hint: '⌘W', keywords: ['close', 'tab', '탭', '닫기'], enabled: !!selected, run: () => selected && dispatchTabs({ type: 'close', pane: tabs.activePane, path: selected }) },
       { id: 'split-right', label: '오른쪽으로 분할', keywords: ['split', '분할', '좌우'], run: () => dispatchTabs({ type: 'split', dir: 'row' }) },
@@ -625,7 +625,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           </button>
         </header>
         <nav className="sidebar__nav" aria-label="빠른 메뉴">
-          <button className="navitem" onClick={() => setSwitcher(true)} title="빠른 전환기 (⌘O)" aria-label="노트 찾기">
+          <button className="navitem" onClick={() => setSwitcher(true)} title="노트 찾기 (⌘O)" aria-label="노트 찾기">
             <span className="navitem__icon" aria-hidden>⌕</span>
             <span className="navitem__label">노트 찾기</span>
             <kbd>⌘O</kbd>

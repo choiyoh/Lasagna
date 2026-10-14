@@ -1,7 +1,7 @@
 {
   "name": "@nopsidian/desktop",
   "productName": "Nopsidian",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "commonjs",
   "main": ".vite/build/main.cjs",

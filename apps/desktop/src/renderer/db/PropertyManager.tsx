@@ -28,7 +28,7 @@ export function makeDef(type: string, optionsText: string): Property {
 const ROLLUP_LABEL: Record<string, string> = {
   show_original: '원본 보기', count: '개수', count_values: '값 개수', count_unique: '고유 값 개수', count_empty: '빈 값 수', percent_empty: '빈 값 비율',
   percent_not_empty: '채워진 비율', sum: '합계', avg: '평균', median: '중앙값', min: '최소', max: '최대', range: '범위', earliest: '가장 이른 날짜',
-  latest: '가장 늦은 날짜', date_range: '날짜 범위', checked: '체크됨 수', unchecked: '체크 안 됨 수', percent_checked: '체크 비율', percent_unchecked: '체크 안 됨 비율',
+  latest: '가장 늦은 날짜', date_range: '날짜 범위', checked: '체크된 수', unchecked: '체크 안 된 수', percent_checked: '체크된 비율', percent_unchecked: '체크 안 된 비율',
 };
 
 /** 관계·롤업·수식 속성의 세부 설정 */
@@ -94,7 +94,7 @@ function Details({ name, def, data, dbs, onApply }: { name: string; def: Propert
             <code>{draft.expr.slice(0, err.pos)}<mark>{draft.expr.slice(err.pos, Math.max(err.end, err.pos + 1)) || ' '}</mark>{draft.expr.slice(Math.max(err.end, err.pos + 1))}</code>
           </p>
         ) : (
-          <p className="muted small">{r && r.ok && r.compiled.deps.length ? `쓰는 속성: ${r.compiled.deps.join(', ')}` : '속성은 prop("이름") 으로 읽어요. 함수: if, round, concat, dateAdd, map …'}</p>
+          <p className="muted small">{r && r.ok && r.compiled.deps.length ? `쓰는 속성: ${r.compiled.deps.join(', ')}` : '속성은 prop("이름")으로 읽어요. 함수: if, round, concat, dateAdd, map …'}</p>
         )}
         <button className="primary" disabled={!!err || !draft.expr.trim() || draft.expr === (def.type === 'formula' ? def.expr : '')} onClick={() => onApply(draft)}>수식 적용</button>
       </div>

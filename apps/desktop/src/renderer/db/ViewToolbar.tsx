@@ -6,7 +6,7 @@ import { TITLE, type DbData } from './types';
 const countConds = (f: FilterNode): number => ('prop' in f ? 1 : ('and' in f ? f.and : f.or).reduce((n, c) => n + countConds(c), 0));
 
 const CALC_LABEL: Record<string, string> = {
-  count: '개수', count_values: '값 있는 수', count_empty: '빈 수', count_unique: '고유 값 수', sum: '합계', avg: '평균', min: '최소', max: '최대', checked: '체크됨', unchecked: '체크 안 됨',
+  count: '개수', count_values: '값이 있는 수', count_empty: '빈 값 수', count_unique: '고유 값 수', sum: '합계', avg: '평균', min: '최소', max: '최대', checked: '체크됨', unchecked: '체크 안 됨',
 };
 const CALC_BY_KIND: Record<string, (typeof CALC_FNS)[number][]> = {
   any: ['count', 'count_values', 'count_empty', 'count_unique'],

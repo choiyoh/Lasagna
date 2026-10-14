@@ -49,6 +49,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(title, body, tokenize='trigram
 export interface NoteRow {
   path: string;
   title: string;
+  /** 프런트매터 `icon`(이모지 등 짧은 글자). 없으면 null */
+  icon: string | null;
   aliases: string[];
   mtime: number;
   size: number;
@@ -631,8 +633,8 @@ export class Indexer {
 
   list(): NoteRow[] {
     const rows = this.db
-      .prepare(`SELECT id, path, title, mtime, size FROM pages ORDER BY path COLLATE NOCASE`)
-      .all() as { id: number; path: string; title: string; mtime: number; size: number }[];
+      .prepare(`SELECT id, path, title, mtime, size, json_extract(frontmatter, '$.icon') AS icon FROM pages ORDER BY path COLLATE NOCASE`)
+      .all() as { id: number; path: string; title: string; mtime: number; size: number; icon: unknown }[];
     const aliases = new Map<number, string[]>();
     for (const a of this.db.prepare(`SELECT page_id AS pageId, alias FROM aliases`).all() as {
       pageId: number;
@@ -642,7 +644,11 @@ export class Indexer {
       if (list) list.push(a.alias);
       else aliases.set(a.pageId, [a.alias]);
     }
-    return rows.map(({ id, ...r }) => ({ ...r, aliases: aliases.get(id) ?? [] }));
+    return rows.map(({ id, icon, ...r }) => ({
+      ...r,
+      icon: typeof icon === 'string' && icon.trim() && icon.length <= 16 ? icon.trim() : null,
+      aliases: aliases.get(id) ?? [],
+    }));
   }
 
   /** 3글자 이상은 FTS5 trigram, 그보다 짧은 질의는 LIKE로 대체한다(한글 2글자 검색 등). */

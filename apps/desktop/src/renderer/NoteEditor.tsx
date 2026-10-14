@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Editor, NopsPeekHost } from '@nopsidian/editor/nops';
 import { createDbViewHost } from './db/dbview-host';
 import { createRowPropsHost } from './db/RowProps';
+import { EmojiPicker } from './EmojiPicker';
 import type { DbEmbedHost } from './db/EmbeddedDb';
 import { relativePath, vaultUrl } from '@nopsidian/core/assets';
 import { TextSelection } from 'prosemirror-state';
@@ -38,6 +39,9 @@ interface Props {
   dbHost?: DbEmbedHost;
   /** 위키링크 호버 미리보기·노트 임베드 발췌 */
   peek?: NopsPeekHost;
+  /** 문서 아이콘(이모지)과 바꾸는 함수. 없으면 아이콘 UI 가 없다 */
+  icon?: string | null;
+  onSetIcon?: (icon: string | null) => void;
   /** 링크로 열었을 때 이동할 제목/블록 */
   focus?: { heading: string | null; block: string | null } | null;
   /** 이 노트를 가리키는 링크 이름(블록 링크 복사에 쓴다) */
@@ -91,7 +95,7 @@ function scrollToFocus(editor: Editor, focus: { heading: string | null; block: s
  * 열기: 읽기(hash) → 파싱 → 표시. 편집 500ms 뒤 `note.save`(baseHash로 외부 변경 감지).
  * 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다.
  */
-export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek }: Props) {
+export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
@@ -111,6 +115,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   dbHostRef.current = dbHost;
   const onRenameRef = useRef(onRename);
   onRenameRef.current = onRename;
+  const [pickingIcon, setPickingIcon] = useState(false);
   const peekRef = useRef(peek);
   peekRef.current = peek;
   const toggleRef = useRef<() => void>(() => undefined);
@@ -387,7 +392,30 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
           </button>
         </div>
       )}
-      <div ref={hostRef} className="note-editor__host" data-theme="system" data-testid="note-editor" hidden={mode === 'source'} />
+      {(icon || onSetIcon) && (
+        <div className="noteicon">
+          {icon ? (
+            <button className="noteicon__btn" onClick={() => onSetIcon && setPickingIcon(true)} title="아이콘 바꾸기" aria-label="아이콘 바꾸기" data-testid="note-icon">
+              {icon}
+            </button>
+          ) : (
+            <button className="noteicon__add" onClick={() => setPickingIcon(true)} data-testid="note-icon-add">
+              ☺ 아이콘 추가
+            </button>
+          )}
+          {pickingIcon && onSetIcon && (
+            <EmojiPicker
+              hasIcon={!!icon}
+              onClose={() => setPickingIcon(false)}
+              onPick={(e) => {
+                setPickingIcon(false);
+                onSetIcon(e);
+              }}
+            />
+          )}
+        </div>
+      )}
+      <div ref={hostRef} className="note-editor__host" data-testid="note-editor" hidden={mode === 'source'} />
       {picker && (
         <TemplatePicker
           onClose={() => {

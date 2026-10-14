@@ -39,6 +39,18 @@
 html, body, #root { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, 'Apple SD Gothic Neo', 'Segoe UI', 'Malgun Gothic', sans-serif; -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; text-align: left; }
+/* 입력 요소는 라이트·다크 모두 앱 팔레트를 따른다(브라우저 기본색이 다크에서 튀지 않게) */
+input:not([type]), input[type='text'], input[type='search'], input[type='number'], input[type='date'], input[type='url'], input[type='email'], input[type='tel'], input[type='password'], select, textarea {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); padding: 3px 8px; font: inherit; font-size: 13px;
+}
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.8; }
+:root[data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.85); }
+@media (prefers-color-scheme: dark) { :root[data-theme='system'] input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.85); } }
+/* 키보드로 이동할 때의 초점 표시: 브라우저 기본(주황·파랑) 대신 강조색 */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 4px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+/* 선택 옵션 칩은 밝은 배경색을 직접 갖는다 → 라이트·다크 모두 어두운 글자로 */
+.chip[style*='background'] { color: #24243a; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .pad { padding: 16px; }
@@ -202,7 +214,7 @@ button.link { color: var(--muted); }
 .dbscreen__head { display: flex; align-items: center; gap: 10px; padding: 38px 16px 6px; }
 .dbscreen__head h2 { margin: 0; font-size: 18px; }
 .dbscreen__head .spacer { flex: 1; }
-.dbscreen button, .dbtoolbar button, .dbpop button, .dbadd button { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border); }
+.dbscreen__head button, .dbtoolbar button, .dbpop button, .dbadd button { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border); }
 .dbscreen button.primary, .dbpop button.primary, .dbadd button.primary { background: var(--accent); border-color: transparent; color: #fff; }
 .dbscreen button:disabled { opacity: 0.5; }
 .dbscreen button.danger { color: #d44; }
@@ -513,3 +525,29 @@ button.primary { background: var(--accent); color: var(--on-accent); padding: 8p
 .ctxmenu button.danger { color: #d1453b; }
 
 input[type='range'], input[type='checkbox'], input[type='radio'], input[type='color'] { accent-color: var(--accent); }
+
+/* 이모지 아이콘 */
+.noteicon { position: relative; display: flex; align-items: center; min-height: 28px; margin: 0 0 -4px; }
+.noteicon__btn { font-size: 64px; line-height: 1.1; padding: 0 4px; margin-left: -4px; border-radius: 12px; }
+.noteicon__btn:hover { background: var(--hover); }
+.noteicon__add { font-size: 13px; color: var(--muted); padding: 3px 8px; margin-left: -8px; border-radius: var(--radius); opacity: 0; transition: opacity 0.12s; }
+.note-editor:hover .noteicon__add, .noteicon__add:focus-visible { opacity: 1; }
+.noteicon__add:hover { background: var(--hover); color: var(--fg); }
+.emoji { margin-right: 5px; }
+.emojipicker { position: absolute; z-index: 40; top: 100%; left: 0; width: 340px; padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28); display: flex; flex-direction: column; gap: 6px; }
+.emojipicker__bar { display: flex; gap: 6px; }
+.emojipicker__bar input { flex: 1; min-width: 0; }
+.emojipicker__bar button { padding: 3px 8px; border-radius: var(--radius); border: 1px solid var(--border); }
+.emojipicker__bar button:hover { background: var(--hover); }
+.emojipicker__remove { color: #d1453b; }
+.emojipicker__tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.emojipicker__tabs button { padding: 2px 6px; border-radius: var(--radius); font-size: 16px; }
+.emojipicker__tabs button.active { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.emojipicker__grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 230px; overflow-y: auto; }
+.emojipicker__grid button { font-size: 22px; line-height: 1.5; text-align: center; border-radius: var(--radius); font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif; }
+.emojipicker__grid button:hover { background: var(--hover); }
+.emojipicker__foot { min-height: 18px; padding: 0 2px; }
+
+/* 사이드바 끌어서 옮기기 */
+.tree summary.drop, .list.drop { background: color-mix(in srgb, var(--accent) 18%, transparent); outline: 1px dashed var(--accent); outline-offset: -1px; border-radius: var(--radius); }
+.row[draggable='true'], .tree summary[draggable='true'] { cursor: grab; }

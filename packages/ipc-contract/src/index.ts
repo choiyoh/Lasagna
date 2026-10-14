@@ -208,6 +208,8 @@ export const noteSummary = z.object({
   path: relPath,
   title: z.string(),
   aliases: z.array(z.string()).default([]),
+  /** 문서 아이콘(이모지). 프런트매터 `icon` */
+  icon: z.string().nullable().default(null),
   mtime: z.number(),
   size: z.number(),
 });

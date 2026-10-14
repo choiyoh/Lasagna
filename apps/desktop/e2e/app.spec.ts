@@ -1652,6 +1652,48 @@ views:
     await expect.poll(() => existsSync(doomed), { timeout: 8000 }).toBe(true);
   });
 
+  test('문서 아이콘(이모지)과 사이드바 끌어서 옮기기', async () => {
+    const page = await app.firstWindow();
+    const file = note('아이콘노트', '# 아이콘노트\n\n본문\n');
+    note('옮길곳/안쪽', '# 안쪽\n');
+    const mover = note('옮길노트', '# 옮길노트\n');
+    await open(page, '아이콘노트');
+
+    // 이모지 고르기: 검색해서 고르면 프런트매터 icon 이 쓰이고 사이드바·탭에 보인다
+    await page.getByTestId('note-icon-add').click({ force: true });
+    const picker = page.getByTestId('emoji-picker');
+    await expect(picker).toBeVisible();
+    await picker.getByLabel('이모지 검색').fill('로켓');
+    await picker.getByRole('option', { name: '로켓', exact: true }).click();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toMatch(/^---\nicon: 🚀\n---\n# 아이콘노트/);
+    await expect(page.getByTestId('note-icon')).toHaveText('🚀', { timeout: 8000 });
+    await expect(page.locator('.tree .row.active')).toContainText('🚀');
+    await expect(page.getByTestId('note-tab').first()).toContainText('🚀');
+    // 바꾸기 → 제거
+    await page.getByTestId('note-icon').click();
+    await page.getByTestId('emoji-picker').getByRole('button', { name: '제거' }).click();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).not.toContain('icon:');
+
+    // 사이드바에서 노트를 폴더 위로 끌어 놓으면 이동한다
+    await expect(page.locator('summary', { hasText: '옮길곳' })).toBeVisible({ timeout: 8000 });
+    await page.evaluate(async () => {
+      const tick = () => new Promise((r) => setTimeout(r, 50));
+      const row = [...document.querySelectorAll('.tree .row')].find((b) => b.textContent === '옮길노트')!;
+      const folder = [...document.querySelectorAll('.tree summary')].find((b) => b.textContent?.includes('옮길곳'))!;
+      const dt = new DataTransfer();
+      const fire = (el: Element, type: string) => el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+      fire(row, 'dragstart');
+      await tick();
+      fire(folder, 'dragover');
+      await tick();
+      fire(folder, 'drop');
+      await tick();
+      fire(row, 'dragend');
+    });
+    await expect.poll(() => existsSync(path.join(vaultDir, '옮길곳/옮길노트.md')), { timeout: 8000 }).toBe(true);
+    expect(existsSync(mover)).toBe(false);
+  });
+
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
     const page = await app.firstWindow();
     const today = await page.evaluate(() => {

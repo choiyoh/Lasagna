@@ -12,6 +12,7 @@ import { flushAll } from './flush';
 import { LinkPanel } from './LinkPanel';
 import { HistoryPanel } from './HistoryPanel';
 import { Logo } from './Logo';
+import { withNoteIcon } from './note-icon';
 import { Panes } from './Panes';
 import { applyTheme, loadTheme, nextTheme, THEME_ICON, THEME_LABEL, type ThemeChoice } from './theme';
 import { initialTabs, parseTabs, selectedOf, tabsReducer } from './tabs';
@@ -141,7 +142,7 @@ function Welcome({ notes, onOpen, actions }: { notes: NoteSummary[]; onOpen: (pa
             {recent.map((n) => (
               <li key={n.path}>
                 <button onClick={() => onOpen(n.path)}>
-                  <span>{n.title}</span>
+                  <span>{n.icon ? <span className="emoji">{n.icon}</span> : null}{n.title}</span>
                   <span className="muted small">{n.path}</span>
                 </button>
               </li>
@@ -465,11 +466,43 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     return () => clearTimeout(t);
   }, [tabs, openedWith]);
 
+  /** 문서 아이콘(이모지)을 프런트매터 `icon` 에 쓰거나 지운다. 열려 있는 에디터는 다시 불러온다. */
+  const setNoteIcon = useCallback(
+    async (p: string, icon: string | null) => {
+      try {
+        await flushAll();
+        const cur = await window.nops.note.read({ path: p });
+        const next = withNoteIcon(cur.content, icon);
+        if (next !== cur.content) await window.nops.note.save({ path: p, content: next, baseHash: cur.hash });
+        window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: p }));
+        refresh();
+      } catch (e) {
+        setToast({ message: `아이콘을 바꾸지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
+      }
+    },
+    [refresh],
+  );
+
   /** 표·카드의 제목을 직접 고칠 때: 파일 이름을 바꾼다(폴더는 그대로) */
   const renameNoteTitle = useCallback(
     (p: string, title: string) => {
       const dir = p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '';
       void renameEntry(p, false, `${dir}${title.replace(/[\\/:*?"<>|]/g, ' ').trim()}`);
+    },
+    [renameEntry],
+  );
+
+  /** 사이드바에서 끌어다 놓기: `toFolder` 안으로 옮긴다(링크 갱신 미리보기·되돌리기는 이름 바꾸기와 같은 흐름) */
+  const moveEntry = useCallback(
+    (from: string, isFolder: boolean, toFolder: string) => {
+      const name = from.slice(from.lastIndexOf('/') + 1);
+      const target = toFolder ? `${toFolder}/${name}` : name;
+      if (target === from) return;
+      if (isFolder && (toFolder === from || toFolder.startsWith(`${from}/`))) {
+        setToast({ message: '폴더를 자기 자신 안으로는 옮길 수 없어요.' });
+        return;
+      }
+      void renameEntry(from, isFolder, target);
     },
     [renameEntry],
   );
@@ -677,7 +710,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             인덱싱 {progress.done}/{progress.total}
           </p>
         )}
-        <nav className="list">
+        <nav className="list" {...dropProps((from, isFolder) => moveEntry(from, isFolder, ''))}>
           {hits ? (
             hits.length === 0 ? (
               <p className="muted small pad">결과 없음</p>
@@ -717,7 +750,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           ) : sideTab === 'db' ? (
             <DbList onOpen={(f) => { setGraphOpen(false); setDbOpen(f); }} />
           ) : (
-            <TreeView nodes={tree} selected={selected} onSelect={(p, newTab) => (newTab ? openInNewTab(p) : setSelected(p))} onRenameFolder={(f) => void renameEntry(f, true)} onMenu={(p, isFolder, x, y) => setMenu({ path: p, isFolder, x, y })} />
+            <TreeView nodes={tree} selected={selected} onSelect={(p, newTab) => (newTab ? openInNewTab(p) : setSelected(p))} onRenameFolder={(f) => void renameEntry(f, true)} onMenu={(p, isFolder, x, y) => setMenu({ path: p, isFolder, x, y })} onMove={moveEntry} />
           )}
         </nav>
         <div className="sidebar__foot">
@@ -755,6 +788,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 onRename={() => void renameEntry(p, false)}
                 dbHost={dbHost}
                 peek={peekHost}
+                icon={notes.find((n) => n.path === p)?.icon ?? null}
+                onSetIcon={(ic) => void setNoteIcon(p, ic)}
               />
             )}
           />
@@ -771,7 +806,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           <Panes
             tabs={tabs}
             dispatch={dispatchTabs}
-            titleOf={(p) => notes.find((n) => n.path === p)?.title ?? p.replace(/\.md$/i, '').split('/').pop()!}
+            titleOf={(p) => {
+              const n = notes.find((x) => x.path === p);
+              return `${n?.icon ? `${n.icon} ` : ''}${n?.title ?? p.replace(/\.md$/i, '').split('/').pop()!}`;
+            }}
             onPopOut={(p) => {
               dispatchTabs({ type: 'close', pane: tabs.panes.findIndex((x) => x.tabs.includes(p)), path: p });
               void window.nops.window.new({ path: p });
@@ -803,6 +841,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 onRename={() => void renameEntry(p, false)}
                 dbHost={dbHost}
                 peek={peekHost}
+                icon={notes.find((n) => n.path === p)?.icon ?? null}
+                onSetIcon={(ic) => void setNoteIcon(p, ic)}
               />
             )}
           />
@@ -902,12 +942,48 @@ function buildTree(notes: NoteSummary[]): TreeNode[] {
   return root.children;
 }
 
+const DRAG_TYPE = 'application/x-nops-entry';
+
+function startDrag(e: React.DragEvent, path: string, isFolder: boolean) {
+  e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ path, isFolder }));
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+/** 폴더(또는 맨 위 빈 곳)에 놓을 수 있게 하는 이벤트 묶음. 놓을 수 있는 동안 `drop` 클래스를 단다. */
+function dropProps(onDropEntry: (from: string, isFolder: boolean) => void) {
+  const has = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes(DRAG_TYPE);
+  return {
+    onDragOver: (e: React.DragEvent) => {
+      if (!has(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      e.currentTarget.classList.add('drop');
+    },
+    onDragLeave: (e: React.DragEvent) => e.currentTarget.classList.remove('drop'),
+    onDrop: (e: React.DragEvent) => {
+      e.currentTarget.classList.remove('drop');
+      const raw = e.dataTransfer.getData(DRAG_TYPE);
+      if (!raw) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const { path, isFolder } = JSON.parse(raw) as { path: string; isFolder: boolean };
+        onDropEntry(path, isFolder);
+      } catch {
+        /* 잘못된 끌기 데이터는 무시한다 */
+      }
+    },
+  };
+}
+
 function TreeView({
   nodes,
   selected,
   onSelect,
   onRenameFolder,
   onMenu,
+  onMove,
   depth = 0,
 }: {
   nodes: TreeNode[];
@@ -915,6 +991,8 @@ function TreeView({
   onSelect: (p: string, newTab?: boolean) => void;
   onRenameFolder: (folder: string) => void;
   onMenu?: (path: string, isFolder: boolean, x: number, y: number) => void;
+  /** 끌어서 놓기: from 항목을 toFolder(빈 문자열 = 볼트 맨 위) 안으로 */
+  onMove?: (from: string, isFolder: boolean, toFolder: string) => void;
   depth?: number;
 }) {
   return (
@@ -930,7 +1008,10 @@ function TreeView({
                 e.preventDefault();
                 onMenu?.(n.path, false, e.clientX, e.clientY);
               }}
+              draggable={!!onMove}
+              onDragStart={(e) => startDrag(e, n.path, false)}
             >
+              {n.note.icon ? <span className="emoji">{n.note.icon}</span> : null}
               {n.note.title}
             </button>
           ) : (
@@ -941,6 +1022,9 @@ function TreeView({
                   e.preventDefault();
                   onMenu?.(n.path, true, e.clientX, e.clientY);
                 }}
+                draggable={!!onMove}
+                onDragStart={(e) => startDrag(e, n.path, true)}
+                {...(onMove ? dropProps((from, isFolder) => onMove(from, isFolder, n.path)) : {})}
               >
                 <span>{n.name}</span>
                 <button
@@ -956,7 +1040,7 @@ function TreeView({
                   ✎
                 </button>
               </summary>
-              <TreeView nodes={n.children} selected={selected} onSelect={onSelect} onRenameFolder={onRenameFolder} onMenu={onMenu} depth={depth + 1} />
+              <TreeView nodes={n.children} selected={selected} onSelect={onSelect} onRenameFolder={onRenameFolder} onMenu={onMenu} onMove={onMove} depth={depth + 1} />
             </details>
           )}
         </li>

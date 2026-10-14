@@ -1,7 +1,7 @@
 {
   "name": "@nopsidian/desktop",
   "productName": "Nopsidian",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": true,
   "type": "commonjs",
   "main": ".vite/build/main.cjs",
@@ -45,6 +45,7 @@
     "better-sqlite3": "^13.0.3",
     "dompurify": "^3.4.16",
     "electron-squirrel-startup": "^1.0.1",
+    "emojibase-data": "^17.0.0",
     "fflate": "^0.8.3",
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",

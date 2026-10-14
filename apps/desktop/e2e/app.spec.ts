@@ -1553,6 +1553,9 @@ views:
     await expect(embed).toBeVisible();
     await embed.getByTestId('embed-add-row').click();
     await expect(embed.locator('.dbtable__row')).toHaveCount(1, { timeout: 8000 });
+    // 새 행은 곧바로 제목을 입력하는 상태로 시작한다(노션처럼). 그대로 두면 "제목 없음" 이 유지된다
+    await expect(embed.getByLabel('제목 바꾸기')).toBeVisible({ timeout: 8000 });
+    await embed.getByLabel('제목 바꾸기').press('Escape');
     // 노트 안의 표도 열 머리 메뉴로 열을 숨길 수 있다(저장하지 않는 임시 보기)
     await embed.getByTestId('th-날짜').click();
     await page.getByRole('menuitem', { name: '이 열 숨기기' }).click();
@@ -1618,6 +1621,35 @@ views:
     await input.press('Meta+Enter');
     await expect.poll(() => readFileSync(origin, 'utf8'), { timeout: 8000 }).toBe('# 동기원본\n\n여기서 고친 문장 **굵게** ^sync1\n');
     await expect(page.getByTestId('note-embed')).toContainText('여기서 고친 문장', { timeout: 8000 });
+  });
+
+  test('삭제(휴지통)와 이름만 바꾸기: 우클릭 삭제 → 되돌리기, F2 는 폴더를 유지한다', async () => {
+    const page = await app.firstWindow();
+    const keep = note('정리/유지', '# 유지\n');
+    const doomed = note('정리/삭제대상', '# 삭제대상\n\n내용\n');
+    await expect(page.getByRole('button', { name: '삭제대상', exact: true }).first()).toBeVisible({ timeout: 8000 });
+
+    // 이름만 입력해도 같은 폴더 안에서 바뀐다
+    await open(page, '유지');
+    await page.keyboard.press('F2');
+    const input = page.locator('.nops-prompt input');
+    await expect(input).toHaveValue('유지'); // 폴더 없이 이름만 보인다
+    await input.fill('새이름');
+    await input.press('Enter');
+    await expect.poll(() => existsSync(path.join(vaultDir, '정리/새이름.md')), { timeout: 8000 }).toBe(true);
+    expect(existsSync(keep)).toBe(false);
+
+    // 우클릭 → 삭제 → 확인: 휴지통으로 가고 탭이 닫힌다
+    await page.getByRole('button', { name: '삭제대상', exact: true }).first().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '삭제' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: '삭제' }).click();
+    await expect.poll(() => existsSync(doomed), { timeout: 8000 }).toBe(false);
+    expect(readdirSync(path.join(vaultDir, '.nopsidian/trash')).some((f) => f.endsWith('삭제대상.md'))).toBe(true);
+    await expect(page.getByTestId('note-tab').filter({ hasText: '삭제대상' })).toHaveCount(0);
+
+    // 되돌리기
+    await page.getByRole('button', { name: '되돌리기' }).click();
+    await expect.poll(() => existsSync(doomed), { timeout: 8000 }).toBe(true);
   });
 
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {

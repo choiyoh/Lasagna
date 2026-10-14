@@ -21,6 +21,8 @@ export type TabsAction =
   | { type: 'split'; dir: 'row' | 'col' }
   | { type: 'unsplit' }
   | { type: 'remap'; from: string; to: string }
+  /** 지운 노트(또는 폴더 아래 모든 노트)의 탭을 닫는다 */
+  | { type: 'closePath'; path: string }
   | { type: 'load'; state: TabsState };
 
 const remapPath = (p: string, a: string, b: string) => (p === a ? b : p.startsWith(`${a}/`) ? `${b}${p.slice(a.length)}` : p);
@@ -77,6 +79,16 @@ export function tabsReducer(s: TabsState, a: TabsAction): TabsState {
     case 'remap': {
       const panes = s.panes.map((p) => ({ tabs: p.tabs.map((t) => remapPath(t, a.from, a.to)), active: p.active === null ? null : remapPath(p.active, a.from, a.to) }));
       return { ...s, panes };
+    }
+    case 'closePath': {
+      const gone = (p: string) => p === a.path || p.startsWith(`${a.path}/`);
+      const panes = s.panes.map((p) => {
+        const tabs = p.tabs.filter((t) => !gone(t));
+        if (tabs.length === p.tabs.length) return p;
+        const active = p.active && !gone(p.active) ? p.active : (tabs[Math.min(Math.max(p.tabs.indexOf(p.active ?? ''), 0), tabs.length - 1)] ?? null);
+        return { tabs, active };
+      });
+      return dropEmptyPanes({ ...s, panes });
     }
     case 'load':
       return a.state;

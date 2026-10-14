@@ -141,8 +141,15 @@ class BlockHandleView {
     if (!dom) return this.hide();
     this.current = ref;
     const rect = dom.getBoundingClientRect();
+    // 목록 항목: 글머리표·체크박스는 항목 왼쪽 바깥에 그려지므로, 가장 바깥 목록의 왼쪽 가장자리를 기준으로 핸들을 둔다
+    let left = rect.left;
+    if (ref.node.type.name === 'list_item') {
+      let list: HTMLElement | null = dom.closest('ul, ol');
+      while (list?.parentElement?.closest('ul, ol')) list = list.parentElement.closest('ul, ol');
+      if (list) left = Math.min(left, list.getBoundingClientRect().left);
+    }
     this.root.hidden = false;
-    this.root.style.left = `${Math.max(4, rect.left - HANDLE_OFFSET_X)}px`;
+    this.root.style.left = `${Math.max(4, left - HANDLE_OFFSET_X)}px`;
     this.root.style.top = `${rect.top + 2}px`;
   }
 

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CellEditor, CellView, isEditable } from './CellEditor';
 import { movedColumns, movedRows } from './view-edit';
@@ -39,6 +39,10 @@ interface Props {
   onFilter?: (prop: string) => void;
   /** 행 앞 손잡이를 끌어 순서를 바꾼다(그룹이 없을 때만). 새 경로 순서 */
   onReorderRows?: (order: string[]) => void;
+  /** 이 경로의 행이 보이면 제목을 바로 고치는 입력으로 시작한다(방금 만든 행) */
+  startRenaming?: string | null;
+  /** `startRenaming` 을 받아 입력 상태로 들어간 뒤 부른다(다시 들어가지 않게 부모가 값을 비운다) */
+  onStartedRenaming?: () => void;
 }
 
 const CALC_LABEL: Record<string, string> = {
@@ -50,7 +54,7 @@ const ROW_H = 32;
 const DEFAULT_W = 180;
 
 /** 표 뷰: 행을 가상화해(2만 행도 보이는 만큼만 그림) 셀을 눌러 바로 고친다. */
-export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide, onColumns, onFilter, onReorderRows }: Props) {
+export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide, onColumns, onFilter, onReorderRows, startRenaming, onStartedRenaming }: Props) {
   const [dragCol, setDragCol] = useState<string | null>(null);
   const [dragRow, setDragRow] = useState<string | null>(null);
   const rowsMovable = !!onReorderRows && !data.groups;
@@ -62,6 +66,12 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
   const scroller = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<{ path: string; prop: string } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  useEffect(() => {
+    if (startRenaming && rows.some((r) => r.path === startRenaming)) {
+      setRenaming(startRenaming);
+      onStartedRenaming?.();
+    }
+  }, [startRenaming, rows, onStartedRenaming]);
   const openTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const items = useMemo(() => flatten(rows, data.groups), [rows, data.groups]);
   const v = useVirtualizer({ count: items.length, getScrollElement: () => scroller.current, estimateSize: () => ROW_H, overscan: 12 });

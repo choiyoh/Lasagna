@@ -184,6 +184,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [sideTab, setSideTab] = useState<'files' | 'tags' | 'db' | 'marks'>('files');
   const [bookmarks, setBookmarks] = useState<string[]>([]);
   const [palette, setPalette] = useState(false);
+  /** 사이드바 항목 우클릭 메뉴 */
+  const [menu, setMenu] = useState<{ path: string; isFolder: boolean; x: number; y: number } | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(() => loadTheme());
   const cycleTheme = useCallback(() => {
     setTheme((cur) => {
@@ -338,11 +340,15 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
 
   /** 이름 변경/이동(노트 또는 폴더): 미리보기(바뀌는 링크 수) → 확인 → 실행 → 되돌리기 */
   const renameEntry = useCallback(async (from: string, isFolder: boolean, preset?: string) => {
+    // 노션처럼 이름만 바꾼다: 입력창에는 이름만 보이고, 폴더는 그대로 유지한다. `폴더/이름` 으로 쓰면 이동도 한다.
+    const dir = from.includes('/') ? from.slice(0, from.lastIndexOf('/')) : '';
+    const currentName = (isFolder ? from : from.replace(/\.md$/i, '')).slice(dir ? dir.length + 1 : 0);
     const answer = preset ?? await showTextPrompt(
-      isFolder ? '폴더의 새 이름 (상위/이름 형식으로 쓰면 이동도 해요)' : '새 이름 (폴더/이름 형식으로 쓰면 이동도 해요)',
-      isFolder ? from : from.replace(/\.md$/i, ''),
+      isFolder ? '폴더 이름 (다른 폴더로 옮기려면 상위/이름 형식으로 쓰세요)' : '새 이름 (다른 폴더로 옮기려면 폴더/이름 형식으로 쓰세요)',
+      currentName,
     );
-    const to = answer?.trim().replace(/^\/+|\/+$/g, '');
+    const typed = answer?.trim().replace(/^\/+|\/+$/g, '');
+    const to = typed && !typed.includes('/') && dir ? `${dir}/${typed}` : typed;
     if (!to || to === from || `${to}.md` === from) return;
     const target = isFolder || /\.md$/i.test(to) ? to : `${to}.md`;
     await flushAll();
@@ -459,6 +465,58 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     return () => clearTimeout(t);
   }, [tabs, openedWith]);
 
+  /** 표·카드의 제목을 직접 고칠 때: 파일 이름을 바꾼다(폴더는 그대로) */
+  const renameNoteTitle = useCallback(
+    (p: string, title: string) => {
+      const dir = p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '';
+      void renameEntry(p, false, `${dir}${title.replace(/[\\/:*?"<>|]/g, ' ').trim()}`);
+    },
+    [renameEntry],
+  );
+
+  /** 노트·폴더를 휴지통으로: 확인 → 이동 → 열린 탭·북마크 정리 → "되돌리기" 토스트 */
+  const deleteEntry = useCallback(
+    (target: string, isFolder: boolean) => {
+      const name = target.slice(target.lastIndexOf('/') + 1).replace(/\.md$/i, '');
+      setConfirm({
+        title: isFolder ? `폴더 “${name}” 를 삭제할까요?` : `“${name}” 를 삭제할까요?`,
+        lines: [
+          isFolder ? '폴더 안의 모든 노트와 첨부가 함께 휴지통(.nopsidian/trash)으로 옮겨져요.' : '휴지통(.nopsidian/trash)으로 옮겨져요. 바로 되돌릴 수 있어요.',
+          '이 노트로 가는 [[링크]] 는 그대로 남아 “없는 노트”로 표시돼요.',
+        ],
+        confirmLabel: '삭제',
+        onConfirm: () => {
+          setConfirm(null);
+          void (async () => {
+            try {
+              await flushAll();
+              const r = await window.nops.note.trash({ path: target });
+              dispatchTabs({ type: 'closePath', path: target });
+              setBookmarks((cur) => {
+                const next = cur.filter((p) => p !== target && !p.startsWith(`${target}/`));
+                if (next.length !== cur.length) void window.nops.bookmarks.set(next);
+                return next;
+              });
+              refresh();
+              setToast({
+                message: `“${name}” 를 휴지통으로 옮겼어요.`,
+                undo: async () => {
+                  const back = await window.nops.note.restore({ trashId: r.trashId });
+                  refresh();
+                  if (!r.isFolder) setSelected(back.path);
+                  setToast({ message: '되돌렸어요.' });
+                },
+              });
+            } catch (e) {
+              setToast({ message: `삭제하지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
+            }
+          })();
+        },
+      });
+    },
+    [refresh, setSelected],
+  );
+
   const exportNote = useCallback(
     async (format: 'html' | 'pdf') => {
       if (!selected) return;
@@ -504,6 +562,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'bookmark', label: '현재 노트 북마크 추가·해제', hint: '⌘⇧B', keywords: ['bookmark', '북마크', '즐겨찾기'], enabled: !!selected, run: () => selected && toggleBookmark(selected) },
       { id: 'bookmarks', label: '북마크 목록 보기', keywords: ['bookmarks', '북마크'], run: () => setSideTab('marks') },
       { id: 'rename', label: '현재 노트 이름 바꾸기', hint: 'F2', keywords: ['rename', '이름', '이동'], enabled: !!selected, run: () => void renameCurrent() },
+      { id: 'delete', label: '현재 노트 삭제 (휴지통)', keywords: ['delete', 'remove', 'trash', '삭제', '지우기', '휴지통'], enabled: !!selected, run: () => selected && deleteEntry(selected, false) },
       { id: 'source', label: '소스 모드 전환', hint: '⌘E', keywords: ['source', 'markdown', '소스', '원문'], enabled: !!selected, run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', metaKey: true })) },
       { id: 'links', label: '링크·기록 패널 열기', keywords: ['panel', '패널', '백링크', '기록', '링크'], enabled: !!selected, run: () => setPanelOpen(true) },
       { id: 'history', label: '버전 기록 보기', keywords: ['history', '기록', '버전', '복원'], enabled: !!selected, run: () => { setPanelOpen(true); setDockTab('history'); } },
@@ -524,7 +583,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'theme', label: '테마 바꾸기 (시스템 → 라이트 → 다크)', keywords: ['theme', 'dark', 'light', '다크', '라이트', '테마', '다크모드'], run: cycleTheme },
       { id: 'close', label: '다른 볼트 열기', keywords: ['vault', '볼트', '닫기'], run: onClose },
     ],
-    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, cycleTheme, onClose, tabs.activePane, tabs.panes.length],
+    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, cycleTheme, deleteEntry, onClose, tabs.activePane, tabs.panes.length],
   );
 
   useEffect(() => {
@@ -550,9 +609,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               setGraphOpen(false);
               setDbOpen(f);
             },
+            renameNote: renameNoteTitle,
           }
         : undefined,
-    [vault, notes],
+    [vault, notes, renameNoteTitle],
   );
 
   return (
@@ -560,14 +620,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       <aside className="sidebar">
         <header className="drag">
           <strong>{vault.name}</strong>
-          <span className="sidebar__headbtns">
-            <button className="link" onClick={cycleTheme} title={`테마: ${THEME_LABEL[theme]} (눌러서 바꾸기)`} aria-label={`테마 ${THEME_LABEL[theme]}`} data-testid="theme-toggle">
-              {THEME_ICON[theme]}
-            </button>
-            <button className="link" onClick={onClose} title="다른 볼트 열기">
-              ⇄
-            </button>
-          </span>
+          <button className="link" onClick={onClose} title="다른 볼트 열기">
+            ⇄
+          </button>
         </header>
         <nav className="sidebar__nav" aria-label="빠른 메뉴">
           <button className="navitem" onClick={() => setSwitcher(true)} title="빠른 전환기 (⌘O)" aria-label="노트 찾기">
@@ -662,12 +717,17 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           ) : sideTab === 'db' ? (
             <DbList onOpen={(f) => { setGraphOpen(false); setDbOpen(f); }} />
           ) : (
-            <TreeView nodes={tree} selected={selected} onSelect={(p, newTab) => (newTab ? openInNewTab(p) : setSelected(p))} onRenameFolder={(f) => void renameEntry(f, true)} />
+            <TreeView nodes={tree} selected={selected} onSelect={(p, newTab) => (newTab ? openInNewTab(p) : setSelected(p))} onRenameFolder={(f) => void renameEntry(f, true)} onMenu={(p, isFolder, x, y) => setMenu({ path: p, isFolder, x, y })} />
           )}
         </nav>
-        <button className="syncbar" onClick={() => setSyncOpen(true)} title="Google Drive 동기화" data-testid="sync-bar">
+        <div className="sidebar__foot">
+          <button className="syncbar" onClick={() => setSyncOpen(true)} title="Google Drive 동기화" data-testid="sync-bar">
           ☁ {sync?.enabled ? syncStateText(sync) : '동기화 꺼짐'}
         </button>
+          <button className="themebtn" onClick={cycleTheme} title="테마 바꾸기: 시스템 → 라이트 → 다크" aria-label={`테마 ${THEME_LABEL[theme]}`} data-testid="theme-toggle">
+            <span aria-hidden>{THEME_ICON[theme]}</span> {THEME_LABEL[theme]}
+          </button>
+        </div>
       </aside>
       <main className="content">
         {dbOpen !== null ? (
@@ -681,10 +741,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             }}
             onClose={() => setDbOpen(null)}
             notes={notes.map((n) => ({ path: n.path, title: n.title }))}
-            onRenameNote={(p, title) => {
-              const dir = p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '';
-              void renameEntry(p, false, `${dir}${title.replace(/[\\/:*?"<>|]/g, ' ').trim()}`);
-            }}
+            onRenameNote={renameNoteTitle}
             renderNote={(p) => (
               <NoteEditor
                 key={p}
@@ -779,6 +836,20 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       )}
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       {syncOpen && <SyncDialog status={sync} onClose={() => setSyncOpen(false)} onOpenNote={setSelected} />}
+      {menu && (
+        <div className="ctxmask" onMouseDown={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}>
+          <div className="ctxmenu" role="menu" style={{ left: Math.min(menu.x, window.innerWidth - 190), top: Math.min(menu.y, window.innerHeight - 140) }} onMouseDown={(e) => e.stopPropagation()}>
+            {!menu.isFolder && (
+              <button role="menuitem" onClick={() => { const p = menu.path; setMenu(null); openInNewTab(p); }}>새 탭에서 열기</button>
+            )}
+            <button role="menuitem" onClick={() => { const m = menu; setMenu(null); void renameEntry(m.path, m.isFolder); }}>이름 바꾸기</button>
+            {!menu.isFolder && (
+              <button role="menuitem" onClick={() => { const p = menu.path; setMenu(null); toggleBookmark(p); }}>{bookmarks.includes(menu.path) ? '북마크 해제' : '북마크'}</button>
+            )}
+            <button role="menuitem" className="danger" onClick={() => { const m = menu; setMenu(null); deleteEntry(m.path, m.isFolder); }}>삭제</button>
+          </div>
+        </div>
+      )}
       {confirm && <ConfirmDialog {...confirm} onCancel={() => setConfirm(null)} />}
       {toast && (
         <div className="toast" role="status">
@@ -836,12 +907,14 @@ function TreeView({
   selected,
   onSelect,
   onRenameFolder,
+  onMenu,
   depth = 0,
 }: {
   nodes: TreeNode[];
   selected: string | null;
   onSelect: (p: string, newTab?: boolean) => void;
   onRenameFolder: (folder: string) => void;
+  onMenu?: (path: string, isFolder: boolean, x: number, y: number) => void;
   depth?: number;
 }) {
   return (
@@ -853,12 +926,22 @@ function TreeView({
               className={n.path === selected ? 'row active' : 'row'}
               style={{ paddingLeft: 8 + depth * 14 }}
               onClick={(e) => onSelect(n.path, e.metaKey || e.ctrlKey)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                onMenu?.(n.path, false, e.clientX, e.clientY);
+              }}
             >
               {n.note.title}
             </button>
           ) : (
             <details open>
-              <summary style={{ paddingLeft: 8 + depth * 14 }}>
+              <summary
+                style={{ paddingLeft: 8 + depth * 14 }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  onMenu?.(n.path, true, e.clientX, e.clientY);
+                }}
+              >
                 <span>{n.name}</span>
                 <button
                   className="treerename"
@@ -873,7 +956,7 @@ function TreeView({
                   ✎
                 </button>
               </summary>
-              <TreeView nodes={n.children} selected={selected} onSelect={onSelect} onRenameFolder={onRenameFolder} depth={depth + 1} />
+              <TreeView nodes={n.children} selected={selected} onSelect={onSelect} onRenameFolder={onRenameFolder} onMenu={onMenu} depth={depth + 1} />
             </details>
           )}
         </li>

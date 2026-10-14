@@ -45,6 +45,12 @@ describe('탭 상태', () => {
     const s = run({ type: 'open', path: '폴더/a.md' }, { type: 'open', path: 'b.md', newTab: true }, { type: 'remap', from: '폴더', to: '새폴더' });
     expect(s.panes[0]!.tabs).toEqual(['새폴더/a.md', 'b.md']);
   });
+  it('노트(폴더)를 지우면 그 탭들이 닫히고 이웃 탭이 활성', () => {
+    const s = run({ type: 'open', path: '폴더/a.md' }, { type: 'open', path: '폴더/b.md', newTab: true }, { type: 'open', path: 'c.md', newTab: true }, { type: 'closePath', path: '폴더' });
+    expect(s.panes[0]).toEqual({ tabs: ['c.md'], active: 'c.md' });
+    const t = run({ type: 'open', path: 'a.md' }, { type: 'open', path: 'b.md', newTab: true }, { type: 'closePath', path: 'b.md' });
+    expect(t.panes[0]).toEqual({ tabs: ['a.md'], active: 'a.md' });
+  });
   it('저장된 상태 복원: 없는 노트·중복은 버린다', () => {
     const exists = (p: string) => p !== 'gone.md';
     const s = parseTabs({ panes: [{ tabs: ['a.md', 'gone.md', 'a.md'], active: 'gone.md' }, { tabs: ['b.md'], active: 'b.md' }], activePane: 1, dir: 'col' }, exists);

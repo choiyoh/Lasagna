@@ -250,6 +250,10 @@ export const contract = {
   /** 이름 변경/이동 미리보기: 파일은 건드리지 않고 어떤 링크가 몇 개 바뀌는지만 계산한다. `from`은 노트·첨부 파일 또는 폴더. */
   'note.renamePlan': { input: z.object({ from: relPath, to: relPath }), output: movePlan },
   /** 이름 변경/이동을 실행하고 볼트 전체의 링크를 갱신한다. 되돌릴 수 있도록 기록을 남긴다. */
+  /** 노트(또는 폴더)를 볼트의 `.nopsidian/trash/` 로 옮긴다(동기화 중이면 Drive 휴지통으로도 간다). */
+  'note.trash': { input: z.object({ path: relPath }), output: z.object({ trashId: z.string(), isFolder: z.boolean() }) },
+  /** 휴지통에서 되돌린다. 돌려주는 값은 되돌려진 경로 */
+  'note.restore': { input: z.object({ trashId: z.string().max(300) }), output: z.object({ path: relPath }) },
   'note.rename': {
     input: z.object({ from: relPath, to: relPath }),
     output: movePlan.extend({ undoId: z.string() }),

@@ -15,6 +15,8 @@ export interface DbEmbedHost {
   openNote: (path: string) => void;
   /** 전체 화면 데이터베이스 화면으로 */
   openDb: (folder: string) => void;
+  /** 제목(파일 이름)을 바꾼다. 폴더는 그대로 */
+  renameNote?: (path: string, title: string) => void;
 }
 
 const clean = (e: unknown) => (e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
@@ -25,6 +27,8 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
   const [folder, setFolder] = useState<string | null>(null);
   const [error, setError] = useState('');
   /** 보기 탭에서 고른 보기(파일에는 쓰지 않는다. 노트에 적힌 보기가 기본) */
+  /** 방금 만든 행: 제목 입력 상태로 시작한다 */
+  const [fresh, setFresh] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   /** 열 머리 메뉴로 바꾼 임시 정렬·열(저장하지 않는다. 보기 탭을 바꾸면 사라진다) */
   const [tmp, setTmp] = useState<Partial<View> | null>(null);
@@ -98,7 +102,8 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
     const first = firstSelect && 'options' in firstSelect[1] ? (firstSelect[1] as { options: { name: string }[] }).options[0]?.name : undefined;
     const base: Record<string, unknown> = firstSelect && first ? { [firstSelect[0]]: first } : {};
     try {
-      await window.nops.db.addRow({ folder, title: '제목 없음', values: { ...base, ...(values ?? {}) } });
+      const r = await window.nops.db.addRow({ folder, title: '제목 없음', values: { ...base, ...(values ?? {}) } });
+      setFresh(r.path);
       void load();
     } catch (e) {
       setError(clean(e));
@@ -137,6 +142,9 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
           onEdit={(r, p, v) => void updateCell(r, p, v)}
           onWidth={() => undefined}
           notes={host.notes}
+          onRenameTitle={host.renameNote ? (r, t) => host.renameNote!(r.path, t) : undefined}
+          startRenaming={fresh}
+          onStartedRenaming={() => setFresh(null)}
           onSort={(prop, dir) => {
             const v = sortedView(data.view, prop, dir);
             setTmp({ sort: v.sort, manualOrder: undefined });

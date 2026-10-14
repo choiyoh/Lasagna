@@ -83,7 +83,7 @@ export function GraphScreen({ current, onOpen, onClose }: ScreenProps) {
             <input type="checkbox" checked={includeUnresolved} onChange={(e) => patch({ includeUnresolved: e.target.checked })} /> 미해결 링크
           </label>
           <label>
-            <input type="checkbox" checked={includeOrphans} onChange={(e) => patch({ includeOrphans: e.target.checked })} /> 고아 노트
+            <input type="checkbox" checked={includeOrphans} onChange={(e) => patch({ includeOrphans: e.target.checked })} /> 연결 없는 노트
           </label>
           <label>
             <input type="checkbox" checked={settings.arrows} onChange={(e) => patch({ arrows: e.target.checked })} /> 화살표

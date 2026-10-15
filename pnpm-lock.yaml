@@ -359,6 +359,9 @@ importers:
       '@nopsidian/core':
         specifier: workspace:*
         version: link:../core
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -366,6 +369,9 @@ importers:
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
 
   packages/sync-gdrive:
     devDependencies:
@@ -4946,7 +4952,6 @@ snapshots:
       '@esbuild/win32-arm64': 0.28.2
       '@esbuild/win32-ia32': 0.28.2
       '@esbuild/win32-x64': 0.28.2
-    optional: true
 
   escape-html@1.0.3: {}
 

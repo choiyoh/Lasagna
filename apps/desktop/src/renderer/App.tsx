@@ -573,6 +573,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             setSettingsOpen(false);
             setSyncOpen(true);
           }}
+          onOpenNote={setSelected}
           onOpenTrash={() => {
             setSettingsOpen(false);
             setTrashOpen(true);

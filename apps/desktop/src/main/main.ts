@@ -22,6 +22,7 @@ import {
   uniqueName,
 } from '@nopsidian/core';
 import { existsSync, readFileSync } from 'node:fs';
+import { readAudit } from '@nopsidian/mcp/audit';
 import { events, graphSettings, workspaceLayout, type EventName } from '@nopsidian/ipc-contract';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { installProtocols, registerSchemes } from './protocols';
@@ -399,6 +400,13 @@ function registerHandlers() {
     atomicWrite(path.join(v.info.path, '.nopsidian', 'bookmarks.json'), JSON.stringify(paths, null, 2));
     return undefined;
   });
+  handle('mcp.info', () => {
+    const v = requireVault();
+    // 패키징된 앱은 resources/ 에, 개발 중에는 저장소의 빌드 결과를 쓴다
+    const script = app.isPackaged ? path.join(process.resourcesPath, 'nopsidian-mcp.mjs') : path.resolve(app.getAppPath(), '../../packages/mcp/dist/nopsidian-mcp.mjs');
+    return { script: existsSync(script) ? script : null, vault: v.info.path };
+  });
+  handle('mcp.audit', ({ limit }) => readAudit(requireVault().info.path, limit));
   handle('order.get', () => {
     const v = requireVault();
     try {

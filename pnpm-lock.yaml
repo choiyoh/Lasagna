@@ -47,6 +47,9 @@ importers:
       '@nopsidian/ipc-contract':
         specifier: workspace:*
         version: link:../../packages/ipc-contract
+      '@nopsidian/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@nopsidian/sync-gdrive':
         specifier: workspace:*
         version: link:../../packages/sync-gdrive

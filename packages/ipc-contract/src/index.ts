@@ -429,6 +429,25 @@ export const contract = {
   },
   /** 안전한 문서 형식은 기본 앱으로 열고, 그 외(실행 파일 등)는 Finder에서 위치만 보여 준다. */
   'asset.open': { input: z.object({ path: relPath }), output: z.enum(['opened', 'revealed']) },
+  /** AI 에이전트 연결(MCP): 번들된 서버 스크립트 경로(없으면 null)와 열린 볼트 경로 */
+  'mcp.info': { input: z.undefined(), output: z.object({ script: z.string().nullable(), vault: z.string() }) },
+  /** 에이전트가 한 쓰기·거부된 시도의 감사 기록(최신순) */
+  'mcp.audit': {
+    input: z.object({ limit: z.number().int().min(1).max(200) }),
+    output: z.array(
+      z.object({
+        t: z.string(),
+        client: z.string().optional(),
+        action: z.enum(['create', 'append', 'update', 'denied']),
+        tool: z.string(),
+        path: z.string(),
+        hashBefore: z.string().nullable().optional(),
+        hashAfter: z.string().optional(),
+        bytes: z.number().optional(),
+        note: z.string().optional(),
+      }),
+    ),
+  },
   'app.openExternal': { input: z.object({ url: z.string().url() }), output: z.undefined() },
 } as const;
 

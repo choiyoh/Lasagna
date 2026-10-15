@@ -669,3 +669,17 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .list:focus-within .row.cursor, .list:focus-within .tree summary.cursor { outline: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: -1.5px; }
 .tree .row:focus-visible, .tree summary:focus-visible { outline: 1.5px solid var(--accent); outline-offset: -1.5px; }
 .dragbadge { position: fixed; top: -100px; left: -100px; padding: 4px 12px; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 600; }
+
+/* 설정: AI 에이전트 연결(MCP) */
+.settings { max-height: 88vh; overflow: auto; }
+.settings__text { width: 120px; padding: 4px 8px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+.mcp__snippets { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }
+.mcp__label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-size: 13px; }
+.mcp__label button { padding: 2px 10px; border-radius: var(--radius); border: 1px solid var(--border); font-size: 12px; }
+.mcp__label button:hover { background: var(--hover); }
+.mcp__code { margin: 0; padding: 8px 10px; max-height: 120px; overflow: auto; border-radius: var(--radius); background: var(--bg-side); border: 1px solid var(--border); font: 11.5px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-all; user-select: text; }
+.mcp__audit ul { list-style: none; margin: 0; padding: 0; max-height: 160px; overflow: auto; }
+.mcp__audit li { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12.5px; }
+.mcp__audit li.denied { opacity: 0.65; }
+.mcp__audit li .link { color: var(--accent); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mcp__act { font-weight: 600; min-width: 56px; }

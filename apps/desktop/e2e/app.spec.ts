@@ -2,6 +2,8 @@ import { _electron as electron, expect, test, type ElectronApplication } from '@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { strToU8, zipSync } from 'fflate';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import path from 'node:path';
 
 // `pnpm package` 로 만든 앱을 실행한다(Fuses·asar·네이티브 모듈까지 함께 검증).
@@ -1843,6 +1845,57 @@ views:
     await expect.poll(() => existsSync(path.join(vaultDir, '다중/M1.md')) && existsSync(path.join(vaultDir, '다중/M3.md')), { timeout: 8000 }).toBe(true);
   });
 
+  test('AI 에이전트(MCP): 설정에 연결 방법이 나오고, 번들된 서버로 에이전트가 쓴 노트가 앱에 바로 나타나며 기록되고, 허용 밖은 거부된다', async () => {
+    const page = await app.firstWindow();
+    await page.keyboard.press('ControlOrMeta+,');
+    const settings = page.getByRole('dialog', { name: '설정' });
+    const cli = settings.getByTestId('mcp-cli');
+    await expect(cli).toContainText('claude mcp add nopsidian -- node', { timeout: 8000 });
+    await expect(cli).toContainText(vaultDir);
+    await expect(cli).not.toContainText('--write');
+    await settings.getByLabel('에이전트가 노트 쓰기 허용').check();
+    await expect(cli).toContainText('--write');
+    await expect(cli).toContainText('--write-folder "AI"');
+    const script = (await cli.innerText()).match(/node "([^"]+nopsidian-mcp\.mjs)"/)![1]!;
+    expect(existsSync(script)).toBe(true);
+    await settings.getByLabel('에이전트가 노트 쓰기 허용').uncheck();
+    await page.keyboard.press('Escape');
+
+    // 앱이 안내한 스크립트를 그대로 실행해 MCP(stdio)로 붙는다
+    const client = new Client({ name: 'e2e-agent', version: '1' });
+    await client.connect(new StdioClientTransport({ command: process.execPath, args: [script, '--vault', vaultDir, '--write'], stderr: 'ignore' }));
+    try {
+      const tools = (await client.listTools()).tools.map((t) => t.name);
+      expect(tools).toEqual(expect.arrayContaining(['search_notes', 'create_note', 'append_to_note']));
+      const text = (r: unknown) => (r as { content: { text: string }[] }).content[0]!.text;
+      // 읽기: 앱에 있는 노트를 검색한다
+      expect(text(await client.callTool({ name: 'search_notes', arguments: { query: 'Nopsidian' } }))).toContain('프로젝트/Nopsidian.md');
+      // 쓰기: AI/ 폴더에 새 노트 → 앱 사이드바에 바로 나타난다
+      const created = await client.callTool({ name: 'create_note', arguments: { path: 'AI/에이전트노트', title: '에이전트노트', content: '에이전트가 쓴 첫 문장', tags: ['ai'] } });
+      expect(created.isError).toBeFalsy();
+      await expect(page.getByRole('button', { name: '에이전트노트', exact: true }).first()).toBeVisible({ timeout: 10000 });
+      await page.getByRole('button', { name: '에이전트노트', exact: true }).first().click();
+      await expect(page.locator('.ProseMirror')).toContainText('에이전트가 쓴 첫 문장');
+      // 열려 있는 노트에 덧붙이면 편집기가 바로 갱신된다
+      await client.callTool({ name: 'append_to_note', arguments: { path: 'AI/에이전트노트.md', content: '덧붙인 둘째 문장' } });
+      await expect(page.locator('.ProseMirror')).toContainText('덧붙인 둘째 문장', { timeout: 10000 });
+      // 허용 폴더 밖은 거부되고 파일이 생기지 않는다
+      const denied = await client.callTool({ name: 'create_note', arguments: { path: '프로젝트/몰래', content: 'x' } });
+      expect(denied.isError).toBe(true);
+      expect(existsSync(path.join(vaultDir, '프로젝트/몰래.md'))).toBe(false);
+    } finally {
+      await client.close();
+    }
+
+    // 설정의 "최근 에이전트 작업" 에 남는다
+    await page.keyboard.press('ControlOrMeta+,');
+    const audit = page.getByRole('dialog', { name: '설정' }).getByTestId('mcp-audit');
+    await expect(audit).toContainText('AI/에이전트노트.md', { timeout: 8000 });
+    await expect(audit).toContainText('e2e-agent');
+    await expect(audit.locator('li.denied')).toContainText('프로젝트/몰래.md');
+    await page.keyboard.press('Escape');
+  });
+
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
     const page = await app.firstWindow();
     const today = await page.evaluate(() => {
@@ -2099,7 +2152,7 @@ views:
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'note', 'on', 'order', 'search', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'mcp', 'note', 'on', 'order', 'search', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

@@ -14,10 +14,16 @@ const config: ForgeConfig = {
     executableName: 'nopsidian',
     // 확장자는 플랫폼에 맞게 붙는다(.icns / .ico)
     icon: path.join(process.cwd(), 'assets', 'icon'),
+    // AI 에이전트용 MCP 서버(의존성까지 한 파일). 앱의 resources/ 에 들어가고, 설정 화면이 그 경로를 안내한다.
+    extraResource: [path.join(process.cwd(), '..', '..', 'packages', 'mcp', 'dist', 'nopsidian-mcp.mjs')],
   },
   // better-sqlite3(N-API prebuild)와 @parcel/watcher(플랫폼별 prebuilt 패키지)는 Electron 헤더로 재빌드하지 않는다.
   rebuildConfig: { onlyModules: [] },
   hooks: {
+    // 패키징 전에 MCP 서버 번들을 만든다(extraResource 가 이 파일을 복사한다).
+    generateAssets: async () => {
+      execFileSync(process.execPath, ['build.mjs'], { cwd: path.join(process.cwd(), '..', '..', 'packages', 'mcp'), stdio: 'inherit' });
+    },
     // Vite 플러그인은 .vite/ 외에는 패키징하지 않으므로 external 네이티브 모듈을 직접 복사한다.
     packageAfterCopy: async (_config, buildPath) => {
       copyNativeModules(buildPath, process.cwd());

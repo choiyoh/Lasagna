@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { applyPrefs, FONT_SIZES, loadPrefs, type Prefs } from './prefs';
 import { applyTheme, THEME_LABEL, type ThemeChoice } from './theme';
 import { keys } from './keys';
+import { McpSettings } from './McpSettings';
 
 interface Props {
   theme: ThemeChoice;
@@ -10,10 +11,11 @@ interface Props {
   onOpenSync: () => void;
   onOpenShortcuts: () => void;
   onOpenTrash: () => void;
+  onOpenNote: (path: string) => void;
 }
 
 /** 설정(⌘,): 모양·편집·동기화·도움말. 값은 이 기기에만 저장된다. */
-export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShortcuts, onOpenTrash }: Props) {
+export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShortcuts, onOpenTrash, onOpenNote }: Props) {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const set = (patch: Partial<Prefs>) =>
     setPrefs((cur) => {
@@ -87,6 +89,7 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
             <input type="checkbox" checked={prefs.titleSync} onChange={(e) => set({ titleSync: e.target.checked })} aria-label="제목을 바꾸면 파일 이름도 맞추기" />
           </label>
         </section>
+        <McpSettings onOpenNote={(p) => { onOpenNote(p); onClose(); }} />
         <section>
           <h3>볼트</h3>
           <div className="settings__links">

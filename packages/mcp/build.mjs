@@ -1,4 +1,4 @@
-// stdio MCP 서버를 의존성까지 한 파일로 묶는다(앱에 넣어 `node nopsidian-mcp.mjs` 로 실행).
+/* global URL */// stdio MCP 서버를 의존성까지 한 파일로 묶는다(앱에 넣어 `node nopsidian-mcp.mjs` 로 실행).
 import { build } from 'esbuild';
 import { readFileSync } from 'node:fs';
 

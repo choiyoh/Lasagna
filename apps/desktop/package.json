@@ -39,6 +39,7 @@
     "@nopsidian/editor": "workspace:*",
     "@nopsidian/formula": "workspace:*",
     "@nopsidian/ipc-contract": "workspace:*",
+    "@nopsidian/mcp": "workspace:*",
     "@nopsidian/sync-gdrive": "workspace:*",
     "@parcel/watcher": "^2.6.0",
     "@tanstack/react-virtual": "^3.14.15",

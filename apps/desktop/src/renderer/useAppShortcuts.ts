@@ -1,0 +1,66 @@
+import { useEffect } from 'react';
+
+export interface ShortcutActions {
+  /** 그래프나 데이터베이스 화면이 떠 있는가(Esc 로 닫는다) */
+  overlayOpen: boolean;
+  /** 그래프·DB 입력창에서 누른 Esc 는 닫지 않는다 */
+  closeOverlay: () => void;
+  selected: string | null;
+  openSwitcher: () => void;
+  toggleGraph: () => void;
+  newNote: () => void;
+  openSettings: () => void;
+  openShortcuts: () => void;
+  rename: () => void;
+  closeTab: (path: string) => void;
+  openPalette: () => void;
+  toggleBookmark: (path: string) => void;
+  openDaily: () => void;
+  /** 열린 DB 화면의 입력창에서 누른 Esc 인가를 가리는 데 쓴다 */
+  dbOpen: boolean;
+}
+
+/** 앱 전체 단축키: ⌘O 전환기 · ⌘P 팔레트 · ⌘N 새 노트 · ⌘, 설정 · F1 단축키 · F2 이름 · ⌘W 탭 닫기 · ⌘⇧G 그래프 · ⌘⇧B 북마크 · ⌘⌥D 오늘 */
+export function useAppShortcuts(a: ShortcutActions) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      const plain = mod && !e.shiftKey && !e.altKey;
+      if (plain && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        a.openSwitcher();
+      } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyG') {
+        e.preventDefault();
+        a.toggleGraph();
+      } else if (e.key === 'Escape' && (a.overlayOpen || (a.dbOpen && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)))) {
+        a.closeOverlay();
+      } else if (plain && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        a.newNote();
+      } else if (plain && e.key === ',') {
+        e.preventDefault();
+        a.openSettings();
+      } else if (e.key === 'F1') {
+        e.preventDefault();
+        a.openShortcuts();
+      } else if (e.key === 'F2') {
+        e.preventDefault();
+        a.rename();
+      } else if (plain && e.key.toLowerCase() === 'w') {
+        e.preventDefault();
+        if (a.selected) a.closeTab(a.selected);
+      } else if (plain && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        a.openPalette();
+      } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyB') {
+        e.preventDefault();
+        if (a.selected) a.toggleBookmark(a.selected);
+      } else if (mod && e.altKey && e.code === 'KeyD') {
+        e.preventDefault();
+        a.openDaily();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [a]);
+}

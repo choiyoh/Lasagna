@@ -437,6 +437,13 @@ nopsidian/
 - **여러 개 작업**: 끌면 "N개 항목" 표시와 함께 선택 전체가 간다. 폴더 안으로(확인창 없이 차례로 옮기고 되돌리기 한 번에) / 앞·뒤로 한 덩어리로 순서 바꾸기(`placeGroupInOrder`) / 우클릭 "N개 삭제"(확인 후 휴지통, 되돌리기 한 번에). 선택한 폴더 안의 항목은 따로 옮기지 않는다(`topLevel`).
 - **구조**: `App.tsx` 에서 사이드바를 `sidebar/`(`build-tree.ts` 나무, `drag.ts` 끌기, `selection.ts` 선택·키보드 훅, `TreeView.tsx`)로 분리.
 
+### App.tsx 정리 (v0.5.4)
+- 1,341줄이던 `App.tsx` 를 607줄로 줄였다(동작 변화 없음, E2E 66개 그대로 통과). 구조:
+  - 화면: `VaultPicker.tsx`, `Welcome.tsx`, `EntryMenu.tsx`(사이드바 우클릭 메뉴), `ToastView.tsx`, `app-types.ts`
+  - 훅: `useEntryActions.ts`(노트·폴더 만들기·이름 바꾸기·옮기기·삭제·아이콘), `useLinkHosts.ts`(위키링크 해석·미리보기·임베드·자동완성 호스트), `useAppShortcuts.ts`(전역 단축키), `useImportExport.ts`
+  - 사이드바: `sidebar/`(`build-tree.ts`, `drag.ts`, `selection.ts`, `TreeView.tsx`)
+- 규칙: 앱 상태(탭·북마크·알림 등)는 `App.tsx` 가 갖고, 훅에는 필요한 setter·ref 만 인자로 넘긴다(`EntryActionDeps`).
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

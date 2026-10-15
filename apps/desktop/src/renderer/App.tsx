@@ -1,14 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { NoteSummary, SearchHit, SyncStatus, VaultInfo } from '@nopsidian/ipc-contract';
-import { createLinkResolver } from '@nopsidian/core/links';
-import type { WikiLinkTarget } from '@nopsidian/editor/nops';
-import { showTextPrompt } from '@nopsidian/editor/nops';
-import type { NopsPeekHost } from '@nopsidian/editor/nops';
-import { extractExcerpt, parseNote, replaceBlock } from '@nopsidian/core/markdown';
 import { NoteEditor } from './NoteEditor';
 import { useAssetStore } from './assets';
 import { ConfirmDialog } from './ConfirmDialog';
-import { flushAll } from './flush';
 import { LinkPanel } from './LinkPanel';
 import { HistoryPanel } from './HistoryPanel';
 import { keys } from './keys';
@@ -16,23 +10,29 @@ import { ShortcutsDialog } from './ShortcutsDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { OutlinePanel } from './OutlinePanel';
 import { TrashDialog } from './TrashDialog';
-import { freshNotes, untitledPath } from './note-title';
 import { EXPAND_ALL_LIMIT, sameNotes, useFolderOpen } from './tree-state';
-import { placeGroupInOrder, remapOrder, type SidebarOrder } from './sidebar-order';
+import type { SidebarOrder } from './sidebar-order';
 import { buildTree, type TreeNode } from './sidebar/build-tree';
 import { dropProps } from './sidebar/drag';
 import { TreeView, type TreeCtx } from './sidebar/TreeView';
-import { flattenVisible, topLevel, useTreeSelection, type Entry } from './sidebar/selection';
-import { Logo } from './Logo';
-import { withNoteIcon } from './note-icon';
+import { flattenVisible, useTreeSelection } from './sidebar/selection';
+import { VaultPicker } from './VaultPicker';
+import { Welcome } from './Welcome';
+import type { ConfirmState, Toast } from './app-types';
 import { Panes } from './Panes';
+import { EntryMenu, type EntryMenuState } from './EntryMenu';
+import { ToastView } from './ToastView';
+import { useEntryActions } from './useEntryActions';
+import { useAppShortcuts } from './useAppShortcuts';
+import { useLinkHosts } from './useLinkHosts';
+import { useImportExport } from './useImportExport';
 import { applyTheme, loadTheme, nextTheme, THEME_ICON, THEME_LABEL, type ThemeChoice } from './theme';
 import { initialTabs, parseTabs, selectedOf, tabsReducer } from './tabs';
 import { DatabaseScreen } from './db/DatabaseScreen';
 import { DbList } from './db/DbList';
 import { SyncDialog, syncStateText } from './SyncDialog';
 import { GraphScreen, LocalGraph } from './graph/GraphScreen';
-import { createLinkHost, linkNameFor } from './link-host';
+import { linkNameFor } from './link-host';
 import { QuickSwitcher } from './QuickSwitcher';
 import { CommandPalette, type PaletteCommand } from './CommandPalette';
 import { TagPanel } from './TagPanel';
@@ -46,139 +46,6 @@ export function App() {
   if (vault === undefined) return null;
   if (!vault) return <VaultPicker onOpen={setVault} />;
   return <Workspace vault={vault} onClose={() => setVault(null)} />;
-}
-
-/** 블록 원문 끝의 ` ^id` 를 뗀다 */
-function stripBlockId(source: string, id: string): string {
-  return source.replace(new RegExp(`[ \\t]*\\^${id}[ \\t]*(\\r?)$`), '$1').replace(/\s+$/, '');
-}
-
-function VaultPicker({ onOpen }: { onOpen: (v: VaultInfo) => void }) {
-  const [recent, setRecent] = useState<VaultInfo[]>([]);
-  const [error, setError] = useState('');
-  const [theme, setTheme] = useState<ThemeChoice>(() => loadTheme());
-  useEffect(() => {
-    void window.nops.vault.listRecent().then(setRecent);
-  }, []);
-
-  const run = async (fn: () => Promise<VaultInfo | null>) => {
-    try {
-      const v = await fn();
-      if (v) onOpen(v);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
-  return (
-    <main className="start">
-      <div className="start__drag drag" />
-      <button
-        className="start__theme"
-        title={`테마: ${THEME_LABEL[theme]} (눌러서 바꾸기)`}
-        aria-label={`테마 ${THEME_LABEL[theme]}`}
-        onClick={() => {
-          const next = nextTheme(theme);
-          applyTheme(next);
-          setTheme(next);
-        }}
-      >
-        {THEME_ICON[theme]}
-      </button>
-      <div className="start__card">
-        <Logo size={88} />
-        <h1>Nopsidian</h1>
-        <p className="start__tagline">내 컴퓨터의 Markdown 폴더가 곧 노트가 됩니다.</p>
-        <button className="primary start__cta" onClick={() => run(() => window.nops.vault.pick())}>
-          폴더 열기 / 만들기
-        </button>
-        <p className="start__hint">기존 Obsidian 볼트나 Markdown 폴더도 그대로 열 수 있어요. 파일을 옮기거나 복사하지 않아요.</p>
-        {error && <p className="error">{error}</p>}
-        {recent.length > 0 ? (
-          <section className="start__recent" aria-label="최근 볼트">
-            <h2>최근 볼트</h2>
-            <ul className="recent">
-              {recent.map((v) => (
-                <li key={v.id}>
-                  <button onClick={() => run(() => window.nops.vault.open({ id: v.id }))}>
-                    <span className="recent__icon" aria-hidden>📁</span>
-                    <span className="recent__text">
-                      <strong>{v.name}</strong>
-                      <span className="muted recent__path" title={v.path}>{v.path}</span>
-                    </span>
-                    <span className="recent__go" aria-hidden>열기 →</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : (
-          <ul className="start__features" aria-label="주요 기능">
-            <li><strong>블록 편집기</strong><span>슬래시(/)로 제목·표·콜아웃·수식을 바로 넣어요</span></li>
-            <li><strong>링크와 그래프</strong><span>[[위키링크]]와 백링크, 노트가 서로 이어진 모습을 그래프로 보여 줘요</span></li>
-            <li><strong>데이터베이스</strong><span>속성이 있는 노트를 표·보드·캘린더로 한눈에 봐요</span></li>
-          </ul>
-        )}
-      </div>
-    </main>
-  );
-}
-
-interface WelcomeAction {
-  icon: string;
-  label: string;
-  hint: string;
-  run: () => void;
-}
-
-/** 열린 노트가 없을 때의 첫 화면: 자주 쓰는 동작과 최근 고친 노트 */
-function Welcome({ notes, onOpen, actions }: { notes: NoteSummary[]; onOpen: (path: string) => void; actions: WelcomeAction[] }) {
-  const recent = [...notes].sort((a, b) => b.mtime - a.mtime).slice(0, 6);
-  return (
-    <div className="welcome" data-testid="welcome">
-      <Logo size={56} />
-      <h2>무엇을 할까요?</h2>
-      <div className="welcome__actions">
-        {actions.map((a) => (
-          <button key={a.label} onClick={a.run}>
-            <span className="welcome__icon" aria-hidden>{a.icon}</span>
-            <span>{a.label}</span>
-            {a.hint && <kbd>{keys(a.hint)}</kbd>}
-          </button>
-        ))}
-      </div>
-      {recent.length > 0 ? (
-        <section className="welcome__recent">
-          <h3>최근에 고친 노트</h3>
-          <ul>
-            {recent.map((n) => (
-              <li key={n.path}>
-                <button onClick={() => onOpen(n.path)}>
-                  <span>{n.icon ? <span className="emoji">{n.icon}</span> : null}{n.title}</span>
-                  <span className="muted small">{n.path}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : (
-        <p className="muted">아직 노트가 없어요. “새 노트”로 시작해 보세요.</p>
-      )}
-    </div>
-  );
-}
-
-interface Toast {
-  message: string;
-  /** 있으면 "되돌리기" 버튼을 보여 준다 */
-  undo?: () => Promise<void>;
-}
-
-interface ConfirmState {
-  title: string;
-  lines: string[];
-  confirmLabel: string;
-  onConfirm: () => void;
 }
 
 function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }) {
@@ -217,7 +84,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [bookmarks, setBookmarks] = useState<string[]>([]);
   const [palette, setPalette] = useState(false);
   /** 사이드바 항목 우클릭 메뉴 */
-  const [menu, setMenu] = useState<{ path: string; isFolder: boolean; x: number; y: number; multi?: boolean } | null>(null);
+  const [menu, setMenu] = useState<EntryMenuState | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(() => loadTheme());
   const cycleTheme = useCallback(() => {
     setTheme((cur) => {
@@ -276,278 +143,51 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     return () => clearTimeout(t);
   }, [query]);
 
-  const resolver = useMemo(
-    () =>
-      createLinkResolver(
-        notes.map((n, i) => ({ id: i, path: n.path, title: n.title })),
-        notes.flatMap((n, i) => n.aliases.map((alias) => ({ pageId: i, alias }))),
-      ),
-    [notes],
-  );
+  const { openLink, peekHost, linkHost, live } = useLinkHosts({ notes, selected, assets, setSelected, setFocus });
 
-  const openLink = useCallback(
-    (link: WikiLinkTarget) => {
-      const id = resolver(link.target, selected ?? '');
-      const note = id === undefined ? undefined : notes[id];
-      if (note) {
-        setFocus(link.heading || link.block ? { heading: link.heading, block: link.block } : null);
-        setSelected(note.path);
-      }
-    },
-    [resolver, notes, selected],
-  );
-
-  const peekHost = useMemo<NopsPeekHost>(
-    () => {
-      const findNote = (target: string) => {
-        const id = resolver(target, selected ?? '');
-        return id === undefined ? undefined : notes[id];
-      };
-      return {
-      async peek({ target, heading, block }) {
-        const note = findNote(target);
-        if (!note) return null;
-        const { content } = await window.nops.note.read({ path: note.path });
-        return { title: note.title, ...extractExcerpt(content, { heading, block }) };
-      },
-      // 동기화 블록: `![[노트#^id]]` 를 그 자리에서 고치면 원본 노트의 블록이 바뀐다
-      async source({ target, block }) {
-        const note = findNote(target);
-        if (!note || !block) return null;
-        const { content } = await window.nops.note.read({ path: note.path });
-        const parsed = parseNote(content);
-        const b = parsed.blocks.find((x) => x.blockId === block);
-        if (!b) return null;
-        return stripBlockId(b.source, block);
-      },
-      async save({ target, block }, markdown) {
-        const note = findNote(target);
-        if (!note || !block) return false;
-        await flushAll();
-        const { content, hash } = await window.nops.note.read({ path: note.path });
-        const parsed = parseNote(content);
-        const b = parsed.blocks.find((x) => x.blockId === block);
-        if (!b) return false;
-        // `^id` 가 줄 끝에 붙어 있던 블록이면 새 원문 끝에도 붙이고, 아래 별도 줄이면 그 줄은 그대로 둔다
-        const inline = new RegExp(`(?:^|\\s)\\^${block}[ \\t]*\\r?$`).test(b.source);
-        const next = markdown.replace(/\s+$/, '');
-        const source = inline ? `${next} ^${block}` : next;
-        await window.nops.note.save({ path: note.path, content: replaceBlock(parsed, b.index, source), baseHash: hash });
-        window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: note.path }));
-        return true;
-      },
-      onChange(cb) {
-        return window.nops.on('note.changed', () => cb());
-      },
-      };
-    },
-    [resolver, notes, selected],
-  );
-
-  // `[[` 자동완성은 항상 최신 노트·첨부 목록을 봐야 하므로 ref로 읽는 안정적인 호스트를 하나만 만든다
-  const live = useRef({ notes, selected, assets });
-  live.current = { notes, selected, assets };
-  const linkHost = useMemo(
-    () =>
-      createLinkHost({
-        notes: () => live.current.notes,
-        assets: () => assets.list(),
-        currentPath: () => live.current.selected ?? '',
-        headings: (path) => window.nops.link.headings({ path }),
-        blocks: (path) => window.nops.link.blocks({ path }),
-        ensureBlockId: async (path, line) => (await window.nops.link.ensureBlockId({ path, line })).id,
-      }),
-    [assets],
-  );
-
-  const createNote = useCallback(
-    async (rawName: string) => {
-      const name = rawName.trim().replace(/[\\:*?"<>|]/g, '').replace(/\.md$/i, '');
-      if (!name) return;
-      const path = `${name}.md`;
-      const r = await window.nops.note.save({ path, content: `# ${name.slice(name.lastIndexOf('/') + 1)}\n`, baseHash: null });
-      setSelected(r.status === 'copy' && r.copyPath ? r.copyPath : path);
-      refresh();
-    },
-    [refresh],
-  );
-
-  /** 노션처럼 이름을 묻지 않고 "제목 없음" 노트를 바로 만들어 연다. 제목을 쓰면 파일 이름이 따라간다. */
-  const quickNote = useCallback(
-    async (folder = '') => {
-      const path = untitledPath(folder, live.current.notes.map((n) => n.path));
-      const r = await window.nops.note.save({ path, content: '# \n', baseHash: null });
-      const opened = r.status === 'copy' && r.copyPath ? r.copyPath : path;
-      freshNotes.add(opened);
-      setSelected(opened);
-      refresh();
-    },
-    [refresh],
-  );
-
-  /** 새 폴더: 이름을 묻고 `parent` 안에 만든다 */
-  const newFolder = useCallback(
-    async (parent: string) => {
-      const name = (await showTextPrompt(parent ? `“${parent}” 안에 만들 폴더 이름` : '새 폴더 이름', '새 폴더'))?.trim().replace(/[\\/:*?"<>|]/g, ' ').trim();
-      if (!name) return;
-      try {
-        await window.nops.folder.create({ path: parent ? `${parent}/${name}` : name });
-        refresh();
-      } catch (e) {
-        setToast({ message: `폴더를 만들지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
-      }
-    },
-    [refresh],
-  );
-
-  const openDaily = useCallback(async () => {
-    const r = await window.nops.daily.open({});
-    setSelected(r.path);
-    refresh();
-  }, [refresh]);
-
-  /** 이름을 바꾼 노트의 첫 H1 이 예전 이름과 같으면 새 이름으로 고친다 */
-  const syncHeadingToName = async (from: string, to: string) => {
-    const oldName = from.slice(from.lastIndexOf('/') + 1).replace(/\.md$/i, '');
-    const newName = to.slice(to.lastIndexOf('/') + 1).replace(/\.md$/i, '');
-    if (oldName === newName) return;
-    try {
-      const cur = await window.nops.note.read({ path: to });
-      const esc = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const next = cur.content.replace(new RegExp(`^((?:---\\r?\\n[\\s\\S]*?\\r?\\n---\\r?\\n)?\\s*)# ${esc}[ \\t]*(\\r?\\n|$)`), `$1# ${newName}$2`);
-      if (next === cur.content) return;
-      await window.nops.note.save({ path: to, content: next, baseHash: cur.hash });
-      window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: to }));
-    } catch {
-      // 제목을 못 고쳐도 이름 변경은 끝났다
-    }
-  };
-
-  /** 항목이 옮겨진 뒤 앱 안의 경로(탭·열린 DB·북마크·사이드바 순서)를 따라가게 하고, 필요하면 노트 제목(H1)도 맞춘다 */
-  const applyMovedState = useCallback(
-    async (from: string, target: string, isFolder: boolean, syncHeading: boolean) => {
-      const remap = (p: string, a: string, b: string) => (p === a ? b : p.startsWith(`${a}/`) ? `${b}${p.slice(a.length)}` : p);
-      dispatchTabs({ type: 'remap', from, to: target });
-      setDbOpen((cur) => (cur === null ? cur : remap(cur, from, target)));
-      setBookmarks((cur) => {
-        const next = cur.map((p) => remap(p, from, target));
-        if (next.some((p, i) => p !== cur[i])) void window.nops.bookmarks.set(next);
-        return next;
-      });
-      if (syncHeading && !isFolder) await syncHeadingToName(from, target);
-      commitOrder(remapOrder(orderRef.current, from, target));
-    },
-    [commitOrder],
-  );
-
-  /** 이름 변경/이동(노트 또는 폴더): 미리보기(바뀌는 링크 수) → 확인 → 실행 → 되돌리기 */
-  const renameEntry = useCallback(async (from: string, isFolder: boolean, preset?: string, opts: { auto?: boolean; afterMove?: (target: string) => void } = {}) => {
-    // 노션처럼 이름만 바꾼다: 입력창에는 이름만 보이고, 폴더는 그대로 유지한다. `폴더/이름` 으로 쓰면 이동도 한다.
-    const dir = from.includes('/') ? from.slice(0, from.lastIndexOf('/')) : '';
-    const currentName = (isFolder ? from : from.replace(/\.md$/i, '')).slice(dir ? dir.length + 1 : 0);
-    const answer = preset ?? await showTextPrompt(
-      isFolder ? '폴더 이름 (다른 곳으로 옮기려면 ‘상위폴더/이름’으로 입력하세요)' : '새 이름 (다른 폴더로 옮기려면 ‘폴더/이름’으로 입력하세요)',
-      currentName,
-    );
-    const typed = answer?.trim().replace(/^\/+|\/+$/g, '');
-    const to = typed && !typed.includes('/') && dir ? `${dir}/${typed}` : typed;
-    if (!to || to === from || `${to}.md` === from) return;
-    const target = isFolder || /\.md$/i.test(to) ? to : `${to}.md`;
-    await flushAll();
-    try {
-      const plan = await window.nops.note.renamePlan({ from, to: target });
-      const apply = async () => {
-        const done = await window.nops.note.rename({ from, to: target });
-        // 노트 이름을 직접 바꾸면 제목(첫 H1)도 따라 바꾼다(제목이 원래 이름과 같았을 때만)
-        await applyMovedState(from, target, isFolder, !opts.auto);
-        opts.afterMove?.(target);
-        refresh();
-        if (opts.auto && done.totalChanges === 0) return;
-        setToast({
-          message: done.totalChanges > 0 ? `이름을 바꾸고 링크 ${done.totalChanges}개를 고쳤어요.` : '이름을 바꿨어요.',
-          undo: async () => {
-            await flushAll();
-            await window.nops.note.undoRename({ undoId: done.undoId });
-            await applyMovedState(target, from, isFolder, true);
-            refresh();
-            setToast({ message: '되돌렸어요.' });
-          },
-        });
-      };
-      if (plan.totalChanges === 0 || opts.auto) return await apply();
-      setConfirm({
-        title: '이름을 바꾸고 링크도 함께 고칠까요?',
-        lines: [
-          `${from} → ${target}`,
-          `${plan.edits.length}개 노트의 링크 ${plan.totalChanges}개를 고쳐요.`,
-          ...plan.edits.slice(0, 8).map((e) => `· ${e.newPath} (${e.changes})`),
-          ...(plan.edits.length > 8 ? [`… 외 ${plan.edits.length - 8}개`] : []),
-        ],
-        confirmLabel: '바꾸기',
-        onConfirm: () => {
-          setConfirm(null);
-          void apply().catch((e) => setToast({ message: `실패: ${e instanceof Error ? e.message : String(e)}` }));
-        },
-      });
-    } catch (e) {
-      setToast({
-        message: opts.auto
-          ? `같은 이름의 노트가 있거나 바꿀 수 없어서 파일 이름은 그대로 두었어요.`
-          : `이름을 바꿀 수 없어요: ${e instanceof Error ? e.message : String(e)}`,
-      });
-    }
-  }, [refresh, applyMovedState]);
-  const renameCurrent = useCallback(async () => {
-    if (selected) await renameEntry(selected, false);
-  }, [selected, renameEntry]);
+  const treeRef = useRef<TreeNode[]>([]);
+  const {
+    createNote,
+    quickNote,
+    newFolder,
+    openDaily,
+    renameEntry,
+    renameCurrent,
+    setNoteIcon,
+    renameNoteTitle,
+    moveEntries,
+    moveRelative,
+    deleteEntry,
+    deleteEntries,
+  } = useEntryActions({ refresh, selected, setSelected, dispatchTabs, setDbOpen, setBookmarks, setToast, setConfirm, live, order: orderRef, commitOrder, tree: treeRef });
 
   useEffect(() => {
     void window.nops.sync.status().then(setSync);
     return window.nops.on('sync.changed', (s) => setSync(s as SyncStatus));
   }, []);
 
-  // 단축키: ⌘O 빠른 전환기 · F2 이름 변경 · ⌘⌥D 오늘의 노트
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'o') {
-        e.preventDefault();
-        setSwitcher(true);
-      } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyG') {
-        e.preventDefault();
-        { setDbOpen(null); setGraphOpen((o) => !o); }
-      } else if (e.key === 'Escape' && (graphOpen || (dbOpen !== null && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)))) {
-        setGraphOpen(false);
-        setDbOpen(null);
-      } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'n') {
-        e.preventDefault();
-        void quickNote('');
-      } else if (mod && !e.shiftKey && !e.altKey && e.key === ',') {
-        e.preventDefault();
-        setSettingsOpen(true);
-      } else if (e.key === 'F1') {
-        e.preventDefault();
-        setShortcutsOpen(true);
-      } else if (e.key === 'F2') {
-        e.preventDefault();
-        void renameCurrent();
-      } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
-        e.preventDefault();
-        if (selected) dispatchTabs({ type: 'close', pane: tabs.activePane, path: selected });
-      } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        setPalette(true);
-      } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyB') {
-        e.preventDefault();
-        if (selected) toggleBookmark(selected);
-      } else if (mod && e.altKey && e.code === 'KeyD') {
-        e.preventDefault();
-        void openDaily();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [quickNote, renameCurrent, openDaily, graphOpen, dbOpen, selected, toggleBookmark, tabs.activePane]);
+  useAppShortcuts({
+    overlayOpen: graphOpen,
+    dbOpen: dbOpen !== null,
+    closeOverlay: () => {
+      setGraphOpen(false);
+      setDbOpen(null);
+    },
+    selected,
+    openSwitcher: () => setSwitcher(true),
+    toggleGraph: () => {
+      setDbOpen(null);
+      setGraphOpen((o) => !o);
+    },
+    newNote: () => void quickNote(''),
+    openSettings: () => setSettingsOpen(true),
+    openShortcuts: () => setShortcutsOpen(true),
+    rename: () => void renameCurrent(),
+    closeTab: (path) => dispatchTabs({ type: 'close', pane: tabs.activePane, path }),
+    openPalette: () => setPalette(true),
+    toggleBookmark,
+    openDaily: () => void openDaily(),
+  });
 
   // 시작: `?open=` 로 열린 창이면 그 노트, 아니면 저장된 탭·분할 배치를 복원한다
   const restored = useRef(false);
@@ -571,237 +211,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     return () => clearTimeout(t);
   }, [tabs, openedWith]);
 
-  /** 문서 아이콘(이모지)을 프런트매터 `icon` 에 쓰거나 지운다. 열려 있는 에디터는 다시 불러온다. */
-  const setNoteIcon = useCallback(
-    async (p: string, icon: string | null) => {
-      try {
-        await flushAll();
-        const cur = await window.nops.note.read({ path: p });
-        const next = withNoteIcon(cur.content, icon);
-        if (next !== cur.content) await window.nops.note.save({ path: p, content: next, baseHash: cur.hash });
-        window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: p }));
-        refresh();
-      } catch (e) {
-        setToast({ message: `아이콘을 바꾸지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
-      }
-    },
-    [refresh],
-  );
-
-  /** 표·카드의 제목을 직접 고칠 때: 파일 이름을 바꾼다(폴더는 그대로) */
-  const renameNoteTitle = useCallback(
-    (p: string, title: string) => {
-      const dir = p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '';
-      void renameEntry(p, false, `${dir}${title.replace(/[\\/:*?"<>|]/g, ' ').trim()}`);
-    },
-    [renameEntry],
-  );
-
-  /** 여러 항목을 `toFolder` 안으로 옮긴다. 한 개면 이름 바꾸기와 같은 흐름(링크 갱신 확인·되돌리기), 여러 개면 확인 없이 차례로 옮기고 한 번에 되돌린다. */
-  const moveMany = useCallback(
-    async (raw: Entry[], toFolder: string, after?: (names: string[]) => void) => {
-      const baseOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
-      const items = topLevel(raw).filter((it) => !(it.isFolder && (toFolder === it.path || toFolder.startsWith(`${it.path}/`))));
-      if (items.length < topLevel(raw).length) setToast({ message: '폴더를 자기 자신 안으로는 옮길 수 없어요.' });
-      if (!items.length) return;
-      const dest = (it: Entry) => (toFolder ? `${toFolder}/${baseOf(it.path)}` : baseOf(it.path));
-      if (items.length === 1) {
-        const it = items[0]!;
-        if (dest(it) === it.path) return after?.([baseOf(it.path)]);
-        return void (await renameEntry(it.path, it.isFolder, dest(it), { afterMove: (t) => after?.([baseOf(t)]) }));
-      }
-      await flushAll();
-      const done: { from: string; target: string; isFolder: boolean; undoId: string }[] = [];
-      let failed = 0;
-      let links = 0;
-      for (const it of items) {
-        const target = dest(it);
-        if (target === it.path) continue;
-        try {
-          const r = await window.nops.note.rename({ from: it.path, to: target });
-          await applyMovedState(it.path, target, it.isFolder, false);
-          links += r.totalChanges;
-          done.push({ from: it.path, target, isFolder: it.isFolder, undoId: r.undoId });
-        } catch {
-          failed++; // 같은 이름이 이미 있는 경우 등
-        }
-      }
-      after?.(items.map((it) => baseOf(it.path)));
-      refresh();
-      if (!done.length && !failed) return;
-      setToast({
-        message: `${done.length}개를 옮겼어요${links > 0 ? ` (링크 ${links}개 갱신)` : ''}${failed ? ` · ${failed}개는 같은 이름이 있어 옮기지 못했어요` : ''}`,
-        undo: done.length
-          ? async () => {
-              await flushAll();
-              for (const d of [...done].reverse()) {
-                await window.nops.note.undoRename({ undoId: d.undoId });
-                await applyMovedState(d.target, d.from, d.isFolder, false);
-              }
-              refresh();
-              setToast({ message: '되돌렸어요.' });
-            }
-          : undefined,
-      });
-    },
-    [renameEntry, applyMovedState, refresh],
-  );
-
-  /** 사이드바에서 끌어다 놓기: `toFolder` 안으로 */
-  const moveEntries = useCallback((items: Entry[], toFolder: string) => void moveMany(items, toFolder), [moveMany]);
-
-  /** 사이드바 안에서 `target` 의 앞/뒤로 끌어 놓기: 같은 폴더면 순서만 바꾸고, 다른 폴더면 옮긴 뒤 그 자리에 끼운다 */
-  const moveRelative = useCallback(
-    (raw: Entry[], target: string, pos: 'before' | 'after') => {
-      const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
-      const baseOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
-      const items = topLevel(raw).filter((it) => it.path !== target && !(it.isFolder && target.startsWith(`${it.path}/`)));
-      if (!items.length) {
-        if (raw.some((it) => it.isFolder && target.startsWith(`${it.path}/`))) setToast({ message: '폴더를 자기 자신 안으로는 옮길 수 없어요.' });
-        return;
-      }
-      const parent = dirOf(target);
-      const place = (names: string[]) => {
-        let siblings: TreeNode[] = treeRef.current;
-        for (const part of parent ? parent.split('/') : []) siblings = siblings.find((n) => !n.note && n.name === part)?.children ?? [];
-        commitOrder({ ...orderRef.current, [parent]: placeGroupInOrder(siblings.map((n) => n.name), names, baseOf(target), pos) });
-      };
-      if (items.every((it) => dirOf(it.path) === parent)) return place(items.map((it) => baseOf(it.path)));
-      void moveMany(items, parent, place);
-    },
-    [moveMany, commitOrder],
-  );
-
-  /** 노트·폴더를 휴지통으로: 확인 → 이동 → 열린 탭·북마크 정리 → "되돌리기" 토스트 */
-  const deleteEntry = useCallback(
-    (target: string, isFolder: boolean) => {
-      const name = target.slice(target.lastIndexOf('/') + 1).replace(/\.md$/i, '');
-      setConfirm({
-        title: isFolder ? `폴더를 삭제할까요? “${name}”` : `노트를 삭제할까요? “${name}”`,
-        lines: [
-          isFolder ? '폴더 안의 모든 노트와 첨부가 함께 휴지통(.nopsidian/trash)으로 옮겨져요.' : '휴지통(.nopsidian/trash)으로 옮겨져요. 바로 되돌릴 수 있어요.',
-          '이 노트를 가리키던 [[링크]]는 그대로 남고 ‘없는 노트’로 표시돼요.',
-        ],
-        confirmLabel: '삭제',
-        onConfirm: () => {
-          setConfirm(null);
-          void (async () => {
-            try {
-              await flushAll();
-              const r = await window.nops.note.trash({ path: target });
-              dispatchTabs({ type: 'closePath', path: target });
-              setBookmarks((cur) => {
-                const next = cur.filter((p) => p !== target && !p.startsWith(`${target}/`));
-                if (next.length !== cur.length) void window.nops.bookmarks.set(next);
-                return next;
-              });
-              refresh();
-              setToast({
-                message: `휴지통으로 옮겼어요: ${name}`,
-                undo: async () => {
-                  const back = await window.nops.note.restore({ trashId: r.trashId });
-                  refresh();
-                  if (!r.isFolder) setSelected(back.path);
-                  setToast({ message: '되돌렸어요.' });
-                },
-              });
-            } catch (e) {
-              setToast({ message: `삭제하지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
-            }
-          })();
-        },
-      });
-    },
-    [refresh, setSelected],
-  );
-
-  /** 여러 항목을 휴지통으로(한 개면 `deleteEntry` 의 확인창) */
-  const deleteEntries = useCallback(
-    (raw: Entry[]) => {
-      const items = topLevel(raw);
-      if (items.length === 1) return deleteEntry(items[0]!.path, items[0]!.isFolder);
-      if (!items.length) return;
-      const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1).replace(/\.md$/i, '');
-      setConfirm({
-        title: `${items.length}개 항목을 삭제할까요?`,
-        lines: [
-          ...items.slice(0, 6).map((it) => `· ${it.isFolder ? '📁 ' : ''}${nameOf(it.path)}`),
-          ...(items.length > 6 ? [`… 외 ${items.length - 6}개`] : []),
-          '휴지통(.nopsidian/trash)으로 옮겨져요. 바로 되돌릴 수 있어요.',
-        ],
-        confirmLabel: '삭제',
-        onConfirm: () => {
-          setConfirm(null);
-          void (async () => {
-            const trashed: string[] = [];
-            try {
-              await flushAll();
-              for (const it of items) {
-                const r = await window.nops.note.trash({ path: it.path });
-                trashed.push(r.trashId);
-                dispatchTabs({ type: 'closePath', path: it.path });
-              }
-              setBookmarks((cur) => {
-                const next = cur.filter((p) => !items.some((it) => p === it.path || p.startsWith(`${it.path}/`)));
-                if (next.length !== cur.length) void window.nops.bookmarks.set(next);
-                return next;
-              });
-              refresh();
-              setToast({
-                message: `${items.length}개를 휴지통으로 옮겼어요`,
-                undo: async () => {
-                  for (const id of trashed) await window.nops.note.restore({ trashId: id });
-                  refresh();
-                  setToast({ message: '되돌렸어요.' });
-                },
-              });
-            } catch (e) {
-              refresh();
-              setToast({ message: `삭제하지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
-            }
-          })();
-        },
-      });
-    },
-    [refresh, deleteEntry],
-  );
-
-
-  const exportNote = useCallback(
-    async (format: 'html' | 'pdf') => {
-      if (!selected) return;
-      try {
-        await flushAll();
-        const r = await window.nops.export.note({ path: selected, format });
-        if (r.saved) setToast({ message: `내보냈어요: ${r.saved}` });
-      } catch (e) {
-        setToast({ message: `내보내기 실패: ${e instanceof Error ? e.message : String(e)}` });
-      }
-    },
-    [selected],
-  );
-  const exportVault = useCallback(async () => {
-    try {
-      await flushAll();
-      const r = await window.nops.export.vault();
-      if (r.dir) setToast({ message: `노트 ${r.notes}개·첨부 ${r.assets}개를 내보냈어요: ${r.dir}` });
-    } catch (e) {
-      setToast({ message: `내보내기 실패: ${e instanceof Error ? e.message : String(e)}` });
-    }
-  }, []);
-
-  const importNotion = useCallback(async () => {
-    try {
-      const r = await window.nops.import.notion();
-      if (!r.folder) return;
-      refresh();
-      setToast({
-        message: `Notion에서 노트 ${r.notes}개·데이터베이스 ${r.databases}개·첨부 ${r.assets}개를 "${r.folder}" 폴더로 가져왔어요${r.unresolvedLinks ? ` (연결 못 한 링크 ${r.unresolvedLinks}개)` : ''}.`,
-      });
-    } catch (e) {
-      setToast({ message: `가져오기 실패: ${e instanceof Error ? e.message : String(e)}` });
-    }
-  }, [refresh]);
+  const { exportNote, exportVault, importNotion } = useImportExport({ selected, refresh, setToast });
 
   const commands = useMemo<PaletteCommand[]>(
     () => [
@@ -847,7 +257,6 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   }, [toast]);
 
   const tree = useMemo(() => buildTree(notes, folders, order), [notes, folders, order]);
-  const treeRef = useRef(tree);
   treeRef.current = tree;
   const folderOpen = useFolderOpen(vault.id, notes.length <= EXPAND_ALL_LIMIT);
   const { reveal } = folderOpen;
@@ -1175,57 +584,23 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         />
       )}
       {menu && (
-        <div className="ctxmask" onMouseDown={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}>
-          <div className="ctxmenu" role="menu" style={{ left: Math.min(menu.x, window.innerWidth - 190), top: Math.min(menu.y, window.innerHeight - 140) }} onMouseDown={(e) => e.stopPropagation()}>
-            {menu.multi ? (
-              <>
-                <button role="menuitem" className="danger" onClick={() => { setMenu(null); deleteEntries(sel.entries()); }}>{sel.picked.size}개 삭제</button>
-                <button role="menuitem" onClick={() => { setMenu(null); sel.clear(); }}>선택 해제</button>
-              </>
-            ) : (
-              <>
-            {!menu.isFolder && (
-              <button role="menuitem" onClick={() => { const p = menu.path; setMenu(null); openInNewTab(p); }}>새 탭에서 열기</button>
-            )}
-            {menu.isFolder && menu.path !== '' && (
-              <>
-                <button role="menuitem" onClick={() => { const p = menu.path; setMenu(null); void quickNote(p); }}>여기에 새 노트</button>
-                <button role="menuitem" onClick={() => { const p = menu.path; setMenu(null); void newFolder(p); }}>새 하위 폴더</button>
-              </>
-            )}
-            {menu.path === '' && (
-              <>
-                <button role="menuitem" onClick={() => { setMenu(null); void quickNote(''); }}>새 노트</button>
-                <button role="menuitem" onClick={() => { setMenu(null); void newFolder(''); }}>새 폴더</button>
-              </>
-            )}
-            {menu.path !== '' && <button role="menuitem" onClick={() => { const m = menu; setMenu(null); void renameEntry(m.path, m.isFolder); }}>이름 바꾸기</button>}
-            {!menu.isFolder && (
-              <button role="menuitem" onClick={() => { const p = menu.path; setMenu(null); toggleBookmark(p); }}>{bookmarks.includes(menu.path) ? '북마크 해제' : '북마크'}</button>
-            )}
-            {menu.path !== '' && <button role="menuitem" className="danger" onClick={() => { const m = menu; setMenu(null); deleteEntry(m.path, m.isFolder); }}>삭제</button>}
-              </>
-            )}
-          </div>
-        </div>
+        <EntryMenu
+          menu={menu}
+          bookmarked={bookmarks.includes(menu.path)}
+          pickedCount={sel.picked.size}
+          onClose={() => setMenu(null)}
+          onOpenInNewTab={openInNewTab}
+          onNewNote={(folder) => void quickNote(folder)}
+          onNewFolder={(parent) => void newFolder(parent)}
+          onRename={(path, isFolder) => void renameEntry(path, isFolder)}
+          onToggleBookmark={toggleBookmark}
+          onDelete={(path, isFolder) => deleteEntry(path, isFolder)}
+          onDeletePicked={() => deleteEntries(sel.entries())}
+          onClearPicked={sel.clear}
+        />
       )}
       {confirm && <ConfirmDialog {...confirm} onCancel={() => setConfirm(null)} />}
-      {toast && (
-        <div className="toast" role="status">
-          <span>{toast.message}</span>
-          {toast.undo && (
-            <button
-              onClick={() => {
-                const undo = toast.undo!;
-                setToast(null);
-                void undo().catch((e) => setToast({ message: `되돌리지 못했어요: ${e instanceof Error ? e.message : String(e)}` }));
-              }}
-            >
-              되돌리기
-            </button>
-          )}
-        </div>
-      )}
+      <ToastView toast={toast} setToast={setToast} />
     </div>
   );
 }

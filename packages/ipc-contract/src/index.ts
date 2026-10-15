@@ -261,6 +261,8 @@ export const contract = {
   /** 휴지통에서 영구 삭제(trashId 없으면 전부 비우기) */
   'trash.purge': { input: z.object({ trashId: z.string().max(300).optional() }), output: z.object({ removed: z.number() }) },
   /** 노트(또는 폴더)를 볼트의 `.nopsidian/trash/` 로 옮긴다(동기화 중이면 Drive 휴지통으로도 간다). */
+  /** 같은 폴더에 `이름 (사본).md` 로 복제 */
+  'note.duplicate': { input: z.object({ path: relPath }), output: z.object({ path: relPath }) },
   'note.trash': { input: z.object({ path: relPath }), output: z.object({ trashId: z.string(), isFolder: z.boolean() }) },
   /** 휴지통에서 되돌린다. 돌려주는 값은 되돌려진 경로 */
   'note.restore': { input: z.object({ trashId: z.string().max(300) }), output: z.object({ path: relPath }) },

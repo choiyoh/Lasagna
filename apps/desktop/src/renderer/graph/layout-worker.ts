@@ -9,7 +9,7 @@ export interface Forces {
   linkDistance: number;
 }
 export type LayoutIn =
-  | { type: 'init'; ids: string[]; positions: Float32Array; edges: Uint32Array; forces: Forces }
+  | { type: 'init'; ids: string[]; positions: Float32Array; edges: Uint32Array; forces: Forces; /** 거의 모든 위치를 저장된 배치에서 가져왔으면 조금만 다듬는다 */ warm?: boolean }
   | { type: 'forces'; forces: Forces }
   | { type: 'stop' };
 export type LayoutOut = { type: 'positions'; positions: Float32Array; done: boolean };
@@ -88,7 +88,7 @@ self.onmessage = (ev: MessageEvent<LayoutIn>) => {
     const b = ids[msg.edges[i + 1]!]!;
     if (a !== b && !graph.hasEdge(a, b)) graph.addEdge(a, b);
   }
-  iterations = 0;
+  iterations = msg.warm ? MAX_ITERATIONS - 120 : 0;
   applyEdgeWeights();
   tick();
 };

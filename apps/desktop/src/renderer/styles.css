@@ -582,3 +582,76 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .findbar__opt[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); }
 .findbar__toggle, .findbar__spacer { width: 22px; min-width: 22px; color: var(--muted); }
 .findbar__count { min-width: 48px; font-size: 12px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+
+/* 표: 여러 행 선택·우클릭 메뉴 */
+.dbtable__check { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); z-index: 2; margin: 0; opacity: 0; cursor: pointer; accent-color: var(--accent); }
+.dbtable__row:hover .dbtable__check, .dbtable.has-picked .dbtable__check, .dbtable__check:focus-visible { opacity: 1; }
+.dbtable__row:has(.dbtable__check) .dbtable__title { padding-left: 22px; }
+.dbtable__row.picked { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.dbtable__selbar { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18); font-size: 13px; }
+.dbtable__selbar button { padding: 2px 10px; border-radius: var(--radius); }
+.dbtable__selbar button:hover { background: var(--hover); }
+.dbtable__selbar .danger { color: #d1453b; }
+.dbundo button { margin-left: 6px; padding: 1px 8px; border-radius: var(--radius); border: 1px solid var(--border); }
+
+/* 설정(⌘,) */
+.oh-editor .ProseMirror { font-size: var(--nops-font-size, 16px); }
+:root[data-width='wide'] .note-editor { max-width: 1040px; }
+:root[data-width='full'] .note-editor { max-width: none; }
+.settings { width: min(560px, 94vw); }
+.settings section { padding: 10px 0; border-top: 1px solid var(--border); }
+.settings section:first-of-type { border-top: 0; }
+.settings h3 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.settings__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 6px 0; font-size: 14px; }
+.settings__row small { display: block; margin-top: 2px; font-size: 12px; }
+.settings__row select { padding: 4px 8px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+.settings__links { display: flex; flex-wrap: wrap; gap: 6px; }
+.settings__links button { padding: 5px 10px; border-radius: var(--radius); border: 1px solid var(--border); font-size: 13px; }
+.settings__links button:hover { background: var(--hover); }
+.seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--hover); gap: 2px; }
+.seg button { padding: 4px 12px; border-radius: 6px; font-size: 13px; color: var(--muted); }
+.seg button.on { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+
+/* 개요 패널 */
+.outline ul { list-style: none; margin: 0; padding: 6px 4px; }
+.outline__item { display: block; width: 100%; text-align: left; padding: 4px 8px; border-radius: var(--radius); font-size: 13px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outline__item:hover { background: var(--hover); }
+.outline__item.lv1 { font-weight: 600; }
+.outline__item.lv3, .outline__item.lv4, .outline__item.lv5, .outline__item.lv6 { color: var(--muted); }
+
+/* 그래프 검색 */
+.graphscreen__find { position: relative; }
+.graphscreen__find input { width: 180px; padding: 5px 10px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg); color: var(--fg); font-size: 13px; }
+.graphscreen__matches { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; min-width: 220px; max-width: 320px; list-style: none; margin: 0; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18); }
+.graphscreen__matches button { display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 5px 8px; border-radius: var(--radius); font-size: 13px; text-align: left; }
+.graphscreen__matches button:hover { background: var(--hover); }
+
+/* 데이터베이스 날짜 고르기 */
+.datepicker { position: absolute; z-index: 40; width: 260px; padding: 10px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2); font-size: 13px; }
+.datepicker__inputs { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.datepicker__inputs > * { display: flex; gap: 4px; }
+.datepicker__inputs input { flex: 1; min-width: 0; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; }
+.datepicker__inputs input:focus { outline: none; border-color: var(--accent); }
+.datepicker__head { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.datepicker__head button { min-width: 26px; height: 26px; padding: 0 6px; border-radius: 6px; }
+.datepicker__head button:hover { background: var(--hover); }
+.datepicker__title { flex: 1; font-weight: 600; text-align: center; }
+.datepicker__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.datepicker__dow { text-align: center; font-size: 11px; color: var(--muted); padding: 2px 0; }
+.datepicker__day { height: 30px; border-radius: 6px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.datepicker__day:hover { background: var(--hover); }
+.datepicker__day:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.datepicker__day.out { color: var(--muted); opacity: 0.55; }
+.datepicker__day.today { color: var(--accent); font-weight: 700; }
+.datepicker__day.inrange { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 0; }
+.datepicker__day.selected { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.datepicker__foot { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.datepicker__foot label { display: flex; align-items: center; gap: 4px; flex: 1; color: var(--muted); }
+.datepicker__foot button { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border); }
+.datepicker__foot button:hover { background: var(--hover); }
+.datepicker-layer { position: fixed; z-index: 70; }
+.datepicker-layer .datepicker { position: static; }
+.datepicker__dow { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; color: var(--muted); padding: 2px 0; }
+.datepicker__inputs { flex-direction: row; flex-wrap: wrap; }
+.datepicker__inputs input { flex: 1 1 100px; }
+.cell__datebtn { width: 100%; text-align: left; padding: 0; font: inherit; color: inherit; background: none; }

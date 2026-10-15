@@ -7,7 +7,7 @@ import { TimelineView } from './TimelineView';
 import { GalleryView, ListView } from './ListGalleryViews';
 import { CsvImportDialog } from './CsvImportDialog';
 import { PropertyManager } from './PropertyManager';
-import { TableView } from './TableView';
+import { TableView, type RowAction } from './TableView';
 import { TemplateSettings } from './TemplateSettings';
 import { ViewToolbar } from './ViewToolbar';
 import { type CellValue, type DbData, type DbRowDto } from './types';
@@ -54,6 +54,8 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   const [adding, setAdding] = useState<{ title: string; values: Record<string, unknown>; template?: string | null } | null>(null);
   const [showProps, setShowProps] = useState(false);
   const [notice, setNotice] = useState('');
+  /** 행 삭제 직후 되돌리기 */
+  const [undoDelete, setUndoDelete] = useState<{ message: string; trashIds: string[] } | null>(null);
   const [peekMode, setPeekMode] = useState<PeekMode>(readPeek);
   const [peek, setPeek] = useState<string | null>(null);
   const [showTpl, setShowTpl] = useState(false);
@@ -97,7 +99,72 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
 
   const saved = data?.schema.views.find((v) => v.id === data.view.id);
   const view = draft ?? data?.view ?? null;
-  const dirty = !!draft && !!saved && !sameView(draft, saved);
+
+  // 보기 설정(필터·정렬·열 등)은 바꾸면 잠시 뒤 `_db.yaml` 에 자동 저장한다.
+  // "되돌리기"는 아직 저장 전이면 바꾼 것을 버리고, 저장 뒤면 바로 앞의 보기로 돌려놓는다.
+  const [undoView, setUndoView] = useState<View | null>(null);
+  const burstBase = useRef<View | null>(null);
+  /** 마지막으로 저장한 초안. 저장된 `_db.yaml` 은 정규화되어 초안과 글자가 다를 수 있어 이것과 비교한다 */
+  const [savedJson, setSavedJson] = useState<string | null>(null);
+  const draftJson = draft ? JSON.stringify(draft) : null;
+  const pending = !!draft && !!saved && draft.id === saved.id && draftJson !== savedJson && !sameView(draft, saved);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const saveDraft = useCallback(
+    async (v: View) => {
+      clearTimeout(saveTimer.current);
+      const base = burstBase.current;
+      burstBase.current = null;
+      try {
+        await window.nops.db.editSchema({ folder, op: { kind: 'upsertView', view: v } });
+        setSavedJson(JSON.stringify(v));
+        if (base) setUndoView(base);
+        await load(v);
+      } catch (e) {
+        setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      }
+    },
+    [folder, load],
+  );
+  useEffect(() => {
+    if (!pending || !draft) return;
+    if (!burstBase.current) burstBase.current = saved ?? null;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => void saveDraft(draft), 700);
+    return () => clearTimeout(saveTimer.current);
+    // 초안 내용이 바뀔 때만 다시 잡는다(불러오기로 `saved` 객체만 새로 생기는 것은 무시)
+  }, [pending, draftJson]);
+  // 화면을 닫을 때 저장 전 변경이 남아 있으면 저장한다
+  const pendingRef = useRef<{ folder: string; view: View } | null>(null);
+  pendingRef.current = draft && pending ? { folder, view: draft } : null;
+  useEffect(
+    () => () => {
+      const p = pendingRef.current;
+      if (p) void window.nops.db.editSchema({ folder: p.folder, op: { kind: 'upsertView', view: p.view } });
+    },
+    [],
+  );
+  /** 다른 보기로 가기 전에 남은 변경을 바로 저장한다 */
+  const flushDraft = () => {
+    clearTimeout(saveTimer.current);
+    if (draft && pending) void window.nops.db.editSchema({ folder, op: { kind: 'upsertView', view: draft } });
+    burstBase.current = null;
+    setUndoView(null);
+    setSavedJson(null);
+  };
+  const undoViewChange = () => {
+    clearTimeout(saveTimer.current);
+    if (pending) {
+      burstBase.current = null;
+      setDraft(null);
+      return;
+    }
+    if (!undoView) return;
+    const v = undoView;
+    setUndoView(null);
+    setSavedJson(null);
+    setDraft(null);
+    void window.nops.db.editSchema({ folder, op: { kind: 'upsertView', view: v } }).then(() => load(null));
+  };
 
   const edit = useCallback(
     async (op: Parameters<typeof window.nops.db.editSchema>[0]['op']) => {
@@ -149,6 +216,29 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
     }
   }, [adding, folder, load]);
 
+  /** 행 우클릭 메뉴·선택 막대: 열기·복제·삭제(휴지통, 되돌리기 가능) */
+  const rowAction = useCallback(
+    async (action: RowAction, paths: string[]) => {
+      if (action === 'open') return openRowRef.current(paths[0]!);
+      try {
+        if (action === 'duplicate') {
+          for (const p of paths) await window.nops.note.duplicate({ path: p });
+          setUndoDelete(null);
+          setNotice(paths.length > 1 ? `${paths.length}개 행을 복제했어요` : '행을 복제했어요');
+        } else {
+          const trashIds: string[] = [];
+          for (const p of paths) trashIds.push((await window.nops.note.trash({ path: p })).trashId);
+          setNotice('');
+          setUndoDelete({ message: paths.length > 1 ? `${paths.length}개 행을 휴지통으로 옮겼어요` : '행을 휴지통으로 옮겼어요', trashIds });
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      }
+      await load();
+    },
+    [load],
+  );
+
   /** 행 열기: 설정에 따라 옆/가운데 창 또는 전체 화면 */
   const openRow = useCallback(
     (path: string) => {
@@ -157,6 +247,8 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
     },
     [peekMode, renderNote, onOpenNote],
   );
+  const openRowRef = useRef(openRow);
+  openRowRef.current = openRow;
   useEffect(() => {
     if (!peek) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !(e.target instanceof HTMLInputElement) && setPeek(null);
@@ -252,6 +344,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             aria-selected={v.id === data.view.id}
             className={v.id === data.view.id ? 'active' : ''}
             onClick={() => {
+              flushDraft();
               setDraft(null);
               setViewId(v.id);
             }}
@@ -261,6 +354,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         ))}
         <button
           onClick={() => {
+            flushDraft();
             const nv: View = { id: uid(), name: `보기 ${tabs.length + 1}`, type: 'table', sort: [] };
             void window.nops.db.editSchema({ folder, op: { kind: 'upsertView', view: nv } }).then(() => {
               setDraft(null);
@@ -289,12 +383,9 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
       <ViewToolbar
         data={current}
         view={view}
-        dirty={dirty}
+        saveState={pending ? 'pending' : undoView ? 'saved' : 'idle'}
         onChange={(v) => setDraft(v)}
-        onSave={() => {
-          if (draft) void edit({ kind: 'upsertView', view: draft }).then(() => setDraft(null));
-        }}
-        onReset={() => setDraft(null)}
+        onUndo={undoViewChange}
         openFilterRequest={filterRequest}
       />
       {data.issues.length > 0 && (
@@ -309,6 +400,22 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
       )}
       {error && <p className="warn small pad" role="alert">{error}</p>}
       {notice && <p className="small pad" role="status">{notice}</p>}
+      {undoDelete && (
+        <p className="small pad dbundo" role="status">
+          {undoDelete.message}{' '}
+          <button
+            onClick={async () => {
+              const ids = undoDelete.trashIds;
+              setUndoDelete(null);
+              for (const id of ids) await window.nops.note.restore({ trashId: id });
+              await load();
+            }}
+          >
+            삭제 되돌리기
+          </button>
+          <button aria-label="알림 닫기" onClick={() => setUndoDelete(null)}>×</button>
+        </p>
+      )}
       {!data.groups && data.matched > data.rows.length && (
         <p className="muted small pad">처음 {data.rows.length}행만 보여요(전체 {data.matched}행). 필터로 좁혀 보세요.</p>
       )}
@@ -361,6 +468,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
               setFilterRequest((n) => n + 1);
             }}
             onReorderRows={(order) => setDraft({ ...view, sort: [], manualOrder: order })}
+            onRowAction={(a, p) => void rowAction(a, p)}
             notes={notes}
           />
         )}

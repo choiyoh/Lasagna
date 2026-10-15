@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createFolder, listFolders, listTrash, moveToTrash, purgeTrash, restoreFromTrash } from './trash';
+import { createFolder, duplicateNote, listFolders, listTrash, moveToTrash, purgeTrash, restoreFromTrash } from './trash';
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -64,5 +64,21 @@ describe('휴지통 목록·비우기, 폴더', () => {
     mkdirSync(path.join(root, '.숨김'));
     expect(listFolders(root)).toEqual(['새 폴더', '새 폴더 2', '폴더']);
     expect(() => createFolder(root, '../밖')).toThrow();
+  });
+});
+
+describe('duplicateNote', () => {
+  it('같은 폴더에 (사본)으로 복제하고 첫 제목도 바꾼다', () => {
+    const root = vault();
+    writeFileSync(path.join(root, '폴더/할 일.md'), '---\n상태: 진행\n---\n# 할 일\n\n본문\n');
+    expect(duplicateNote(root, '폴더/할 일.md')).toBe('폴더/할 일 (사본).md');
+    expect(readFileSync(path.join(root, '폴더/할 일 (사본).md'), 'utf8')).toBe('---\n상태: 진행\n---\n# 할 일 (사본)\n\n본문\n');
+    expect(duplicateNote(root, '폴더/할 일.md')).toBe('폴더/할 일 (사본 2).md');
+  });
+  it('제목이 이름과 다르면 내용은 그대로 둔다', () => {
+    const root = vault();
+    writeFileSync(path.join(root, 'a.md'), '# 다른 제목\n');
+    expect(duplicateNote(root, 'a.md')).toBe('a (사본).md');
+    expect(readFileSync(path.join(root, 'a (사본).md'), 'utf8')).toBe('# 다른 제목\n');
   });
 });

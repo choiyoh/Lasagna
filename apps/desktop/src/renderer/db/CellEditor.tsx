@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { DatePicker } from './DatePicker';
 import { linkNameFor } from '@nopsidian/core/links';
 import { cellText, optionsOf } from '@nopsidian/core/db/values';
 import type { CellValue, Property } from './types';
@@ -11,6 +13,48 @@ interface Props {
   autoFocus?: boolean;
   /** 관계 속성의 노트 고르기에 쓰는 볼트의 노트 경로·제목 */
   notes?: { path: string; title: string }[];
+  /** 편집을 마쳤을 때(날짜 고르기 창을 닫았을 때 등) */
+  onDone?: () => void;
+}
+
+/** 날짜 셀: 값을 누르면 달력(DatePicker)이 뜬다. 표 셀이 잘리지 않도록 화면 위에 띄운다. */
+function DateCell({ prop, value, onCommit, autoFocus, onDone }: { prop: Property; value: CellValue; onCommit: (v: CellValue) => void; autoFocus?: boolean; onDone?: () => void }) {
+  const btn = useRef<HTMLButtonElement>(null);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+  const openPicker = () => {
+    const r = btn.current?.getBoundingClientRect();
+    if (!r) return;
+    // 아래 공간이 모자라면 위로
+    const top = r.bottom + 360 > window.innerHeight ? Math.max(8, r.top - 364) : r.bottom + 4;
+    setAt({ left: Math.max(8, Math.min(r.left, window.innerWidth - 276)), top });
+  };
+  useEffect(() => {
+    if (autoFocus) openPicker();
+  }, [autoFocus]);
+  const text = value === null ? '' : cellText(prop, value);
+  return (
+    <span className="cell__date">
+      <button ref={btn} type="button" className="cell__datebtn" onClick={openPicker} aria-label="날짜 고르기 열기">
+        {text || <span className="muted">날짜 고르기</span>}
+      </button>
+      {at &&
+        createPortal(
+          <div className="datepicker-layer" style={{ left: at.left, top: at.top }}>
+            <DatePicker
+              value={value}
+              includeTime={prop.type === 'date' && !!prop.includeTime}
+              autoFocus
+              onCommit={(v) => onCommit(v)}
+              onClose={() => {
+                setAt(null);
+                onDone?.();
+              }}
+            />
+          </div>,
+          document.body,
+        )}
+    </span>
+  );
 }
 
 const relName = (raw: string) => (/^\[\[(.+)\]\]$/.exec(raw.trim())?.[1] ?? raw).split('|')[0]!.split('#')[0]!.trim();
@@ -89,10 +133,9 @@ export function CellView({ prop, value }: { prop: Property | undefined; value: C
 }
 
 /** 형식별 편집기. 값을 바꾸면(엔터·포커스 이동·선택) `onCommit` 으로 한 번 알린다. */
-export function CellEditor({ prop, value, onCommit, autoFocus, notes }: Props) {
+export function CellEditor({ prop, value, onCommit, autoFocus, notes, onDone }: Props) {
   const ref = useRef<HTMLInputElement | HTMLSelectElement>(null);
   const [draft, setDraft] = useState(() => (Array.isArray(value) ? value.join(', ') : typeof value === 'object' && value && !Array.isArray(value) ? value.start : (value ?? '').toString()));
-  const [end, setEnd] = useState(() => (value && typeof value === 'object' && !Array.isArray(value) ? (value.end ?? '') : ''));
   useEffect(() => {
     if (autoFocus) ref.current?.focus();
   }, [autoFocus]);
@@ -149,29 +192,7 @@ export function CellEditor({ prop, value, onCommit, autoFocus, notes }: Props) {
       );
     }
     case 'date':
-      return (
-        <span className="cell__date">
-          <input
-            ref={ref as React.RefObject<HTMLInputElement>}
-            type={prop.includeTime ? 'datetime-local' : 'date'}
-            value={draft.slice(0, prop.includeTime ? 16 : 10)}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              onCommit(e.target.value ? (end ? { start: e.target.value, end } : { start: e.target.value }) : null);
-            }}
-            aria-label="날짜"
-          />
-          <input
-            type={prop.includeTime ? 'datetime-local' : 'date'}
-            value={end.slice(0, prop.includeTime ? 16 : 10)}
-            onChange={(e) => {
-              setEnd(e.target.value);
-              if (draft) onCommit(e.target.value ? { start: draft, end: e.target.value } : { start: draft });
-            }}
-            aria-label="끝 날짜"
-          />
-        </span>
-      );
+      return <DateCell prop={prop} value={value} onCommit={onCommit} autoFocus={autoFocus} onDone={onDone} />;
     case 'number':
       if (prop.format === 'stars') {
         const max = prop.max ?? 5;

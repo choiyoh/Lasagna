@@ -43,7 +43,11 @@ interface Props {
   startRenaming?: string | null;
   /** `startRenaming` 을 받아 입력 상태로 들어간 뒤 부른다(다시 들어가지 않게 부모가 값을 비운다) */
   onStartedRenaming?: () => void;
+  /** 행 우클릭 메뉴·여러 행 선택 막대의 동작. 없으면 선택 기능이 없다 */
+  onRowAction?: (action: RowAction, paths: string[]) => void;
 }
+
+export type RowAction = 'open' | 'duplicate' | 'delete';
 
 const CALC_LABEL: Record<string, string> = {
   count: '개수', count_values: '값이 있는 수', count_empty: '빈 값 수', count_unique: '고유 값 수', sum: '합계', avg: '평균', min: '최소', max: '최대', checked: '체크됨', unchecked: '체크 안 됨',
@@ -54,7 +58,32 @@ const ROW_H = 32;
 const DEFAULT_W = 180;
 
 /** 표 뷰: 행을 가상화해(2만 행도 보이는 만큼만 그림) 셀을 눌러 바로 고친다. */
-export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide, onColumns, onFilter, onReorderRows, startRenaming, onStartedRenaming }: Props) {
+export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide, onColumns, onFilter, onReorderRows, startRenaming, onStartedRenaming, onRowAction }: Props) {
+  /** 선택한 행(경로). 체크 상자·⇧클릭으로 범위·우클릭 */
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const anchor = useRef<string | null>(null);
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number } | null>(null);
+  // 사라진 행(삭제·필터)은 선택에서 뺀다
+  const live = useMemo(() => new Set(rows.map((r) => r.path)), [rows]);
+  const selected = useMemo(() => [...picked].filter((p) => live.has(p)), [picked, live]);
+  const toggleRow = (path: string, range: boolean) => {
+    setPicked((cur) => {
+      const next = new Set(cur);
+      if (range && anchor.current && live.has(anchor.current)) {
+        const order = rows.map((r) => r.path);
+        const [a, b] = [order.indexOf(anchor.current), order.indexOf(path)].sort((x, y) => x - y);
+        order.slice(a, b + 1).forEach((p) => next.add(p));
+      } else if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+    anchor.current = path;
+  };
+  const act = (action: RowAction, paths: string[]) => {
+    setRowMenu(null);
+    if (action !== 'open') setPicked(new Set());
+    onRowAction?.(action, paths);
+  };
   const [dragCol, setDragCol] = useState<string | null>(null);
   const [dragRow, setDragRow] = useState<string | null>(null);
   const rowsMovable = !!onReorderRows && !data.groups;
@@ -91,7 +120,24 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
   };
 
   return (
-    <div className="dbtable" ref={scroller} data-testid="db-table">
+    <div className={selected.length ? 'dbtable has-picked' : 'dbtable'} ref={scroller} data-testid="db-table">
+      {onRowAction && selected.length > 0 && (
+        <div className="dbtable__selbar" role="toolbar" aria-label="선택한 행" data-testid="db-selbar">
+          <strong>{selected.length}개 선택됨</strong>
+          <button onClick={() => act('duplicate', selected)}>복제</button>
+          <button className="danger" onClick={() => act('delete', selected)}>삭제</button>
+          <button onClick={() => setPicked(new Set())}>선택 해제</button>
+        </div>
+      )}
+      {rowMenu && onRowAction && (
+        <div className="ctxmask" onMouseDown={() => setRowMenu(null)} onContextMenu={(e) => (e.preventDefault(), setRowMenu(null))}>
+          <div className="ctxmenu" role="menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 190), top: Math.min(rowMenu.y, window.innerHeight - 130) }} onMouseDown={(e) => e.stopPropagation()}>
+            {selected.length === 1 && <button role="menuitem" onClick={() => act('open', selected)}>열기</button>}
+            <button role="menuitem" onClick={() => act('duplicate', selected)}>{selected.length > 1 ? `${selected.length}개 복제` : '복제'}</button>
+            <button role="menuitem" className="danger" onClick={() => act('delete', selected)}>{selected.length > 1 ? `${selected.length}개 삭제` : '삭제'}</button>
+          </div>
+        </div>
+      )}
       <div className="dbtable__inner" style={{ width: total }}>
         <div className="dbtable__head" role="row">
           {cols.map((c) => (
@@ -150,9 +196,21 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
             return (
               <div
                 key={`${vi.index}:${row.path}`}
-                className={dragRow && dragRow !== row.path ? 'dbtable__row dropable' : 'dbtable__row'}
+                className={`dbtable__row${dragRow && dragRow !== row.path ? ' dropable' : ''}${picked.has(row.path) ? ' picked' : ''}`}
                 role="row"
+                aria-selected={onRowAction ? picked.has(row.path) : undefined}
                 style={{ transform: `translateY(${vi.start}px)`, height: ROW_H }}
+                onContextMenu={
+                  onRowAction
+                    ? (e) => {
+                        if ((e.target as HTMLElement).closest('input, textarea, select')) return;
+                        e.preventDefault();
+                        if (!picked.has(row.path)) setPicked(new Set([row.path]));
+                        anchor.current = row.path;
+                        setRowMenu({ x: e.clientX, y: e.clientY });
+                      }
+                    : undefined
+                }
                 onDragOver={(e) => rowsMovable && dragRow && e.preventDefault()}
                 onDrop={(e) => {
                   if (!rowsMovable || !dragRow) return;
@@ -165,6 +223,16 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                   <span className="dbtable__rowgrip" draggable title="끌어서 행 순서 바꾸기" aria-label="행 순서 바꾸기" onDragStart={() => setDragRow(row.path)} onDragEnd={() => setDragRow(null)}>
                     ⋮⋮
                   </span>
+                )}
+                {onRowAction && (
+                  <input
+                    type="checkbox"
+                    className="dbtable__check"
+                    checked={picked.has(row.path)}
+                    aria-label={`${row.title} 선택`}
+                    onChange={() => undefined}
+                    onClick={(e) => toggleRow(row.path, e.shiftKey)}
+                  />
                 )}
                 {cols.map((c) => {
                   const prop = c === TITLE ? undefined : data.schema.properties[c];
@@ -222,8 +290,14 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                           </button>
                         )
                       ) : prop && isEditable(prop) && (isEd || prop.type === 'checkbox' || prop.type === 'select' || prop.type === 'status' || prop.type === 'multi_select' || prop.type === 'relation' || (prop.type === 'number' && prop.format === 'stars')) ? (
-                        <div onBlurCapture={() => !isEd || setEditing(null)} onKeyDownCapture={() => undefined}>
-                          <CellEditor prop={prop} value={value} notes={notes} autoFocus={isEd} onCommit={(nv) => { onEdit(row, c, nv); if (isEd && prop.type !== 'date') setEditing(null); }} />
+                        <div
+                          onBlurCapture={(e) => {
+                            // 날짜 고르기 창(화면 위에 띄움)으로 초점이 옮겨 가는 것은 편집을 끝낸 것이 아니다
+                            const to = e.relatedTarget instanceof Element ? e.relatedTarget : null;
+                            if (isEd && prop.type !== 'date' && !to?.closest('.datepicker')) setEditing(null);
+                          }}
+                        >
+                          <CellEditor prop={prop} value={value} notes={notes} autoFocus={isEd} onDone={() => setEditing(null)} onCommit={(nv) => { onEdit(row, c, nv); if (isEd && prop.type !== 'date') setEditing(null); }} />
                         </div>
                       ) : data.errors[row.path]?.[c] ? (
                         <span className="cell__error" title={data.errors[row.path]![c]} role="img" aria-label={`오류: ${data.errors[row.path]![c]}`}>

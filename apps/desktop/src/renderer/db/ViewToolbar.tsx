@@ -17,10 +17,11 @@ const CALC_BY_KIND: Record<string, (typeof CALC_FNS)[number][]> = {
 interface Props {
   data: DbData;
   view: View;
-  dirty: boolean;
+  /** 보기 설정 자동 저장 상태: 저장 대기 / 방금 저장(되돌릴 수 있음) / 없음 */
+  saveState: 'pending' | 'saved' | 'idle';
   onChange: (v: View) => void;
-  onSave: () => void;
-  onReset: () => void;
+  /** 방금 바꾼 보기 설정을 되돌린다 */
+  onUndo: () => void;
   /** 값이 바뀔 때마다 필터 창을 연다(표 열 머리 메뉴의 "필터 추가") */
   openFilterRequest?: number;
 }
@@ -29,8 +30,8 @@ const VIEW_TYPES: { type: View['type']; label: string }[] = [
   { type: 'table', label: '표' }, { type: 'board', label: '보드' }, { type: 'list', label: '목록' }, { type: 'gallery', label: '갤러리' }, { type: 'calendar', label: '캘린더' }, { type: 'timeline', label: '타임라인' },
 ];
 
-/** 필터·정렬·그룹·표시 속성 조절 막대. 바꾸면 저장 전의 임시 뷰가 되고, "보기 저장"으로 `_db.yaml` 에 쓴다. */
-export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset, openFilterRequest }: Props) {
+/** 필터·정렬·그룹·표시 속성 조절 막대. 바꾸면 잠시 뒤 `_db.yaml` 에 자동 저장되고, "되돌리기"로 돌아갈 수 있다. */
+export function ViewToolbar({ data, view, saveState, onChange, onUndo, openFilterRequest }: Props) {
   const [open, setOpen] = useState<'filter' | 'sort' | 'group' | 'cols' | 'calc' | null>(null);
   useEffect(() => {
     if (openFilterRequest) setOpen('filter');
@@ -85,10 +86,10 @@ export function ViewToolbar({ data, view, dirty, onChange, onSave, onReset, open
       {view.type === 'table' && (
         <button className={view.calc && Object.keys(view.calc).length ? 'on' : ''} onClick={() => toggle('calc')} aria-expanded={open === 'calc'}>계산</button>
       )}
-      {dirty && (
-        <span className="dbtoolbar__dirty">
-          <button className="primary" onClick={onSave}>보기 저장</button>
-          <button onClick={onReset}>되돌리기</button>
+      {saveState !== 'idle' && (
+        <span className="dbtoolbar__dirty" data-testid="view-save-state">
+          <span className="muted small">{saveState === 'pending' ? '저장 중…' : '보기 저장됨'}</span>
+          <button onClick={onUndo}>되돌리기</button>
         </span>
       )}
 

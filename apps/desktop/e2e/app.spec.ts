@@ -942,7 +942,7 @@ test.describe('링크 코어', () => {
     });
     await expect.poll(titles).toEqual([before[1], before[0]]);
 
-    // 7) 필터를 걸고 보기를 저장하면 _db.yaml 의 뷰가 바뀐다
+    // 7) 필터를 걸면 잠시 뒤 _db.yaml 의 뷰에 자동 저장된다
     await screen.getByLabel('보기 형태').selectOption('table');
     await screen.getByRole('button', { name: /^필터/ }).click();
     await page.getByRole('button', { name: '+ 조건 추가' }).click();
@@ -952,7 +952,7 @@ test.describe('링크 코어', () => {
     await filter.getByLabel('값', { exact: true }).fill('10');
     await expect(page.getByTestId('db-table')).toContainText('첫 할일');
     await expect(page.getByTestId('db-table')).not.toContainText('밖에서 만든');
-    await screen.getByRole('button', { name: '보기 저장' }).click();
+    await expect(screen.getByTestId('view-save-state')).toContainText('보기 저장됨', { timeout: 5000 });
     await expect.poll(() => readFileSync(path.join(dbDir, '_db.yaml'), 'utf8'), { timeout: 5000 }).toContain('>=');
     expect(readFileSync(path.join(dbDir, '_db.yaml'), 'utf8')).toContain('manualOrder');
 
@@ -1724,8 +1724,12 @@ views:
     await expect(folder).toBeVisible({ timeout: 8000 });
     await folder.click({ button: 'right' });
     await page.getByRole('menuitem', { name: '여기에 새 노트' }).click();
-    await page.locator('.nops-prompt input').fill('폴더안노트');
-    await page.locator('.nops-prompt input').press('Enter');
+    // 이름을 묻지 않고 '제목 없음'으로 만들어 제목에 커서를 둔다 → 제목을 쓰고 떠나면 파일 이름이 된다
+    await expect.poll(() => existsSync(path.join(vaultDir, '빈폴더/제목 없음.md')), { timeout: 8000 }).toBe(true);
+    await expect(page.locator('.ProseMirror h1.nops-empty-title')).toBeVisible({ timeout: 8000 });
+    await page.keyboard.type('폴더안노트');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '빈폴더/제목 없음.md'), 'utf8'), { timeout: 8000 }).toBe('# 폴더안노트\n');
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const inner = path.join(vaultDir, '빈폴더/폴더안노트.md');
     await expect.poll(() => existsSync(inner), { timeout: 8000 }).toBe(true);
     await expect(page.locator('.ProseMirror h1')).toHaveText('폴더안노트', { timeout: 8000 });
@@ -1792,6 +1796,154 @@ views:
     await expect(dlg).toContainText(process.platform === 'darwin' ? '⌘O' : 'Ctrl+O');
     await page.keyboard.press('Escape');
     await expect(dlg).toHaveCount(0);
+  });
+
+  test('노션처럼 새 노트: 제목 없음으로 바로 열고, 제목을 쓰고 떠나면 파일 이름이 따라가며, F2 이름 변경은 제목도 바꾼다', async () => {
+    const page = await app.firstWindow();
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
+    await page.getByRole('button', { name: '새 노트', exact: true }).click();
+    const untitled = path.join(vaultDir, '제목 없음.md');
+    await expect.poll(() => existsSync(untitled), { timeout: 8000 }).toBe(true);
+    await expect(page.locator('.ProseMirror h1.nops-empty-title')).toBeVisible({ timeout: 8000 });
+    // 커서가 제목에 있으므로 바로 쓴다
+    await page.keyboard.type('주간 회의');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('안건 정리');
+    await expect.poll(() => readFileSync(untitled, 'utf8'), { timeout: 8000 }).toBe('# 주간 회의\n\n안건 정리\n');
+    // 쓰는 동안에는 이름을 바꾸지 않는다
+    expect(existsSync(path.join(vaultDir, '주간 회의.md'))).toBe(false);
+    // 노트를 떠나면(초점이 밖으로) 파일 이름이 제목을 따라간다
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const renamed = path.join(vaultDir, '주간 회의.md');
+    await expect.poll(() => existsSync(renamed), { timeout: 8000 }).toBe(true);
+    expect(existsSync(untitled)).toBe(false);
+    expect(readFileSync(renamed, 'utf8')).toBe('# 주간 회의\n\n안건 정리\n');
+    await expect(page.getByTestId('note-tab').filter({ hasText: '주간 회의' })).toHaveCount(1);
+    await expect(page.locator('.ProseMirror')).toContainText('안건 정리');
+
+    // F2 로 이름을 바꾸면 제목(H1)도 따라 바뀐다
+    await page.keyboard.press('F2');
+    const input = page.locator('.nops-prompt input');
+    await expect(input).toHaveValue('주간 회의');
+    await input.fill('월간 회의');
+    await input.press('Enter');
+    const monthly = path.join(vaultDir, '월간 회의.md');
+    await expect.poll(() => existsSync(monthly) && readFileSync(monthly, 'utf8'), { timeout: 8000 }).toBe('# 월간 회의\n\n안건 정리\n');
+    await expect(page.locator('.ProseMirror h1')).toHaveText('월간 회의', { timeout: 8000 });
+  });
+
+  test('데이터베이스: 보기 자동 저장·되돌리기, 행 우클릭 메뉴(복제·삭제·되돌리기)와 여러 행 선택', async () => {
+    const page = await app.firstWindow();
+    const dir = path.join(vaultDir, '행관리');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, '_db.yaml'), 'title: 행관리\nproperties:\n  점수: { type: number }\n  마감: { type: date }\nviews:\n  - { id: t, name: 표, type: table }\n');
+    for (const [n, v] of [['일', 1], ['이', 2], ['삼', 3]] as const) writeFileSync(path.join(dir, `${n}.md`), `---\n점수: ${v}\n---\n# ${n}\n`);
+    await page.getByRole('tab', { name: 'DB' }).click();
+    await page.getByRole('button', { name: /행관리/ }).first().click();
+    const screen = page.getByTestId('db-screen');
+    const table = screen.getByTestId('db-table');
+    await expect(table.locator('.dbtable__row')).toHaveCount(3, { timeout: 8000 });
+
+    // 보기 설정은 저장 버튼 없이 자동 저장되고, 되돌리기로 돌아간다
+    await table.getByTestId('th-점수').click();
+    await page.getByRole('menuitem', { name: '내림차순 정렬' }).click();
+    await expect(screen.getByTestId('view-save-state')).toContainText('보기 저장됨', { timeout: 5000 });
+    await expect.poll(() => readFileSync(path.join(dir, '_db.yaml'), 'utf8')).toContain('desc');
+    await screen.getByTestId('view-save-state').getByRole('button', { name: '되돌리기' }).click();
+    await expect.poll(() => readFileSync(path.join(dir, '_db.yaml'), 'utf8'), { timeout: 5000 }).not.toContain('desc');
+
+    // 우클릭 → 복제
+    await table.locator('.dbtable__row', { hasText: '일' }).first().click({ button: 'right', position: { x: 200, y: 10 } });
+    await page.getByRole('menuitem', { name: '복제' }).click();
+    await expect.poll(() => existsSync(path.join(dir, '일 (사본).md')), { timeout: 8000 }).toBe(true);
+    expect(readFileSync(path.join(dir, '일 (사본).md'), 'utf8')).toBe('---\n점수: 1\n---\n# 일 (사본)\n');
+    await expect(table.locator('.dbtable__row')).toHaveCount(4, { timeout: 8000 });
+
+    // 여러 행 선택 → 삭제 → 되돌리기
+    await table.getByLabel('이 선택').check();
+    await table.getByLabel('삼 선택').check();
+    const bar = page.getByTestId('db-selbar');
+    await expect(bar).toContainText('2개 선택됨');
+    await bar.getByRole('button', { name: '삭제' }).click();
+    await expect.poll(() => existsSync(path.join(dir, '이.md')) || existsSync(path.join(dir, '삼.md')), { timeout: 8000 }).toBe(false);
+    await expect(table.locator('.dbtable__row')).toHaveCount(2, { timeout: 8000 });
+    await screen.getByRole('button', { name: '삭제 되돌리기' }).click();
+    await expect.poll(() => existsSync(path.join(dir, '이.md')) && existsSync(path.join(dir, '삼.md')), { timeout: 8000 }).toBe(true);
+    await expect(table.locator('.dbtable__row')).toHaveCount(4, { timeout: 8000 });
+    // 날짜 셀: 달력에서 고른다(오늘)
+    const today = await page.evaluate(() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    });
+    const dueCell = table.locator('.dbtable__row', { hasText: '삼' }).first().locator('.dbtable__td').nth(2);
+    await dueCell.click();
+    const picker = page.getByTestId('date-picker');
+    await expect(picker).toBeVisible();
+    await picker.getByRole('button', { name: '오늘' }).click();
+    await expect.poll(() => readFileSync(path.join(dir, '삼.md'), 'utf8'), { timeout: 8000 }).toContain(`마감: ${today}`);
+    await picker.getByRole('button', { name: '닫기' }).click();
+    await expect(picker).toHaveCount(0);
+
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
+  });
+
+  test('설정(⌘,)·개요 패널·폴더 접힘 기억·그래프 노드 찾기', async () => {
+    const page = await app.firstWindow();
+    note('개요노트', '# 개요노트\n\n## 첫째\n\n본문\n\n### 둘째\n\n끝\n');
+    note('접기/안쪽노트', '# 안쪽노트\n');
+    await open(page, '개요노트');
+
+    // 설정: 글자 크기·본문 너비·제목 동기화(이 기기에만 저장)
+    await page.keyboard.press('ControlOrMeta+,');
+    const settings = page.getByRole('dialog', { name: '설정' });
+    await expect(settings).toBeVisible();
+    await settings.getByLabel('본문 글자 크기').selectOption('18');
+    await expect.poll(() => page.locator('.oh-editor .ProseMirror').first().evaluate((el) => getComputedStyle(el).fontSize)).toBe('18px');
+    await settings.getByRole('radio', { name: '넓게' }).click();
+    expect(await page.evaluate(() => document.documentElement.dataset.width)).toBe('wide');
+    await settings.getByLabel('제목을 바꾸면 파일 이름도 맞추기').uncheck();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('nops.prefs') ?? '{}'))).toEqual({ fontSize: 18, width: 'wide', titleSync: false });
+    // 원래대로
+    await settings.getByLabel('본문 글자 크기').selectOption('16');
+    await settings.getByRole('radio', { name: '보통' }).click();
+    await settings.getByLabel('제목을 바꾸면 파일 이름도 맞추기').check();
+    await page.keyboard.press('Escape');
+    await expect(settings).toHaveCount(0);
+
+    // 개요: 제목 목록, 누르면 그 제목으로 이동, 편집하면 바로 반영
+    await page.getByRole('tab', { name: '개요', exact: true }).click();
+    const outline = page.getByTestId('outline');
+    await expect(outline.getByRole('button')).toHaveText(['개요노트', '첫째', '둘째'], { timeout: 8000 });
+    await outline.getByRole('button', { name: '둘째' }).click();
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.anchorNode?.parentElement?.closest('h3')?.textContent ?? null)).toBe('둘째');
+    // 초점을 막 받은 직후(약 0.2초)에는 ProseMirror 가 DOM 선택 변화를 무시하므로 잠깐 기다린다
+    await page.waitForTimeout(300);
+    await page.locator('.ProseMirror p', { hasText: '끝' }).click();
+    await page.waitForTimeout(200);
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('## 셋째');
+    await expect(outline.getByRole('button')).toHaveText(['개요노트', '첫째', '둘째', '셋째'], { timeout: 8000 });
+    await page.getByRole('tab', { name: '링크', exact: true }).click();
+
+    // 폴더를 접으면 안을 그리지 않고, 접은 상태를 기억한다
+    const folder = page.locator('.tree summary', { hasText: '접기' });
+    await expect(page.getByRole('button', { name: '안쪽노트', exact: true })).toBeVisible({ timeout: 8000 });
+    await folder.click();
+    await expect(page.getByRole('button', { name: '안쪽노트', exact: true })).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => Object.keys(localStorage).some((k) => k.startsWith('nops.tree.') && JSON.parse(localStorage.getItem(k) ?? '{}')['접기'] === false))).toBe(true);
+    await folder.click();
+    await expect(page.getByRole('button', { name: '안쪽노트', exact: true })).toBeVisible();
+
+    // 그래프 노드 찾기
+    await page.getByRole('button', { name: '그래프', exact: true }).click();
+    await expect(page.getByTestId('graph-global-stats')).toContainText('개 노드', { timeout: 8000 });
+    await page.getByLabel('노드 찾기').fill('개요노');
+    await page.getByRole('listbox', { name: '찾은 노드' }).getByRole('option', { name: /개요노트/ }).click();
+    await expect(page.getByLabel('노드 찾기')).toHaveValue('');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('graph-screen')).toHaveCount(0);
   });
 });
 

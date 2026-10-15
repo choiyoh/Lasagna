@@ -47,7 +47,7 @@ import {
 } from './vault';
 import { readFile } from 'node:fs/promises';
 import { CredentialStore, SyncController } from './sync';
-import { createFolder, listFolders, listTrash, moveToTrash, purgeTrash, restoreFromTrash } from './trash';
+import { createFolder, listFolders, listTrash, moveToTrash, purgeTrash, restoreFromTrash, duplicateNote } from './trash';
 import { importNotionInto, readZipEntries } from './notion-import';
 import { exportVaultSite, renderNoteDocument, type ExportContext } from './export';
 import { addRow, createDatabase, editSchema, exportCsv, importCsvApply, importCsvPreview, updateCell } from './db';
@@ -103,7 +103,15 @@ function broadcast(name: EventName, payload: unknown, selfOrigin?: number) {
 /** 이름 변경 계획을 세우려고 볼트의 모든 노트 내용과 첨부 목록을 읽는다. */
 async function snapshotVault(v: ReturnType<typeof requireVault>) {
   const list = await v.index.list();
-  const notes = list.map((n) => ({ path: n.path, content: readFileSync(resolveInVault(v.info.path, n.path), 'utf8') }));
+  // 인덱스가 아직 따라오지 못한 경우(방금 이름을 바꾼 파일 등) 디스크에 없는 노트는 건너뛴다
+  const notes = list.flatMap((n) => {
+    try {
+      return [{ path: n.path, content: readFileSync(resolveInVault(v.info.path, n.path), 'utf8') }];
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw e;
+    }
+  });
   const assets = (await v.index.assets()).map((a) => a.path);
   return { notes, assets };
 }
@@ -206,6 +214,7 @@ function registerHandlers() {
     v.bases.delete(rel);
     return moveToTrash(v.info.path, rel);
   });
+  handle('note.duplicate', ({ path: rel }) => ({ path: duplicateNote(requireVault().info.path, rel) }));
   handle('folder.list', () => listFolders(requireVault().info.path));
   handle('folder.create', ({ path: rel }) => ({ path: createFolder(requireVault().info.path, rel) }));
   handle('trash.list', () => listTrash(requireVault().info.path));

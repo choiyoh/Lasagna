@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BacklinkContext, OutgoingLink, UnlinkedMention } from '@nopsidian/ipc-contract';
 
 type Tab = 'backlinks' | 'outgoing' | 'unlinked';
@@ -11,10 +11,11 @@ interface Props {
 interface Data {
   backlinks: BacklinkContext[];
   outgoing: OutgoingLink[];
-  unlinked: UnlinkedMention[];
+  /** 링크 안 된 언급은 전문 검색이라 무겁다: 그 탭을 열었을 때만 계산한다(null = 아직 안 셈) */
+  unlinked: UnlinkedMention[] | null;
 }
 
-const EMPTY: Data = { backlinks: [], outgoing: [], unlinked: [] };
+const EMPTY: Data = { backlinks: [], outgoing: [], unlinked: null };
 
 function groupBy<T extends { path: string }>(items: T[]) {
   const map = new Map<string, T[]>();
@@ -31,20 +32,28 @@ export function LinkPanel({ path, onOpen }: Props) {
   const [tab, setTab] = useState<Tab>('backlinks');
   const [data, setData] = useState<Data>(EMPTY);
   const [loading, setLoading] = useState(false);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const withUnlinked = tabRef.current === 'unlinked';
       const [backlinks, outgoing, unlinked] = await Promise.all([
         window.nops.link.backlinks({ path }),
         window.nops.link.outgoing({ path }),
-        window.nops.link.unlinked({ path }),
+        withUnlinked ? window.nops.link.unlinked({ path }) : Promise.resolve(null),
       ]);
+      // 탭을 안 열었으면 이전에 센 값은 낡았으므로 버린다(다시 열면 새로 센다)
       setData({ backlinks, outgoing, unlinked });
     } finally {
       setLoading(false);
     }
   }, [path]);
+  // "링크 안 된 언급" 탭을 처음 열 때 센다
+  useEffect(() => {
+    if (tab === 'unlinked' && data.unlinked === null) void load();
+  }, [tab, data.unlinked, load]);
 
   useEffect(() => {
     setData(EMPTY);
@@ -61,10 +70,10 @@ export function LinkPanel({ path, onOpen }: Props) {
     };
   }, [load]);
 
-  const tabs: [Tab, string, number][] = [
+  const tabs: [Tab, string, number | null][] = [
     ['backlinks', '백링크', data.backlinks.length],
     ['outgoing', '나가는 링크', data.outgoing.length],
-    ['unlinked', '링크 안 된 언급', data.unlinked.length],
+    ['unlinked', '링크 안 된 언급', data.unlinked?.length ?? null],
   ];
 
   return (
@@ -72,7 +81,7 @@ export function LinkPanel({ path, onOpen }: Props) {
       <div className="linkpanel__tabs" role="tablist">
         {tabs.map(([id, label, n]) => (
           <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
-            {label} <span className="count">{n}</span>
+            {label} {n !== null && <span className="count">{n}</span>}
           </button>
         ))}
       </div>
@@ -120,7 +129,7 @@ export function LinkPanel({ path, onOpen }: Props) {
             </ul>
           ))}
         {tab === 'unlinked' &&
-          (data.unlinked.length === 0 ? (
+          (data.unlinked === null ? null : data.unlinked.length === 0 ? (
             <p className="muted small pad">링크 없이 언급된 곳이 없어요.</p>
           ) : (
             groupBy(data.unlinked).map(([p, items]) => (

@@ -20,6 +20,7 @@ import { createLinkSuggestPlugin, type NopsLinkHost } from './link-suggest';
 import { nopsNodeViews } from './node-views';
 import { showTextPrompt } from './prompt';
 import { createFindPlugin } from './find';
+import { createTitlePlugin } from './title';
 import { createInteractionPlugin, createNopsInputRules, createTitleKeymapPlugin, type WikiLinkTarget } from './plugins';
 import { nopsSchema } from './schema';
 
@@ -120,6 +121,7 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
       createCodeHighlightPlugin(),
       createFlashPlugin(),
       createFindPlugin(),
+      createTitlePlugin(),
       createToggleHeadingPlugin(),
       createMathActivePlugin(),
       createTocPlugin(),

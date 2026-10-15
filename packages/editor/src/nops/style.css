@@ -218,3 +218,6 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 /* 노트 안 찾기(⌘F) */
 .ProseMirror .ProseMirror-search-match { background: rgba(255, 200, 0, 0.35); border-radius: 2px; }
 .ProseMirror .ProseMirror-active-search-match { background: rgba(255, 140, 0, 0.75); border-radius: 2px; box-shadow: 0 0 0 1px rgba(255, 140, 0, 0.9); }
+
+/* 비어 있는 노트 제목 안내 */
+.ProseMirror h1.nops-empty-title::before { content: attr(data-placeholder); color: var(--oh-editor-muted, #9b9a97); opacity: 0.6; float: left; height: 0; pointer-events: none; }

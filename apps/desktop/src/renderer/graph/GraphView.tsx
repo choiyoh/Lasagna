@@ -17,6 +17,8 @@ interface Props {
   testId: string;
   /** 있으면 레이아웃 위치를 localStorage 에 캐시해 다음에 열 때 바로 보여 준다 */
   cacheKey?: string;
+  /** 그래프 검색: 이 노드로 화면을 옮기고 잠깐 강조한다(tick 이 바뀔 때마다) */
+  focus?: { id: string; tick: number } | null;
 }
 
 const CACHE_PREFIX = 'nops.graph.layout.';
@@ -48,7 +50,7 @@ function saveLayout(key: string | undefined, graph: Graph): void {
 
 
 /** sigma + graphology 로 그래프를 그린다. 레이아웃은 워커에서 돌고, 위치만 받아 갱신한다. */
-export function GraphView({ data, settings, current, onOpen, testId, cacheKey }: Props) {
+export function GraphView({ data, settings, current, onOpen, testId, cacheKey, focus }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
@@ -72,9 +74,11 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey }:
     const graph = new Graph({ type: 'directed', multi: false });
     const n = data.nodes.length;
     const cached = prev ? new Map<string, [number, number]>() : loadLayout(cacheKey);
+    let known = 0;
     data.nodes.forEach((node, i) => {
       const hit = cached.get(node.id);
       const old = prev?.hasNode(node.id) ? prev.getNodeAttributes(node.id) : hit ? { x: hit[0], y: hit[1] } : null;
+      if (old) known++;
       const angle = (i / Math.max(n, 1)) * Math.PI * 2;
       const radius = 10 + Math.sqrt(n) * 3;
       graph.addNode(node.id, {
@@ -223,7 +227,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey }:
       if (done) saveLayout(cacheKey, graph);
       setStats(`${ids.length}개 노드 · ${graph.size}개 링크${done ? '' : ' · 배치 중…'}`);
     };
-    const init: LayoutIn = { type: 'init', ids, positions: pos, edges: new Uint32Array(edgeArr), forces: live.current.settings.forces };
+    const init: LayoutIn = { type: 'init', ids, positions: pos, edges: new Uint32Array(edgeArr), forces: live.current.settings.forces, warm: n > 0 && known / n >= 0.95 };
     worker.postMessage(init);
     setStats(`${ids.length}개 노드 · ${graph.size}개 링크`);
 
@@ -257,6 +261,22 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey }:
     parsedRef.current = parsed;
     sigmaRef.current?.refresh({ skipIndexation: true });
   }, [parsed, filterKey, current]);
+
+  // 그래프 검색으로 고른 노드로 이동
+  useEffect(() => {
+    const s = sigmaRef.current;
+    if (!focus || !s || !graphRef.current?.hasNode(focus.id)) return;
+    const d = s.getNodeDisplayData(focus.id);
+    if (d) void s.getCamera().animate({ x: d.x, y: d.y, ratio: 0.3 }, { duration: 450 });
+    hover.current = focus.id;
+    s.refresh({ skipIndexation: true });
+    const t = setTimeout(() => {
+      if (hover.current !== focus.id) return;
+      hover.current = null;
+      sigmaRef.current?.refresh({ skipIndexation: true });
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [focus]);
 
   // 화살표 토글
   useEffect(() => {

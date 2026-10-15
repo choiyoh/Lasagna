@@ -4,12 +4,16 @@ import { createDbViewHost } from './db/dbview-host';
 import { createRowPropsHost } from './db/RowProps';
 import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
+import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
+import { loadPrefs } from './prefs';
+import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
 import type { DbEmbedHost } from './db/EmbeddedDb';
 import { relativePath, vaultUrl } from '@nopsidian/core/assets';
 import { TextSelection } from 'prosemirror-state';
 import {
   createNopsEditor,
+  firstTitle,
   flashBlock,
   insertMarkdown,
   parseDocument,
@@ -48,6 +52,8 @@ interface Props {
   focus?: { heading: string | null; block: string | null } | null;
   /** 이 노트를 가리키는 링크 이름(블록 링크 복사에 쓴다) */
   noteLinkName: string;
+  /** 제목(첫 H1)을 고치고 나가면 파일 이름을 맞춘다(새 경로). 없으면 동기화하지 않는다 */
+  onTitleRename?: (to: string) => void;
 }
 
 /** 저장 결과가 앱의 내용과 달라졌을 때 사용자에게 알리는 문구 */
@@ -97,7 +103,7 @@ function scrollToFocus(editor: Editor, focus: { heading: string | null; block: s
  * 열기: 읽기(hash) → 파싱 → 표시. 편집 500ms 뒤 `note.save`(baseHash로 외부 변경 감지).
  * 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다.
  */
-export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon }: Props) {
+export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, onTitleRename }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
@@ -117,6 +123,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   dbHostRef.current = dbHost;
   const onRenameRef = useRef(onRename);
   onRenameRef.current = onRename;
+  const onTitleRenameRef = useRef(onTitleRename);
+  onTitleRenameRef.current = onTitleRename;
   const [pickingIcon, setPickingIcon] = useState(false);
   const peekRef = useRef(peek);
   peekRef.current = peek;
@@ -152,6 +160,19 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       },
       open: (p) => void window.nops.asset.open({ path: p }),
       onError: (m) => setNotice(m),
+    };
+    /** 제목 → 파일 이름 동기화: 처음 열 때 제목과 이름이 같았던 노트만 */
+    let syncTitle = false;
+    let titleCommitted = false;
+    const commitTitle = () => {
+      if (!syncTitle || titleCommitted || !loaded || current !== 'edit' || !onTitleRenameRef.current) return;
+      const view = editor.getView();
+      const title = firstTitle(view.state.doc);
+      const to = title === null ? null : titleRenameTarget(path, title);
+      if (!to) return;
+      titleCommitted = true;
+      carrySelection.set(to, { anchor: view.state.selection.anchor, head: view.state.selection.head });
+      onTitleRenameRef.current(to);
     };
     const editor: Editor = createNopsEditor(host, { onOpenLink: (l) => linkRef.current(l), assets: assetHost,
       rowProps: createRowPropsHost(path, () => dbHostRef.current?.notes ?? [], () => onRenameRef.current?.()),
@@ -244,8 +265,25 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       dirty = false;
       const first = !loaded;
       loaded = true;
+      sendOutline();
       setState('saved');
-      if (first) scrollToFocus(editor, focusRef.current);
+      if (!first) return;
+      syncTitle = loadPrefs().titleSync && (freshNotes.has(path) || titleInSync(path, firstTitle(view.state.doc)));
+      const carried = carrySelection.get(path);
+      carrySelection.delete(path);
+      const size = view.state.doc.content.size;
+      if (carried) {
+        // 제목 동기화로 이름이 바뀌어 다시 열린 경우: 커서를 그대로
+        const sel =
+          carried.anchor === carried.head
+            ? TextSelection.near(view.state.doc.resolve(Math.min(carried.head, size)))
+            : TextSelection.create(view.state.doc, Math.min(carried.anchor, size), Math.min(carried.head, size));
+        view.dispatch(view.state.tr.setSelection(sel));
+      } else if (freshNotes.delete(path)) {
+        // 방금 만든 노트: 제목부터 쓰도록
+        view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(1))));
+        editor.focus();
+      } else scrollToFocus(editor, focusRef.current);
     };
 
     const save = async (): Promise<void> => {
@@ -292,10 +330,50 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     };
     editor.on('change', markDirty);
     editor.on('change', () => setDocTick((t) => t + 1));
+
+    // ── 개요 패널: 제목 목록을 알리고, 누르면 그 제목으로 이동 ──
+    let outlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const sendOutline = () => {
+      const items: OutlineItem[] = [];
+      editor.getView().state.doc.descendants((node, pos) => {
+        if (node.type.name === 'heading') items.push({ text: node.textContent, level: node.attrs.level as number, pos });
+        return node.isBlock && node.type.name !== 'heading' && node.type.name !== 'paragraph';
+      });
+      window.dispatchEvent(new CustomEvent(OUTLINE_EVENT, { detail: { path, items } }));
+    };
+    editor.on('change', () => {
+      clearTimeout(outlineTimer);
+      outlineTimer = setTimeout(sendOutline, 250);
+    });
+    const onOutlineRequest = (e: Event) => (e as CustomEvent<string>).detail === path && loaded && sendOutline();
+    const onOutlineJump = (e: Event) => {
+      const d = (e as CustomEvent<{ path: string; pos: number }>).detail;
+      if (d.path !== path || current !== 'edit') return;
+      const view = editor.getView();
+      // 패널 버튼의 클릭 처리가 끝난 뒤에 에디터로 초점을 옮기고 선택을 놓는다
+      requestAnimationFrame(() => {
+        if (view.isDestroyed) return;
+        editor.focus();
+        const pos = Math.min(d.pos + 1, view.state.doc.content.size);
+        view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(pos))).scrollIntoView());
+        flashBlock(view, d.pos);
+      });
+    };
+    window.addEventListener(OUTLINE_REQUEST, onOutlineRequest);
+    window.addEventListener(OUTLINE_JUMP, onOutlineJump);
     editor.on('blur', () => {
       clearTimeout(timer);
       void save();
     });
+    // 제목 → 파일 이름: 초점이 이 노트 밖(앱의 다른 곳)으로 나가면 맞춘다.
+    // 쓰는 도중에 이름을 바꾸면 에디터가 다시 열리며 입력이 끊기므로, 노트를 떠날 때만 한다.
+    const root = rootRef.current;
+    const onFocusOut = () =>
+      setTimeout(() => {
+        const a = document.activeElement;
+        if (!disposed && root && document.hasFocus() && !(a && (root.contains(a) || a.closest('.nops-prompt, [role="dialog"]')))) commitTitle();
+      }, 0);
+    root?.addEventListener('focusout', onFocusOut);
 
     // ── 모드 전환 ──
     const setMode = async (next: Mode) => {
@@ -348,6 +426,11 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     void load();
 
     return () => {
+      root?.removeEventListener('focusout', onFocusOut);
+      window.removeEventListener(OUTLINE_REQUEST, onOutlineRequest);
+      window.removeEventListener(OUTLINE_JUMP, onOutlineJump);
+      clearTimeout(outlineTimer);
+      commitTitle();
       disposed = true;
       unregisterFlush();
       offChanged();

@@ -114,3 +114,20 @@ export function createFolder(root: string, rel: string): string {
   mkdirSync(resolveInVault(root, target), { recursive: true });
   return target;
 }
+
+/**
+ * 노트를 같은 폴더에 `이름 (사본).md`(이미 있으면 `(사본 2)`…)로 복제한다.
+ * 첫 제목이 원래 이름과 같으면 사본 이름으로 바꾼다. 새 경로를 돌려준다.
+ */
+export function duplicateNote(root: string, rel: string): string {
+  const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/') + 1) : '';
+  const base = rel.slice(dir.length).replace(/\.md$/i, '');
+  let name = `${base} (사본)`;
+  for (let n = 2; existsSync(resolveInVault(root, `${dir}${name}.md`)); n++) name = `${base} (사본 ${n})`;
+  const content = readFileSync(resolveInVault(root, rel), 'utf8');
+  const esc = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const next = content.replace(new RegExp(`^((?:---\\r?\\n[\\s\\S]*?\\r?\\n---\\r?\\n)?\\s*)# ${esc}[ \\t]*(\\r?\\n|$)`), `$1# ${name}$2`);
+  const target = `${dir}${name}.md`;
+  writeFileSync(resolveInVault(root, target), next, { flag: 'wx' });
+  return target;
+}

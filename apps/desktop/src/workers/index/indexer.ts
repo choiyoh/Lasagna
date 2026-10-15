@@ -1,7 +1,10 @@
-import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, mkdirSync } from 'node:fs';
+import os from 'node:os';
+import { Worker } from 'node:worker_threads';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { buildIndexRecord, firstImage, type IndexRecord } from './index-record';
+import type { ParseRequest, ParseResponse } from './parse-worker';
 import { databaseRowPaths, dbFolders, listDatabases, queryDatabase, rowDatabase, type DbQueryParams } from './db-queries';
 import { globalGraph, localGraph, type GlobalGraphOptions, type LocalGraphOptions } from './graph-queries';
 import {
@@ -10,7 +13,6 @@ import {
   maskInlineCode,
   mimeFromName,
   parseNote,
-  type ParsedNote,
 } from '@nopsidian/core';
 
 export const SCHEMA_VERSION = 5;
@@ -153,17 +155,7 @@ export function deriveTitle(rel: string, content: string): string {
   return parseNote(content).meta.title || path.posix.basename(rel, path.posix.extname(rel));
 }
 
-const IMG_EXT = '(?:png|jpe?g|gif|webp|avif|svg)';
-const WIKI_IMG = new RegExp(`!\\[\\[([^\\]|#]+\\.${IMG_EXT})`, 'i');
-const MD_IMG = new RegExp(`!\\[[^\\]]*\\]\\(<?([^)>\\s]+\\.${IMG_EXT})`, 'i');
-
-/** 본문에서 처음 나오는 이미지 참조(`![[a.png]]` 또는 `![](a.png)`) — 갤러리 커버용 */
-export function firstImage(body: string): string | null {
-  const a = WIKI_IMG.exec(body);
-  const b = MD_IMG.exec(body);
-  const hit = a && b ? (a.index <= b.index ? a : b) : (a ?? b);
-  return hit ? decodeURI(hit[1]!.trim()) : null;
-}
+export { firstImage };
 
 export class Indexer {
   readonly db: Database.Database;
@@ -180,6 +172,17 @@ export class Indexer {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('synchronous = NORMAL');
     this.init();
+  }
+
+  /** 자주 쓰는 SQL 은 한 번만 준비해 재사용한다(1만 개를 색인하면 준비만 수십만 번이라 비용이 크다). */
+  private readonly stmtCache = new Map<string, Database.Statement<unknown[]>>();
+  private st(sql: string) {
+    let s = this.stmtCache.get(sql);
+    if (!s) {
+      s = this.db.prepare<unknown[]>(sql);
+      this.stmtCache.set(sql, s);
+    }
+    return s;
   }
 
   /** 인덱스는 파생 데이터이므로 스키마 버전이 다르면 마이그레이션 대신 비우고 재구축한다. */
@@ -206,41 +209,24 @@ export class Indexer {
       .run(String(SCHEMA_VERSION));
   }
 
-  /** mtime+size가 같은 파일은 건너뛰고, 사라진 파일은 지운다. 바뀐 파일 수를 돌려준다. */
-  scan(onProgress?: (done: number, total: number) => void): { changed: number; removed: number } {
+  /** 디스크와 인덱스를 견줘 새로 읽어야 할 파일을 고른다 */
+  private plan() {
     const found = walkMarkdown(this.root);
     const known = new Map(
       (
-        this.db.prepare(`SELECT path, mtime, size FROM pages`).all() as {
-          path: string;
-          mtime: number;
-          size: number;
-        }[]
+        this.db.prepare(`SELECT path, mtime, size FROM pages`).all() as { path: string; mtime: number; size: number }[]
       ).map((r) => [r.path, r]),
     );
-    const seen = new Set<string>();
-    let changed = 0;
-    let done = 0;
-    // 파일마다 따로 커밋하면 디스크 동기화가 파일 수만큼 일어난다 → 250개씩 묶어 커밋한다
-    let pending = 0;
-    const commit = () => {
-      if (this.db.inTransaction) this.db.exec('COMMIT');
-      pending = 0;
-    };
-    try {
-      for (const f of found) {
-        seen.add(f.rel);
-        const k = known.get(f.rel);
-        if (!k || k.mtime !== f.mtime || k.size !== f.size) {
-          if (!this.db.inTransaction) this.db.exec('BEGIN');
-          if (this.indexFile(f.rel)) changed++;
-          if (++pending >= 250) commit();
-        }
-        onProgress?.(++done, found.length);
-      }
-    } finally {
-      commit();
-    }
+    const todo = found.filter((f) => {
+      const k = known.get(f.rel);
+      return !k || k.mtime !== f.mtime || k.size !== f.size;
+    });
+    return { found, known, todo };
+  }
+
+  /** 스캔의 마무리: 사라진 파일 정리, 링크 해석, 첨부 목록, (대량이면) 메모리 반환 */
+  private finishScan(found: { rel: string }[], known: Map<string, unknown>, changed: number) {
+    const seen = new Set(found.map((f) => f.rel));
     let removed = 0;
     for (const p of known.keys()) {
       if (!seen.has(p)) {
@@ -256,6 +242,100 @@ export class Indexer {
       this.db.pragma('shrink_memory');
     }
     return { changed, removed };
+  }
+
+  /** mtime+size가 같은 파일은 건너뛰고, 사라진 파일은 지운다. 바뀐 파일 수를 돌려준다. (한 스레드에서 차례로) */
+  scan(onProgress?: (done: number, total: number) => void): { changed: number; removed: number } {
+    const { found, known, todo } = this.plan();
+    const skipped = found.length - todo.length;
+    let changed = 0;
+    let done = skipped;
+    // 파일마다 따로 커밋하면 디스크 동기화가 파일 수만큼 일어난다 → 250개씩 묶어 커밋한다
+    let pending = 0;
+    const commit = () => {
+      if (this.db.inTransaction) this.db.exec('COMMIT');
+      pending = 0;
+    };
+    try {
+      for (const f of todo) {
+        if (!this.db.inTransaction) this.db.exec('BEGIN');
+        if (this.indexFile(f.rel)) changed++;
+        if (++pending >= 250) commit();
+        onProgress?.(++done, found.length);
+      }
+    } finally {
+      commit();
+    }
+    if (!todo.length) onProgress?.(found.length, found.length);
+    return this.finishScan(found, known, changed);
+  }
+
+  /**
+   * `scan` 과 같은 일을 하되, 파일이 많으면(기본 400개 이상) 파싱을 여러 스레드에 나눠 맡긴다.
+   * 파싱이 색인 시간의 절반 넘게 차지하고, 파싱 쓰레기는 스레드가 끝나면 통째로 운영체제에 돌아간다.
+   * 파서 스레드 파일이 없거나(테스트) 스레드가 실패하면 `scan` 으로 마저 처리한다.
+   */
+  async scanParallel(
+    onProgress?: (done: number, total: number) => void,
+    opts: { workerFile?: string; threads?: number; threshold?: number } = {},
+  ): Promise<{ changed: number; removed: number }> {
+    const { found, known, todo } = this.plan();
+    const workerFile = opts.workerFile ?? path.join(__dirname, 'parse-worker.cjs');
+    if (todo.length < (opts.threshold ?? 400) || !existsSync(workerFile)) return this.scan(onProgress);
+
+    const threads = Math.max(1, Math.min(opts.threads ?? 4, os.cpus().length - 1, Math.ceil(todo.length / 64)));
+    const BATCH = 64;
+    const batches: string[][] = [];
+    for (let i = 0; i < todo.length; i += BATCH) batches.push(todo.slice(i, i + BATCH).map((f) => f.rel));
+    const workers = Array.from({ length: threads }, () => new Worker(workerFile, { resourceLimits: { maxOldGenerationSizeMb: 192 } }));
+    let changed = 0;
+    let done = found.length - todo.length;
+    let next = 0;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        let finished = 0;
+        const dispatch = (w: Worker) => {
+          if (next < batches.length) {
+            const id = next++;
+            w.postMessage({ id, root: this.root, rels: batches[id]! } satisfies ParseRequest);
+          }
+        };
+        for (const w of workers) {
+          w.on('error', reject);
+          w.on('message', (res: ParseResponse) => {
+            try {
+              this.db.exec('BEGIN');
+              try {
+                res.records.forEach((rec, i) => {
+                  if (rec) {
+                    this.writeRecord(rec);
+                    changed++;
+                  } else this.removeFile(batches[res.id]![i]!);
+                });
+                this.db.exec('COMMIT');
+              } catch (e) {
+                if (this.db.inTransaction) this.db.exec('ROLLBACK');
+                throw e;
+              }
+              done += res.records.length;
+              onProgress?.(done, found.length);
+              dispatch(w);
+              if (++finished === batches.length) resolve();
+            } catch (e) {
+              reject(e);
+            }
+          });
+          dispatch(w);
+        }
+      });
+    } catch {
+      // 스레드 문제(메모리 한도 등)는 한 스레드 스캔으로 이어서 한다. 이미 쓴 파일은 mtime 이 같아 건너뛴다.
+      await Promise.all(workers.map((w) => w.terminate().catch(() => undefined)));
+      return this.scan(onProgress);
+    }
+    await Promise.all(workers.map((w) => w.terminate().catch(() => undefined)));
+    onProgress?.(found.length, found.length);
+    return this.finishScan(found, known, changed);
   }
 
   /** 첨부 목록을 디스크와 맞춘다(경로·크기만 저장 — 내용 해시는 저장할 때만 필요하다). */
@@ -307,89 +387,57 @@ export class Indexer {
 
   /** 단일 파일 (재)인덱싱. 파일이 없으면 제거하고 false. */
   indexFile(rel: string): boolean {
-    const full = path.join(this.root, rel);
-    let content: string;
-    let st;
-    try {
-      st = statSync(full);
-      content = readFileSync(full, 'utf8');
-    } catch {
+    const rec = buildIndexRecord(this.root, rel);
+    if (!rec) {
       this.removeFile(rel);
       return false;
     }
-    const hash = createHash('sha256').update(content).digest('hex');
-    const note = parseNote(content);
-    const title = note.meta.title || path.posix.basename(rel, path.posix.extname(rel));
-    const folder = path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel);
-    const fm = JSON.stringify(note.frontmatter?.data ?? {});
-    const cover = firstImage(content.slice(note.frontmatter?.end ?? 0));
-    this.db.transaction(() => {
-      const existing = this.db.prepare(`SELECT id FROM pages WHERE path=?`).get(rel) as
-        | { id: number }
-        | undefined;
-      let id: number;
-      if (existing) {
-        id = existing.id;
-        this.db
-          .prepare(`UPDATE pages SET title=?, folder=?, mtime=?, size=?, hash=?, note_id=?, frontmatter=?, cover=? WHERE id=?`)
-          .run(title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null, fm, cover, id);
-        this.clearDerived(id);
-      } else {
-        id = Number(
-          this.db
-            .prepare(`INSERT INTO pages(path,title,folder,mtime,size,hash,note_id,frontmatter,cover) VALUES(?,?,?,?,?,?,?,?,?)`)
-            .run(rel, title, folder, st.mtimeMs, st.size, hash, note.meta.id ?? null, fm, cover).lastInsertRowid,
-        );
-      }
-      this.db.prepare(`INSERT INTO fts(rowid,title,body) VALUES(?,?,?)`).run(id, title, content);
-      this.storeDerived(id, note);
-    })();
-    this.resolveDirty = true;
-    this.generation++;
+    this.writeRecord(rec);
     return true;
   }
 
-  private clearDerived(id: number) {
-    for (const t of ['aliases', 'headings', 'blocks', 'tags'])
-      this.db.prepare(`DELETE FROM ${t} WHERE page_id=?`).run(id);
-    this.db.prepare(`DELETE FROM links WHERE src_page=?`).run(id);
-    this.db.prepare(`DELETE FROM fts WHERE rowid=?`).run(id);
+  /** 파싱이 끝난 레코드를 SQLite 에 쓴다(페이지·FTS·제목·블록·태그·링크). */
+  writeRecord(rec: IndexRecord) {
+    this.db.transaction(() => {
+      const existing = this.st(`SELECT id FROM pages WHERE path=?`).get(rec.rel) as { id: number } | undefined;
+      let id: number;
+      if (existing) {
+        id = existing.id;
+        this.st(`UPDATE pages SET title=?, folder=?, mtime=?, size=?, hash=?, note_id=?, frontmatter=?, cover=? WHERE id=?`).run(
+          rec.title, rec.folder, rec.mtime, rec.size, rec.hash, rec.noteId, rec.frontmatter, rec.cover, id,
+        );
+        this.clearDerived(id);
+      } else {
+        id = Number(
+          this.st(`INSERT INTO pages(path,title,folder,mtime,size,hash,note_id,frontmatter,cover) VALUES(?,?,?,?,?,?,?,?,?)`).run(
+            rec.rel, rec.title, rec.folder, rec.mtime, rec.size, rec.hash, rec.noteId, rec.frontmatter, rec.cover,
+          ).lastInsertRowid,
+        );
+      }
+      this.st(`INSERT INTO fts(rowid,title,body) VALUES(?,?,?)`).run(id, rec.title, rec.content);
+      this.storeDerived(id, rec);
+    })();
+    this.resolveDirty = true;
+    this.generation++;
   }
 
-  private storeDerived(id: number, note: ParsedNote) {
-    const { meta, blocks } = note;
-    const insAlias = this.db.prepare(`INSERT INTO aliases(page_id, alias) VALUES(?,?)`);
-    for (const a of meta.aliases) insAlias.run(id, a);
+  private clearDerived(id: number) {
+    for (const t of ['aliases', 'headings', 'blocks', 'tags']) this.st(`DELETE FROM ${t} WHERE page_id=?`).run(id);
+    this.st(`DELETE FROM links WHERE src_page=?`).run(id);
+    this.st(`DELETE FROM fts WHERE rowid=?`).run(id);
+  }
 
-    const insHeading = this.db.prepare(
-      `INSERT INTO headings(page_id, level, text, slug, line) VALUES(?,?,?,?,?)`,
-    );
-    for (const h of meta.headings) insHeading.run(id, h.level, h.text, h.slug, h.line);
-
-    const insBlock = this.db.prepare(
-      `INSERT INTO blocks(id, page_id, type, parent_id, ord, text, heading_level, line_start, line_end)
-       VALUES(?,?,?,NULL,?,?,?,?,?)`,
-    );
-    for (const b of blocks)
-      insBlock.run(b.blockId ?? null, id, b.kind, b.index, b.text, b.headingLevel ?? null, b.lineStart, b.lineEnd);
-
-    const insTag = this.db.prepare(`INSERT INTO tags(page_id, tag, source) VALUES(?,?,?)`);
-    const seen = new Set<string>();
-    for (const t of meta.tags) {
-      const key = `${t.tag}\0${t.source}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      insTag.run(id, t.tag, t.source);
-    }
-
-    const insLink = this.db.prepare(
-      `INSERT INTO links(src_page, src_block, dst_raw, dst_heading, dst_block, kind, line, is_resolved)
-       VALUES(?,?,?,?,?,?,?,0)`,
-    );
-    for (const l of meta.links) {
-      const srcBlock = blocks.find((b) => l.line >= b.lineStart && l.line <= b.lineEnd)?.blockId ?? null;
-      insLink.run(id, srcBlock, l.target, l.heading ?? null, l.block ?? null, l.kind, l.line);
-    }
+  private storeDerived(id: number, rec: IndexRecord) {
+    const insAlias = this.st(`INSERT INTO aliases(page_id, alias) VALUES(?,?)`);
+    for (const a of rec.aliases) insAlias.run(id, a);
+    const insHeading = this.st(`INSERT INTO headings(page_id, level, text, slug, line) VALUES(?,?,?,?,?)`);
+    for (const h of rec.headings) insHeading.run(id, h.level, h.text, h.slug, h.line);
+    const insBlock = this.st(`INSERT INTO blocks(id, page_id, type, parent_id, ord, text, heading_level, line_start, line_end) VALUES(?,?,?,NULL,?,?,?,?,?)`);
+    for (const b of rec.blocks) insBlock.run(b.blockId, id, b.kind, b.index, b.text, b.headingLevel, b.lineStart, b.lineEnd);
+    const insTag = this.st(`INSERT INTO tags(page_id, tag, source) VALUES(?,?,?)`);
+    for (const t of rec.tags) insTag.run(id, t.tag, t.source);
+    const insLink = this.st(`INSERT INTO links(src_page, src_block, dst_raw, dst_heading, dst_block, kind, line, is_resolved) VALUES(?,?,?,?,?,?,?,0)`);
+    for (const l of rec.links) insLink.run(id, l.srcBlock, l.target, l.heading, l.block, l.kind, l.line);
   }
 
   /**

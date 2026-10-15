@@ -18,7 +18,7 @@ export class IndexClient {
   ) {
     this.worker = new Worker(path.join(__dirname, 'index-worker.cjs'), {
       workerData: { root },
-      // 대량 인덱싱 때 파서가 만든 쓰레기가 쌓여 RSS 가 커지지 않게 한다(큰 노트 하나는 수 MB 라 충분)
+      // 파싱은 일회용 파서 스레드가 맡는다. 색인 스레드의 힙 한도는 쓰레기가 끝없이 쌓이지 않게 하는 안전장치(큰 노트 하나는 수 MB)
       resourceLimits: { maxOldGenerationSizeMb: 256 },
     });
     this.ready = new Promise((resolve, reject) => {

@@ -444,6 +444,14 @@ nopsidian/
   - 사이드바: `sidebar/`(`build-tree.ts`, `drag.ts`, `selection.ts`, `TreeView.tsx`)
 - 규칙: 앱 상태(탭·북마크·알림 등)는 `App.tsx` 가 갖고, 훅에는 필요한 setter·ref 만 인자로 넘긴다(`EntryActionDeps`).
 
+### 성능 개선·MCP (v0.6.0)
+- **MCP 서버**(`packages/mcp`, 사용법은 `docs/mcp.md`): stdio, 읽기 도구 기본·쓰기 도구는 `--write` + 허용 폴더(기본 `AI/`), 낡은 해시 거부, 버전 기록 스냅샷, 감사 기록(`.nopsidian/mcp-audit.jsonl`), 설정 화면에서 연결 명령 복사·최근 작업 보기. 디스크 스캐너(`VaultScanner`)는 DeepSeek 구현.
+- **노트 1만 개 측정**(`.scratch/perf-ui.cjs`, `perf-warm.cjs`, M 시리즈 맥): 
+  - 발견한 버그: "큰 볼트는 폴더를 접은 채 시작"이 동작하지 않았다(처음 그릴 때 `<details open>` 의 toggle 이벤트가 사용자 선택으로 저장됨). 고친 뒤 사이드바 DOM 20,407 → 357, 폴더 펼치기 419ms → 257ms, 노트 열기 117 → 66ms.
+  - 첫 색인 7.2초 → 3.5초: 파싱(색인 시간의 60%)을 일회용 파서 스레드 4개에 나누고(`parse-worker.ts`, `Indexer.scanParallel`), SQLite 는 색인 스레드 한 곳에서 쓴다. SQL 은 준비한 문장을 재사용. 한 스레드 `scan` 과 같은 인덱스를 만드는지 테스트(`scan-parallel.test.ts`).
+  - 이미 색인된 볼트를 다시 열면 목록 준비 0.33초, 메모리 약 540MB(첫 색인 직후 약 760MB — 운영체제가 해제한 메모리를 바로 돌려받지 않는다).
+  - 그래프 10,000개: 열기 0.6초, 배치 중 약 37fps(노드가 2,500개를 넘으면 두 프레임에 한 번 갱신, 노드 속성은 직접 갱신).
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

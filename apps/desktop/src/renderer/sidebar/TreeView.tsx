@@ -62,7 +62,14 @@ export function TreeView({ nodes, ctx, depth = 0 }: { nodes: TreeNode[]; ctx: Tr
               {n.note.title}
             </button>
           ) : (
-            <details open={folderOpen.isOpen(n.path)} onToggle={(e) => folderOpen.setOpen(n.path, e.currentTarget.open)}>
+            <details
+              open={folderOpen.isOpen(n.path)}
+              onToggle={(e) => {
+                // 처음 그릴 때 `open` 속성 때문에도 toggle 이 오므로, 화면 상태와 다를 때(= 사용자가 눌렀을 때)만 기억한다.
+                // 안 그러면 노트를 불러오는 도중에 열려 있던 폴더가 "사용자가 연 것"으로 저장돼 큰 볼트에서도 전부 펼쳐진다.
+                if (e.currentTarget.open !== folderOpen.isOpen(n.path)) folderOpen.setOpen(n.path, e.currentTarget.open);
+              }}
+            >
               <summary
                 className={state(n.path).trim()}
                 style={{ paddingLeft: 8 + depth * 14 }}

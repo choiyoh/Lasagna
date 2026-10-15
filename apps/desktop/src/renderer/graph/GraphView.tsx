@@ -244,22 +244,32 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     let raf = 0;
     let finished = false;
     let first = true;
+    // 노드 속성 객체를 한 번만 찾아 두고 직접 고친다(프레임마다 1만 번 이벤트·조회를 하면 느리다).
+    // 화면 갱신은 아래 `sigma.refresh()` 가 한 번에 한다.
+    const attrs = ids.map((id) => graph.getNodeAttributes(id) as { x: number; y: number });
+    // 노드가 많으면(수천 개) 화면 갱신 한 번이 무거우므로 두 프레임에 한 번만 갱신해 입력·스크롤이 끊기지 않게 한다
+    const heavy = attrs.length > 2500;
+    const ease = heavy ? 0.3 : 0.18;
+    let skip = false;
     const follow = () => {
       raf = 0;
+      if (heavy && (skip = !skip)) {
+        raf = requestAnimationFrame(follow);
+        return;
+      }
       let moving = false;
-      for (let i = 0; i < ids.length; i++) {
-        const id = ids[i]!;
-        if (!graph.hasNode(id)) continue;
-        const x = graph.getNodeAttribute(id, 'x') as number;
-        const y = graph.getNodeAttribute(id, 'y') as number;
-        const dx = target[i * 2]! - x;
-        const dy = target[i * 2 + 1]! - y;
+      for (let i = 0; i < attrs.length; i++) {
+        const a = attrs[i]!;
+        const dx = target[i * 2]! - a.x;
+        const dy = target[i * 2 + 1]! - a.y;
         if (Math.abs(dx) < 0.02 && Math.abs(dy) < 0.02) {
-          if (dx !== 0 || dy !== 0) graph.mergeNodeAttributes(id, { x: target[i * 2]!, y: target[i * 2 + 1]! });
+          a.x = target[i * 2]!;
+          a.y = target[i * 2 + 1]!;
           continue;
         }
         moving = true;
-        graph.mergeNodeAttributes(id, { x: x + dx * 0.18, y: y + dy * 0.18 });
+        a.x += dx * ease;
+        a.y += dy * ease;
       }
       sigma.refresh();
       if (moving) raf = requestAnimationFrame(follow);
@@ -274,7 +284,10 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
       if (first) {
         // 미리 돌려 둔 첫 배치는 곧바로 보여 주고(자리 잡기), 이후 변화만 부드럽게 따라간다
         first = false;
-        ids.forEach((id, i) => graph.hasNode(id) && graph.mergeNodeAttributes(id, { x: target[i * 2]!, y: target[i * 2 + 1]! }));
+        attrs.forEach((a, i) => {
+          a.x = target[i * 2]!;
+          a.y = target[i * 2 + 1]!;
+        });
         sigma.refresh();
         setReady(true);
       } else if (!raf) raf = requestAnimationFrame(follow);

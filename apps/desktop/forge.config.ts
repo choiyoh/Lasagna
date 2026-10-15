@@ -55,6 +55,7 @@ const config: ForgeConfig = {
         { entry: 'src/main/main.ts', config: 'vite.main.config.ts', target: 'main' },
         { entry: 'src/preload/preload.ts', config: 'vite.preload.config.ts', target: 'preload' },
         { entry: 'src/workers/index/index-worker.ts', config: 'vite.worker.config.ts', target: 'main' },
+        { entry: 'src/workers/index/parse-worker.ts', config: 'vite.worker.config.ts', target: 'main' },
         { entry: 'src/workers/sync/sync-worker.ts', config: 'vite.worker.config.ts', target: 'main' },
       ],
       renderer: [{ name: 'main_window', config: 'vite.renderer.config.ts' }],

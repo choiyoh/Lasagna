@@ -88,18 +88,17 @@ port.on('message', (req: WorkerRequest) => {
   }
 });
 
-// 시작 시 증분 스캔 → 감시 시작. 진행률은 이벤트로 알린다.
-try {
-  let last = 0;
-  ix.scan((done, total) => {
-    const now = Date.now();
-    if (done === total || now - last > 100) {
-      last = now;
-      post({ type: 'event', name: 'index.progress', payload: { done, total } });
-    }
-  });
-  post({ type: 'ready' });
-  void startWatching();
-} catch (e) {
-  post({ type: 'fatal', error: e instanceof Error ? e.message : String(e) });
-}
+// 시작 시 증분 스캔(파일이 많으면 파싱을 여러 스레드에 나눈다) → 감시 시작. 진행률은 이벤트로 알린다.
+let lastProgress = 0;
+ix.scanParallel((done, total) => {
+  const now = Date.now();
+  if (done === total || now - lastProgress > 100) {
+    lastProgress = now;
+    post({ type: 'event', name: 'index.progress', payload: { done, total } });
+  }
+})
+  .then(() => {
+    post({ type: 'ready' });
+    void startWatching();
+  })
+  .catch((e) => post({ type: 'fatal', error: e instanceof Error ? e.message : String(e) }));

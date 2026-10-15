@@ -16,6 +16,9 @@ export type LayoutOut = { type: 'positions'; positions: Float32Array; done: bool
 
 const MAX_ITERATIONS = 700;
 const CHUNK = 4;
+/** 처음 배치를 화면에 내보내기 전에 미리 돌리는 한도 */
+const WARMUP_ITERATIONS = 160;
+const WARMUP_MS = 400;
 
 let graph: Graph | null = null;
 let forces: Forces = { gravity: 0.3, repulsion: 0.3, linkDistance: 0.5 };
@@ -30,7 +33,8 @@ function settings() {
     scalingRatio: 1 + forces.repulsion * 30,
     edgeWeightInfluence: 1,
     barnesHutOptimize: n > 300,
-    slowDown: 1 + Math.log(n + 1),
+    // 시간이 지날수록 움직임을 식혀(slowDown 증가) 마지막에는 떨림 없이 가라앉게 한다
+    slowDown: (1 + Math.log(n + 1)) * (1 + (iterations / MAX_ITERATIONS) * 3),
     adjustSizes: false,
   };
 }
@@ -62,7 +66,7 @@ function tick() {
 
 function restart() {
   clearTimeout(timer);
-  iterations = Math.min(iterations, MAX_ITERATIONS - 200);
+  iterations = Math.min(iterations, MAX_ITERATIONS - 300);
   applyEdgeWeights();
   tick();
 }
@@ -90,5 +94,13 @@ self.onmessage = (ev: MessageEvent<LayoutIn>) => {
   }
   iterations = msg.warm ? MAX_ITERATIONS - 120 : 0;
   applyEdgeWeights();
+  // 처음 배치는 화면에 보이기 전에 미리 돌려 둔다(가장 격렬한 초반 움직임을 보여 주지 않으려고)
+  if (!msg.warm) {
+    const t0 = performance.now();
+    while (iterations < WARMUP_ITERATIONS && performance.now() - t0 < WARMUP_MS) {
+      forceAtlas2.assign(graph, { iterations: CHUNK, settings: settings() });
+      iterations += CHUNK;
+    }
+  }
   tick();
 };

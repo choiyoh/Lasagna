@@ -5,7 +5,8 @@ import { EdgeArrowProgram, EdgeRectangleProgram } from 'sigma/rendering';
 import type { GraphData, GraphSettings } from '@nopsidian/ipc-contract';
 import { colorForNode, matchesQuery, parseGraphQuery } from './filter';
 import type { LayoutIn, LayoutOut } from './layout-worker';
-import { readPalette, type GraphPalette } from './palette';
+import { mix, readPalette, type GraphPalette } from './palette';
+import { NodeGlowProgram } from './node-glow';
 
 interface Props {
   data: GraphData;
@@ -59,6 +60,10 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   const live = useRef({ settings, current, onOpen });
   live.current = { settings, current, onOpen };
   const [stats, setStats] = useState('');
+  /** 첫 배치가 도착하기 전에는 캔버스를 숨겨 두었다가 부드럽게 나타낸다(초반의 요동을 보여 주지 않는다) */
+  const [ready, setReady] = useState(false);
+  /** 노드별 기본 색(연결이 많을수록 강조색에 가깝게). 테마가 바뀌거나 그래프를 다시 만들면 비운다 */
+  const tint = useRef(new Map<string, string>());
   /** 테마가 바뀌면 다시 읽는다 */
   const pal = useRef<GraphPalette>(readPalette());
 
@@ -75,17 +80,24 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     const n = data.nodes.length;
     const cached = prev ? new Map<string, [number, number]>() : loadLayout(cacheKey);
     let known = 0;
-    data.nodes.forEach((node, i) => {
+    // 새 노드의 처음 자리: 연결이 많은 노드를 가운데에 두는 해바라기 배열(무작위 없이 항상 같다).
+    // 최종 모양에 가깝게 시작해야 배치가 얌전히 가라앉는다.
+    const rank = new Map<string, number>();
+    [...data.nodes].sort((a, b) => b.degree - a.degree || a.id.localeCompare(b.id)).forEach((nd, i) => rank.set(nd.id, i));
+    const maxDegree = data.nodes.reduce((m, nd) => Math.max(m, nd.degree), 1);
+    tint.current.clear();
+    data.nodes.forEach((node) => {
       const hit = cached.get(node.id);
       const old = prev?.hasNode(node.id) ? prev.getNodeAttributes(node.id) : hit ? { x: hit[0], y: hit[1] } : null;
       if (old) known++;
-      const angle = (i / Math.max(n, 1)) * Math.PI * 2;
-      const radius = 10 + Math.sqrt(n) * 3;
+      const k = rank.get(node.id) ?? 0;
+      const angle = k * 2.399963229728653; // 황금각
+      const radius = 4 * Math.sqrt(k + 0.5);
       graph.addNode(node.id, {
         label: node.label,
-        size: 3 + Math.sqrt(node.degree) * 2.2,
-        x: old ? (old.x as number) : Math.cos(angle) * radius + Math.random(),
-        y: old ? (old.y as number) : Math.sin(angle) * radius + Math.random(),
+        size: 3 + Math.min(Math.sqrt(node.degree) * 2.3, 20),
+        x: old ? (old.x as number) : Math.cos(angle) * radius,
+        y: old ? (old.y as number) : Math.sin(angle) * radius,
         color: pal.current.note,
         kind: node.kind,
       });
@@ -146,6 +158,8 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
         }
       },
       defaultEdgeType: live.current.settings.arrows ? 'arrow' : 'line',
+      defaultNodeType: 'glow',
+      nodeProgramClasses: { glow: NodeGlowProgram },
       edgeProgramClasses: { arrow: EdgeArrowProgram, line: EdgeRectangleProgram },
       nodeReducer: (id, attrs) => {
         const { settings: s, current: cur } = live.current;
@@ -153,7 +167,14 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
         const out = { ...attrs };
         if (!node) return out;
         const p = pal.current;
-        out.color = colorForNode(node, s.groups, node.kind === 'tag' ? p.tag : node.kind === 'unresolved' ? p.unresolved : p.note);
+        let base = tint.current.get(id);
+        if (!base) {
+          // 연결이 많은 노트일수록 강조색에 가까워진다(허브가 한눈에 보이게)
+          const t = node.kind === 'note' ? Math.min(1, Math.log2(1 + node.degree) / Math.log2(1 + maxDegree)) : 0;
+          base = node.kind === 'tag' ? p.tag : node.kind === 'unresolved' ? p.unresolved : mix(p.note, p.accent, t * 0.6);
+          tint.current.set(id, base);
+        }
+        out.color = colorForNode(node, s.groups, base);
         out.zIndex = 1;
         if (!matchesQuery(node, parsedRef.current)) {
           out.color = p.dim;
@@ -217,21 +238,54 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     graph.forEachEdge((_e, _a, s, t) => edgeArr.push(index.get(s)!, index.get(t)!));
     const worker = new Worker(new URL('./layout-worker.ts', import.meta.url), { type: 'module' });
     workerRef.current = worker;
+    // 워커가 보내 주는 위치는 '목표'일 뿐이고, 화면의 노드는 목표를 향해 부드럽게 따라간다.
+    // 배치 계산의 미세한 진동이 그대로 보이지 않고, 노드가 갑자기 튀지도 않는다.
+    const target = new Float32Array(pos);
+    let raf = 0;
+    let finished = false;
+    let first = true;
+    const follow = () => {
+      raf = 0;
+      let moving = false;
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]!;
+        if (!graph.hasNode(id)) continue;
+        const x = graph.getNodeAttribute(id, 'x') as number;
+        const y = graph.getNodeAttribute(id, 'y') as number;
+        const dx = target[i * 2]! - x;
+        const dy = target[i * 2 + 1]! - y;
+        if (Math.abs(dx) < 0.02 && Math.abs(dy) < 0.02) {
+          if (dx !== 0 || dy !== 0) graph.mergeNodeAttributes(id, { x: target[i * 2]!, y: target[i * 2 + 1]! });
+          continue;
+        }
+        moving = true;
+        graph.mergeNodeAttributes(id, { x: x + dx * 0.18, y: y + dy * 0.18 });
+      }
+      sigma.refresh();
+      if (moving) raf = requestAnimationFrame(follow);
+      else if (finished) saveLayout(cacheKey, graph);
+    };
+    const warm = n > 0 && known / n >= 0.95;
+    if (!warm) setReady(false);
     worker.onmessage = (ev: MessageEvent<LayoutOut>) => {
       const { positions, done } = ev.data;
-      ids.forEach((id, i) => {
-        if (!graph.hasNode(id)) return;
-        graph.mergeNodeAttributes(id, { x: positions[i * 2]!, y: positions[i * 2 + 1]! });
-      });
-      sigma.refresh();
-      if (done) saveLayout(cacheKey, graph);
+      target.set(positions);
+      finished = done;
+      if (first) {
+        // 미리 돌려 둔 첫 배치는 곧바로 보여 주고(자리 잡기), 이후 변화만 부드럽게 따라간다
+        first = false;
+        ids.forEach((id, i) => graph.hasNode(id) && graph.mergeNodeAttributes(id, { x: target[i * 2]!, y: target[i * 2 + 1]! }));
+        sigma.refresh();
+        setReady(true);
+      } else if (!raf) raf = requestAnimationFrame(follow);
       setStats(`${ids.length}개 노드 · ${graph.size}개 링크${done ? '' : ' · 배치 중…'}`);
     };
-    const init: LayoutIn = { type: 'init', ids, positions: pos, edges: new Uint32Array(edgeArr), forces: live.current.settings.forces, warm: n > 0 && known / n >= 0.95 };
+    const init: LayoutIn = { type: 'init', ids, positions: pos, edges: new Uint32Array(edgeArr), forces: live.current.settings.forces, warm };
     worker.postMessage(init);
     setStats(`${ids.length}개 노드 · ${graph.size}개 링크`);
 
     return () => {
+      cancelAnimationFrame(raf);
       saveLayout(cacheKey, graph);
       worker.postMessage({ type: 'stop' } satisfies LayoutIn);
       worker.terminate();
@@ -245,6 +299,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   useEffect(() => {
     const redraw = () => {
       pal.current = readPalette();
+      tint.current.clear();
       sigmaRef.current?.refresh();
     };
     window.addEventListener('nops:theme', redraw);
@@ -291,7 +346,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
 
   return (
     <div className="graphview" data-testid={testId}>
-      <div ref={host} className="graphview__canvas" />
+      <div ref={host} className={ready ? 'graphview__canvas ready' : 'graphview__canvas'} />
       <span className="graphview__stats muted small" data-testid={`${testId}-stats`}>
         {stats}
       </span>

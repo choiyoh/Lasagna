@@ -51,7 +51,7 @@ export function readPalette(): GraphPalette {
     note,
     tag: dark ? '#e0b45a' : '#c58a1b',
     unresolved: dark ? '#6c6c7a' : '#a4a4b2',
-    edge: mix(bg, note, dark ? 0.3 : 0.2),
+    edge: mix(bg, note, dark ? 0.4 : 0.27),
     edgeFaded: mix(bg, note, 0.1),
     edgeHot: accent,
     dim: mix(bg, note, 0.28),

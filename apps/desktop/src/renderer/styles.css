@@ -662,3 +662,10 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .tree li.drop-before::before, .tree li.drop-after::after { content: ''; position: absolute; left: calc(8px + var(--d, 0) * 14px); right: 6px; height: 2px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent); z-index: 8; pointer-events: none; }
 .tree li.drop-before::before { top: -1px; }
 .tree li.drop-after::after { bottom: -1px; }
+
+/* 사이드바: 여러 개 선택·키보드 이동 */
+.tree .row.picked, .tree summary.picked { background: color-mix(in srgb, var(--accent) 17%, transparent); }
+.tree .row.picked.active { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.list:focus-within .row.cursor, .list:focus-within .tree summary.cursor { outline: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: -1.5px; }
+.tree .row:focus-visible, .tree summary:focus-visible { outline: 1.5px solid var(--accent); outline-offset: -1.5px; }
+.dragbadge { position: fixed; top: -100px; left: -100px; padding: 4px 12px; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 600; }

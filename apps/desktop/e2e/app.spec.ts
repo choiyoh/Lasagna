@@ -1491,8 +1491,8 @@ views:
     note('탭B', '# 탭B\n\n비 내용\n');
     note('탭C', '# 탭C\n\n씨 내용\n');
     await open(page, '탭A');
-    // ⌘-클릭이면 새 탭
-    await page.getByRole('button', { name: '탭B', exact: true }).first().click({ modifiers: ['Meta'] });
+    // 가운데 버튼 클릭이면 새 탭(⌘/Ctrl 클릭은 여러 개 선택에 쓴다)
+    await page.getByRole('button', { name: '탭B', exact: true }).first().click({ button: 'middle' });
     await expect(page.locator('.ProseMirror h1')).toHaveText('탭B');
     const tabs = page.getByTestId('note-tab');
     await expect(tabs).toHaveCount(2);
@@ -1758,6 +1758,89 @@ views:
     await expect.poll(() => existsSync(path.join(vaultDir, '정렬/정렬밖.md')), { timeout: 8000 }).toBe(true);
     expect(existsSync(path.join(vaultDir, '정렬밖.md'))).toBe(false);
     await expect.poll(names, { timeout: 5000 }).toEqual(['순서가', '정렬밖', '순서나', '순서다']);
+  });
+
+  test('사이드바 여러 개 선택: ⌘/⇧ 클릭, 키보드 이동, 한꺼번에 끌어 순서 바꾸기·옮기기·삭제', async () => {
+    const page = await app.firstWindow();
+    for (const n of ['M1', 'M2', 'M3', 'M4']) note(`다중/${n}`, `# ${n}\n`);
+    note('다중도착/안쪽', '# 안쪽\n');
+    const row = (name: string) => page.locator('.tree .row', { hasText: new RegExp(`^${name}$`) });
+    await expect(row('M4')).toBeVisible({ timeout: 8000 });
+    const names = () =>
+      page.evaluate(() => {
+        const li = [...document.querySelectorAll('.tree li')].find((l) => l.querySelector(':scope > details > summary > span')?.textContent === '다중');
+        return [...(li?.querySelectorAll(':scope > details > ul > li > .row') ?? [])].map((b) => b.textContent);
+      });
+    const picked = () => page.locator('.tree .row.picked').allTextContents();
+    await expect.poll(names).toEqual(['M1', 'M2', 'M3', 'M4']);
+
+    // ⌘/Ctrl 클릭: 열려 있던 노트까지 함께 골라진다. ⇧ 클릭: 범위
+    await row('M1').click();
+    await expect(page.locator('.ProseMirror h1')).toHaveText('M1', { timeout: 8000 });
+    await row('M3').click({ modifiers: ['ControlOrMeta'] });
+    expect((await picked()).sort()).toEqual(['M1', 'M3']);
+    await expect(page.locator('.ProseMirror h1')).toHaveText('M1'); // 선택만 바뀌고 노트는 그대로
+    await row('M2').click({ modifiers: ['Shift'] });
+    expect((await picked()).sort()).toEqual(['M2', 'M3']);
+
+    // 키보드: 화살표로 이동하고 ⇧ 화살표로 늘린다
+    await row('M1').click();
+    expect(await picked()).toEqual([]);
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('.tree .row.cursor')).toHaveText('M2');
+    await expect(page.locator('.tree .row.cursor')).toBeFocused();
+    await page.keyboard.press('Shift+ArrowDown');
+    expect((await picked()).sort()).toEqual(['M2', 'M3']);
+    await page.keyboard.press('Escape');
+    expect(await picked()).toEqual([]);
+
+    // 여러 개를 한 덩어리로 끌어 'M1' 앞으로: 순서만 바뀌고 파일은 그대로
+    const drag = (names: string[], toText: string, where: 'top' | 'bottom' | 'middle', toFolder = false) =>
+      page.evaluate(
+        async ([names, toText, where, toFolder]) => {
+          const tick = () => new Promise((r) => setTimeout(r, 40));
+          const from = [...document.querySelectorAll('.tree .row')].find((b) => b.textContent === names[0])!;
+          const to = toFolder
+            ? [...document.querySelectorAll('.tree summary')].find((b) => b.querySelector('span')?.textContent === toText)!
+            : [...document.querySelectorAll('.tree .row')].find((b) => b.textContent === toText)!;
+          const r = to.getBoundingClientRect();
+          const y = where === 'top' ? r.top + r.height * 0.15 : where === 'bottom' ? r.bottom - r.height * 0.15 : r.top + r.height / 2;
+          const dt = new DataTransfer();
+          const fire = (el: Element, type: string) => el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true, clientX: r.left + 20, clientY: y }));
+          fire(from, 'dragstart');
+          await tick();
+          fire(to, 'dragover');
+          await tick();
+          fire(to, 'drop');
+          await tick();
+          fire(from, 'dragend');
+        },
+        [names, toText, where, toFolder] as const,
+      );
+    await row('M4').click();
+    await row('M2').click({ modifiers: ['ControlOrMeta'] });
+    expect((await picked()).sort()).toEqual(['M2', 'M4']);
+    await drag(['M2'], 'M1', 'top');
+    await expect.poll(names, { timeout: 5000 }).toEqual(['M2', 'M4', 'M1', 'M3']);
+    expect(existsSync(path.join(vaultDir, '다중/M4.md'))).toBe(true);
+
+    // 폴더 가운데에 놓으면 모두 그 폴더 안으로(확인창 없이 한 번에), 되돌리기는 한 번에
+    await drag(['M2'], '다중도착', 'middle', true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '다중도착/M2.md')) && existsSync(path.join(vaultDir, '다중도착/M4.md')), { timeout: 8000 }).toBe(true);
+    expect(existsSync(path.join(vaultDir, '다중/M2.md'))).toBe(false);
+    await page.getByRole('button', { name: '되돌리기' }).click();
+    await expect.poll(() => existsSync(path.join(vaultDir, '다중/M2.md')) && existsSync(path.join(vaultDir, '다중/M4.md')), { timeout: 8000 }).toBe(true);
+
+    // Delete 키: 여러 개 삭제 확인 → 휴지통 → 되돌리기
+    await row('M1').click();
+    await row('M3').click({ modifiers: ['ControlOrMeta'] });
+    await page.keyboard.press('Delete');
+    const dlg = page.getByRole('dialog');
+    await expect(dlg).toContainText('2개 항목을 삭제할까요?');
+    await dlg.getByRole('button', { name: '삭제' }).click();
+    await expect.poll(() => existsSync(path.join(vaultDir, '다중/M1.md')) || existsSync(path.join(vaultDir, '다중/M3.md')), { timeout: 8000 }).toBe(false);
+    await page.getByRole('button', { name: '되돌리기' }).click();
+    await expect.poll(() => existsSync(path.join(vaultDir, '다중/M1.md')) && existsSync(path.join(vaultDir, '다중/M3.md')), { timeout: 8000 }).toBe(true);
   });
 
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {

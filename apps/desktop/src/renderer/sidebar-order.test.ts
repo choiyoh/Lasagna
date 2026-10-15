@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeInOrder, remapOrder, sortByOrder } from './sidebar-order';
+import { placeGroupInOrder, placeInOrder, remapOrder, sortByOrder } from './sidebar-order';
 
 describe('sidebar-order', () => {
   it('저장된 순서대로 정렬하고, 없는 이름은 원래 순서로 뒤에 붙인다', () => {
@@ -14,6 +14,11 @@ describe('sidebar-order', () => {
     expect(placeInOrder(['a', 'b', 'c'], 'a', 'b', 'before')).toEqual(['a', 'b', 'c']);
     expect(placeInOrder(['a', 'b'], 'z', 'b', 'after')).toEqual(['a', 'b', 'z']);
     expect(placeInOrder(['a', 'b'], 'z', 'nope', 'before')).toEqual(['a', 'b', 'z']);
+  });
+  it('여러 항목을 한 덩어리로 끼워 넣는다', () => {
+    expect(placeGroupInOrder(['a', 'b', 'c', 'd'], ['d', 'a'], 'c', 'before')).toEqual(['b', 'd', 'a', 'c']);
+    expect(placeGroupInOrder(['a', 'b', 'c'], ['a', 'b'], 'c', 'after')).toEqual(['c', 'a', 'b']);
+    expect(placeGroupInOrder(['a'], ['x', 'y'], 'nope', 'before')).toEqual(['a', 'x', 'y']);
   });
   it('이름 바꾸기·이동에 순서가 따라간다', () => {
     const o = { '': ['폴더', '메모.md'], 폴더: ['a.md', 'b.md'], '폴더/하위': ['c.md'] };

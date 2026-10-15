@@ -30,6 +30,15 @@ export function placeInOrder(current: string[], moved: string, target: string, p
   return list;
 }
 
+/** 여러 항목(`moved`, 보이는 순서)을 `target` 의 앞/뒤에 한 덩어리로 끼워 넣는다. */
+export function placeGroupInOrder(current: string[], moved: string[], target: string, pos: 'before' | 'after'): string[] {
+  const list = current.filter((n) => !moved.includes(n));
+  const at = list.indexOf(target);
+  if (at < 0) return [...list, ...moved];
+  list.splice(pos === 'before' ? at : at + 1, 0, ...moved);
+  return list;
+}
+
 /**
  * 이름 바꾸기·이동에 맞춰 순서를 고친다. `from`/`to` 는 볼트 상대 경로.
  *  - 같은 폴더 안에서 이름만 바뀌면 그 자리의 이름을 바꾼다.

@@ -1866,7 +1866,7 @@ views:
     await client.connect(new StdioClientTransport({ command: process.execPath, args: [script, '--vault', vaultDir, '--write'], stderr: 'ignore' }));
     try {
       const tools = (await client.listTools()).tools.map((t) => t.name);
-      expect(tools).toEqual(expect.arrayContaining(['search_notes', 'create_note', 'append_to_note']));
+      expect(tools).toEqual(expect.arrayContaining(['search_notes', 'create_note', 'append_to_note', 'list_databases', 'query_database', 'add_database_row', 'update_database_row']));
       const text = (r: unknown) => (r as { content: { text: string }[] }).content[0]!.text;
       // 읽기: 앱에 있는 노트를 검색한다
       expect(text(await client.callTool({ name: 'search_notes', arguments: { query: 'Nopsidian' } }))).toContain('프로젝트/Nopsidian.md');

@@ -95,6 +95,22 @@ export class NoteWriter {
     return this.commit(tool, 'update', rel, content.replace(/\s+$/, '') + '\n', disk);
   }
 
+  /** 이미 완성된 노트 전문을 그대로 새 노트로 쓴다(데이터베이스 행처럼 프런트매터를 직접 만든 경우). 있으면 실패. */
+  createExact(tool: string, rawPath: string, text: string): WriteResult {
+    const rel = this.guard(tool, rawPath);
+    if (existsSync(resolveInVault(this.policy.root, rel))) this.deny(tool, rel, 'exists', `이미 있는 노트예요: ${rel}`);
+    return this.commit(tool, 'create', rel, text, null);
+  }
+
+  /** 기존 노트의 현재 내용을 읽어 `mutate` 로 바꾼 결과를 쓴다. 결과가 같으면 쓰지 않고 그대로 돌려준다. */
+  modify(tool: string, rawPath: string, mutate: (disk: string) => string): WriteResult {
+    const rel = this.guard(tool, rawPath);
+    const disk = this.readDisk(tool, rel);
+    const next = mutate(disk);
+    if (next === disk) return { path: rel, hash: sha256(disk), bytes: Buffer.byteLength(disk), status: 'saved' };
+    return this.commit(tool, 'update', rel, next, disk);
+  }
+
   /** 쓰기 전 공통 검사: 켜짐·경로·폴더·횟수 */
   private guard(tool: string, rawPath: string): string {
     let rel: string;

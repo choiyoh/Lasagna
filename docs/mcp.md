@@ -10,8 +10,8 @@ Claude 같은 AI 에이전트가 Nopsidian 볼트의 노트를 **찾아 읽고**
 직접 실행: `node nopsidian-mcp.mjs --vault <볼트 폴더> [--write] [--write-folder <폴더>]…` (`--help` 참고). 서버 파일은 앱의 `resources/nopsidian-mcp.mjs`(개발 중에는 `pnpm --filter @nopsidian/mcp build` 로 `packages/mcp/dist/`)에 있습니다.
 
 ## 도구
-읽기(항상): `search_notes`(제목·별칭·태그·제목들·본문 AND 검색, 한글 부분 일치), `list_notes`, `read_note`(내용 + 해시·태그·제목들·링크·속성), `get_backlinks`, `list_tags`.
-쓰기(`--write` 일 때만): `create_note`(새 노트, 있으면 실패), `append_to_note`(끝 또는 제목 구역 끝에 덧붙이기), `update_note`(통째로 교체 — `read_note` 의 해시 필요, 그 사이 바뀌었으면 거부), `get_write_policy`.
+읽기(항상): `search_notes`(제목·별칭·태그·제목들·본문 AND 검색, 한글 부분 일치), `list_notes`, `read_note`(내용 + 해시·태그·제목들·링크·속성), `get_backlinks`, `list_tags`, **`list_databases`**(데이터베이스 폴더와 속성 형식·선택 옵션·보기), **`query_database`**(보기·필터·정렬로 행 조회).
+쓰기(`--write` 일 때만): `create_note`(새 노트, 있으면 실패), `append_to_note`(끝 또는 제목 구역 끝에 덧붙이기), `update_note`(통째로 교체 — `read_note` 의 해시 필요, 그 사이 바뀌었으면 거부), **`add_database_row`**(속성 형식·옵션을 검증해 행 추가, 고유 ID·created 자동), **`update_database_row`**(주어진 속성만 바꾸고 본문은 그대로, `null` 은 비움), `get_write_policy`. 데이터베이스 행 쓰기도 허용 폴더 안(데이터베이스 폴더가 `--write-folder` 에 들어 있어야)에서만 되고, 계산 속성·양방향 관계·없는 속성·없는 옵션은 이유와 함께 거부합니다.
 지우기·이동·이름 바꾸기는 없습니다.
 
 ## 안전장치

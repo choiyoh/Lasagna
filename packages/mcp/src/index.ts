@@ -5,3 +5,4 @@ export { appendAudit, readAudit, AUDIT_FILE } from './audit.js';
 export type { AuditEntry } from './audit.js';
 export { NoteWriter, WriteError, appendText, composeNote } from './writer.js';
 export { VaultScanner } from './vault-scan.js';
+export { DatabaseAccess, findDatabaseFolders } from './databases.js';

@@ -45,7 +45,7 @@ describe('MCP 서버 — 읽기 전용(기본)', () => {
   it('읽기 도구만 보이고 쓰기 도구는 없다', async () => {
     const { client } = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(['get_backlinks', 'list_notes', 'list_tags', 'read_note', 'search_notes']);
+    expect(names).toEqual(['get_backlinks', 'list_databases', 'list_notes', 'list_tags', 'query_database', 'read_note', 'search_notes']);
     expect((await client.listTools()).tools.every((t) => t.annotations?.readOnlyHint)).toBe(true);
     expect(client.getInstructions()).toContain('read-only');
   });
@@ -123,5 +123,114 @@ describe('MCP 서버 — 쓰기 허용', () => {
       expect(r.isError, bad).toBe(true);
     }
     expect(existsSync(path.join(path.dirname(root), '탈출.md'))).toBe(false);
+  });
+});
+
+describe('MCP 서버 — 데이터베이스', () => {
+  const DB_YAML = [
+    'title: 할 일',
+    'properties:',
+    '  상태: { type: status, options: [{name: 할 일, group: todo}, {name: 진행, group: doing}, {name: 완료, group: done}] }',
+    '  점수: { type: number }',
+    '  마감: { type: date }',
+    '  분류: { type: multi_select, options: [{name: 집}, {name: 회사}] }',
+    '  번호: { type: unique_id }',
+    '  합: { type: formula, expr: "prop(\\"점수\\") * 2" }',
+    '  관련: { type: relation, target: "*", twoWay: true, reverse: 역관련 }',
+    'views:',
+    '  - { id: v1, name: 전체, type: table, sort: [] }',
+    '  - { id: v2, name: 진행만, type: table, sort: [], filter: { prop: 상태, op: "=", value: 진행 } }',
+    '',
+  ].join('\n');
+  async function withDb(over: Partial<McpPolicy> = {}) {
+    const c = await connect(over);
+    mkdirSync(path.join(c.root, '할일'));
+    writeFileSync(path.join(c.root, '할일/_db.yaml'), DB_YAML);
+    writeFileSync(path.join(c.root, '할일/가.md'), '---\n상태: 진행\n점수: 5\n마감: 2026-11-01\n번호: 1\n---\n# 가\n본문 가\n');
+    writeFileSync(path.join(c.root, '할일/나.md'), '---\n상태: 완료\n점수: 2\n번호: 2\n---\n# 나\n');
+    writeFileSync(path.join(c.root, '할일/다.md'), '---\n상태: 진행\n점수: 9\n분류: [집]\n번호: 3\n---\n# 다\n');
+    return c;
+  }
+  const write = { write: true, writeFolders: ['할일', 'AI'] };
+
+  it('list_databases: 속성 형식·옵션·쓸 수 있는지를 알려 준다', async () => {
+    const { call } = await withDb();
+    const r = await call('list_databases');
+    const db = r.json.databases[0];
+    expect(db).toMatchObject({ folder: '할일', title: '할 일', rows: 3 });
+    const prop = (n: string) => db.properties.find((p: { name: string }) => p.name === n);
+    expect(prop('상태')).toMatchObject({ type: 'status', options: ['할 일', '진행', '완료'], writable: true });
+    expect(prop('합')).toMatchObject({ writable: false });
+    expect(prop('관련')).toMatchObject({ writable: false });
+    expect(prop('번호').note).toContain('automatically');
+    expect(db.views.map((v: { name: string }) => v.name)).toEqual(['전체', '진행만']);
+  });
+  it('query_database: 보기·필터·정렬·한도', async () => {
+    const { call } = await withDb();
+    const all = await call('query_database', { database: '할일' });
+    expect(all.json).toMatchObject({ total: 3, matched: 3 });
+    const view = await call('query_database', { database: '할 일', view: '진행만' }); // 제목으로도, 보기 이름으로도
+    expect(view.json.rows.map((x: { title: string }) => x.title).sort()).toEqual(['가', '다']);
+    const f = await call('query_database', { database: '할일', filter: [{ prop: '점수', op: '>=', value: 5 }], sort: [{ prop: '점수', dir: 'desc' }] });
+    expect(f.json.rows.map((x: { title: string }) => x.title)).toEqual(['다', '가']);
+    expect(f.json.rows[0].values).toMatchObject({ 상태: '진행', 점수: 9, 분류: ['집'] });
+    expect((await call('query_database', { database: '할일', limit: 1, offset: 1 })).json.rows).toHaveLength(1);
+    expect((await call('query_database', { database: '할일', filter: [{ prop: '없는속성', op: '=', value: 1 }] })).isError).toBe(true);
+    expect((await call('query_database', { database: '없는DB' })).text).toContain('list_databases');
+  });
+  it('읽기 전용이면 행 쓰기 도구가 없다', async () => {
+    const { client } = await withDb();
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names).toEqual(expect.arrayContaining(['list_databases', 'query_database']));
+    expect(names).not.toContain('add_database_row');
+  });
+  it('add_database_row: 검증해서 행을 만들고 고유 ID·created 를 붙인다', async () => {
+    const { call, root } = await withDb(write);
+    const r = await call('add_database_row', { database: '할일', title: '새 일', values: { 상태: '할 일', 점수: '7', 마감: '2026-12-25', 분류: ['회사', '집'] }, body: '메모' });
+    expect(r.isError).toBe(false);
+    expect(r.json.path).toBe('할일/새 일.md');
+    const text = readFileSync(path.join(root, '할일/새 일.md'), 'utf8');
+    expect(text).toMatch(/^---\n상태: 할 일\n점수: 7\n마감: 2026-12-25\n분류:\n {2}- 회사\n {2}- 집\n번호: 4\ncreated: \d{4}-\d\d-\d\dT[\d:+-]+\n---\n\n메모$/);
+    // 새 행이 바로 질의에 잡힌다
+    expect((await call('query_database', { database: '할일', filter: [{ prop: '번호', op: '=', value: 4 }] })).json.rows[0]).toMatchObject({ title: '새 일', values: { 점수: 7 } });
+    // 같은 제목이면 번호를 붙인다
+    expect((await call('add_database_row', { database: '할일', title: '새 일' })).json.path).toBe('할일/새 일 2.md');
+  });
+  it('add_database_row: 잘못된 값은 이유를 알려 주며 거부한다', async () => {
+    const { call, root } = await withDb(write);
+    const cases: [Record<string, unknown>, string][] = [
+      [{ 없는: 1 }, '없는 속성'],
+      [{ 상태: '몰라' }, '쓸 수 있는 옵션: 할 일, 진행, 완료'],
+      [{ 점수: '많이' }, '형식으로 읽을 수 없어요'],
+      [{ 합: 1 }, '계산되는 속성'],
+      [{ 관련: ['[[가]]'] }, '양방향 관계'],
+      [{ title: 'x' }, 'title 인자'],
+    ];
+    for (const [values, why] of cases) {
+      const r = await call('add_database_row', { database: '할일', title: '거부', values });
+      expect(r.isError, JSON.stringify(values)).toBe(true);
+      expect(r.text).toContain(why);
+    }
+    expect(existsSync(path.join(root, '할일/거부.md'))).toBe(false);
+  });
+  it('add_database_row: 허용 폴더 밖 데이터베이스는 거부한다', async () => {
+    const { call, root } = await withDb({ write: true, writeFolders: ['AI'] });
+    const r = await call('add_database_row', { database: '할일', title: '몰래', values: { 점수: 1 } });
+    expect(r.isError).toBe(true);
+    expect(r.text).toContain('forbidden-folder');
+    expect(existsSync(path.join(root, '할일/몰래.md'))).toBe(false);
+  });
+  it('update_database_row: 프런트매터의 그 키만 바꾸고 본문은 그대로, null 은 비운다', async () => {
+    const { call, root } = await withDb(write);
+    const r = await call('update_database_row', { path: '할일/가.md', values: { 상태: '완료', 마감: null } });
+    expect(r.isError).toBe(false);
+    expect(readFileSync(path.join(root, '할일/가.md'), 'utf8')).toBe('---\n상태: 완료\n점수: 5\n번호: 1\n---\n# 가\n본문 가\n');
+    expect((await call('update_database_row', { path: '할일/가.md', values: { 상태: '몰라' } })).isError).toBe(true);
+    expect((await call('update_database_row', { path: '프로젝트/계획.md', values: { 상태: '완료' } })).text).toContain('데이터베이스의 행이 아니에요');
+    expect((await call('update_database_row', { path: '할일/없음.md', values: { 점수: 1 } })).isError).toBe(true);
+    // 같은 값이면 파일을 다시 쓰지 않는다
+    const before = readAudit(root).length;
+    await call('update_database_row', { path: '할일/가.md', values: { 상태: '완료' } });
+    expect(readAudit(root).length).toBe(before);
   });
 });

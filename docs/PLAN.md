@@ -452,6 +452,8 @@ nopsidian/
   - 이미 색인된 볼트를 다시 열면 목록 준비 0.33초, 메모리 약 540MB(첫 색인 직후 약 760MB — 운영체제가 해제한 메모리를 바로 돌려받지 않는다).
   - 그래프 10,000개: 열기 0.6초, 배치 중 약 37fps(노드가 2,500개를 넘으면 두 프레임에 한 번 갱신, 노드 속성은 직접 갱신).
 
+### MCP 데이터베이스 도구 (v0.6.1)
+- `list_databases`/`query_database`(읽기)와 `add_database_row`/`update_database_row`(쓰기). 질의는 앱과 같은 `@nopsidian/core/db` 의 `queryRows` 를 쓰고(저장된 보기에서 시작해 필터·정렬을 더함), 값 검증·변환은 `normalizeValue`/`toFrontmatterValue`, 프런트매터 수정은 `setFrontmatter`(그 키만 바꾸고 본문 불변). 양방향 관계·계산 속성은 쓰기 거부(반대쪽 동기화는 앱의 일).
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

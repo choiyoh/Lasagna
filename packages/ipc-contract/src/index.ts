@@ -338,6 +338,9 @@ export const contract = {
   /** `.nopsidian/bookmarks.json` — 북마크한 노트 경로(볼트와 함께 동기화) */
   'bookmarks.get': { input: z.undefined(), output: z.array(relPath) },
   'bookmarks.set': { input: z.array(relPath).max(500), output: z.undefined() },
+  /** `.nopsidian/order.json` — 사이드바에서 손으로 정한 순서. 폴더 경로('' = 볼트 맨 위) → 그 폴더 안 항목 이름 순서(볼트와 함께 동기화) */
+  'order.get': { input: z.undefined(), output: z.record(z.string().max(1024), z.array(z.string().max(255)).max(5000)) },
+  'order.set': { input: z.record(z.string().max(1024), z.array(z.string().max(255)).max(5000)), output: z.undefined() },
   'graph.getSettings': { input: z.undefined(), output: graphSettings.nullable() },
   'graph.setSettings': { input: graphSettings, output: z.undefined() },
   'sync.status': { input: z.undefined(), output: syncStatus },

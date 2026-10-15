@@ -656,3 +656,9 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .datepicker__inputs { flex-direction: row; flex-wrap: wrap; }
 .datepicker__inputs input { flex: 1 1 100px; }
 .cell__datebtn { width: 100%; text-align: left; padding: 0; font: inherit; color: inherit; background: none; }
+
+/* 사이드바 끌어서 순서 바꾸기: 놓을 자리에 선을 보여 준다(노션처럼) */
+.tree li { position: relative; }
+.tree li.drop-before::before, .tree li.drop-after::after { content: ''; position: absolute; left: calc(8px + var(--d, 0) * 14px); right: 6px; height: 2px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent); z-index: 8; pointer-events: none; }
+.tree li.drop-before::before { top: -1px; }
+.tree li.drop-after::after { bottom: -1px; }

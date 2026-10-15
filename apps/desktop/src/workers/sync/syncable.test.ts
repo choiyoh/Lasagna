@@ -21,6 +21,7 @@ const CASES: [string, boolean, string][] = [
   ['.nopsidian/config.json', true, '설정'],
   ['.nopsidian/graph.json', true, '그래프'],
   ['.nopsidian/bookmarks.json', true, '북마크'],
+  ['.nopsidian/order.json', true, '사이드바 순서'],
   ['.nopsidian/comments', true, '주석 폴더'],
   ['.nopsidian/comments/a.md', true, '주석 파일'],
   ['.nopsidian/comments/2026/a.md', true, '주석 하위 파일'],

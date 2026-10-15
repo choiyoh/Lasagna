@@ -1681,17 +1681,83 @@ views:
       const row = [...document.querySelectorAll('.tree .row')].find((b) => b.textContent === '옮길노트')!;
       const folder = [...document.querySelectorAll('.tree summary')].find((b) => b.textContent?.includes('옮길곳'))!;
       const dt = new DataTransfer();
-      const fire = (el: Element, type: string) => el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+      // 폴더의 가운데에 놓으면 '폴더 안으로'(가장자리면 앞/뒤로 순서만 바뀐다)
+      const mid = folder.getBoundingClientRect();
+      const fire = (el: Element, type: string, y = 0) => el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true, clientX: mid.left + 20, clientY: y }));
       fire(row, 'dragstart');
       await tick();
-      fire(folder, 'dragover');
+      fire(folder, 'dragover', mid.top + mid.height / 2);
       await tick();
-      fire(folder, 'drop');
+      fire(folder, 'drop', mid.top + mid.height / 2);
       await tick();
       fire(row, 'dragend');
     });
     await expect.poll(() => existsSync(path.join(vaultDir, '옮길곳/옮길노트.md')), { timeout: 8000 }).toBe(true);
     expect(existsSync(mover)).toBe(false);
+  });
+
+  test('사이드바에서 끌어 순서 바꾸기: 같은 폴더 안에서도 옮겨지고, 놓을 자리에 선이 보이며, 다른 폴더로 가면 그 자리에 끼워진다', async () => {
+    const page = await app.firstWindow();
+    note('정렬/순서가', '# 순서가\n');
+    note('정렬/순서나', '# 순서나\n');
+    note('정렬/순서다', '# 순서다\n');
+    note('정렬밖', '# 정렬밖\n');
+    await expect(page.getByRole('button', { name: '순서다', exact: true }).first()).toBeVisible({ timeout: 8000 });
+    const names = () =>
+      page.evaluate(() => {
+        const li = [...document.querySelectorAll('.tree li')].find((l) => l.querySelector(':scope > details > summary > span')?.textContent === '정렬');
+        return [...(li?.querySelectorAll(':scope > details > ul > li > .row') ?? [])].map((b) => b.textContent);
+      });
+    await expect.poll(names).toEqual(['순서가', '순서나', '순서다']);
+
+    // 드래그 도우미: 대상 행의 위(앞)/아래(뒤) 가장자리에 놓는다. `hold` 면 놓지 않고 선 표시만 확인한다.
+    const drag = (fromSel: string, toSel: string, at: 'top' | 'bottom', hold = false) =>
+      page.evaluate(
+        async ([fromS, toS, where, hold]) => {
+          const tick = () => new Promise((r) => setTimeout(r, 40));
+          const rows = [...document.querySelectorAll('.tree .row')];
+          const from = rows.find((b) => b.textContent === fromS)!;
+          const to = rows.find((b) => b.textContent === toS)!;
+          const r = to.getBoundingClientRect();
+          const y = where === 'top' ? r.top + r.height * 0.15 : r.bottom - r.height * 0.15;
+          const dt = new DataTransfer();
+          const fire = (el: Element, type: string) => el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true, clientX: r.left + 20, clientY: y }));
+          fire(from, 'dragstart');
+          await tick();
+          fire(to, 'dragover');
+          await tick();
+          const mark = to.closest('li')!.className;
+          if (hold) {
+            fire(from, 'dragend');
+            return mark;
+          }
+          fire(to, 'drop');
+          await tick();
+          fire(from, 'dragend');
+          return mark;
+        },
+        [fromSel, toSel, at, hold] as const,
+      );
+
+    // 선 표시: 위쪽 가장자리면 앞, 아래쪽이면 뒤
+    expect(await drag('순서다', '순서가', 'top', true)).toContain('drop-before');
+    expect(await drag('순서다', '순서가', 'bottom', true)).toContain('drop-after');
+    await expect(page.locator('.tree li.drop-before, .tree li.drop-after')).toHaveCount(0); // 끝나면 선이 사라진다
+
+    // 같은 폴더 안: '순서다' 를 '순서가' 앞으로 → 파일은 그대로, 순서만 저장된다
+    await drag('순서다', '순서가', 'top');
+    await expect.poll(names, { timeout: 5000 }).toEqual(['순서다', '순서가', '순서나']);
+    expect(existsSync(path.join(vaultDir, '정렬/순서다.md'))).toBe(true);
+    await expect.poll(() => JSON.parse(readFileSync(path.join(vaultDir, '.nopsidian/order.json'), 'utf8'))['정렬'], { timeout: 5000 }).toEqual(['순서다.md', '순서가.md', '순서나.md']);
+    // 뒤로: '순서다' 를 '순서나' 뒤로
+    await drag('순서다', '순서나', 'bottom');
+    await expect.poll(names, { timeout: 5000 }).toEqual(['순서가', '순서나', '순서다']);
+
+    // 다른 폴더에서 가져오기: 폴더 밖의 '정렬밖' 을 '순서나' 앞으로 → 폴더로 옮겨지고 그 자리에 끼워진다
+    await drag('정렬밖', '순서나', 'top');
+    await expect.poll(() => existsSync(path.join(vaultDir, '정렬/정렬밖.md')), { timeout: 8000 }).toBe(true);
+    expect(existsSync(path.join(vaultDir, '정렬밖.md'))).toBe(false);
+    await expect.poll(names, { timeout: 5000 }).toEqual(['순서가', '정렬밖', '순서나', '순서다']);
   });
 
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
@@ -1950,7 +2016,7 @@ views:
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'note', 'on', 'search', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'note', 'on', 'order', 'search', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

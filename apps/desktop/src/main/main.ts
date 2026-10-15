@@ -399,6 +399,23 @@ function registerHandlers() {
     atomicWrite(path.join(v.info.path, '.nopsidian', 'bookmarks.json'), JSON.stringify(paths, null, 2));
     return undefined;
   });
+  handle('order.get', () => {
+    const v = requireVault();
+    try {
+      const raw: unknown = JSON.parse(readFileSync(path.join(v.info.path, '.nopsidian', 'order.json'), 'utf8'));
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+      const out: Record<string, string[]> = {};
+      for (const [k, list] of Object.entries(raw)) if (Array.isArray(list)) out[k] = list.filter((n): n is string => typeof n === 'string');
+      return out;
+    } catch {
+      return {};
+    }
+  });
+  handle('order.set', (order) => {
+    const v = requireVault();
+    atomicWrite(path.join(v.info.path, '.nopsidian', 'order.json'), JSON.stringify(order, null, 2));
+    return undefined;
+  });
   handle('graph.getSettings', async () => {
     const v = requireVault();
     try {

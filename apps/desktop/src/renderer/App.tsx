@@ -18,6 +18,7 @@ import { OutlinePanel } from './OutlinePanel';
 import { TrashDialog } from './TrashDialog';
 import { freshNotes, untitledPath } from './note-title';
 import { EXPAND_ALL_LIMIT, sameNotes, useFolderOpen } from './tree-state';
+import { placeInOrder, remapOrder, sortByOrder, type SidebarOrder } from './sidebar-order';
 import { Logo } from './Logo';
 import { withNoteIcon } from './note-icon';
 import { Panes } from './Panes';
@@ -180,6 +181,21 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   /** 빈 폴더도 보이게 따로 받는 폴더 목록 */
   const [folders, setFolders] = useState<string[]>([]);
+  /** 사이드바에서 손으로 정한 순서(`.nopsidian/order.json`) */
+  const [order, setOrderState] = useState<SidebarOrder>({});
+  const orderRef = useRef(order);
+  orderRef.current = order;
+  const commitOrder = useCallback((next: SidebarOrder) => {
+    orderRef.current = next;
+    setOrderState(next);
+    void window.nops.order.set(next);
+  }, []);
+  useEffect(() => {
+    const load = () => void window.nops.order.get().then((o) => setOrderState((cur) => (JSON.stringify(cur) === JSON.stringify(o) ? cur : o)));
+    load();
+    window.addEventListener('focus', load); // 동기화로 다른 기기의 순서가 들어왔을 수 있다
+    return () => window.removeEventListener('focus', load);
+  }, []);
   const [trashOpen, setTrashOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -404,7 +420,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   };
 
   /** 이름 변경/이동(노트 또는 폴더): 미리보기(바뀌는 링크 수) → 확인 → 실행 → 되돌리기 */
-  const renameEntry = useCallback(async (from: string, isFolder: boolean, preset?: string, opts: { auto?: boolean } = {}) => {
+  const renameEntry = useCallback(async (from: string, isFolder: boolean, preset?: string, opts: { auto?: boolean; afterMove?: (target: string) => void } = {}) => {
     // 노션처럼 이름만 바꾼다: 입력창에는 이름만 보이고, 폴더는 그대로 유지한다. `폴더/이름` 으로 쓰면 이동도 한다.
     const dir = from.includes('/') ? from.slice(0, from.lastIndexOf('/')) : '';
     const currentName = (isFolder ? from : from.replace(/\.md$/i, '')).slice(dir ? dir.length + 1 : 0);
@@ -434,6 +450,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         remapBookmarks(from, target);
         // 노트 이름을 직접 바꾸면 제목(첫 H1)도 따라 바꾼다(제목이 원래 이름과 같았을 때만)
         if (!isFolder && !opts.auto) await syncHeadingToName(from, target);
+        commitOrder(remapOrder(orderRef.current, from, target));
+        opts.afterMove?.(target);
         refresh();
         if (opts.auto && done.totalChanges === 0) return;
         setToast({
@@ -442,6 +460,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             await flushAll();
             await window.nops.note.undoRename({ undoId: done.undoId });
             if (!isFolder) await syncHeadingToName(target, from);
+            commitOrder(remapOrder(orderRef.current, target, from));
             dispatchTabs({ type: 'remap', from: target, to: from });
             setDbOpen((cur) => (cur === null ? cur : remap(cur, target, from)));
             remapBookmarks(target, from);
@@ -472,7 +491,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           : `이름을 바꿀 수 없어요: ${e instanceof Error ? e.message : String(e)}`,
       });
     }
-  }, [refresh]);
+  }, [refresh, commitOrder]);
   const renameCurrent = useCallback(async () => {
     if (selected) await renameEntry(selected, false);
   }, [selected, renameEntry]);
@@ -586,6 +605,28 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       void renameEntry(from, isFolder, target);
     },
     [renameEntry],
+  );
+
+  /** 사이드바 안에서 `target` 의 앞/뒤로 끌어 놓기: 같은 폴더면 순서만 바꾸고, 다른 폴더면 옮긴 뒤 그 자리에 끼운다 */
+  const moveRelative = useCallback(
+    (from: string, isFolder: boolean, target: string, pos: 'before' | 'after') => {
+      if (from === target) return;
+      if (isFolder && target.startsWith(`${from}/`)) {
+        setToast({ message: '폴더를 자기 자신 안으로는 옮길 수 없어요.' });
+        return;
+      }
+      const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
+      const baseOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
+      const parent = dirOf(target);
+      const place = (movedName: string) => {
+        let siblings: TreeNode[] = treeRef.current;
+        for (const part of parent ? parent.split('/') : []) siblings = siblings.find((n) => !n.note && n.name === part)?.children ?? [];
+        commitOrder({ ...orderRef.current, [parent]: placeInOrder(siblings.map((n) => n.name), movedName, baseOf(target), pos) });
+      };
+      if (dirOf(from) === parent) return place(baseOf(from));
+      void renameEntry(from, isFolder, parent ? `${parent}/${baseOf(from)}` : baseOf(from), { afterMove: (t) => place(baseOf(t)) });
+    },
+    [renameEntry, commitOrder],
   );
 
   /** 노트·폴더를 휴지통으로: 확인 → 이동 → 열린 탭·북마크 정리 → "되돌리기" 토스트 */
@@ -710,7 +751,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     return () => clearTimeout(t);
   }, [toast]);
 
-  const tree = useMemo(() => buildTree(notes, folders), [notes, folders]);
+  const tree = useMemo(() => buildTree(notes, folders, order), [notes, folders, order]);
+  const treeRef = useRef(tree);
+  treeRef.current = tree;
   const folderOpen = useFolderOpen(vault.id, notes.length <= EXPAND_ALL_LIMIT);
   const { reveal } = folderOpen;
   useEffect(() => {
@@ -847,7 +890,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           ) : sideTab === 'db' ? (
             <DbList onOpen={(f) => { setGraphOpen(false); setDbOpen(f); }} />
           ) : (
-            <TreeView nodes={tree} folderOpen={folderOpen} selected={selected} onSelect={(p, newTab) => (newTab ? openInNewTab(p) : setSelected(p))} onRenameFolder={(f) => void renameEntry(f, true)} onMenu={(p, isFolder, x, y) => setMenu({ path: p, isFolder, x, y })} onMove={moveEntry} />
+            <TreeView nodes={tree} folderOpen={folderOpen} selected={selected} onSelect={(p, newTab) => (newTab ? openInNewTab(p) : setSelected(p))} onRenameFolder={(f) => void renameEntry(f, true)} onMenu={(p, isFolder, x, y) => setMenu({ path: p, isFolder, x, y })} onMove={moveEntry} onReorder={moveRelative} />
           )}
         </nav>
         <div className="sidebar__foot">
@@ -1065,7 +1108,7 @@ interface TreeNode {
   children: TreeNode[];
 }
 
-function buildTree(notes: NoteSummary[], folders: string[] = []): TreeNode[] {
+function buildTree(notes: NoteSummary[], folders: string[] = [], order: SidebarOrder = {}): TreeNode[] {
   const root: TreeNode = { name: '', path: '', children: [] };
   // 빈 폴더도 나무에 넣는다(노트가 있는 폴더는 아래에서 다시 만나도 그대로 쓴다)
   for (const f of folders) {
@@ -1095,19 +1138,90 @@ function buildTree(notes: NoteSummary[], folders: string[] = []): TreeNode[] {
       cur = child;
     });
   }
-  const sort = (nodes: TreeNode[]) => {
+  const sort = (nodes: TreeNode[], parent: string): TreeNode[] => {
     nodes.sort((a, b) => Number(!!a.note) - Number(!!b.note) || a.name.localeCompare(b.name, 'ko'));
-    nodes.forEach((n) => sort(n.children));
+    // 손으로 정한 순서가 있으면 그 순서가 먼저, 없는(새) 항목은 기본 순서로 뒤에 붙는다
+    const sorted = sortByOrder(nodes, (n) => n.name, order[parent]);
+    sorted.forEach((n) => (n.children = sort(n.children, n.path)));
+    return sorted;
   };
-  sort(root.children);
-  return root.children;
+  return sort(root.children, '');
 }
 
 const DRAG_TYPE = 'application/x-nops-entry';
 
+/** 지금 끌고 있는 항목(끌기 중에는 데이터를 읽을 수 없어서 따로 기억한다) */
+let dragging: { path: string; isFolder: boolean } | null = null;
+const DROP_CLASSES = ['drop-before', 'drop-after', 'drop-into', 'drop'];
+const clearDropMarks = () => document.querySelectorAll(DROP_CLASSES.map((c) => `.${c}`).join(',')).forEach((el) => el.classList.remove(...DROP_CLASSES));
+
 function startDrag(e: React.DragEvent, path: string, isFolder: boolean) {
   e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ path, isFolder }));
   e.dataTransfer.effectAllowed = 'move';
+  dragging = { path, isFolder };
+}
+function endDrag() {
+  dragging = null;
+  clearDropMarks();
+}
+
+type DropZone = 'before' | 'after' | 'into';
+
+/**
+ * 사이드바 항목 위에서 놓을 자리: 노트는 위쪽 절반 = 앞, 아래쪽 절반 = 뒤.
+ * 폴더는 위쪽 가장자리 = 앞, 아래쪽 가장자리(접힌 폴더만) = 뒤, 가운데 = 폴더 안으로.
+ */
+function zoneFor(e: React.DragEvent, isFolder: boolean, open: boolean): DropZone {
+  const r = e.currentTarget.getBoundingClientRect();
+  const y = r.height > 0 ? (e.clientY - r.top) / r.height : 0.5;
+  if (!isFolder) return y < 0.5 ? 'before' : 'after';
+  if (y < 0.28) return 'before';
+  if (y > 0.72 && !open) return 'after';
+  return 'into';
+}
+
+/**
+ * 노션처럼 사이드바 항목에 끌어 놓기. 놓을 자리에 선(앞/뒤)이나 강조(폴더 안)를 보여 주고,
+ * 놓으면 `onDropAt` 으로 알린다. 자기 자신·자기 하위 폴더 위에서는 놓을 수 없다.
+ */
+function entryDropProps(path: string, isFolder: boolean, open: boolean, onDropAt: (from: string, fromIsFolder: boolean, zone: DropZone) => void) {
+  const has = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes(DRAG_TYPE);
+  const blocked = () => !!dragging && (dragging.path === path || (dragging.isFolder && path.startsWith(`${dragging.path}/`)));
+  const mark = (e: React.DragEvent, zone: DropZone) => {
+    const li = e.currentTarget.closest('li');
+    clearDropMarks();
+    if (zone === 'into') e.currentTarget.classList.add('drop');
+    else li?.classList.add(`drop-${zone}`);
+  };
+  return {
+    onDragOver: (e: React.DragEvent) => {
+      if (!has(e) || blocked()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      mark(e, zoneFor(e, isFolder, open));
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+      e.currentTarget.classList.remove('drop');
+      e.currentTarget.closest('li')?.classList.remove('drop-before', 'drop-after');
+    },
+    onDrop: (e: React.DragEvent) => {
+      const raw = e.dataTransfer.getData(DRAG_TYPE);
+      const zone = zoneFor(e, isFolder, open);
+      clearDropMarks();
+      if (!raw || blocked()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      dragging = null;
+      try {
+        const { path: from, isFolder: fromIsFolder } = JSON.parse(raw) as { path: string; isFolder: boolean };
+        onDropAt(from, fromIsFolder, zone);
+      } catch {
+        /* 잘못된 끌기 데이터는 무시한다 */
+      }
+    },
+  };
 }
 
 /** 폴더(또는 맨 위 빈 곳)에 놓을 수 있게 하는 이벤트 묶음. 놓을 수 있는 동안 `drop` 클래스를 단다. */
@@ -1128,6 +1242,7 @@ function dropProps(onDropEntry: (from: string, isFolder: boolean) => void) {
       if (!raw) return;
       e.preventDefault();
       e.stopPropagation();
+      dragging = null;
       try {
         const { path, isFolder } = JSON.parse(raw) as { path: string; isFolder: boolean };
         onDropEntry(path, isFolder);
@@ -1146,6 +1261,7 @@ function TreeView({
   onRenameFolder,
   onMenu,
   onMove,
+  onReorder,
   depth = 0,
 }: {
   nodes: TreeNode[];
@@ -1157,12 +1273,14 @@ function TreeView({
   onMenu?: (path: string, isFolder: boolean, x: number, y: number) => void;
   /** 끌어서 놓기: from 항목을 toFolder(빈 문자열 = 볼트 맨 위) 안으로 */
   onMove?: (from: string, isFolder: boolean, toFolder: string) => void;
+  /** 끌어서 놓기: from 항목을 target 의 앞/뒤로(같은 폴더면 순서만 바뀐다) */
+  onReorder?: (from: string, isFolder: boolean, target: string, pos: 'before' | 'after') => void;
   depth?: number;
 }) {
   return (
     <ul className="tree">
       {nodes.map((n) => (
-        <li key={n.path}>
+        <li key={n.path} style={{ '--d': depth } as React.CSSProperties}>
           {n.note ? (
             <button
               className={n.path === selected ? 'row active' : 'row'}
@@ -1174,6 +1292,8 @@ function TreeView({
               }}
               draggable={!!onMove}
               onDragStart={(e) => startDrag(e, n.path, false)}
+              onDragEnd={endDrag}
+              {...(onMove ? entryDropProps(n.path, false, false, (from, isFolder, zone) => onReorder ? onReorder(from, isFolder, n.path, zone === 'after' ? 'after' : 'before') : undefined) : {})}
             >
               {n.note.icon ? <span className="emoji">{n.note.icon}</span> : null}
               {n.note.title}
@@ -1188,7 +1308,12 @@ function TreeView({
                 }}
                 draggable={!!onMove}
                 onDragStart={(e) => startDrag(e, n.path, true)}
-                {...(onMove ? dropProps((from, isFolder) => onMove(from, isFolder, n.path)) : {})}
+                onDragEnd={endDrag}
+                {...(onMove
+                  ? entryDropProps(n.path, true, folderOpen.isOpen(n.path), (from, isFolder, zone) =>
+                      zone === 'into' ? onMove(from, isFolder, n.path) : onReorder?.(from, isFolder, n.path, zone),
+                    )
+                  : {})}
               >
                 <span>{n.name}</span>
                 <button
@@ -1205,7 +1330,7 @@ function TreeView({
                 </button>
               </summary>
               {folderOpen.isOpen(n.path) && (
-                <TreeView nodes={n.children} folderOpen={folderOpen} selected={selected} onSelect={onSelect} onRenameFolder={onRenameFolder} onMenu={onMenu} onMove={onMove} depth={depth + 1} />
+                <TreeView nodes={n.children} folderOpen={folderOpen} selected={selected} onSelect={onSelect} onRenameFolder={onRenameFolder} onMenu={onMenu} onMove={onMove} onReorder={onReorder} depth={depth + 1} />
               )}
             </details>
           )}

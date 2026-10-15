@@ -4,7 +4,7 @@ import path from 'node:path';
 const META_DIR = '.nopsidian';
 
 /** `.nopsidian/` 안에서 동기화하는 파일 이름. */
-const META_FILES = new Set(['config.json', 'graph.json', 'bookmarks.json']);
+const META_FILES = new Set(['config.json', 'graph.json', 'bookmarks.json', 'order.json']);
 
 /** `.nopsidian/` 안에서 동기화하는 폴더 이름. */
 const META_DIRS = new Set(['comments']);

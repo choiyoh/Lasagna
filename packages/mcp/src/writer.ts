@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { parseNote, resolveInVault, saveNote, sha256, splitFrontmatter } from '@nopsidian/core';
+import { addComment, parseNote, resolveInVault, saveNote, sha256, splitFrontmatter, type Comment } from '@nopsidian/core';
 import { stringify } from 'yaml';
 import { appendAudit, type AuditEntry } from './audit.js';
 import { canWrite, validateNotePath, type McpPolicy } from './policy.js';
@@ -109,6 +109,34 @@ export class NoteWriter {
     const next = mutate(disk);
     if (next === disk) return { path: rel, hash: sha256(disk), bytes: Buffer.byteLength(disk), status: 'saved' };
     return this.commit(tool, 'update', rel, next, disk);
+  }
+
+  /**
+   * 노트에 댓글을 단다(노트 본문은 건드리지 않는다). 쓰기가 켜져 있으면 허용 폴더 밖의 노트에도 달 수 있다 —
+   * 댓글은 검토 의견을 남기는 통로이고 노트를 바꾸지 않는다. 횟수 한도와 감사 기록은 똑같이 적용한다.
+   */
+  comment(tool: string, rawPath: string, text: string, quote?: string): Comment {
+    let rel: string;
+    try {
+      rel = validateNotePath(rawPath);
+    } catch (e) {
+      this.log({ action: 'denied', tool, path: rawPath, note: e instanceof Error ? e.message : String(e) });
+      throw new WriteError('bad-input', e instanceof Error ? e.message : String(e));
+    }
+    if (!this.policy.write) this.deny(tool, rel, 'read-only', '이 서버는 읽기 전용이에요(--write 로 시작해야 댓글을 달 수 있어요)');
+    if (!existsSync(resolveInVault(this.policy.root, rel))) this.deny(tool, rel, 'not-found', `없는 노트예요: ${rel}`);
+    const t = this.now().getTime();
+    this.stamps = this.stamps.filter((s) => t - s < 60_000);
+    if (this.stamps.length >= this.policy.maxWritesPerMinute) this.deny(tool, rel, 'rate-limit', `1분에 ${this.policy.maxWritesPerMinute}번까지만 쓸 수 있어요. 잠시 뒤에 다시 시도하세요`);
+    let c: Comment;
+    try {
+      c = addComment(this.policy.root, rel, { author: this.client() ?? 'AI 에이전트', text, quote }, this.now());
+    } catch (e) {
+      throw new WriteError('bad-input', e instanceof Error ? e.message : String(e));
+    }
+    this.stamps.push(t);
+    this.log({ action: 'comment', tool, path: rel, bytes: Buffer.byteLength(text), note: c.id });
+    return c;
   }
 
   /** 쓰기 전 공통 검사: 켜짐·경로·폴더·횟수 */

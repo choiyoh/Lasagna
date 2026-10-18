@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { atomicWrite, planMoves, resolveInVault, sha256, type Move, type MovePlan } from '@nopsidian/core';
+import { atomicWrite, planMoves, resolveInVault, sha256, type Move, type MovePlan, relocateComments } from '@nopsidian/core';
 
 /** 볼트 안의 이동 대상(파일 하나 또는 폴더 안의 모든 파일)을 파일 단위 이동 목록으로 펼친다. */
 export function expandMoves(root: string, from: string, to: string): Move[] {
@@ -150,6 +150,7 @@ export function undoRename(root: string, id: string): { restored: number; skippe
     mkdirSync(path.dirname(to), { recursive: true });
     renameSync(from, to);
   }
+  for (const m of [...record.moves].reverse()) relocateComments(root, m.to, m.from); // 댓글도 원래 이름으로
   pruneEmptyDirs([...new Set(record.moves.map((m) => path.dirname(resolveInVault(root, m.to))))]);
   writeFileSync(file, JSON.stringify({ ...record, undone: true }));
   return { restored, skipped };

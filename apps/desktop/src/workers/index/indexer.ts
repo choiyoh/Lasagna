@@ -53,6 +53,8 @@ export interface NoteRow {
   title: string;
   /** 프런트매터 `icon`(이모지 등 짧은 글자). 없으면 null */
   icon: string | null;
+  /** 프런트매터 `cover`. 없으면 null */
+  cover: string | null;
   aliases: string[];
   mtime: number;
   size: number;
@@ -691,8 +693,8 @@ export class Indexer {
 
   list(): NoteRow[] {
     const rows = this.db
-      .prepare(`SELECT id, path, title, mtime, size, json_extract(frontmatter, '$.icon') AS icon FROM pages ORDER BY path COLLATE NOCASE`)
-      .all() as { id: number; path: string; title: string; mtime: number; size: number; icon: unknown }[];
+      .prepare(`SELECT id, path, title, mtime, size, json_extract(frontmatter, '$.icon') AS icon, json_extract(frontmatter, '$.cover') AS cover FROM pages ORDER BY path COLLATE NOCASE`)
+      .all() as { id: number; path: string; title: string; mtime: number; size: number; icon: unknown; cover: unknown }[];
     const aliases = new Map<number, string[]>();
     for (const a of this.db.prepare(`SELECT page_id AS pageId, alias FROM aliases`).all() as {
       pageId: number;
@@ -702,9 +704,10 @@ export class Indexer {
       if (list) list.push(a.alias);
       else aliases.set(a.pageId, [a.alias]);
     }
-    return rows.map(({ id, icon, ...r }) => ({
+    return rows.map(({ id, icon, cover, ...r }) => ({
       ...r,
       icon: typeof icon === 'string' && icon.trim() && icon.length <= 16 ? icon.trim() : null,
+      cover: typeof cover === 'string' && cover.trim() && cover.length <= 300 ? cover.trim() : null,
       aliases: aliases.get(id) ?? [],
     }));
   }

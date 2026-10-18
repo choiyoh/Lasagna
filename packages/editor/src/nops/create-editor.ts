@@ -19,6 +19,7 @@ import type { NopsPeekHost } from './peek-host';
 import { createLinkSuggestPlugin, type NopsLinkHost } from './link-suggest';
 import { nopsNodeViews } from './node-views';
 import { showTextPrompt } from './prompt';
+import { createDateMentionPlugin } from './date-mention';
 import { createFindPlugin } from './find';
 import { createTitlePlugin } from './title';
 import { createInteractionPlugin, createNopsInputRules, createTitleKeymapPlugin, type WikiLinkTarget } from './plugins';
@@ -110,6 +111,7 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
     // 자동완성은 Enter/Tab/방향키를 기본 키맵보다 먼저 받아야 한다
     priorityPlugins: [
       ...(options.links ? [createLinkSuggestPlugin(options.links)] : []),
+      createDateMentionPlugin(),
       createTitleKeymapPlugin(),
       createBlockKeymapPlugin(),
       ...(assets ? [createFilesPlugin(assets)] : []),

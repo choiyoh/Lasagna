@@ -204,12 +204,24 @@ export type BacklinkContext = z.infer<typeof backlinkContext>;
 export type OutgoingLink = z.infer<typeof outgoingLink>;
 export type UnlinkedMention = z.infer<typeof unlinkedMention>;
 
+export const commentItem = z.object({
+  id: z.string(),
+  author: z.string(),
+  text: z.string(),
+  quote: z.string().optional(),
+  createdAt: z.string(),
+  resolved: z.boolean().optional(),
+});
+export type CommentItem = z.infer<typeof commentItem>;
+
 export const noteSummary = z.object({
   path: relPath,
   title: z.string(),
   aliases: z.array(z.string()).default([]),
   /** 문서 아이콘(이모지). 프런트매터 `icon` */
   icon: z.string().nullable().default(null),
+  /** 노트 커버: 프런트매터 `cover`(볼트 안 이미지 경로/파일명 또는 `gradient:<id>`). 없으면 null */
+  cover: z.string().nullable().default(null),
   mtime: z.number(),
   size: z.number(),
 });
@@ -438,7 +450,7 @@ export const contract = {
       z.object({
         t: z.string(),
         client: z.string().optional(),
-        action: z.enum(['create', 'append', 'update', 'denied', 'revert']),
+        action: z.enum(['create', 'append', 'update', 'denied', 'revert', 'comment']),
         tool: z.string(),
         path: z.string(),
         hashBefore: z.string().nullable().optional(),
@@ -450,6 +462,11 @@ export const contract = {
   },
   /** 에이전트가 한 작업 되돌리기: 덧붙이기·고치기는 이전 내용으로 복원, 새로 만든 노트는 휴지통으로. 그 뒤 바뀌었으면 거부 */
   'mcp.revert': { input: z.object({ t: z.string().max(40), path: relPath }), output: z.object({ kind: z.enum(['restored', 'trashed']), trashId: z.string().optional() }) },
+  /** 노트 댓글(`.nopsidian/comments/`, 동기화 대상) */
+  'comment.list': { input: z.object({ path: relPath }), output: z.array(commentItem) },
+  'comment.add': { input: z.object({ path: relPath, text: z.string().min(1).max(5000), quote: z.string().max(300).optional() }), output: commentItem },
+  'comment.resolve': { input: z.object({ path: relPath, id: z.string().max(40), resolved: z.boolean() }), output: z.object({ ok: z.boolean() }) },
+  'comment.remove': { input: z.object({ path: relPath, id: z.string().max(40) }), output: z.object({ ok: z.boolean() }) },
   'app.openExternal': { input: z.object({ url: z.string().url() }), output: z.undefined() },
 } as const;
 

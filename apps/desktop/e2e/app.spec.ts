@@ -1917,6 +1917,130 @@ views:
     await page.keyboard.press('Escape');
   });
 
+  test('노트 커버: 그라디언트·업로드한 이미지를 고르고, 바꾸고, 제거한다', async () => {
+    const page = await app.firstWindow();
+    const file = note('커버노트', '# 커버노트\n\n본문\n');
+    await open(page, '커버노트');
+    await expect(page.getByTestId('note-cover')).toHaveCount(0);
+
+    // 그라디언트
+    await page.getByTestId('note-cover-add').click({ force: true });
+    const picker = page.getByTestId('cover-picker');
+    await expect(picker).toBeVisible();
+    await picker.getByRole('tab', { name: '그라디언트' }).click();
+    await picker.getByTestId('gradient-ocean').click();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toBe('---\ncover: gradient:ocean\n---\n# 커버노트\n\n본문\n');
+    await expect(page.getByTestId('note-cover')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByTestId('note-cover')).toHaveCSS('background-image', /linear-gradient/);
+    await expect(page.locator('.ProseMirror')).toContainText('본문');
+
+    // 이미지 올리기: 볼트에 저장되고 그 이름이 cover 가 된다
+    await page.getByTestId('note-cover').hover();
+    await page.getByTestId('note-cover-change').click();
+    await page.getByTestId('cover-picker').getByRole('tab', { name: '이미지' }).click();
+    await page.getByTestId('cover-picker').getByTestId('cover-upload-input').setInputFiles({ name: '표지.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64') });
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 10000 }).toMatch(/^---\ncover: .*표지.*\.png\n---\n# 커버노트/);
+    const img = page.getByTestId('note-cover').locator('img');
+    await expect(img).toBeVisible({ timeout: 8000 });
+    await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth), { timeout: 8000 }).toBeGreaterThan(0);
+
+    // 제거: 프런트매터가 비면 통째로 없어진다
+    await page.getByTestId('note-cover').hover();
+    await page.getByTestId('note-cover-remove').click();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toBe('# 커버노트\n\n본문\n');
+    await expect(page.getByTestId('note-cover')).toHaveCount(0);
+  });
+
+  test('댓글: 남기고(선택한 글 인용), 해결하고, 노트 이름을 바꿔도 따라가며, 에이전트가 단 댓글도 보인다', async () => {
+    const page = await app.firstWindow();
+    note('댓글노트', '# 댓글노트\n\n인용할 문장입니다\n');
+    await open(page, '댓글노트');
+    const dockTab = page.locator('.dockbody__tabs').getByRole('tab', { name: /^댓글/ });
+    await dockTab.click();
+    const panel = page.getByTestId('comments');
+    await expect(panel).toContainText('아직 댓글이 없어요');
+
+    // 선택한 글을 인용해 남긴다
+    await page.locator('.ProseMirror p', { hasText: '인용할 문장입니다' }).click({ clickCount: 3 });
+    await panel.getByRole('button', { name: '선택한 글 인용' }).click();
+    await expect(panel.locator('.comments__new .comment__quote')).toContainText('인용할 문장입니다');
+    await panel.getByLabel('댓글 내용').fill('이 문장을 다듬자');
+    await panel.getByRole('button', { name: '남기기' }).click();
+    const item = panel.getByTestId('comment').first();
+    await expect(item).toContainText('이 문장을 다듬자');
+    await expect(item.locator('.comment__quote')).toContainText('인용할 문장입니다');
+    await expect(dockTab).toHaveText('댓글 1');
+    const dir = path.join(vaultDir, '.nopsidian/comments');
+    expect(readdirSync(dir).length).toBe(1);
+
+    // 노트 이름을 바꿔도 댓글이 따라간다
+    await page.keyboard.press('F2');
+    const input = page.locator('.nops-prompt input');
+    await input.fill('댓글노트이름바꿈');
+    await input.press('Enter');
+    await expect(page.getByTestId('note-tab').filter({ hasText: '댓글노트이름바꿈' })).toHaveCount(1, { timeout: 8000 });
+    await expect(panel.getByTestId('comment')).toHaveCount(1, { timeout: 8000 });
+
+    // 에이전트(MCP)가 단 댓글도 보인다: 창에 돌아올 때 다시 읽는다
+    const script = path.join(__dirname, '../out/Nopsidian-darwin-arm64/Nopsidian.app/Contents/Resources/nopsidian-mcp.mjs');
+    const client = new Client({ name: 'review-agent', version: '1' });
+    await client.connect(new StdioClientTransport({ command: process.execPath, args: [script, '--vault', vaultDir, '--write'], stderr: 'ignore' }));
+    try {
+      const r = (await client.callTool({ name: 'add_comment', arguments: { path: '댓글노트이름바꿈.md', text: '검토했어요: 좋아요' } })) as { isError?: boolean };
+      expect(r.isError).toBeFalsy();
+      const l = (await client.callTool({ name: 'list_comments', arguments: { path: '댓글노트이름바꿈.md' } })) as { content: { text: string }[] };
+      expect(l.content[0]!.text).toContain('이 문장을 다듬자');
+    } finally {
+      await client.close();
+    }
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(panel.getByTestId('comment')).toHaveCount(2, { timeout: 8000 });
+    await expect(panel).toContainText('review-agent');
+
+    // 해결 → 접힌 목록으로, 삭제
+    await panel.getByTestId('comment').first().hover();
+    await panel.getByTestId('comment').first().getByRole('button', { name: '해결' }).click();
+    await expect(panel.locator('.comments__done')).toContainText('해결된 댓글 1개');
+    await expect(dockTab).toHaveText('댓글 1');
+    await panel.getByTestId('comment').first().hover();
+    await panel.getByTestId('comment').first().getByRole('button', { name: '댓글 삭제' }).click();
+    await expect(panel.getByTestId('comment')).toHaveCount(1);
+    await expect(panel).not.toContainText('review-agent'); // 열린 목록의 첫 댓글(에이전트가 단 것)이 지워졌다
+    await expect(panel.locator('.comments__done')).toContainText('이 문장을 다듬자'); // 해결한 댓글은 남아 있다
+  });
+
+  test('@ 로 날짜 넣기: @내일 → 그 날짜의 노트 링크, @+3 은 사흘 뒤, 잘못된 날짜는 후보가 없다', async () => {
+    const page = await app.firstWindow();
+    const file = note('날짜멘션', '# 날짜멘션\n\n시작\n');
+    await open(page, '날짜멘션');
+    const iso = (offset: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() + offset);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    await page.locator('.ProseMirror p').last().click();
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.type('약속 @내');
+    const menu = page.locator('.nops-date-suggest');
+    await expect(menu).toBeVisible({ timeout: 5000 });
+    await expect(menu.locator('.nops-date-suggest__item')).toHaveCount(1);
+    await expect(menu).toContainText(iso(1));
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeHidden();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toContain(`시작약속 [[${iso(1)}]]`);
+    // 며칠 뒤
+    await page.keyboard.type(' 마감 @+3');
+    await expect(menu).toContainText(`3일 뒤 · ${iso(3)}`);
+    await page.keyboard.press('Tab');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toContain(`마감 [[${iso(3)}]]`);
+    // 없는 날짜·모르는 말은 메뉴가 뜨지 않고, 이메일 주소의 @ 는 건드리지 않는다
+    await page.keyboard.type(' @2026-02-30');
+    await expect(menu).toBeHidden();
+    await page.keyboard.type(' me@example.com');
+    await expect(menu).toBeHidden();
+    expect(readFileSync(file, 'utf8')).not.toContain('[[2026-02-30]]');
+  });
+
   test('오늘의 노트: 한 번 누르면 일기/날짜.md를 만들고 열며, 다시 누르면 같은 노트', async () => {
     const page = await app.firstWindow();
     const today = await page.evaluate(() => {
@@ -2194,7 +2318,7 @@ views:
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'mcp', 'note', 'on', 'order', 'search', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'comment', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'mcp', 'note', 'on', 'order', 'search', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

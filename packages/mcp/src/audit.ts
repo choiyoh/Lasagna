@@ -7,7 +7,7 @@ export interface AuditEntry {
   t: string;
   /** 연결한 MCP 클라이언트 이름(알 수 있으면) */
   client?: string;
-  action: 'create' | 'append' | 'update' | 'denied' | 'revert';
+  action: 'create' | 'append' | 'update' | 'denied' | 'revert' | 'comment';
   /** 도구 이름 */
   tool: string;
   path: string;

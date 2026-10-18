@@ -9,6 +9,7 @@ import { keys } from './keys';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { OutlinePanel } from './OutlinePanel';
+import { CommentsPanel } from './CommentsPanel';
 import { TrashDialog } from './TrashDialog';
 import { EXPAND_ALL_LIMIT, sameNotes, useFolderLimit, useFolderOpen } from './tree-state';
 import type { SidebarOrder } from './sidebar-order';
@@ -111,7 +112,18 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [dbOpen, setDbOpen] = useState<string | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
   const [sync, setSync] = useState<SyncStatus | null>(null);
-  const [dockTab, setDockTab] = useState<'links' | 'outline' | 'graph' | 'history'>('links');
+  const [dockTab, setDockTab] = useState<'links' | 'outline' | 'comments' | 'graph' | 'history'>('links');
+  /** 열린 노트의 안 푼 댓글 수(탭에 배지로 보인다) */
+  const [commentCount, setCommentCount] = useState(0);
+  const countComments = useCallback(() => {
+    if (!selected) return setCommentCount(0);
+    void window.nops.comment.list({ path: selected }).then((l) => setCommentCount(l.filter((c) => !c.resolved).length)).catch(() => setCommentCount(0));
+  }, [selected]);
+  useEffect(() => {
+    countComments();
+    window.addEventListener('focus', countComments);
+    return () => window.removeEventListener('focus', countComments);
+  }, [countComments]);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const assets = useAssetStore();
@@ -155,6 +167,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     renameCurrent,
     setNoteIcon,
     renameNoteTitle,
+    setNoteCover,
     moveEntries,
     moveRelative,
     deleteEntry,
@@ -465,6 +478,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 peek={peekHost}
                 icon={notes.find((n) => n.path === p)?.icon ?? null}
                 onSetIcon={(ic) => void setNoteIcon(p, ic)}
+                cover={notes.find((n) => n.path === p)?.cover ?? null}
+                onSetCover={(c) => void setNoteCover(p, c)}
               />
             )}
           />
@@ -520,6 +535,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 peek={peekHost}
                 icon={notes.find((n) => n.path === p)?.icon ?? null}
                 onSetIcon={(ic) => void setNoteIcon(p, ic)}
+                cover={notes.find((n) => n.path === p)?.cover ?? null}
+                onSetCover={(c) => void setNoteCover(p, c)}
               />
             )}
           />
@@ -539,6 +556,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 <button role="tab" aria-selected={dockTab === 'outline'} className={dockTab === 'outline' ? 'active' : ''} onClick={() => setDockTab('outline')}>
                   개요
                 </button>
+                <button role="tab" aria-selected={dockTab === 'comments'} className={dockTab === 'comments' ? 'active' : ''} onClick={() => setDockTab('comments')}>
+                  댓글{commentCount > 0 && <span className="count"> {commentCount}</span>}
+                </button>
                 <button role="tab" aria-selected={dockTab === 'graph'} className={dockTab === 'graph' ? 'active' : ''} onClick={() => setDockTab('graph')}>
                   로컬 그래프
                 </button>
@@ -546,7 +566,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                   기록
                 </button>
               </div>
-              {dockTab === 'links' ? <LinkPanel path={selected} onOpen={setSelected} /> : dockTab === 'outline' ? <OutlinePanel path={selected} /> : dockTab === 'history' ? <HistoryPanel path={selected} onRestored={(message) => setToast({ message })} /> : <LocalGraph path={selected} onOpen={setSelected} />}
+              {dockTab === 'links' ? <LinkPanel path={selected} onOpen={setSelected} /> : dockTab === 'outline' ? <OutlinePanel path={selected} /> : dockTab === 'comments' ? <CommentsPanel path={selected} onChanged={countComments} /> : dockTab === 'history' ? <HistoryPanel path={selected} onRestored={(message) => setToast({ message })} /> : <LocalGraph path={selected} onOpen={setSelected} />}
             </div>
           )}
         </div>

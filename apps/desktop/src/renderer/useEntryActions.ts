@@ -4,7 +4,7 @@ import { showTextPrompt } from '@nopsidian/editor/nops';
 import type { NoteSummary } from '@nopsidian/ipc-contract';
 import type { ConfirmState, Toast } from './app-types';
 import { flushAll } from './flush';
-import { withNoteIcon } from './note-icon';
+import { withNoteCover, withNoteIcon } from './note-icon';
 import { freshNotes, untitledPath } from './note-title';
 import { placeGroupInOrder, remapOrder, type SidebarOrder } from './sidebar-order';
 import type { TreeNode } from './sidebar/build-tree';
@@ -192,6 +192,23 @@ export function useEntryActions(deps: EntryActionDeps) {
     [refresh],
   );
 
+  /** 노트 커버를 프런트매터 `cover` 에 쓰거나 지운다. 열려 있는 에디터는 다시 불러온다. */
+  const setNoteCover = useCallback(
+    async (p: string, cover: string | null) => {
+      try {
+        await flushAll();
+        const cur = await window.nops.note.read({ path: p });
+        const next = withNoteCover(cur.content, cover);
+        if (next !== cur.content) await window.nops.note.save({ path: p, content: next, baseHash: cur.hash });
+        window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: p }));
+        refresh();
+      } catch (e) {
+        setToast({ message: `커버를 바꾸지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
+      }
+    },
+    [refresh],
+  );
+
   /** 표·카드의 제목을 직접 고칠 때: 파일 이름을 바꾼다(폴더는 그대로) */
   const renameNoteTitle = useCallback(
     (p: string, title: string) => {
@@ -371,5 +388,5 @@ export function useEntryActions(deps: EntryActionDeps) {
   );
 
 
-  return { createNote, quickNote, newFolder, openDaily, renameEntry, renameCurrent, setNoteIcon, renameNoteTitle, moveMany, moveEntries, moveRelative, deleteEntry, deleteEntries };
+  return { createNote, quickNote, newFolder, openDaily, renameEntry, renameCurrent, setNoteIcon, setNoteCover, renameNoteTitle, moveMany, moveEntries, moveRelative, deleteEntry, deleteEntries };
 }

@@ -3,14 +3,14 @@ import { useCallback, useEffect, useState } from 'react';
 interface AuditRow {
   t: string;
   client?: string;
-  action: 'create' | 'append' | 'update' | 'denied' | 'revert';
+  action: 'create' | 'append' | 'update' | 'denied' | 'revert' | 'comment';
   tool: string;
   path: string;
   note?: string;
 }
 
 const KEY = 'nops.mcp';
-const ACTION_LABEL: Record<AuditRow['action'], string> = { create: '새로 만듦', append: '덧붙임', update: '고침', denied: '거부됨', revert: '되돌림' };
+const ACTION_LABEL: Record<AuditRow['action'], string> = { create: '새로 만듦', append: '덧붙임', update: '고침', denied: '거부됨', revert: '되돌림', comment: '댓글' };
 
 const load = (): { write: boolean; folder: string } => {
   try {

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { listComments } from '@nopsidian/core';
 import { DatabaseAccess, FILTER_OPS } from './databases.js';
 import { canWrite, type McpPolicy } from './policy.js';
 import { VaultScanner } from './vault-scan.js';
@@ -170,6 +171,23 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
     async () => {
       fresh();
       return ok({ tags: scanner.tags() });
+    },
+  );
+
+  server.registerTool(
+    'list_comments',
+    {
+      title: 'List comments on a note',
+      description: 'Comments left on a note (by the user in the app or by agents): author, text, optional quoted passage, time, resolved or not. Check them before editing a note — they may contain requests or review feedback from the user.',
+      inputSchema: { path: z.string().min(1).describe('Note path relative to the vault') },
+      annotations: { title: 'List comments on a note', ...readOnly },
+    },
+    async ({ path }) => {
+      fresh();
+      const n = findNote(scanner, path);
+      if (!n) return fail(`Note not found: ${path}`);
+      const comments = listComments(policy.root, n.path);
+      return ok({ path: n.path, open: comments.filter((c) => !c.resolved).length, comments });
     },
   );
 
@@ -345,6 +363,31 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
         const rel = `${dailyFolderOf(policy.root)}/${day}.md`;
         return existsSync(path.join(policy.root, rel)) ? writer.append('append_to_daily_note', rel, content, heading) : writer.create('append_to_daily_note', rel, content, { title: day });
       }),
+  );
+
+  server.registerTool(
+    'add_comment',
+    {
+      title: 'Comment on a note',
+      description:
+        'Leave a comment on a note without changing the note itself — good for review feedback, questions, or suggestions about a note you are not allowed to edit. Works on any note (not limited to the write folders). Optionally quote the passage it refers to.',
+      inputSchema: {
+        path: z.string().min(1).describe('Existing note path'),
+        text: z.string().min(1).max(5000).describe('The comment (plain text)'),
+        quote: z.string().max(300).optional().describe('The passage of the note this comment refers to'),
+      },
+      annotations: writeHint('Comment on a note', false),
+    },
+    async ({ path, text, quote }) => {
+      try {
+        fresh();
+        const n = findNote(scanner, path);
+        const c = writer.comment('add_comment', n?.path ?? path, text, quote);
+        return ok({ id: c.id, path: n?.path ?? path, author: c.author, createdAt: c.createdAt });
+      } catch (e) {
+        return fail(e instanceof WriteError ? `add_comment refused (${e.code}): ${e.message}` : `add_comment failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
   );
 
   // 에이전트에게 지금 어디에 쓸 수 있는지 한눈에 보여 주는 도우미

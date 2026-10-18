@@ -20,6 +20,11 @@ import {
   sha256,
   uniqueName,
   expandTemplate,
+  addComment,
+  listComments,
+  relocateComments,
+  removeComment,
+  setCommentResolved,
 } from '@nopsidian/core';
 import { existsSync, readFileSync } from 'node:fs';
 import { readAudit } from '@nopsidian/mcp/audit';
@@ -233,6 +238,7 @@ function registerHandlers() {
     await v.index.ready;
     const { plan, moves } = planRename(v.info.path, await snapshotVault(v), from, to);
     const { undoId } = applyRename(v.info.path, moves, plan);
+    for (const m of moves) relocateComments(v.info.path, m.from, m.to);
     // 앱이 기억하던 노트 내용(3-way 병합의 기준)은 이동·갱신 뒤에는 무효다
     v.bases.clear();
     v.selfWrites.clear();
@@ -401,6 +407,10 @@ function registerHandlers() {
     atomicWrite(path.join(v.info.path, '.nopsidian', 'bookmarks.json'), JSON.stringify(paths, null, 2));
     return undefined;
   });
+  handle('comment.list', ({ path: rel }) => listComments(requireVault().info.path, rel));
+  handle('comment.add', ({ path: rel, text, quote }) => addComment(requireVault().info.path, rel, { author: '나', text, quote }));
+  handle('comment.resolve', ({ path: rel, id, resolved }) => ({ ok: setCommentResolved(requireVault().info.path, rel, id, resolved) }));
+  handle('comment.remove', ({ path: rel, id }) => ({ ok: removeComment(requireVault().info.path, rel, id) }));
   handle('mcp.info', () => {
     const v = requireVault();
     // 패키징된 앱은 resources/ 에, 개발 중에는 저장소의 빌드 결과를 쓴다

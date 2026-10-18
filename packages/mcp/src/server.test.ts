@@ -45,7 +45,7 @@ describe('MCP 서버 — 읽기 전용(기본)', () => {
   it('읽기 도구만 보이고 쓰기 도구는 없다', async () => {
     const { client } = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(['get_backlinks', 'list_databases', 'list_notes', 'list_tags', 'query_database', 'read_note', 'search_notes']);
+    expect(names).toEqual(['get_backlinks', 'list_comments', 'list_databases', 'list_notes', 'list_tags', 'query_database', 'read_note', 'search_notes']);
     expect((await client.listTools()).tools.every((t) => t.annotations?.readOnlyHint)).toBe(true);
     expect(client.getInstructions()).toContain('read-only');
   });
@@ -279,5 +279,29 @@ describe('MCP 서버 — 템플릿과 오늘의 노트', () => {
     const denied = await call('append_to_daily_note', { content: 'x' });
     expect(denied.isError).toBe(true);
     expect(denied.text).toContain('forbidden-folder');
+  });
+});
+
+describe('MCP 서버 — 댓글', () => {
+  it('list_comments 는 읽기 전용에서도 되고, add_comment 는 쓰기를 켜야 있다', async () => {
+    const ro = await connect();
+    expect((await ro.client.listTools()).tools.map((t) => t.name)).not.toContain('add_comment');
+    expect((await ro.call('list_comments', { path: '회의록' })).json).toMatchObject({ open: 0, comments: [] });
+    expect((await ro.call('list_comments', { path: '없음' })).isError).toBe(true);
+  });
+  it('허용 폴더 밖의 노트에도 댓글을 달 수 있고(본문은 그대로), 기록과 함께 읽힌다', async () => {
+    const { call, root } = await connect({ write: true, writeFolders: ['AI'] });
+    const before = readFileSync(path.join(root, '회의록.md'), 'utf8');
+    const r = await call('add_comment', { path: '회의록', text: '결론이 빠졌어요', quote: '오늘 [[계획]] 을 논의했다.' });
+    expect(r.isError).toBe(false);
+    expect(r.json).toMatchObject({ path: '회의록.md', author: 'test-agent' });
+    expect(readFileSync(path.join(root, '회의록.md'), 'utf8')).toBe(before);
+    const l = await call('list_comments', { path: '회의록.md' });
+    expect(l.json).toMatchObject({ open: 1 });
+    expect(l.json.comments[0]).toMatchObject({ author: 'test-agent', text: '결론이 빠졌어요', quote: '오늘 [[계획]] 을 논의했다.' });
+    expect(readAudit(root)[0]).toMatchObject({ action: 'comment', path: '회의록.md', client: 'test-agent' });
+    // 없는 노트·빈 댓글
+    expect((await call('add_comment', { path: '없음', text: 'x' })).text).toContain('not-found');
+    expect((await call('add_comment', { path: '회의록', text: '   ' })).isError).toBe(true);
   });
 });

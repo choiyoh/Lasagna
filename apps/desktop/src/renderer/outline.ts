@@ -15,3 +15,8 @@ export const OUTLINE_EVENT = 'nops:outline';
 export const OUTLINE_REQUEST = 'nops:outline-request';
 /** 패널 → 에디터: 이 위치로 이동 */
 export const OUTLINE_JUMP = 'nops:outline-jump';
+
+/** 댓글 패널 → 에디터: 지금 선택한 글을 알려 달라(인용용) */
+export const SELECTION_REQUEST = 'nops:selection-request';
+/** 에디터 → 댓글 패널: 선택한 글 */
+export const SELECTION_REPLY = 'nops:selection-reply';

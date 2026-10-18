@@ -3,7 +3,7 @@ import type { NoteSummary } from '@nopsidian/ipc-contract';
 import { buildTree } from './build-tree';
 import { flattenVisible, rangeBetween, topLevel } from './selection';
 
-const n = (path: string): NoteSummary => ({ path, title: path, aliases: [], icon: null, mtime: 0, size: 0 });
+const n = (path: string): NoteSummary => ({ path, title: path, aliases: [], icon: null, cover: null, mtime: 0, size: 0 });
 
 describe('sidebar selection helpers', () => {
   const tree = buildTree([n('a/x.md'), n('a/y.md'), n('b.md'), n('c.md')], ['빈']);

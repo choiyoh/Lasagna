@@ -38,6 +38,12 @@ export function firstImage(body: string): string | null {
   return hit ? decodeURI(hit[1]!.trim()) : null;
 }
 
+const IMG_PATH = new RegExp(`\\.${IMG_EXT}$`, 'i');
+/** 프런트매터 `cover` 가 이미지 경로이면 그 값(그라디언트 `gradient:…` 등은 null) */
+function frontmatterCover(v: unknown): string | null {
+  return typeof v === 'string' && IMG_PATH.test(v.trim()) ? v.trim() : null;
+}
+
 /** 파일을 읽고 파싱해 색인 레코드를 만든다. 읽을 수 없으면 null. */
 export function buildIndexRecord(root: string, rel: string): IndexRecord | null {
   const full = path.join(root, rel);
@@ -69,7 +75,8 @@ export function buildIndexRecord(root: string, rel: string): IndexRecord | null 
     title: meta.title || path.posix.basename(rel, path.posix.extname(rel)),
     folder: dir === '.' ? '' : dir,
     frontmatter: JSON.stringify(note.frontmatter?.data ?? {}),
-    cover: firstImage(content.slice(note.frontmatter?.end ?? 0)),
+    // 갤러리 커버: 프런트매터 `cover` 가 이미지면 그것, 아니면 본문의 첫 이미지
+    cover: frontmatterCover(note.frontmatter?.data.cover) ?? firstImage(content.slice(note.frontmatter?.end ?? 0)),
     noteId: meta.id ?? null,
     aliases: meta.aliases,
     headings: meta.headings.map((h) => ({ level: h.level, text: h.text, slug: h.slug, line: h.line })),

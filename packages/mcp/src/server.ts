@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { DatabaseAccess, FILTER_OPS } from './databases.js';
@@ -6,6 +8,20 @@ import { VaultScanner } from './vault-scan.js';
 import { NoteWriter, WriteError, type WriteResult } from './writer.js';
 
 export const SERVER_NAME = 'nopsidian';
+
+/** 앱 설정(`.nopsidian/config.json`)의 데일리 노트 폴더(기본 `일기`) */
+function dailyFolderOf(root: string): string {
+  try {
+    const raw = JSON.parse(readFileSync(path.join(root, '.nopsidian', 'config.json'), 'utf8')) as { dailyFolder?: unknown };
+    const f = typeof raw.dailyFolder === 'string' ? raw.dailyFolder.replace(/^\/+|\/+$/g, '') : '';
+    if (f && !f.startsWith('.') && !f.includes('..')) return f;
+  } catch {
+    /* 설정이 없으면 기본값 */
+  }
+  return '일기';
+}
+
+const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 const MAX_READ_CHARS = 40_000;
 
@@ -277,14 +293,18 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
         database: z.string().min(1).describe('Database folder path or title'),
         title: z.string().min(1).describe('Row title (becomes the note name)'),
         values: z.record(z.string(), z.unknown()).optional().describe('Property values, e.g. {"상태":"진행","마감":"2026-11-01","점수":3}'),
-        body: z.string().optional().describe('Optional Markdown body of the row note'),
+        body: z.string().optional().describe('Optional Markdown body of the row note (added after the template, if any)'),
+        template: z
+          .string()
+          .optional()
+          .describe('Template note path (see "defaultTemplate"/"templates" in list_databases). Omit to use the database default; pass "" for none. {{date}} {{title}} are filled in.'),
       },
       annotations: writeHint('Add a database row', false),
     },
-    async ({ database, title, values, body }) =>
+    async ({ database, title, values, body, template }) =>
       run('add_database_row', () => {
         const folder = dbs.resolveFolder(database);
-        const { rel, text } = dbs.buildRow(folder, title, values ?? {}, body ?? '');
+        const { rel, text } = dbs.buildRow(folder, title, values ?? {}, body ?? '', new Date(), template);
         return writer.createExact('add_database_row', rel, text);
       }),
   );
@@ -304,6 +324,26 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       run('update_database_row', () => {
         const notePath = path.normalize('NFC').replace(/\\/g, '/').replace(/^\.?\//, '');
         return writer.modify('update_database_row', notePath, dbs.applyValues(notePath.endsWith('.md') ? notePath : `${notePath}.md`, values));
+      }),
+  );
+
+  server.registerTool(
+    'append_to_daily_note',
+    {
+      title: 'Append to a daily note',
+      description: `Add Markdown to the daily note of a date (default: today), creating it ("# YYYY-MM-DD") if it does not exist yet. The daily folder (${dailyFolderOf(policy.root)}/ by default) must be one of the allowed write folders (${folders}).`,
+      inputSchema: {
+        content: z.string().min(1).describe('Markdown to add, e.g. "- 10:30 Reviewed the plan"'),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('YYYY-MM-DD (default today)'),
+        heading: z.string().optional().describe('Add to the end of the section under this heading'),
+      },
+      annotations: writeHint('Append to a daily note', false),
+    },
+    async ({ content, date, heading }) =>
+      run('append_to_daily_note', () => {
+        const day = date ?? localDate(new Date());
+        const rel = `${dailyFolderOf(policy.root)}/${day}.md`;
+        return existsSync(path.join(policy.root, rel)) ? writer.append('append_to_daily_note', rel, content, heading) : writer.create('append_to_daily_note', rel, content, { title: day });
       }),
   );
 

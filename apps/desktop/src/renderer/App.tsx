@@ -574,6 +574,12 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             setSyncOpen(true);
           }}
           onOpenNote={setSelected}
+          onReverted={(p, kind) => {
+            refresh();
+            // 열려 있는 편집기는 되돌린 내용으로 다시 불러온다(새로 만든 노트를 치웠다면 탭을 닫는다)
+            if (kind === 'trashed') dispatchTabs({ type: 'closePath', path: p });
+            else window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: p }));
+          }}
           onOpenTrash={() => {
             setSettingsOpen(false);
             setTrashOpen(true);

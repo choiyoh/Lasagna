@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { resolveInVault } from '@nopsidian/core';
+import { expandTemplate, resolveInVault } from '@nopsidian/core';
 import {
   DB_FILE,
   FILTER_OPS,
@@ -21,6 +21,7 @@ import {
   type SortRule,
 } from '@nopsidian/core/db';
 import type { ScannedNote, VaultScanner } from './vault-scan.js';
+import { validateNotePath } from './policy.js';
 import { WriteError } from './writer.js';
 
 /** 에이전트에게 보여 줄 속성 설명 */
@@ -40,6 +41,9 @@ export interface DatabaseInfo {
   rows: number;
   properties: PropertyInfo[];
   views: { id: string; name: string; type: string }[];
+  /** 새 행에 기본으로 쓰는 템플릿 노트(없으면 생략)와 고를 수 있는 템플릿 */
+  defaultTemplate?: string;
+  templates: string[];
   /** `_db.yaml` 에서 읽다가 버린 항목 수 */
   issues: number;
 }
@@ -135,6 +139,8 @@ export class DatabaseAccess {
         rows: this.rowNotes(folder, s.schema, folders).length,
         properties: Object.entries(s.schema.properties).map(([n, d]) => propertyInfo(n, d)),
         views: s.schema.views.map((v) => ({ id: v.id, name: v.name, type: v.type })),
+        ...(s.schema.defaultTemplate ? { defaultTemplate: s.schema.defaultTemplate } : {}),
+        templates: s.schema.templates,
         issues: s.issues,
       });
     }
@@ -223,7 +229,15 @@ export class DatabaseAccess {
   }
 
   /** 새 행 노트의 경로와 내용. 이름이 겹치면 ` 2`, ` 3`… */
-  buildRow(folder: string, title: string, values: Record<string, unknown>, body = '', now = new Date()): { rel: string; text: string } {
+  buildRow(
+    folder: string,
+    title: string,
+    values: Record<string, unknown>,
+    body = '',
+    now = new Date(),
+    /** 템플릿 노트 경로. 빈 문자열이면 템플릿 없이, 생략하면 데이터베이스의 기본 템플릿 */
+    template?: string,
+  ): { rel: string; text: string } {
     const s = this.schemaOf(folder);
     if (!s) throw new WriteError('bad-input', `데이터베이스가 아니에요: ${folder}`);
     const fm = this.frontmatterFor(s.schema, values);
@@ -245,7 +259,19 @@ export class DatabaseAccess {
       rel = path.posix.join(folder, `${clean}${n > 1 ? ` ${n}` : ''}.md`);
       if (!existsSync(resolveInVault(this.root, rel))) break;
     }
-    return { rel, text: buildRowNote(fm, body) };
+    const tpl = template === '' ? undefined : (template ?? s.schema.defaultTemplate);
+    if (!tpl) return { rel, text: buildRowNote(fm, body) };
+    let tplPath: string;
+    try {
+      tplPath = validateNotePath(tpl);
+    } catch (e) {
+      throw new WriteError('bad-input', `템플릿 경로가 올바르지 않아요: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    const tplFile = resolveInVault(this.root, tplPath);
+    if (!existsSync(tplFile)) throw new WriteError('bad-input', `템플릿 노트가 없어요: ${tplPath}. 템플릿 없이 만들려면 template 를 빈 문자열로 주세요`);
+    const filled = expandTemplate(readFileSync(tplFile, 'utf8'), { now, title: clean });
+    const withValues = setFrontmatter(filled, fm);
+    return { rel, text: body ? `${withValues.replace(/\s+$/, '')}\n\n${body}` : withValues };
   }
 
   /** 행 노트의 속성을 고친 새 내용(프런트매터의 그 키만 바뀌고 본문은 그대로) */

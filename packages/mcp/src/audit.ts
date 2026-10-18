@@ -7,14 +7,14 @@ export interface AuditEntry {
   t: string;
   /** 연결한 MCP 클라이언트 이름(알 수 있으면) */
   client?: string;
-  action: 'create' | 'append' | 'update' | 'denied';
+  action: 'create' | 'append' | 'update' | 'denied' | 'revert';
   /** 도구 이름 */
   tool: string;
   path: string;
   hashBefore?: string | null;
   hashAfter?: string;
   bytes?: number;
-  /** 거부 사유·병합 결과 등 */
+  /** 거부 사유·병합 결과 등. 되돌림 기록은 `revert:<되돌린 기록의 t>` */
   note?: string;
 }
 

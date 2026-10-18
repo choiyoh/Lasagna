@@ -2,7 +2,7 @@ import { dialog, BrowserWindow } from 'electron';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { atomicWrite, resolveInVault, saveNote, splitFrontmatter } from '@nopsidian/core';
+import { atomicWrite, expandTemplate, resolveInVault, saveNote, splitFrontmatter } from '@nopsidian/core';
 import { createLinkResolver, linkNameFor } from '@nopsidian/core/links';
 import {
   DB_FILE,
@@ -38,7 +38,6 @@ import {
 } from '@nopsidian/core/db';
 import type { z } from 'zod';
 import type { dbSchemaOp } from '@nopsidian/ipc-contract';
-import { expandTemplate } from '../workers/index/templates';
 import type { OpenVault } from './vault';
 
 type SchemaOp = z.infer<typeof dbSchemaOp>;

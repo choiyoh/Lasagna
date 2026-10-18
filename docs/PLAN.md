@@ -454,6 +454,10 @@ nopsidian/
 
 ### MCP 데이터베이스 도구 (v0.6.1)
 - `list_databases`/`query_database`(읽기)와 `add_database_row`/`update_database_row`(쓰기). 질의는 앱과 같은 `@nopsidian/core/db` 의 `queryRows` 를 쓰고(저장된 보기에서 시작해 필터·정렬을 더함), 값 검증·변환은 `normalizeValue`/`toFrontmatterValue`, 프런트매터 수정은 `setFrontmatter`(그 키만 바꾸고 본문 불변). 양방향 관계·계산 속성은 쓰기 거부(반대쪽 동기화는 앱의 일).
+### MCP 보강 (v0.6.2)
+- **되돌리기**: 감사 기록의 각 작업 옆 버튼(`packages/mcp/src/revert.ts`). 감사 기록의 `hashBefore`/`hashAfter` 와 버전 기록 스냅샷(이름 끝 8자리 = 이전 내용 해시)으로, 현재 내용이 그 작업 직후와 같을 때만 복원한다. 새 노트는 휴지통으로. 되돌림도 감사 기록(`revert:<t>`)에 남아 중복 되돌리기를 막는다. IPC `mcp.revert`.
+- `add_database_row` 가 데이터베이스 기본 템플릿(`defaultTemplate`)·`template` 인자를 적용하고, `append_to_daily_note` 추가(데일리 폴더는 `.nopsidian/config.json`). 템플릿 변수 확장(`expandTemplate`)은 MCP 에서도 쓰도록 `packages/core/src/templates.ts` 로 옮겼다.
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

@@ -3,14 +3,14 @@ import { useCallback, useEffect, useState } from 'react';
 interface AuditRow {
   t: string;
   client?: string;
-  action: 'create' | 'append' | 'update' | 'denied';
+  action: 'create' | 'append' | 'update' | 'denied' | 'revert';
   tool: string;
   path: string;
   note?: string;
 }
 
 const KEY = 'nops.mcp';
-const ACTION_LABEL: Record<AuditRow['action'], string> = { create: '새로 만듦', append: '덧붙임', update: '고침', denied: '거부됨' };
+const ACTION_LABEL: Record<AuditRow['action'], string> = { create: '새로 만듦', append: '덧붙임', update: '고침', denied: '거부됨', revert: '되돌림' };
 
 const load = (): { write: boolean; folder: string } => {
   try {
@@ -25,11 +25,25 @@ const load = (): { write: boolean; folder: string } => {
 const q = (s: string) => `"${s.replace(/(["\\$`])/g, '\\$1')}"`;
 
 /** 설정 화면의 "AI 에이전트 연결(MCP)": 연결 방법 복사와 에이전트가 한 일 보기 */
-export function McpSettings({ onOpenNote }: { onOpenNote: (path: string) => void }) {
+export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: string) => void; onReverted: (path: string, kind: 'restored' | 'trashed') => void }) {
   const [info, setInfo] = useState<{ script: string | null; vault: string } | null>(null);
   const [cfg, setCfg] = useState(load);
   const [audit, setAudit] = useState<AuditRow[]>([]);
   const [copied, setCopied] = useState('');
+  /** 되돌리기 확인 중인 기록과 결과 문구 */
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [message, setMessage] = useState('');
+  const revert = async (a: AuditRow) => {
+    try {
+      const r = await window.nops.mcp.revert({ t: a.t, path: a.path });
+      setMessage(r.kind === 'trashed' ? `휴지통으로 옮겼어요: ${a.path}` : `이전 내용으로 되돌렸어요: ${a.path}`);
+      onReverted(a.path, r.kind);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+    }
+    setConfirming(null);
+    refresh();
+  };
 
   const refresh = useCallback(() => void window.nops.mcp.audit({ limit: 30 }).then(setAudit), []);
   useEffect(() => {
@@ -45,6 +59,8 @@ export function McpSettings({ onOpenNote }: { onOpenNote: (path: string) => void
   }, [cfg]);
 
   if (!info) return null;
+  /** 이미 되돌린 기록(`revert:<t>` 메모가 붙은 되돌림 기록이 가리키는 것) */
+  const reverted = new Set(audit.filter((a) => a.action === 'revert' && a.note?.startsWith('revert:')).map((a) => `${a.note!.slice(7)}|${a.path}`));
   const folder = cfg.folder.trim().replace(/^\/+|\/+$/g, '') || '.';
   const args = info.script ? [info.script, '--vault', info.vault, ...(cfg.write ? ['--write', '--write-folder', folder] : [])] : [];
   const cli = info.script ? `claude mcp add nopsidian -- node ${args.map((a) => (a.startsWith('--') ? a : q(a))).join(' ')}` : '';
@@ -106,7 +122,7 @@ export function McpSettings({ onOpenNote }: { onOpenNote: (path: string) => void
         ) : (
           <ul data-testid="mcp-audit">
             {audit.map((a, i) => (
-              <li key={`${a.t}-${i}`} className={a.action === 'denied' ? 'denied' : ''}>
+              <li key={`${a.t}-${i}`} className={`${a.action === 'denied' ? 'denied' : ''}${reverted.has(`${a.t}|${a.path}`) ? ' reverted' : ''}`.trim()}>
                 <span className="muted small">{new Date(a.t).toLocaleString()}</span>
                 <span className="mcp__act">{ACTION_LABEL[a.action]}</span>
                 {a.action === 'denied' ? (
@@ -117,11 +133,24 @@ export function McpSettings({ onOpenNote }: { onOpenNote: (path: string) => void
                   </button>
                 )}
                 <span className="muted small">{a.client ?? ''}</span>
+                {(a.action === 'create' || a.action === 'append' || a.action === 'update') && !reverted.has(`${a.t}|${a.path}`) && (
+                  confirming === `${a.t}|${a.path}` ? (
+                    <span className="mcp__confirm">
+                      <button className="danger" onClick={() => void revert(a)} data-testid="mcp-revert-confirm">정말 되돌리기</button>
+                      <button onClick={() => setConfirming(null)}>취소</button>
+                    </span>
+                  ) : (
+                    <button className="mcp__undo" onClick={() => setConfirming(`${a.t}|${a.path}`)} data-testid="mcp-revert" title={a.action === 'create' ? '이 노트를 휴지통으로' : '이 작업 전 내용으로 복원'}>
+                      되돌리기
+                    </button>
+                  )
+                )}
               </li>
             ))}
           </ul>
         )}
-        <p className="muted small">지운 것·고친 것은 노트의 “버전 기록”에서 이전 내용으로 되돌릴 수 있어요.</p>
+        {message && <p className="small" role="status" data-testid="mcp-revert-msg">{message}</p>}
+        <p className="muted small">“되돌리기”는 그 뒤로 노트가 바뀌지 않았을 때만 돼요(더 최근 작업부터). 그 밖에는 노트의 “버전 기록”에서 복원하세요.</p>
       </div>
     </section>
   );

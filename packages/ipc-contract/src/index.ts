@@ -438,7 +438,7 @@ export const contract = {
       z.object({
         t: z.string(),
         client: z.string().optional(),
-        action: z.enum(['create', 'append', 'update', 'denied']),
+        action: z.enum(['create', 'append', 'update', 'denied', 'revert']),
         tool: z.string(),
         path: z.string(),
         hashBefore: z.string().nullable().optional(),
@@ -448,6 +448,8 @@ export const contract = {
       }),
     ),
   },
+  /** 에이전트가 한 작업 되돌리기: 덧붙이기·고치기는 이전 내용으로 복원, 새로 만든 노트는 휴지통으로. 그 뒤 바뀌었으면 거부 */
+  'mcp.revert': { input: z.object({ t: z.string().max(40), path: relPath }), output: z.object({ kind: z.enum(['restored', 'trashed']), trashId: z.string().optional() }) },
   'app.openExternal': { input: z.object({ url: z.string().url() }), output: z.undefined() },
 } as const;
 

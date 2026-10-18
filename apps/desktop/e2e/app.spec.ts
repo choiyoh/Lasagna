@@ -1866,7 +1866,7 @@ views:
     await client.connect(new StdioClientTransport({ command: process.execPath, args: [script, '--vault', vaultDir, '--write'], stderr: 'ignore' }));
     try {
       const tools = (await client.listTools()).tools.map((t) => t.name);
-      expect(tools).toEqual(expect.arrayContaining(['search_notes', 'create_note', 'append_to_note', 'list_databases', 'query_database', 'add_database_row', 'update_database_row']));
+      expect(tools).toEqual(expect.arrayContaining(['search_notes', 'create_note', 'append_to_note', 'list_databases', 'query_database', 'add_database_row', 'update_database_row', 'append_to_daily_note']));
       const text = (r: unknown) => (r as { content: { text: string }[] }).content[0]!.text;
       // 읽기: 앱에 있는 노트를 검색한다
       expect(text(await client.callTool({ name: 'search_notes', arguments: { query: 'Nopsidian' } }))).toContain('프로젝트/Nopsidian.md');
@@ -1893,6 +1893,27 @@ views:
     await expect(audit).toContainText('AI/에이전트노트.md', { timeout: 8000 });
     await expect(audit).toContainText('e2e-agent');
     await expect(audit.locator('li.denied')).toContainText('프로젝트/몰래.md');
+
+    // 되돌리기: 덧붙인 것을 되돌리면 이전 내용으로, 새로 만든 노트를 되돌리면 휴지통으로
+    const note = path.join(vaultDir, 'AI/에이전트노트.md');
+    expect(readFileSync(note, 'utf8')).toContain('덧붙인 둘째 문장');
+    const dlg = page.getByRole('dialog', { name: '설정' });
+    // 만든 기록은 그 뒤로 바뀌었으므로 먼저 되돌리면 거부된다
+    await audit.locator('li', { hasText: '새로 만듦' }).getByTestId('mcp-revert').click();
+    await audit.locator('li', { hasText: '새로 만듦' }).getByTestId('mcp-revert-confirm').click();
+    await expect(dlg.getByTestId('mcp-revert-msg')).toContainText('또 바뀌었어요');
+    expect(existsSync(note)).toBe(true);
+    await audit.locator('li', { hasText: '덧붙임' }).getByTestId('mcp-revert').click();
+    await audit.locator('li', { hasText: '덧붙임' }).getByTestId('mcp-revert-confirm').click();
+    await expect(dlg.getByTestId('mcp-revert-msg')).toContainText('이전 내용으로 되돌렸어요');
+    await expect.poll(() => readFileSync(note, 'utf8'), { timeout: 8000 }).not.toContain('덧붙인 둘째 문장');
+    expect(readFileSync(note, 'utf8')).toContain('에이전트가 쓴 첫 문장');
+    await expect(audit.locator('li.reverted')).toHaveCount(1);
+    await audit.locator('li', { hasText: '새로 만듦' }).getByTestId('mcp-revert').click();
+    await audit.locator('li', { hasText: '새로 만듦' }).getByTestId('mcp-revert-confirm').click();
+    await expect(dlg.getByTestId('mcp-revert-msg')).toContainText('휴지통으로 옮겼어요');
+    await expect.poll(() => existsSync(note), { timeout: 8000 }).toBe(false);
+    await expect(audit.locator('li', { hasText: '되돌림' }).first()).toBeVisible();
     await page.keyboard.press('Escape');
   });
 

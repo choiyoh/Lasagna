@@ -234,3 +234,50 @@ describe('MCP 서버 — 데이터베이스', () => {
     expect(readAudit(root).length).toBe(before);
   });
 });
+
+describe('MCP 서버 — 템플릿과 오늘의 노트', () => {
+  const localDay = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  async function withTemplate(over: Partial<McpPolicy>) {
+    const c = await connect(over);
+    mkdirSync(path.join(c.root, '할일'));
+    mkdirSync(path.join(c.root, '템플릿'));
+    writeFileSync(path.join(c.root, '할일/_db.yaml'), 'title: 할 일\nproperties:\n  점수: { type: number }\ndefaultTemplate: 템플릿/할일.md\nviews:\n  - { id: v1, name: 표, type: table, sort: [] }\n');
+    writeFileSync(path.join(c.root, '템플릿/할일.md'), '---\n점수: 1\n---\n## 메모\n\n{{title}} 을(를) 시작\n');
+    return c;
+  }
+  it('add_database_row: 기본 템플릿을 적용하고 값으로 덮어쓴다', async () => {
+    const { call, root } = await withTemplate({ write: true, writeFolders: ['할일'] });
+    expect((await call('list_databases')).json.databases[0]).toMatchObject({ defaultTemplate: '템플릿/할일.md' });
+    const r = await call('add_database_row', { database: '할일', title: '새 행', values: { 점수: 8 }, body: '추가 메모' });
+    expect(r.isError).toBe(false);
+    const text = readFileSync(path.join(root, '할일/새 행.md'), 'utf8');
+    expect(text).toMatch(/^---\n점수: 8\ncreated: [^\n]+\n---\n## 메모\n\n새 행 을\(를\) 시작\n\n추가 메모$/);
+    // 템플릿 없이
+    const none = await call('add_database_row', { database: '할일', title: '빈 행', template: '' });
+    expect(readFileSync(path.join(root, '할일/빈 행.md'), 'utf8')).not.toContain('## 메모');
+    expect(none.isError).toBe(false);
+    // 없는 템플릿
+    expect((await call('add_database_row', { database: '할일', title: 'x', template: '템플릿/없음.md' })).text).toContain('템플릿 노트가 없어요');
+  });
+  it('append_to_daily_note: 없으면 만들고, 있으면 덧붙인다(폴더는 앱 설정을 따른다)', async () => {
+    const { call, root } = await connect({ write: true, writeFolders: ['일기'] });
+    const day = localDay();
+    const a = await call('append_to_daily_note', { content: '- 첫 기록' });
+    expect(a.isError).toBe(false);
+    expect(a.json.path).toBe(`일기/${day}.md`);
+    expect(readFileSync(path.join(root, `일기/${day}.md`), 'utf8')).toBe(`# ${day}\n\n- 첫 기록\n`);
+    await call('append_to_daily_note', { content: '- 둘째 기록' });
+    expect(readFileSync(path.join(root, `일기/${day}.md`), 'utf8')).toBe(`# ${day}\n\n- 첫 기록\n\n- 둘째 기록\n`);
+    // 다른 날짜
+    expect((await call('append_to_daily_note', { content: '과거', date: '2026-01-02' })).json.path).toBe('일기/2026-01-02.md');
+    // 앱 설정의 데일리 폴더
+    mkdirSync(path.join(root, '.nopsidian'), { recursive: true });
+    writeFileSync(path.join(root, '.nopsidian/config.json'), JSON.stringify({ dailyFolder: '저널' }));
+    const denied = await call('append_to_daily_note', { content: 'x' });
+    expect(denied.isError).toBe(true);
+    expect(denied.text).toContain('forbidden-folder');
+  });
+});

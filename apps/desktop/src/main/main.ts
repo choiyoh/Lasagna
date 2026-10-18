@@ -3,7 +3,6 @@ import { app, BrowserWindow, dialog, safeStorage, session, shell } from 'electro
 import { createHash } from 'node:crypto';
 import { applyRename, planRename, undoRename } from './rename';
 import { linkMention } from '../workers/index/mention-link';
-import { expandTemplate } from '../workers/index/templates';
 import path from 'node:path';
 import {
   atomicWrite,
@@ -20,9 +19,11 @@ import {
   saveNote,
   sha256,
   uniqueName,
+  expandTemplate,
 } from '@nopsidian/core';
 import { existsSync, readFileSync } from 'node:fs';
 import { readAudit } from '@nopsidian/mcp/audit';
+import { RevertError, applyRestore, logRevert, planRevert } from '@nopsidian/mcp/revert';
 import { events, graphSettings, workspaceLayout, type EventName } from '@nopsidian/ipc-contract';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { installProtocols, registerSchemes } from './protocols';
@@ -405,6 +406,23 @@ function registerHandlers() {
     // 패키징된 앱은 resources/ 에, 개발 중에는 저장소의 빌드 결과를 쓴다
     const script = app.isPackaged ? path.join(process.resourcesPath, 'nopsidian-mcp.mjs') : path.resolve(app.getAppPath(), '../../packages/mcp/dist/nopsidian-mcp.mjs');
     return { script: existsSync(script) ? script : null, vault: v.info.path };
+  });
+  handle('mcp.revert', ({ t, path: rel }) => {
+    const v = requireVault();
+    try {
+      const { entry, plan } = planRevert(v.info.path, t, rel);
+      v.bases.delete(rel);
+      if (plan.action === 'trash') {
+        const r = moveToTrash(v.info.path, rel);
+        logRevert(v.info.path, entry, undefined);
+        return { kind: 'trashed' as const, trashId: r.trashId };
+      }
+      applyRestore(v.info.path, entry, plan.content);
+      return { kind: 'restored' as const };
+    } catch (e) {
+      // 사용자에게 보일 문구만 넘긴다
+      throw e instanceof RevertError ? new Error(e.message) : e;
+    }
   });
   handle('mcp.audit', ({ limit }) => readAudit(requireVault().info.path, limit));
   handle('order.get', () => {

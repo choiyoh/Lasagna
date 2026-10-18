@@ -14,6 +14,11 @@ describe('sidebar selection helpers', () => {
     expect(closed).toEqual(['빈', 'a', 'b.md', 'c.md']);
     expect(flattenVisible(tree, () => true).find((v) => v.path === 'a/y.md')).toMatchObject({ depth: 1, parent: 'a', isFolder: false });
   });
+  it('폴더마다 한도까지만 펼친다', () => {
+    const big = buildTree(Array.from({ length: 10 }, (_, i) => n(`큰/${String(i).padStart(2, '0')}.md`)), []);
+    const items = flattenVisible(big, () => true, (f) => (f === '큰' ? 3 : 100)).map((v) => v.path);
+    expect(items).toEqual(['큰', '큰/00.md', '큰/01.md', '큰/02.md']);
+  });
   it('범위는 순서와 무관하게 양끝을 포함한다', () => {
     const list = flattenVisible(tree, () => true);
     expect(rangeBetween(list, '빈', 'a/x.md').map((v) => v.path)).toEqual(['빈', 'a', 'a/x.md']);

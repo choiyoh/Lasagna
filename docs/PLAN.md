@@ -458,6 +458,11 @@ nopsidian/
 - **되돌리기**: 감사 기록의 각 작업 옆 버튼(`packages/mcp/src/revert.ts`). 감사 기록의 `hashBefore`/`hashAfter` 와 버전 기록 스냅샷(이름 끝 8자리 = 이전 내용 해시)으로, 현재 내용이 그 작업 직후와 같을 때만 복원한다. 새 노트는 휴지통으로. 되돌림도 감사 기록(`revert:<t>`)에 남아 중복 되돌리기를 막는다. IPC `mcp.revert`.
 - `add_database_row` 가 데이터베이스 기본 템플릿(`defaultTemplate`)·`template` 인자를 적용하고, `append_to_daily_note` 추가(데일리 폴더는 `.nopsidian/config.json`). 템플릿 변수 확장(`expandTemplate`)은 MCP 에서도 쓰도록 `packages/core/src/templates.ts` 로 옮겼다.
 
+### 대량 노트 마무리 (v0.6.3)
+- **한 폴더에 노트가 수천 개**여도 처음 300개만 그리고 "… N개 더 보기"(500개씩)로 늘린다(`FOLDER_PAGE`, `useFolderLimit`). 열린 노트·키보드 커서는 한도 밖이어도 보인다. 키보드 이동·범위 선택도 같은 한도를 따른다(`flattenVisible(…, limitOf)`). 1만 개 폴더 펼치기 DOM 20,113 → 715.
+- **버그**: 감시(`@parcel/watcher`)를 걸기 전, 첫 스캔이 끝난 직후에 생긴 파일을 영영 색인하지 못했다(앱을 다시 켜야 나타남). 감시를 건 뒤 한 번 더 증분 스캔해 놓친 것을 잡고 `note.changed` 로 알린다(`ScanResult.changedPaths`).
+- 측정으로 확인한 것: 그래프 1만 노드의 배치 중 프레임률(약 37fps)은 라벨 그리기가 원인이 아니었다(라벨을 꺼도 같음). 첫 색인 직후 메모리(약 760MB)는 JS 힙 한도를 줄여도 그대로라 운영체제가 해제한 메모리를 바로 돌려받지 않는 탓으로 보고 더 손대지 않았다.
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

@@ -23,10 +23,17 @@ export interface TreeCtx {
   onMove: (items: Entry[], toFolder: string) => void;
   /** 끌어서 놓기: 항목들을 target 의 앞/뒤로(같은 폴더면 순서만 바뀐다) */
   onReorder: (items: Entry[], target: string, pos: 'before' | 'after') => void;
+  /** 이 폴더(''=맨 위)에서 지금 보여 줄 항목 수와 "더 보기" */
+  limitOf: (folder: string) => number;
+  showMore: (folder: string) => void;
 }
 
-export function TreeView({ nodes, ctx, depth = 0 }: { nodes: TreeNode[]; ctx: TreeCtx; depth?: number }) {
+export function TreeView({ nodes: all, ctx, depth = 0, parent = '' }: { nodes: TreeNode[]; ctx: TreeCtx; depth?: number; parent?: string }) {
   const { folderOpen, selected, picked, cursor } = ctx;
+  // 항목이 아주 많으면 처음 몇백 개만 그린다. 지금 열린 노트·키보드 커서는 항상 보이게 한다.
+  const need = Math.max(all.findIndex((n) => n.path === selected), all.findIndex((n) => n.path === cursor)) + 1;
+  const shown = Math.max(ctx.limitOf(parent), need);
+  const nodes = all.length > shown ? all.slice(0, shown) : all;
   const state = (path: string) => `${picked.has(path) ? ' picked' : ''}${cursor === path ? ' cursor' : ''}`;
   return (
     <ul className="tree">
@@ -104,11 +111,18 @@ export function TreeView({ nodes, ctx, depth = 0 }: { nodes: TreeNode[]; ctx: Tr
                   ✎
                 </button>
               </summary>
-              {folderOpen.isOpen(n.path) && <TreeView nodes={n.children} ctx={ctx} depth={depth + 1} />}
+              {folderOpen.isOpen(n.path) && <TreeView nodes={n.children} ctx={ctx} depth={depth + 1} parent={n.path} />}
             </details>
           )}
         </li>
       ))}
+      {all.length > nodes.length && (
+        <li className="tree__more" style={{ paddingLeft: 8 + depth * 14 }}>
+          <button onClick={() => ctx.showMore(parent)} data-testid="tree-more">
+            … {all.length - nodes.length}개 더 보기
+          </button>
+        </li>
+      )}
     </ul>
   );
 }

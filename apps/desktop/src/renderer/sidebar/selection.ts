@@ -12,12 +12,19 @@ export interface VisibleItem extends Entry {
 }
 
 /** 화면에 보이는 순서(접힌 폴더의 안쪽은 빠진다)로 펼친 목록 */
-export function flattenVisible(nodes: TreeNode[], isOpen: (folder: string) => boolean, depth = 0, parent = ''): VisibleItem[] {
+export function flattenVisible(
+  nodes: TreeNode[],
+  isOpen: (folder: string) => boolean,
+  limitOf: (folder: string) => number = () => Infinity,
+  depth = 0,
+  parent = '',
+): VisibleItem[] {
   const out: VisibleItem[] = [];
-  for (const n of nodes) {
+  // 한 폴더에서는 `limitOf` 개까지만 그린다(나머지는 "더 보기")
+  for (const n of nodes.slice(0, limitOf(parent))) {
     const isFolder = !n.note;
     out.push({ path: n.path, isFolder, depth, parent });
-    if (isFolder && isOpen(n.path)) out.push(...flattenVisible(n.children, isOpen, depth + 1, n.path));
+    if (isFolder && isOpen(n.path)) out.push(...flattenVisible(n.children, isOpen, limitOf, depth + 1, n.path));
   }
   return out;
 }

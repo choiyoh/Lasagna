@@ -66,7 +66,7 @@ describe('scanParallel', () => {
     writeFileSync(path.join(root, '폴더0', '새노트.md'), '# 새노트\n');
     rmSync(path.join(root, '폴더1', '노트1.md'));
     const r = await ix.scanParallel(undefined, { workerFile, threshold: 1 });
-    expect(r).toEqual({ changed: 1, removed: 1 });
+    expect(r).toMatchObject({ changed: 1, removed: 1, changedPaths: ['폴더0/새노트.md'], removedPaths: ['폴더1/노트1.md'] });
     expect(ix.list().length).toBe(61);
     ix.close();
   });

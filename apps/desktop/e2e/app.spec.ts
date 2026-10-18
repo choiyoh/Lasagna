@@ -1,5 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { strToU8, zipSync } from 'fflate';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -2167,6 +2167,27 @@ views:
     await expect(page.getByLabel('노드 찾기')).toHaveValue('');
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('graph-screen')).toHaveCount(0);
+  });
+
+  // 노트가 300개를 넘으면 폴더가 접힌 채 시작하므로 이 테스트는 맨 끝에 둔다
+  test('아주 많은 노트가 든 폴더는 처음 300개만 그리고 "더 보기"로 늘린다', async () => {
+    const page = await app.firstWindow();
+    const dir = path.join(vaultDir, '대량');
+    mkdirSync(dir, { recursive: true });
+    for (let i = 0; i < 350; i++) writeFileSync(path.join(dir, `대량노트${String(i).padStart(3, '0')}.md`), `# 대량노트${i}\n`);
+    const summary = page.locator('.tree summary', { hasText: '대량' });
+    await expect(summary).toBeVisible({ timeout: 15000 });
+    await expect.poll(() => page.evaluate(() => window.nops.note.list().then((l) => l.filter((n) => n.path.startsWith('대량/')).length)), { timeout: 20000 }).toBe(350);
+    // 큰 볼트(>300)는 폴더가 접힌 채 시작한다(사이드바가 노트 수를 따라잡으면 접힌다)
+    await expect(page.locator('.tree details', { has: page.locator(':scope > summary', { hasText: '대량' }) })).not.toHaveAttribute('open', '', { timeout: 15000 });
+    await expect(page.locator('.tree .row', { hasText: '대량노트000' })).toHaveCount(0);
+    await summary.click();
+    const rows = page.locator('.tree .row', { hasText: /^대량노트/ });
+    await expect(rows).toHaveCount(300, { timeout: 8000 });
+    await page.getByTestId('tree-more').click();
+    await expect(rows).toHaveCount(350);
+    await expect(page.getByTestId('tree-more')).toHaveCount(0);
+    rmSync(dir, { recursive: true, force: true });
   });
 });
 

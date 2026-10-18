@@ -44,7 +44,7 @@ describe('Indexer', () => {
     put('a.md', '# A');
     put('b.md', '# B');
     ix.scan();
-    expect(ix.scan()).toEqual({ changed: 0, removed: 0 });
+    expect(ix.scan()).toMatchObject({ changed: 0, removed: 0, changedPaths: [], removedPaths: [] });
     rmSync(path.join(root, 'b.md'));
     expect(ix.scan().removed).toBe(1);
     expect(ix.list().map((n) => n.path)).toEqual(['a.md']);

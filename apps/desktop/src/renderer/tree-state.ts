@@ -55,3 +55,15 @@ export function sameNotes(a: NoteSummary[], b: NoteSummary[]): boolean {
   }
   return true;
 }
+
+/** 한 폴더 목록에서 처음 보여 주는 항목 수와, "더 보기"를 누를 때마다 늘리는 수(수천 개를 한꺼번에 그리면 펼칠 때 수백 ms 멈춘다) */
+export const FOLDER_PAGE = 300;
+export const FOLDER_PAGE_MORE = 500;
+
+/** 폴더별로 지금 몇 개까지 보여 주는지(폴더 경로, '' = 맨 위) */
+export function useFolderLimit() {
+  const [shown, setShown] = useState<Record<string, number>>({});
+  const limitOf = useCallback((folder: string) => shown[folder] ?? FOLDER_PAGE, [shown]);
+  const more = useCallback((folder: string) => setShown((s) => ({ ...s, [folder]: (s[folder] ?? FOLDER_PAGE) + FOLDER_PAGE_MORE })), []);
+  return { limitOf, more };
+}

@@ -10,7 +10,7 @@ import { ShortcutsDialog } from './ShortcutsDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { OutlinePanel } from './OutlinePanel';
 import { TrashDialog } from './TrashDialog';
-import { EXPAND_ALL_LIMIT, sameNotes, useFolderOpen } from './tree-state';
+import { EXPAND_ALL_LIMIT, sameNotes, useFolderLimit, useFolderOpen } from './tree-state';
 import type { SidebarOrder } from './sidebar-order';
 import { buildTree, type TreeNode } from './sidebar/build-tree';
 import { dropProps } from './sidebar/drag';
@@ -260,7 +260,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   treeRef.current = tree;
   const folderOpen = useFolderOpen(vault.id, notes.length <= EXPAND_ALL_LIMIT);
   const { reveal } = folderOpen;
-  const visible = useMemo(() => flattenVisible(tree, folderOpen.isOpen), [tree, folderOpen.isOpen]);
+  const folderLimit = useFolderLimit();
+  const visible = useMemo(() => flattenVisible(tree, folderOpen.isOpen, folderLimit.limitOf), [tree, folderOpen.isOpen, folderLimit.limitOf]);
   const sel = useTreeSelection(visible);
   useEffect(() => {
     if (selected) reveal(selected);
@@ -305,6 +306,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     dragItems: (p, isFolder) => (sel.picked.has(p) && sel.picked.size > 1 ? sel.entries() : [{ path: p, isFolder }]),
     onMove: moveEntries,
     onReorder: moveRelative,
+    limitOf: folderLimit.limitOf,
+    showMore: folderLimit.more,
   };
 
   return (

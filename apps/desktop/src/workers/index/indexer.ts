@@ -157,6 +157,14 @@ export function deriveTitle(rel: string, content: string): string {
 
 export { firstImage };
 
+/** 스캔 결과: 바뀐·지워진 파일 수와 그 경로(감시 시작 전에 생긴 변화를 화면에 알리는 데 쓴다) */
+export interface ScanResult {
+  changed: number;
+  removed: number;
+  changedPaths: string[];
+  removedPaths: string[];
+}
+
 export class Indexer {
   readonly db: Database.Database;
   private resolveDirty = true;
@@ -225,15 +233,17 @@ export class Indexer {
   }
 
   /** 스캔의 마무리: 사라진 파일 정리, 링크 해석, 첨부 목록, (대량이면) 메모리 반환 */
-  private finishScan(found: { rel: string }[], known: Map<string, unknown>, changed: number) {
+  private finishScan(found: { rel: string }[], known: Map<string, unknown>, changedPaths: string[]) {
+    const changed = changedPaths.length;
     const seen = new Set(found.map((f) => f.rel));
-    let removed = 0;
+    const removedPaths: string[] = [];
     for (const p of known.keys()) {
       if (!seen.has(p)) {
         this.removeFile(p);
-        removed++;
+        removedPaths.push(p);
       }
     }
+    const removed = removedPaths.length;
     this.resolveLinks();
     this.syncAssets();
     if (changed > 500) {
@@ -241,14 +251,14 @@ export class Indexer {
       this.db.pragma('wal_checkpoint(TRUNCATE)');
       this.db.pragma('shrink_memory');
     }
-    return { changed, removed };
+    return { changed, removed, changedPaths, removedPaths };
   }
 
   /** mtime+size가 같은 파일은 건너뛰고, 사라진 파일은 지운다. 바뀐 파일 수를 돌려준다. (한 스레드에서 차례로) */
-  scan(onProgress?: (done: number, total: number) => void): { changed: number; removed: number } {
+  scan(onProgress?: (done: number, total: number) => void): ScanResult {
     const { found, known, todo } = this.plan();
     const skipped = found.length - todo.length;
-    let changed = 0;
+    const changedPaths: string[] = [];
     let done = skipped;
     // 파일마다 따로 커밋하면 디스크 동기화가 파일 수만큼 일어난다 → 250개씩 묶어 커밋한다
     let pending = 0;
@@ -259,7 +269,7 @@ export class Indexer {
     try {
       for (const f of todo) {
         if (!this.db.inTransaction) this.db.exec('BEGIN');
-        if (this.indexFile(f.rel)) changed++;
+        if (this.indexFile(f.rel)) changedPaths.push(f.rel);
         if (++pending >= 250) commit();
         onProgress?.(++done, found.length);
       }
@@ -267,7 +277,7 @@ export class Indexer {
       commit();
     }
     if (!todo.length) onProgress?.(found.length, found.length);
-    return this.finishScan(found, known, changed);
+    return this.finishScan(found, known, changedPaths);
   }
 
   /**
@@ -278,7 +288,7 @@ export class Indexer {
   async scanParallel(
     onProgress?: (done: number, total: number) => void,
     opts: { workerFile?: string; threads?: number; threshold?: number } = {},
-  ): Promise<{ changed: number; removed: number }> {
+  ): Promise<ScanResult> {
     const { found, known, todo } = this.plan();
     const workerFile = opts.workerFile ?? path.join(__dirname, 'parse-worker.cjs');
     if (todo.length < (opts.threshold ?? 400) || !existsSync(workerFile)) return this.scan(onProgress);
@@ -288,7 +298,7 @@ export class Indexer {
     const batches: string[][] = [];
     for (let i = 0; i < todo.length; i += BATCH) batches.push(todo.slice(i, i + BATCH).map((f) => f.rel));
     const workers = Array.from({ length: threads }, () => new Worker(workerFile, { resourceLimits: { maxOldGenerationSizeMb: 192 } }));
-    let changed = 0;
+    const changedPaths: string[] = [];
     let done = found.length - todo.length;
     let next = 0;
     try {
@@ -309,7 +319,7 @@ export class Indexer {
                 res.records.forEach((rec, i) => {
                   if (rec) {
                     this.writeRecord(rec);
-                    changed++;
+                    changedPaths.push(rec.rel);
                   } else this.removeFile(batches[res.id]![i]!);
                 });
                 this.db.exec('COMMIT');
@@ -335,7 +345,7 @@ export class Indexer {
     }
     await Promise.all(workers.map((w) => w.terminate().catch(() => undefined)));
     onProgress?.(found.length, found.length);
-    return this.finishScan(found, known, changed);
+    return this.finishScan(found, known, changedPaths);
   }
 
   /** 첨부 목록을 디스크와 맞춘다(경로·크기만 저장 — 내용 해시는 저장할 때만 필요하다). */

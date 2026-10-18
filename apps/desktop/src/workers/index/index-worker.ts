@@ -88,7 +88,8 @@ port.on('message', (req: WorkerRequest) => {
   }
 });
 
-// 시작 시 증분 스캔(파일이 많으면 파싱을 여러 스레드에 나눈다) → 감시 시작. 진행률은 이벤트로 알린다.
+// 시작 시 증분 스캔(파일이 많으면 파싱을 여러 스레드에 나눈다) → 감시 시작 → 한 번 더 증분 스캔.
+// 첫 스캔이 끝나고 감시가 시작되기 전에 생긴 변화는 감시가 못 보므로, 감시를 건 뒤 한 번 더 훑어 놓친 것을 잡는다.
 let lastProgress = 0;
 ix.scanParallel((done, total) => {
   const now = Date.now();
@@ -97,8 +98,11 @@ ix.scanParallel((done, total) => {
     post({ type: 'event', name: 'index.progress', payload: { done, total } });
   }
 })
-  .then(() => {
+  .then(async () => {
     post({ type: 'ready' });
-    void startWatching();
+    await startWatching();
+    const late = await ix.scanParallel();
+    for (const rel of late.changedPaths.slice(0, 500)) post({ type: 'event', name: 'note.changed', payload: { path: rel, kind: 'change' } });
+    for (const rel of late.removedPaths.slice(0, 500)) post({ type: 'event', name: 'note.changed', payload: { path: rel, kind: 'unlink' } });
   })
   .catch((e) => post({ type: 'fatal', error: e instanceof Error ? e.message : String(e) }));

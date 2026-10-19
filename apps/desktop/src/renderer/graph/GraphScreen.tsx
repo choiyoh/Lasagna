@@ -1,44 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { GraphData, GraphSettings } from '@nopsidian/ipc-contract';
+import type { GraphSettings } from '@nopsidian/ipc-contract';
+import { useGraphData } from './graph-data';
 import { GraphView } from './GraphView';
 import { DEFAULT_GRAPH_SETTINGS, GROUP_PALETTE } from './settings';
-
-const EMPTY: GraphData = { nodes: [], edges: [] };
-
-/** 마지막으로 받은 그래프 데이터(다시 열 때 바로 그리고, 새 데이터는 뒤에서 받는다) */
-const dataCache = new Map<string, { data: GraphData; sig: string }>();
-/** 내용이 같은지 빠르게 비교하기 위한 서명 */
-const signature = (d: GraphData) => `${d.nodes.map((n) => `${n.id}\u0001${n.label}\u0001${n.degree}`).join('\u0002')}\u0003${d.edges.map((e) => `${e.source}\u0001${e.target}`).join('\u0002')}`;
-
-/** 노트 변경을 디바운스해 그래프 데이터를 다시 받는다. 같은 내용이면 그래프를 다시 만들지 않는다. */
-function useGraphData(load: () => Promise<GraphData>, deps: unknown[], cacheKey?: string): GraphData {
-  const [data, setData] = useState<GraphData>(() => (cacheKey && dataCache.get(cacheKey)?.data) || EMPTY);
-  useEffect(() => {
-    let alive = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const run = () =>
-      void load().then((d) => {
-        if (!alive) return;
-        if (!cacheKey) return setData(d);
-        const sig = signature(d);
-        const hit = dataCache.get(cacheKey);
-        if (hit && hit.sig === sig) return setData(hit.data);
-        dataCache.set(cacheKey, { data: d, sig });
-        setData(d);
-      });
-    run();
-    const off = window.nops.on('note.changed', () => {
-      clearTimeout(timer);
-      timer = setTimeout(run, 600);
-    });
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-      off();
-    };
-  }, deps);
-  return data;
-}
 
 interface ScreenProps {
   /** 그래프 데이터 캐시를 볼트별로 나눈다 */
@@ -52,12 +16,20 @@ interface ScreenProps {
 export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) {
   const [settings, setSettings] = useState<GraphSettings>(DEFAULT_GRAPH_SETTINGS);
   const loaded = useRef(false);
+  /** 저장된 설정을 읽기 전에는 그래프를 그리지 않는다(기본 힘으로 배치했다가 저장된 힘으로 다시 돌리며 흔들리지 않게) */
+  const [settingsReady, setSettingsReady] = useState(false);
 
   useEffect(() => {
-    void window.nops.graph.getSettings().then((s) => {
-      if (s) setSettings(s);
-      loaded.current = true;
-    });
+    void window.nops.graph
+      .getSettings()
+      .then((s) => {
+        if (s) setSettings(s);
+      })
+      .catch(() => undefined) // 못 읽으면 기본 설정으로 그린다
+      .finally(() => {
+        loaded.current = true;
+        setSettingsReady(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -184,7 +156,7 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
             + 그룹 추가
           </button>
         </aside>
-        <GraphView data={data} settings={settings} current={current} onOpen={onOpen} testId="graph-global" cacheKey="global" focus={focus} />
+        {settingsReady && <GraphView data={data} settings={settings} current={current} onOpen={onOpen} testId="graph-global" cacheKey="global" focus={focus} />}
       </div>
     </div>
   );

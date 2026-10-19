@@ -4,7 +4,10 @@ import { stringify } from 'yaml';
 import { appendAudit, type AuditEntry } from './audit.js';
 import { canWrite, validateNotePath, type McpPolicy } from './policy.js';
 
-export type WriteErrorCode = 'read-only' | 'forbidden-folder' | 'exists' | 'not-found' | 'stale' | 'rate-limit' | 'too-large' | 'bad-heading' | 'bad-input';
+export type WriteErrorCode = 'read-only' | 'forbidden-folder' | 'exists' | 'not-found' | 'stale' | 'rate-limit' | 'too-large' | 'bad-heading' | 'bad-input' | 'partial';
+
+/** read_note 가 노트의 일부만 돌려줬을 때 hash 앞에 붙는 접두사 */
+export const PARTIAL_HASH_PREFIX = 'partial:';
 
 export class WriteError extends Error {
   constructor(
@@ -91,8 +94,22 @@ export class NoteWriter {
   update(tool: string, rawPath: string, content: string, baseHash: string): WriteResult {
     const rel = this.guard(tool, rawPath);
     const disk = this.readDisk(tool, rel);
-    if (sha256(disk) !== baseHash) this.deny(tool, rel, 'stale', '노트가 읽은 뒤에 바뀌었어요. read_note 로 다시 읽고 최신 hash 로 시도하세요');
-    return this.commit(tool, 'update', rel, content.replace(/\s+$/, '') + '\n', disk);
+    // read_note 가 일부만 돌려준 경우 hash 에 "partial:" 이 붙어 있다. 낡음 검사는 전체 내용 해시로 똑같이 한다.
+    const partial = baseHash.startsWith(PARTIAL_HASH_PREFIX);
+    const expected = partial ? baseHash.slice(PARTIAL_HASH_PREFIX.length) : baseHash;
+    if (sha256(disk) !== expected) this.deny(tool, rel, 'stale', '노트가 읽은 뒤에 바뀌었어요. read_note 로 다시 읽고 최신 hash 로 시도하세요');
+    const text = content.replace(/\s+$/, '') + '\n';
+    // 일부만 읽고 받은 hash 로 노트를 통째로 바꾸면, 잘려 나간 뒷부분을 모르는 채 지워 버릴 수 있다.
+    // 디스크에서 방금 읽은 내용보다 짧아지면 거부한다(전체를 읽고 받은 hash 는 그대로 허용 — 기존 동작).
+    if (partial && text.length < disk.length) {
+      this.deny(
+        tool,
+        rel,
+        'partial',
+        `You sent ${text.length} characters but the note on disk has ${disk.length}; a "partial:" hash only allows update_note when the new content is not shorter than the current note. Read all pages with read_note (follow offset/next_offset) and send the complete note, or use append_to_note.`,
+      );
+    }
+    return this.commit(tool, 'update', rel, text, disk);
   }
 
   /** 이미 완성된 노트 전문을 그대로 새 노트로 쓴다(데이터베이스 행처럼 프런트매터를 직접 만든 경우). 있으면 실패. */

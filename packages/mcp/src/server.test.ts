@@ -126,6 +126,103 @@ describe('MCP 서버 — 쓰기 허용', () => {
   });
 });
 
+describe('MCP 서버 — 긴 노트 페이징과 partial 해시', () => {
+  const write = { write: true, writeFolders: ['AI'], maxBytes: 1_000_000 };
+  // 4만 자를 넘기는 결정적 노트(한 줄마다 번호가 있어 순서가 뒤바뀌면 바로 드러난다)
+  const LONG = `${Array.from({ length: 2000 }, (_, i) => `- line ${String(i).padStart(5, '0')} ${'x'.repeat(40)}`).join('\n')}\n`;
+
+  async function withLongNote() {
+    const c = await connect(write);
+    mkdirSync(path.join(c.root, 'AI'), { recursive: true });
+    const file = path.join(c.root, 'AI/long.md');
+    writeFileSync(file, LONG);
+    return { ...c, file };
+  }
+
+  it('잘린 내용을 partial 해시로 그대로 되쓰면 거부되고 파일은 그대로다(데이터 유실 회귀)', async () => {
+    const { call, root, file } = await withLongNote();
+    const before = readFileSync(file, 'utf8');
+    const r = await call('read_note', { path: 'AI/long.md' });
+    expect(r.isError).toBe(false);
+    expect(r.json).toMatchObject({ truncated: true, total_chars: LONG.length, offset: 0, returned_chars: 40_000, next_offset: 40_000 });
+    expect(r.json.content).toBe(LONG.slice(0, 40_000));
+    expect(r.json.hash).toMatch(/^partial:[0-9a-f]{64}$/);
+
+    const u = await call('update_note', { path: 'AI/long.md', content: r.json.content, base_hash: r.json.hash });
+    expect(u.isError).toBe(true);
+    expect(u.text).toContain('partial');
+    expect(u.text).toContain('append_to_note');
+    expect(readFileSync(file, 'utf8')).toBe(before);
+    expect(readAudit(root).some((e) => e.action === 'denied' && e.tool === 'update_note')).toBe(true);
+  });
+
+  it('offset/next_offset 로 끝까지 읽으면 전체 내용이 그대로 맞아떨어진다', async () => {
+    const { call } = await withLongNote();
+    let text = '';
+    let offset = 0;
+    const pages: { hash: string; next_offset: number | null }[] = [];
+    for (let i = 0; i < 10; i++) {
+      const r = await call('read_note', { path: 'AI/long.md', offset });
+      expect(r.isError).toBe(false);
+      text += r.json.content;
+      pages.push({ hash: r.json.hash, next_offset: r.json.next_offset });
+      if (r.json.next_offset === null) break;
+      offset = r.json.next_offset;
+    }
+    expect(text).toBe(LONG);
+    expect(pages).toHaveLength(3); // 108,000자 → 40,000 + 40,000 + 나머지
+    expect(pages.map((p) => p.next_offset)).toEqual([40_000, 80_000, null]);
+    expect(pages.every((p) => p.hash.startsWith('partial:'))).toBe(true); // 한 번에 다 못 읽으므로 모든 페이지가 부분 읽기
+    // limit 을 주면 그만큼만 돌려준다
+    const small = await call('read_note', { path: 'AI/long.md', offset: 0, limit: 10 });
+    expect(small.json).toMatchObject({ returned_chars: 10, next_offset: 10, truncated: true });
+    expect(small.json.content).toBe(LONG.slice(0, 10));
+  });
+
+  it('partial 해시라도 내용이 짧아지지 않으면 update_note 가 통과한다', async () => {
+    const { call, file } = await withLongNote();
+    const r = await call('read_note', { path: 'AI/long.md' });
+    const edited = `${LONG}새 문단\n`;
+    const u = await call('update_note', { path: 'AI/long.md', content: edited, base_hash: r.json.hash });
+    expect(u.isError).toBe(false);
+    expect(u.json.status).toBe('saved');
+    expect(readFileSync(file, 'utf8')).toBe(edited);
+  });
+
+  it('읽은 뒤 디스크가 바뀐 partial 해시는 stale 로 거부된다', async () => {
+    const { call, file } = await withLongNote();
+    const r = await call('read_note', { path: 'AI/long.md' });
+    writeFileSync(file, `${LONG}다른 사람이 고침\n`);
+    const u = await call('update_note', { path: 'AI/long.md', content: `${LONG}내 편집\n`, base_hash: r.json.hash });
+    expect(u.isError).toBe(true);
+    expect(u.text).toContain('stale');
+    expect(readFileSync(file, 'utf8')).toBe(`${LONG}다른 사람이 고침\n`);
+  });
+
+  it('짧은 노트는 접두사 없는 전체 해시·truncated=false·next_offset=null 이고 짧게 고쳐도 된다', async () => {
+    const { call, root } = await connect({ write: true, writeFolders: ['AI'] });
+    expect((await call('create_note', { path: 'AI/short', content: '# 짧음\n\n본문' })).isError).toBe(false);
+    const r = await call('read_note', { path: 'AI/short' });
+    expect(r.json.hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(r.json).toMatchObject({ truncated: false, next_offset: null, offset: 0, returned_chars: r.json.content.length, total_chars: r.json.content.length });
+    const u = await call('update_note', { path: 'AI/short', content: '짧게', base_hash: r.json.hash });
+    expect(u.isError).toBe(false);
+    expect(readFileSync(path.join(root, 'AI/short.md'), 'utf8')).toBe('짧게\n');
+  });
+
+  it('끝을 넘어선 offset 은 오류다', async () => {
+    const { call } = await withLongNote();
+    const past = await call('read_note', { path: 'AI/long.md', offset: LONG.length });
+    expect(past.isError).toBe(true);
+    expect(past.text).toContain('beyond the end');
+    expect((await call('read_note', { path: 'AI/long.md', offset: LONG.length + 100 })).isError).toBe(true);
+    // 경계: 마지막 한 글자부터는 읽힌다
+    const last = await call('read_note', { path: 'AI/long.md', offset: LONG.length - 1 });
+    expect(last.isError).toBe(false);
+    expect(last.json).toMatchObject({ content: LONG.slice(-1), returned_chars: 1, next_offset: null, truncated: true });
+  });
+});
+
 describe('MCP 서버 — 데이터베이스', () => {
   const DB_YAML = [
     'title: 할 일',

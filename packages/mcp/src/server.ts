@@ -6,7 +6,7 @@ import { listComments } from '@nopsidian/core';
 import { DatabaseAccess, FILTER_OPS } from './databases.js';
 import { canWrite, type McpPolicy } from './policy.js';
 import { VaultScanner } from './vault-scan.js';
-import { NoteWriter, WriteError, type WriteResult } from './writer.js';
+import { NoteWriter, PARTIAL_HASH_PREFIX, WriteError, type WriteResult } from './writer.js';
 
 export const SERVER_NAME = 'nopsidian';
 
@@ -118,27 +118,42 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
     'read_note',
     {
       title: 'Read a note',
-      description: `Read one note: full Markdown content plus title, tags, headings, links and frontmatter properties. Returns a content hash; pass it to update_note. Content longer than ${MAX_READ_CHARS} characters is truncated.`,
-      inputSchema: { path: z.string().min(1).describe('Note path relative to the vault, e.g. "Projects/Plan.md" (".md" optional)') },
+      description: `Read one note: Markdown content plus title, tags, headings, links and frontmatter properties. Returns a content hash; pass it to update_note. Long notes are read in pages of characters: use offset (start, default 0) and limit (1..${MAX_READ_CHARS}, default ${MAX_READ_CHARS}); the result reports total_chars, returned_chars, offset, next_offset (null at the end) and truncated. When only part of the note is returned (truncated is true) the hash is prefixed with "partial:" — update_note accepts such a hash only if the new content is not shorter than the note on disk, so read every page (follow next_offset) before replacing a long note.`,
+      inputSchema: {
+        path: z.string().min(1).describe('Note path relative to the vault, e.g. "Projects/Plan.md" (".md" optional)'),
+        offset: z.number().int().min(0).optional().describe('Start position in characters (default 0). Use next_offset from the previous read to get the next page.'),
+        limit: z.number().int().min(1).max(MAX_READ_CHARS).optional().describe(`Max characters to return (1..${MAX_READ_CHARS}, default ${MAX_READ_CHARS})`),
+      },
       annotations: { title: 'Read a note', ...readOnly },
     },
-    async ({ path }) => {
+    async ({ path, offset = 0, limit = MAX_READ_CHARS }) => {
       fresh();
       const n = findNote(scanner, path);
       if (!n) return fail(`Note not found: ${path}. Use search_notes or list_notes to find the exact path.`);
       const disk = scanner.read(n.path);
       if (!disk) return fail(`Note not readable: ${n.path}`);
-      const truncated = disk.content.length > MAX_READ_CHARS;
+      const total = disk.content.length;
+      if (offset > 0 && offset >= total) {
+        return fail(`Offset ${offset} is beyond the end of "${n.path}" (total_chars ${total}). Use offset 0, or next_offset from a previous read_note.`);
+      }
+      const content = disk.content.slice(offset, offset + limit);
+      const end = offset + content.length;
+      // 노트 전체가 아니면(= 잘렸거나 중간부터 읽었으면) 부분 읽기로 본다
+      const truncated = !(offset === 0 && end === total);
       return ok({
         path: n.path,
         title: n.title,
-        hash: disk.hash,
+        hash: truncated ? `${PARTIAL_HASH_PREFIX}${disk.hash}` : disk.hash,
         tags: n.tags,
         properties: n.properties,
         headings: n.headings,
         links: n.links.map((l) => ({ target: l.target, resolved: l.resolved, heading: l.heading, block: l.block, kind: l.kind })),
         truncated,
-        content: truncated ? disk.content.slice(0, MAX_READ_CHARS) : disk.content,
+        total_chars: total,
+        offset,
+        returned_chars: content.length,
+        next_offset: end < total ? end : null,
+        content,
       });
     },
   );
@@ -289,7 +304,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
     {
       title: 'Replace a note',
       description:
-        'Replace the ENTIRE content of an existing note (include the frontmatter if it has one). Requires the hash from a fresh read_note; fails if the note changed since. The previous version is kept in the note history. Allowed folders: ' +
+        'Replace the ENTIRE content of an existing note (include the frontmatter if it has one). Requires the hash from a fresh read_note; fails if the note changed since. If the hash comes from a partial read (it starts with "partial:") the write is also refused when the new content is shorter than the note on disk — read every page (offset/next_offset) and send the complete note, or use append_to_note. The previous version is kept in the note history. Allowed folders: ' +
         folders +
         '.',
       inputSchema: {

@@ -90,6 +90,28 @@ describe('NoteWriter', () => {
     expect(r.status).toBe('saved');
     expect(readFileSync(path.join(root, 'AI/n.md'), 'utf8')).toBe('새 내용\n');
   });
+  it('partial 해시는 더 짧아지는 덮어쓰기를 막고, 낡음 검사는 전체 해시로 똑같이 한다', () => {
+    const { root, writer } = setup();
+    mkdirSync(path.join(root, 'AI'));
+    const disk = `${'x'.repeat(80)}\n`;
+    writeFileSync(path.join(root, 'AI/n.md'), disk);
+    const full = sha256(disk);
+    // 잘린 내용 + partial 해시 → 거부되고 파일은 그대로
+    expect(code(() => writer.update('update_note', 'AI/n', 'x'.repeat(40), `partial:${full}`))).toBe('partial');
+    expect(readFileSync(path.join(root, 'AI/n.md'), 'utf8')).toBe(disk);
+    const denied = readAudit(root).filter((e) => e.action === 'denied');
+    expect(denied[0]).toMatchObject({ action: 'denied', tool: 'update_note', path: 'AI/n.md' });
+    expect(denied[0]!.note).toContain('partial:');
+    // 해시가 낡았으면 partial 이어도 stale
+    expect(code(() => writer.update('update_note', 'AI/n', 'y'.repeat(200), `partial:${'a'.repeat(64)}`))).toBe('stale');
+    // 디스크 해시가 맞고 내용이 짧아지지 않으면 통과(같은 길이도 허용)
+    const same = `${'y'.repeat(80)}\n`;
+    expect(writer.update('update_note', 'AI/n', same, `partial:${full}`)).toMatchObject({ status: 'saved' });
+    expect(readFileSync(path.join(root, 'AI/n.md'), 'utf8')).toBe(same);
+    // 접두사 없는 전체 해시는 짧아져도 통과 — 기존 동작 그대로
+    expect(writer.update('update_note', 'AI/n', 'short', sha256(same)).status).toBe('saved');
+    expect(readFileSync(path.join(root, 'AI/n.md'), 'utf8')).toBe('short\n');
+  });
   it('크기·횟수 한도', () => {
     const { writer, advance } = setup({ maxWritesPerMinute: 2, maxBytes: 20 });
     expect(code(() => writer.create('create_note', 'AI/big', 'x'.repeat(50)))).toBe('too-large');

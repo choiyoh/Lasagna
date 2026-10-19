@@ -6,46 +6,199 @@ import type { IndexQuery, WorkerEvent, WorkerResponse } from '../workers/index/p
 
 type Listener = (e: WorkerEvent) => void;
 
+/** 워커가 멈췄을 때 대기 중인 호출에 주는 오류 */
+const WORKER_DOWN = '색인 작업이 멈춰 다시 시작하고 있어요';
+/** 재시작 한도를 넘겼을 때 */
+const GAVE_UP = '색인 작업이 반복해서 멈춰 자동 재시작을 멈췄어요. 앱을 다시 시작해 주세요';
+/** 우리가 닫는 중이라 더는 응답을 받을 수 없을 때 */
+const CLOSED = '색인을 닫았어요';
+/** 60초 안에 이만큼 넘게 멈추면 재시작을 포기한다 */
+const MAX_RESTARTS = 3;
+const RESTART_WINDOW_MS = 60_000;
+/** 닫을 때 워커의 응답을 기다리는 최대 시간 */
+const CLOSE_TIMEOUT_MS = 3_000;
+
+/** 테스트에서 가짜 워커를 끼워 넣기 위한 최소 표면(`node:worker_threads` 의 Worker 가 이걸 만족한다) */
+export interface WorkerLike {
+  on(event: 'message', listener: (m: WorkerResponse | WorkerEvent) => void): unknown;
+  on(event: 'error', listener: (err: Error) => void): unknown;
+  on(event: 'exit', listener: (code: number) => void): unknown;
+  postMessage(message: unknown): void;
+  terminate(): Promise<unknown> | void;
+}
+
+interface PendingCall {
+  req: { id: string; method: string; params?: unknown };
+  resolve: (v: never) => void;
+  reject: (e: Error) => void;
+}
+
 /** IndexWorker와의 요청/응답 RPC. SQLite 연결은 워커만 가진다. */
 export class IndexClient {
-  private worker: Worker;
-  private calls = new Map<string, { resolve: (v: never) => void; reject: (e: Error) => void }>();
-  readonly ready: Promise<void>;
+  private worker!: WorkerLike;
+  private calls = new Map<string, PendingCall>();
+  /** 재시작 중이라 아직 못 보낸 호출 — 새 워커가 ready 하면 한꺼번에 보낸다 */
+  private waiting = new Set<string>();
+  private readyPromise: Promise<void> = Promise.resolve();
+  private rejectReady: ((e: Error) => void) | undefined;
+  private createWorker: () => WorkerLike;
+  private restarting = false;
+  private gaveUp = false;
+  private closed = false;
+  /** 최근 재시작 시각 — `RESTART_WINDOW_MS` 안에 `MAX_RESTARTS` 를 넘으면 포기한다 */
+  private restarts: number[] = [];
 
   constructor(
     root: string,
-    onEvent: Listener,
+    private readonly onEvent: Listener,
+    createWorker?: () => WorkerLike,
   ) {
-    this.worker = new Worker(path.join(__dirname, 'index-worker.cjs'), {
-      workerData: { root },
-      // 파싱은 일회용 파서 스레드가 맡는다. 색인 스레드의 힙 한도는 쓰레기가 끝없이 쌓이지 않게 하는 안전장치(큰 노트 하나는 수 MB)
-      resourceLimits: { maxOldGenerationSizeMb: 256 },
+    this.createWorker =
+      createWorker ??
+      (() =>
+        new Worker(path.join(__dirname, 'index-worker.cjs'), {
+          workerData: { root },
+          // 파싱은 일회용 파서 스레드가 맡는다. 색인 스레드의 힙 한도는 쓰레기가 끝없이 쌓이지 않게 하는 안전장치(큰 노트 하나는 수 MB)
+          resourceLimits: { maxOldGenerationSizeMb: 256 },
+        }));
+    this.spawn();
+  }
+
+  /** 지금 워커의 준비 상태. 재시작하면 새 워커의 것으로 바뀐다(호출할 때마다 `await index.ready`). */
+  get ready(): Promise<void> {
+    return this.readyPromise;
+  }
+
+  /** 워커를 띄우고 이 워커의 ready 약속으로 갈아 끼운다. */
+  private spawn() {
+    const worker = this.createWorker();
+    this.worker = worker;
+    let resolveReady!: () => void;
+    let rejectReady!: (e: Error) => void;
+    const ready = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
     });
-    this.ready = new Promise((resolve, reject) => {
-      this.worker.on('message', (m: WorkerResponse | WorkerEvent) => {
-        if (m.type === 'ready') resolve();
-        else if (m.type === 'fatal') reject(new Error(m.error));
-        else if (m.type === 'event') onEvent(m);
-        else if (m.type === 'response') {
-          const call = this.calls.get(m.id);
-          if (!call) return;
-          this.calls.delete(m.id);
-          if ('error' in m) call.reject(new Error(m.error));
-          else call.resolve(m.result as never);
-        }
-      });
-      this.worker.on('error', reject);
+    ready.catch(() => undefined); // 아무도 안 기다릴 때 처리되지 않은 거부가 되지 않게
+    this.readyPromise = ready;
+    this.rejectReady = rejectReady;
+
+    worker.on('message', (m) => {
+      if (worker !== this.worker) return; // 이미 갈아 끼운 워커가 늦게 보낸 메시지는 무시
+      if (m.type === 'ready') {
+        this.restarting = false;
+        resolveReady();
+        this.flushWaiting();
+      } else if (m.type === 'fatal') {
+        this.restarting = false;
+        rejectReady(new Error(m.error));
+        // 재시작을 기다리던 호출은 보낼 곳이 없다 — 영원히 기다리지 않게 거부한다
+        for (const id of [...this.waiting]) this.fail(id, new Error(m.error));
+      } else if (m.type === 'event') this.onEvent(m);
+      else if (m.type === 'response') {
+        const call = this.calls.get(m.id);
+        if (!call) return;
+        this.calls.delete(m.id);
+        if ('error' in m) call.reject(new Error(m.error));
+        else call.resolve(m.result as never);
+      }
     });
-    // ready 전에 호출돼도 스캔이 끝난 뒤 처리되도록 호출자가 await ready 한다.
-    this.ready.catch(() => undefined);
+    worker.on('error', (err) => this.handleDeath(worker, err));
+    worker.on('exit', (code) => this.handleDeath(worker, new Error(`색인 워커가 코드 ${code} 로 끝났어요`)));
+  }
+
+  /** 워커가 죽었다: 보낸 요청을 거부하고 새 워커로 다시 시작한다(닫는 중이면 아무것도 안 한다). */
+  private handleDeath(worker: WorkerLike, err: Error) {
+    if (worker !== this.worker || this.closed || this.gaveUp) return;
+    this.rejectReady?.(new Error(WORKER_DOWN));
+    this.failSent(new Error(WORKER_DOWN));
+    this.restart(err);
+  }
+
+  private restart(err: Error) {
+    const now = Date.now();
+    this.restarts = this.restarts.filter((t) => now - t < RESTART_WINDOW_MS);
+    if (this.restarts.length >= MAX_RESTARTS) {
+      this.giveUp(err.message);
+      return;
+    }
+    this.restarts.push(now);
+    console.warn(`[index] 색인 워커가 멈춰 다시 시작해요(${this.restarts.length}/${MAX_RESTARTS}): ${err.message}`);
+    this.restarting = true;
+    try {
+      this.spawn();
+    } catch (e) {
+      this.giveUp(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  /** 더는 재시작하지 않는다: 준비 약속과 대기 중인 호출을 모두 거부한다. */
+  private giveUp(reason: string) {
+    this.gaveUp = true;
+    this.restarting = false;
+    console.warn(`[index] ${GAVE_UP}: ${reason}`);
+    this.readyPromise = Promise.reject(new Error(GAVE_UP));
+    this.readyPromise.catch(() => undefined);
+    this.failAll(new Error(GAVE_UP));
   }
 
   private call<T>(method: string, params?: unknown): Promise<T> {
     const id = randomUUID();
+    const req = { id, method, params };
     return new Promise<T>((resolve, reject) => {
-      this.calls.set(id, { resolve: resolve as (v: never) => void, reject });
-      this.worker.postMessage({ id, method, params });
+      this.calls.set(id, { req, resolve: resolve as (v: never) => void, reject });
+      this.send(req);
     });
+  }
+
+  /** 재시작 중에 만든 호출은 새 워커가 ready 한 뒤에 보낸다 — 잃거나 거부하지 않는다. */
+  private send(req: { id: string; method: string; params?: unknown }) {
+    if (this.closed) return this.post(req); // 닫는 중: 종료 요청은 곧바로 보낸다
+    if (this.gaveUp) return this.fail(req.id, new Error(GAVE_UP));
+    if (this.restarting) {
+      this.waiting.add(req.id);
+      return;
+    }
+    this.post(req);
+  }
+
+  private post(req: { id: string; method: string; params?: unknown }) {
+    try {
+      this.worker.postMessage(req);
+    } catch (e) {
+      this.fail(req.id, e instanceof Error ? e : new Error(String(e)));
+    }
+  }
+
+  private flushWaiting() {
+    for (const id of this.waiting) {
+      const call = this.calls.get(id);
+      if (call) this.post(call.req);
+    }
+    this.waiting.clear();
+  }
+
+  private fail(id: string, e: Error) {
+    const call = this.calls.get(id);
+    if (!call) return;
+    this.calls.delete(id);
+    this.waiting.delete(id);
+    call.reject(e);
+  }
+
+  /** 이미 보낸 요청만 거부한다 — 재시작을 기다리는 요청은 새 워커가 ready 하면 보낸다. */
+  private failSent(e: Error) {
+    for (const [id, call] of this.calls) {
+      if (this.waiting.has(id)) continue;
+      this.calls.delete(id);
+      call.reject(e);
+    }
+  }
+
+  private failAll(e: Error) {
+    for (const [, call] of this.calls) call.reject(e);
+    this.calls.clear();
+    this.waiting.clear();
   }
 
   list() {
@@ -62,7 +215,17 @@ export class IndexClient {
     return this.call<Hit[]>('search', { q, limit });
   }
   async close() {
-    await this.call('close').catch(() => undefined);
+    this.closed = true;
+    this.failAll(new Error(CLOSED));
+    if (!this.gaveUp) {
+      // 워커가 이미 죽었으면 응답이 오지 않는다 — 잠깐만 기다리고 강제로 끝낸다
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        this.call('close').catch(() => undefined),
+        new Promise<void>((resolve) => (timer = setTimeout(resolve, CLOSE_TIMEOUT_MS))),
+      ]);
+      clearTimeout(timer);
+    }
     await this.worker.terminate();
   }
 }

@@ -1,4 +1,4 @@
-import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
+import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { strToU8, zipSync } from 'fflate';
@@ -7,10 +7,32 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import path from 'node:path';
 
 // `pnpm package` 로 만든 앱을 실행한다(Fuses·asar·네이티브 모듈까지 함께 검증).
-const executable = path.join(
-  __dirname,
-  `../out/Nopsidian-${process.platform}-${process.arch}/Nopsidian.app/Contents/MacOS/Nopsidian`,
-);
+/** 패키징한 앱의 실행 파일. darwin 은 .app 번들 안, win32 는 .exe, linux 는 실행 파일이다. NOPS_E2E_EXECUTABLE 로 덮어쓸 수 있다. */
+function packagedExecutable(): string {
+  const override = process.env.NOPS_E2E_EXECUTABLE;
+  if (override) return override;
+  const dir = path.join(__dirname, `../out/Nopsidian-${process.platform}-${process.arch}`);
+  if (process.platform === 'darwin') return path.join(dir, 'Nopsidian.app/Contents/MacOS/Nopsidian');
+  return path.join(dir, process.platform === 'win32' ? 'nopsidian.exe' : 'nopsidian');
+}
+
+/** 패키징한 앱의 resources 폴더(MCP 서버 번들이 들어 있다). 실행 파일 위치에서 찾아 플랫폼마다 달라도 같은 코드로 동작한다. */
+function packagedResourcesDir(): string {
+  const dir = path.dirname(packagedExecutable());
+  return process.platform === 'darwin' ? path.join(dir, '..', 'Resources') : path.join(dir, 'resources');
+}
+
+const executable = packagedExecutable();
+
+/** 시작 화면이면 볼트를 연다. beforeAll 이 이미 열어 두었으면(테스트 재시작) 그냥 지나간다. */
+async function openVaultIfNeeded(page: Page): Promise<void> {
+  const openVault = page.getByRole('button', { name: '폴더 열기 / 만들기' });
+  await expect(openVault.or(page.locator('aside.sidebar'))).toBeVisible({ timeout: 30_000 });
+  if (await openVault.isVisible()) {
+    await openVault.click();
+    await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 30_000 });
+  }
+}
 
 let app: ElectronApplication;
 let vaultDir: string;
@@ -32,8 +54,14 @@ test.beforeAll(async () => {
   for (let attempt = 1; attempt <= 3; attempt++) {
     const candidate = await electron.launch({
       executablePath: executable,
-      // 재빌드마다 달라지는 ad-hoc 서명이 실제 키체인 허용 대화상자를 띄우지 않도록 모의 키체인을 쓴다.
-      args: ['--use-mock-keychain', `--user-data-dir=${path.join(base, `userdata-${attempt}`)}`],
+      args: [
+        // 재빌드마다 달라지는 ad-hoc 서명이 실제 키체인 허용 대화상자를 띄우지 않도록 모의 키체인을 쓴다.
+        '--use-mock-keychain',
+        `--user-data-dir=${path.join(base, `userdata-${attempt}`)}`,
+        // GitHub Actions 리눅스 러너에서는 chrome-sandbox 에 setuid 를 걸 수 없어(루트가 아니다) 그냥 두면 Chromium 이 뜨지 않는다.
+        // 화면 없는 리눅스(xvfb)에는 GPU 가 없다: 그래프 테스트가 그래프를 그리도록 소프트웨어 WebGL(SwiftShader)을 쓴다.
+        ...(process.platform === 'linux' ? ['--no-sandbox', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] : []),
+      ],
     });
     try {
       await candidate.firstWindow({ timeout: attempt === 1 ? 60_000 : 45_000 });
@@ -49,15 +77,31 @@ test.beforeAll(async () => {
   await app.evaluate(({ dialog }, dir) => {
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as typeof dialog.showOpenDialog;
   }, vaultDir);
+
+  // 앞선 테스트가 실패하면 Playwright 가 워커를 다시 시작하면서 앱만 새로 띄운다(볼트는 아직 안 열린 상태).
+  // 그대로 두면 뒤따르는 모든 테스트가 '열린 볼트가 없어요'로 죽으므로, 여기서 볼트를 열어 둔다.
+  await openVaultIfNeeded(await app.firstWindow());
 });
 
 test.afterAll(async () => {
   await app.close();
 });
 
+// _electron 은 Playwright 의 page 픽스처를 쓰지 않아 자동 스크린샷이 없다. 실패한 테스트의 화면을 직접 남겨
+// CI(e2e 작업)가 `apps/desktop/test-results` 를 아티팩트로 올릴 수 있게 한다.
+// Playwright 훅의 첫 인자는 구조 분해 패턴이어야 해서 빈 객체를 받는다.
+// eslint-disable-next-line no-empty-pattern
+test.afterEach(async ({}, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  const page = app?.windows()[0];
+  if (!page) return;
+  await page.screenshot({ path: testInfo.outputPath('failure.png') }).catch(() => undefined);
+});
+
 test('볼트를 열고 목록·검색·미리보기가 동작한다', async () => {
   const page = await app.firstWindow();
-  await page.getByRole('button', { name: '폴더 열기 / 만들기' }).click();
+  // beforeAll 이 볼트를 열어 두었을 수 있다(테스트 재시작). 그때도 목록·검색·미리보기는 그대로 확인한다.
+  await openVaultIfNeeded(page);
 
   await expect(page.getByRole('button', { name: 'Nopsidian', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '위험', exact: true })).toBeVisible();
@@ -287,9 +331,9 @@ test.describe('블록 핸들', () => {
     await page.locator('.ProseMirror p', { hasText: 'A' }).click();
     // 클릭 직후 ProseMirror가 선택 영역을 동기화할 시간(사람의 입력 속도에서는 문제되지 않는다)
     await page.waitForTimeout(150);
-    await page.keyboard.press('Meta+Shift+ArrowDown');
+    await page.keyboard.press('ControlOrMeta+Shift+ArrowDown');
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 핸들키\n\nB\n\nA\n');
-    await page.keyboard.press('Meta+d');
+    await page.keyboard.press('ControlOrMeta+d');
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 핸들키\n\nB\n\nA\n\nA\n');
   });
 
@@ -463,7 +507,7 @@ test.describe('소스 모드와 코드 강조', () => {
     await expect(page.locator('.ProseMirror')).toBeHidden();
 
     await cm.click();
-    await page.keyboard.press('Meta+ArrowDown');
+    await page.keyboard.press('ControlOrMeta+ArrowDown');
     await page.keyboard.type('\n소스에서 쓴 줄 [[링크]]\n');
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe(original + '\n소스에서 쓴 줄 [[링크]]\n');
 
@@ -480,10 +524,10 @@ test.describe('소스 모드와 코드 강조', () => {
     await page.waitForTimeout(150);
     await page.keyboard.press('End');
     await page.keyboard.type(' 추가');
-    await page.keyboard.press('Meta+e');
+    await page.keyboard.press('ControlOrMeta+e');
     await expect(page.locator('.cm-content')).toContainText('처음 추가', { timeout: 10000 });
     expect(await page.locator('.cm-content').innerText()).toContain('# 소스전환');
-    await page.keyboard.press('Meta+e');
+    await page.keyboard.press('ControlOrMeta+e');
     await expect(page.locator('.ProseMirror')).toBeVisible();
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 소스전환\n\n처음 추가\n');
   });
@@ -497,7 +541,7 @@ test.describe('소스 모드와 코드 강조', () => {
     const cm = page.locator('.cm-content');
     await expect(cm).toContainText('[^1]: 각주 내용', { timeout: 10000 });
     await cm.click();
-    await page.keyboard.press('Meta+ArrowDown');
+    await page.keyboard.press('ControlOrMeta+ArrowDown');
     await page.keyboard.type('\n[^2]: 둘째 각주\n');
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 소스각주\n\n본문[^1]\n\n[^1]: 각주 내용\n\n[^2]: 둘째 각주\n');
     await page.getByRole('button', { name: '편집 모드' }).click();
@@ -512,7 +556,7 @@ test.describe('소스 모드와 코드 강조', () => {
     const cm = page.locator('.cm-content');
     await expect(cm).toBeVisible({ timeout: 10000 });
     await cm.click();
-    await page.keyboard.press('Meta+ArrowDown');
+    await page.keyboard.press('ControlOrMeta+ArrowDown');
     const cdp = await page.context().newCDPSession(page);
     for (const text of ['ㅎ', '하', '한']) {
       await cdp.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length });
@@ -611,7 +655,7 @@ test.describe('링크 코어', () => {
 
   test('빠른 전환기(⌘O): 한글 초성으로 찾아 열고, 없으면 새 노트를 만든다', async () => {
     const page = await app.firstWindow();
-    await page.keyboard.press('Meta+o');
+    await page.keyboard.press('ControlOrMeta+o');
     const input = page.getByPlaceholder(/노트 이름·별칭/);
     await expect(input).toBeVisible();
     await input.fill('ㅋㄹㅋㄷ');
@@ -619,12 +663,12 @@ test.describe('링크 코어', () => {
     await page.keyboard.press('Enter');
     await expect(page.locator('.ProseMirror h1')).toHaveText('클린 코드');
 
-    await page.keyboard.press('Meta+o');
+    await page.keyboard.press('ControlOrMeta+o');
     await page.getByPlaceholder(/노트 이름·별칭/).fill('cleancode');
     await expect(page.locator('.switcher__item.is-active')).toContainText('클린 코드'); // 별칭 Clean Code 퍼지
     await page.keyboard.press('Escape');
 
-    await page.keyboard.press('Meta+o');
+    await page.keyboard.press('ControlOrMeta+o');
     await page.getByPlaceholder(/노트 이름·별칭/).fill('전환기로 만든 노트');
     await expect(page.locator('.switcher__item.is-active')).toContainText('새 노트 만들기');
     await page.keyboard.press('Enter');
@@ -1369,7 +1413,7 @@ views:
     expect(readFileSync(user, 'utf8')).toContain('![[발췌원본#^quote1]]');
 
     // 5) 북마크: ⌘⇧B 로 현재 노트를 추가·해제하고, 별 탭에서 열 수 있으며 .nopsidian/bookmarks.json 에 저장된다
-    await page.keyboard.press('Meta+Shift+B');
+    await page.keyboard.press('ControlOrMeta+Shift+B');
     await page.getByRole('tab', { name: '★' }).click();
     const marks = page.getByTestId('bookmarks');
     await expect(marks).toContainText('발췌사용');
@@ -1416,7 +1460,7 @@ views:
     await open(page, '내보낼노트');
 
     // 팔레트: 초성으로 찾아 실행
-    await page.keyboard.press('Meta+p');
+    await page.keyboard.press('ControlOrMeta+p');
     const palette = page.getByTestId('command-palette');
     await expect(palette).toBeVisible();
     await palette.locator('input').fill('ㅂㅋㅁ');
@@ -1435,7 +1479,7 @@ views:
       dialog.showSaveDialog = (async () => ({ canceled: false, filePath: n++ === 0 ? h : p })) as typeof dialog.showSaveDialog;
     }, [htmlOut, pdfOut]);
     for (const label of ['HTML', 'PDF']) {
-      await page.keyboard.press('Meta+p');
+      await page.keyboard.press('ControlOrMeta+p');
       await palette.locator('input').fill(`현재 노트를 ${label}`);
       await page.keyboard.press('Enter');
       await expect.poll(() => existsSync(label === 'HTML' ? htmlOut : pdfOut), { timeout: 20000 }).toBe(true);
@@ -1451,7 +1495,7 @@ views:
     await app.evaluate(({ dialog }, dir) => {
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as typeof dialog.showOpenDialog;
     }, siteBase);
-    await page.keyboard.press('Meta+p');
+    await page.keyboard.press('ControlOrMeta+p');
     await palette.locator('input').fill('볼트 전체');
     await page.keyboard.press('Enter');
     await expect.poll(() => readdirSync(siteBase).length, { timeout: 20000 }).toBe(1);
@@ -1476,7 +1520,7 @@ views:
     await app.evaluate(({ dialog }, f) => {
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [f] })) as typeof dialog.showOpenDialog;
     }, zipFile);
-    await page.keyboard.press('Meta+p');
+    await page.keyboard.press('ControlOrMeta+p');
     await page.getByTestId('command-palette').locator('input').fill('Notion에서 가져오기');
     await page.keyboard.press('Enter');
     await expect(page.locator('.toast')).toContainText('Notion에서', { timeout: 15000 });
@@ -1502,7 +1546,7 @@ views:
     await expect(page.locator('.ProseMirror h1')).toHaveText('탭A');
 
     // 오른쪽 분할: 새 칸이 활성이고, 거기로 노트가 열린다
-    await page.keyboard.press('Meta+p');
+    await page.keyboard.press('ControlOrMeta+p');
     await page.getByTestId('command-palette').locator('input').fill('오른쪽으로 분할');
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('pane-1')).toBeVisible();
@@ -1516,7 +1560,7 @@ views:
     await expect(page.getByTestId('pane-0').locator('.ProseMirror h1')).toHaveText('탭A');
 
     // 새 창에서 열기 → 거기서 고친 내용이 이 창에도 반영된다
-    await page.keyboard.press('Meta+p');
+    await page.keyboard.press('ControlOrMeta+p');
     await page.getByTestId('command-palette').locator('input').fill('새 창에서 열기');
     await page.keyboard.press('Enter');
     await expect.poll(() => app.windows().length, { timeout: 10000 }).toBe(2);
@@ -1620,7 +1664,7 @@ views:
     await page.getByTestId('note-embed-edit').click();
     const input = page.getByTestId('note-embed-input');
     await input.fill('여기서 고친 문장 **굵게**');
-    await input.press('Meta+Enter');
+    await input.press('ControlOrMeta+Enter');
     await expect.poll(() => readFileSync(origin, 'utf8'), { timeout: 8000 }).toBe('# 동기원본\n\n여기서 고친 문장 **굵게** ^sync1\n');
     await expect(page.getByTestId('note-embed')).toContainText('여기서 고친 문장', { timeout: 8000 });
   });
@@ -1982,7 +2026,7 @@ views:
     await expect(panel.getByTestId('comment')).toHaveCount(1, { timeout: 8000 });
 
     // 에이전트(MCP)가 단 댓글도 보인다: 창에 돌아올 때 다시 읽는다
-    const script = path.join(__dirname, '../out/Nopsidian-darwin-arm64/Nopsidian.app/Contents/Resources/nopsidian-mcp.mjs');
+    const script = path.join(packagedResourcesDir(), 'nopsidian-mcp.mjs');
     const client = new Client({ name: 'review-agent', version: '1' });
     await client.connect(new StdioClientTransport({ command: process.execPath, args: [script, '--vault', vaultDir, '--write'], stderr: 'ignore' }));
     try {

@@ -8,7 +8,21 @@
 - **각 OS 에서 빌드해야 한다.** `better-sqlite3`·`@parcel/watcher` 가 플랫폼별 네이티브 모듈이고 `native-modules.ts` 가 현재 OS 용 바이너리만 앱에 넣는다. 그래서 맥에서 Windows 설치 파일을 만들 수 없다.
 - **빌드 결과물과 문서는 GitHub 에서 만들지 않는다.** 각 PC 에서 `make` 로 만들고(맥: dmg·zip, 윈도우: Setup.exe·zip) 구글 드라이브 `AI Works/Nopsidian/빌드/<버전>/` 에 둔다. 문서 사본은 `AI Works/Nopsidian/문서/`.
   - 설치 파일은 `node scripts/collect-build.mjs "<구글 드라이브 데스크톱의 AI Works/Nopsidian/빌드 경로>"` 로 `v<버전>/` 폴더에 복사한다(맥·윈도우 공통). 크기가 100MB 이상이라 에이전트 도구로는 못 올려서, 드라이브 데스크톱이 동기화하는 폴더로 복사하는 방식을 쓴다.
-- CI(`.github/workflows/build.yml`): 푸시/PR 에서 Linux 린트·타입·테스트만 돌린다(비공개 저장소 무료 분량 월 2000분, macOS 10배·Windows 2배 계산). 세 OS 전체 테스트는 Actions 탭에서 수동 실행(`all-os`).
+- CI(`.github/workflows/build.yml`): 푸시/PR 에서 리눅스 러너로 린트·타입·테스트만 돌린다(비공개 저장소 무료 분량 월 2000분, macOS 10배·Windows 2배 계산). 세 OS 전체 테스트는 Actions 탭에서 수동 실행(`all-os`). 워크플로 변경(ubuntu-24.04 고정·수동 `e2e` 작업)은 PR 설명의 패치로 따로 넣는다.
+
+## E2E(Playwright) 실행
+- 리눅스(CI 의 e2e 작업과 같음). `apps/desktop` 에서:
+  ```sh
+  NOPS_E2E=1 pnpm exec electron-forge package   # E2E 용으로 inspect 인자 퓨즈를 연 빌드
+  xvfb-run -a pnpm exec playwright test
+  ```
+  - 스펙이 리눅스에서만 `--no-sandbox` 를 붙인다(GitHub Actions 러너는 `chrome-sandbox` 에 setuid 를 걸 수 없다).
+  - GPU 가 없는 xvfb 에서도 그래프가 그려지도록 리눅스에서 `--enable-unsafe-swiftshader --ignore-gpu-blocklist`(소프트웨어 WebGL)도 붙인다.
+  - 동기화 테스트(클라이언트 ID 저장)는 `safeStorage` 가 필요해서 Secret Service 키링(gnome-keyring 등)이 없는 리눅스에서는 실패한다(앱이 일부러 평문 저장을 쓰지 않는다). 나머지 테스트는 키링 없이 돈다.
+  - `NOPS_E2E_EXECUTABLE` 로 실행 파일 경로를 덮어쓸 수 있다(기본: `out/Nopsidian-<플랫폼>-<arch>/` 아래, macOS 는 `.app` 번들 안).
+- macOS·Windows 는 `pnpm --filter @nopsidian/desktop e2e` 로 패키징과 실행을 한 번에 한다.
+- 새 클론에서 `node_modules/electron/dist` 가 없어 `pnpm start` 가 "Electron failed to install correctly" 로 죽으면 `node scripts/ensure-electron.mjs` 를 실행한다(루트 `postinstall` 로 `pnpm install` 때 자동으로 시도한다. 오프라인이면 경고만 하고 넘어간다).
+- 실패하면 그 시점 화면이 `apps/desktop/test-results` 에 남고, CI e2e 작업은 이것을 아티팩트로 올린다(`_electron` 은 자동 스크린샷이 없어 스펙의 `afterEach` 가 직접 남긴다).
 
 ## 알아 둘 것
 - 서명하지 않았다. macOS 는 ad-hoc 서명(키체인 `safeStorage` 가 동작하도록 `postPackage` 훅)이라 다른 맥에서 처음 열 때 Gatekeeper 경고가 나온다(우클릭 → 열기). 배포용 서명·공증은 Apple Developer 인증서, Windows 는 코드 서명 인증서가 있어야 하며 아직 연결하지 않았다.

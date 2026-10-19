@@ -3,6 +3,7 @@ import type { NoteSummary, SearchHit, SyncStatus, VaultInfo } from '@nopsidian/i
 import { NoteEditor } from './NoteEditor';
 import { useAssetStore } from './assets';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ErrorBoundary } from './ErrorBoundary';
 import { LinkPanel } from './LinkPanel';
 import { HistoryPanel } from './HistoryPanel';
 import { keys } from './keys';
@@ -452,47 +453,53 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       </aside>
       <main className="content">
         {dbOpen !== null ? (
-          <DatabaseScreen
-            key={dbOpen}
-            folder={dbOpen}
-            vaultId={vault.id}
-            onOpenNote={(p) => {
-              setSelected(p);
-              setDbOpen(null);
-            }}
-            onClose={() => setDbOpen(null)}
-            notes={notes.map((n) => ({ path: n.path, title: n.title }))}
-            onRenameNote={renameNoteTitle}
-            renderNote={(p) => (
-              <NoteEditor
-                key={p}
-                path={p}
-                vaultId={vault.id}
-                assets={assets}
-                links={linkHost}
-                focus={null}
-                noteLinkName={linkNameFor(p, notes.map((n) => n.path))}
-                onOpenLink={openLink}
-                onRename={() => void renameEntry(p, false)}
-                dbHost={dbHost}
-                peek={peekHost}
-                icon={notes.find((n) => n.path === p)?.icon ?? null}
-                onSetIcon={(ic) => void setNoteIcon(p, ic)}
-                cover={notes.find((n) => n.path === p)?.cover ?? null}
-                onSetCover={(c) => void setNoteCover(p, c)}
-              />
-            )}
-          />
+          <ErrorBoundary label="데이터베이스">
+            <DatabaseScreen
+              key={dbOpen}
+              folder={dbOpen}
+              vaultId={vault.id}
+              onOpenNote={(p) => {
+                setSelected(p);
+                setDbOpen(null);
+              }}
+              onClose={() => setDbOpen(null)}
+              notes={notes.map((n) => ({ path: n.path, title: n.title }))}
+              onRenameNote={renameNoteTitle}
+              renderNote={(p) => (
+                <ErrorBoundary label="노트" resetKeys={[p]}>
+                  <NoteEditor
+                    key={p}
+                    path={p}
+                    vaultId={vault.id}
+                    assets={assets}
+                    links={linkHost}
+                    focus={null}
+                    noteLinkName={linkNameFor(p, notes.map((n) => n.path))}
+                    onOpenLink={openLink}
+                    onRename={() => void renameEntry(p, false)}
+                    dbHost={dbHost}
+                    peek={peekHost}
+                    icon={notes.find((n) => n.path === p)?.icon ?? null}
+                    onSetIcon={(ic) => void setNoteIcon(p, ic)}
+                    cover={notes.find((n) => n.path === p)?.cover ?? null}
+                    onSetCover={(c) => void setNoteCover(p, c)}
+                  />
+                </ErrorBoundary>
+              )}
+            />
+          </ErrorBoundary>
         ) : graphOpen ? (
-          <GraphScreen
-            vaultId={vault.id}
-            current={selected}
-            onOpen={(p) => {
-              setSelected(p);
-              setGraphOpen(false);
-            }}
-            onClose={() => setGraphOpen(false)}
-          />
+          <ErrorBoundary label="그래프">
+            <GraphScreen
+              vaultId={vault.id}
+              current={selected}
+              onOpen={(p) => {
+                setSelected(p);
+                setGraphOpen(false);
+              }}
+              onClose={() => setGraphOpen(false)}
+            />
+          </ErrorBoundary>
         ) : (
           <Panes
             tabs={tabs}
@@ -520,24 +527,26 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               />
             }
             renderEditor={(p, pane) => (
-              <NoteEditor
-                key={p}
-                path={p}
-                vaultId={vault.id}
-                assets={assets}
-                links={linkHost}
-                focus={pane === tabs.activePane ? focus : null}
-                noteLinkName={linkNameFor(p, notes.map((n) => n.path))}
-                onOpenLink={openLink}
-                onRename={() => void renameEntry(p, false)}
-                onTitleRename={(to) => void renameEntry(p, false, to.replace(/\.md$/i, ''), { auto: true })}
-                dbHost={dbHost}
-                peek={peekHost}
-                icon={notes.find((n) => n.path === p)?.icon ?? null}
-                onSetIcon={(ic) => void setNoteIcon(p, ic)}
-                cover={notes.find((n) => n.path === p)?.cover ?? null}
-                onSetCover={(c) => void setNoteCover(p, c)}
-              />
+              <ErrorBoundary label="노트" resetKeys={[p]}>
+                <NoteEditor
+                  key={p}
+                  path={p}
+                  vaultId={vault.id}
+                  assets={assets}
+                  links={linkHost}
+                  focus={pane === tabs.activePane ? focus : null}
+                  noteLinkName={linkNameFor(p, notes.map((n) => n.path))}
+                  onOpenLink={openLink}
+                  onRename={() => void renameEntry(p, false)}
+                  onTitleRename={(to) => void renameEntry(p, false, to.replace(/\.md$/i, ''), { auto: true })}
+                  dbHost={dbHost}
+                  peek={peekHost}
+                  icon={notes.find((n) => n.path === p)?.icon ?? null}
+                  onSetIcon={(ic) => void setNoteIcon(p, ic)}
+                  cover={notes.find((n) => n.path === p)?.cover ?? null}
+                  onSetCover={(c) => void setNoteCover(p, c)}
+                />
+              </ErrorBoundary>
             )}
           />
         )}
@@ -566,7 +575,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                   기록
                 </button>
               </div>
-              {dockTab === 'links' ? <LinkPanel path={selected} onOpen={setSelected} /> : dockTab === 'outline' ? <OutlinePanel path={selected} /> : dockTab === 'comments' ? <CommentsPanel path={selected} onChanged={countComments} /> : dockTab === 'history' ? <HistoryPanel path={selected} onRestored={(message) => setToast({ message })} /> : <LocalGraph path={selected} onOpen={setSelected} />}
+              <ErrorBoundary label="패널" resetKeys={[dockTab, selected]}>
+                {dockTab === 'links' ? <LinkPanel path={selected} onOpen={setSelected} /> : dockTab === 'outline' ? <OutlinePanel path={selected} /> : dockTab === 'comments' ? <CommentsPanel path={selected} onChanged={countComments} /> : dockTab === 'history' ? <HistoryPanel path={selected} onRestored={(message) => setToast({ message })} /> : <LocalGraph path={selected} onOpen={setSelected} />}
+              </ErrorBoundary>
             </div>
           )}
         </div>

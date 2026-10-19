@@ -743,3 +743,17 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .comment__quote button { color: var(--muted); }
 .comment__text { margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; }
 .comments__done summary { cursor: pointer; color: var(--muted); font-size: 12px; margin: 6px 0; }
+
+/* 오류 경계: 화면 한 조각이 실패해도 앱 전체가 하얗게 되지 않도록 그 자리에 보여 주는 안내 */
+.errorboundary { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 10px; flex: 1; min-height: 100%; padding: 24px; overflow: auto; }
+.errorboundary strong { font-size: 14.5px; }
+.errorboundary__message { max-width: min(640px, 100%); margin: 0; padding: 8px 10px; overflow: auto; white-space: pre-wrap; word-break: break-word; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-side); color: var(--muted); }
+.errorboundary__actions { display: flex; gap: 8px; }
+.errorboundary button { padding: 4px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; }
+.errorboundary button:hover { background: var(--hover); }
+.errorboundary__actions button:first-child { border-color: var(--accent); color: var(--accent); }
+
+/* 그래프를 그릴 수 없는 환경(WebGL 없음)에서 캔버스 자리에 보여 주는 안내 */
+.graphview__fallback { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; }
+.graphview__fallback p { max-width: 420px; margin: 0; }
+.graphview__error { max-width: min(520px, 100%); margin: 0; padding: 6px 10px; overflow: auto; white-space: pre-wrap; word-break: break-word; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-side); color: var(--muted); }

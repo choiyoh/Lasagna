@@ -7,6 +7,7 @@
  *   `Nopsidian/<vaultName>/…` 에 만들되, 폴더 자신에도 `nopsVault` 를 붙여 볼트별로 격리한다.
  * - 파일 내용 해시는 `appProperties.contentHash`(sha256)에 저장하고 `md5Checksum` 과
  *   `appProperties.contentMd5` 를 대조해 Drive 웹에서 사람이 고친 파일을 감지한다.
+ * - 생성 요청은 같은 이름·부모의 리소스가 이미 있는지 확인한 뒤에만 다시 보낸다(중복 폴더·파일 방지).
  */
 
 import { createHash, randomUUID } from 'node:crypto';
@@ -22,6 +23,8 @@ const UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3/files';
 const MULTIPART_LIMIT = 5 * 1024 * 1024;
 /** 지수 백오프 상한 */
 const MAX_BACKOFF_MS = 32_000;
+/** `Retry-After` 로 기다릴 수 있는 상한(5분) — 서버가 몇 시간을 보내도 동기화가 그만큼 멈추지 않게 */
+const MAX_RETRY_AFTER_MS = 5 * 60_000;
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 /** 목록 조회에서 필요한 필드만 받는다 */
 const FILE_FIELDS = 'id,appProperties,headRevisionId,size';
@@ -62,11 +65,19 @@ export interface GoogleDriveOptions {
   maxRetries?: number;
 }
 
+/**
+ * 결과를 모르는 요청(POST 생성)을 다시 보내기 전에 "이미 만들어졌는지" 확인하는 훅.
+ * 이미 있으면 그 리소스를 응답처럼 돌려주고, 없으면 null 을 돌려준다.
+ */
+type Reconcile = () => Promise<Response | null>;
+
 /** 요청에 쓰는 최소 init — 헤더는 평범한 객체로만 넘긴다 */
 interface FetchInit {
   method?: string;
   headers?: Record<string, string>;
   body?: Uint8Array | string;
+  /** 네트워크 오류·5xx 로 재시도하기 전에 부른다(중복 생성 방지) */
+  reconcile?: Reconcile;
 }
 
 /**
@@ -197,19 +208,42 @@ export class GoogleDriveClient implements DriveClient {
       contentHash: hash,
       contentMd5: md5Hex(bytes),
     };
-    // 기존 파일 교체는 parents 를 건드리지 않는다(경로 이동은 move 담당).
-    const metadata = existing ? { appProperties } : { name: baseName(path), parents: [parentId], appProperties };
 
-    if (existing) {
-      // 업로드 전에 현재 revision 을 확인 — 그 사이 원격이 바뀌었으면 이번 동기화에서는 건너뛴다.
-      const current = await this.headRevision(existing.id);
-      if (current !== existing.revision) throw new RevisionConflictError(path);
+    // 새 파일인데 같은 부모에 같은 이름이 이미 있으면 새로 만들지 않는다 — 목록 조회와 업로드 사이의 경합이거나
+    // Drive 웹에서 사람이 만든 파일이다. 우리 파일(relPath 일치)이면 그대로 덮어쓰고, 남의 파일이면
+    // 중복을 만들지 않고 실패시킨다(MemoryDrive 도 같은 경로로의 새 업로드를 거부한다).
+    let target = existing;
+    if (!target) {
+      const found = await this.findFileByName(baseName(path), parentId);
+      if (found && found.appProperties?.nopsVault === this.vaultKey && found.appProperties.relPath === path) {
+        target = { id: found.id, revision: found.headRevisionId ?? '' };
+      } else if (found) {
+        throw new Error(`이미 같은 이름의 파일이 있어요: ${path}`);
+      }
     }
+
+    // 기존 파일 교체는 parents 를 건드리지 않는다(경로 이동은 move 담당).
+    const metadata = target ? { appProperties } : { name: baseName(path), parents: [parentId], appProperties };
+
+    if (target) {
+      // 업로드 전에 현재 revision 을 확인 — 그 사이 원격이 바뀌었으면 이번 동기화에서는 건너뛴다.
+      const current = await this.headRevision(target.id);
+      if (current !== target.revision) throw new RevisionConflictError(path);
+    }
+
+    // 새 파일 POST 는 응답을 못 받았을 때(네트워크 오류·5xx) 이미 만들어졌는지 확인한 뒤 재시도한다.
+    const reconcile: Reconcile | undefined = target
+      ? undefined
+      : async () => {
+          const found = await this.findFileByName(baseName(path), parentId);
+          const props = found?.appProperties;
+          return found && props?.relPath === path && props.contentHash === hash ? jsonResponse(found) : null;
+        };
 
     const res =
       bytes.length > MULTIPART_LIMIT
-        ? await this.uploadResumable(existing ? 'PATCH' : 'POST', existing?.id, metadata, bytes)
-        : await this.uploadMultipart(existing ? 'PATCH' : 'POST', existing?.id, metadata, bytes);
+        ? await this.uploadResumable(target ? 'PATCH' : 'POST', target?.id, metadata, bytes, reconcile)
+        : await this.uploadMultipart(target ? 'PATCH' : 'POST', target?.id, metadata, bytes, reconcile);
 
     const file = (await res.json()) as DriveFile;
     const revision = file.headRevisionId ?? '';
@@ -322,6 +356,16 @@ export class GoogleDriveClient implements DriveClient {
     return data.files?.[0]?.id;
   }
 
+  /** 같은 부모 아래 같은 이름의 파일(폴더 제외, 휴지통 제외)을 찾는다. 없으면 undefined. */
+  private async findFileByName(name: string, parent: string): Promise<DriveFile | undefined> {
+    const q =
+      `name='${escapeQuery(name)}' and '${escapeQuery(parent)}' in parents` +
+      ` and mimeType!='${FOLDER_MIME}' and trashed=false`;
+    const res = await this.request(`${API_BASE}/files?${new URLSearchParams({ q, fields: `files(${FILE_FIELDS})` })}`);
+    const data = (await res.json()) as FileList;
+    return data.files?.[0];
+  }
+
   private async createFolder(name: string, parent: string): Promise<string> {
     const res = await this.request(`${API_BASE}/files?fields=id`, {
       method: 'POST',
@@ -332,6 +376,11 @@ export class GoogleDriveClient implements DriveClient {
         parents: [parent],
         appProperties: { nopsVault: this.vaultKey },
       }),
+      // 응답을 못 받은 채 재시도할 때 같은 부모·이름의 폴더가 이미 있으면 그것을 쓴다(중복 폴더 방지).
+      reconcile: async () => {
+        const id = await this.findFolder(name, parent);
+        return id === undefined ? null : jsonResponse({ id });
+      },
     });
     return ((await res.json()) as DriveFile).id;
   }
@@ -341,12 +390,14 @@ export class GoogleDriveClient implements DriveClient {
     fileId: string | undefined,
     metadata: unknown,
     bytes: Uint8Array,
+    reconcile?: Reconcile,
   ): Promise<Response> {
     const { contentType, body } = buildMultipart(metadata, bytes);
     return this.request(this.uploadUrl(fileId, 'multipart'), {
       method,
       headers: { 'Content-Type': contentType, 'Content-Length': String(body.length) },
       body,
+      ...(reconcile ? { reconcile } : {}),
     });
   }
 
@@ -356,6 +407,7 @@ export class GoogleDriveClient implements DriveClient {
     fileId: string | undefined,
     metadata: unknown,
     bytes: Uint8Array,
+    reconcile?: Reconcile,
   ): Promise<Response> {
     const session = await this.request(this.uploadUrl(fileId, 'resumable'), {
       method,
@@ -366,10 +418,12 @@ export class GoogleDriveClient implements DriveClient {
     if (!location) {
       throw new DriveApiError('resumable 업로드 응답에 Location 헤더가 없어요', session.status);
     }
+    // 세션 만들기(POST)는 리소스를 만들지 않으므로 확인 없이 재시도해도 되고, 본문 PUT 만 확인한다.
     return this.request(location, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(bytes.length) },
       body: bytes,
+      ...(reconcile ? { reconcile } : {}),
     });
   }
 
@@ -382,10 +436,23 @@ export class GoogleDriveClient implements DriveClient {
    * 모든 요청의 공통 래퍼: Authorization 부착, 401 → DriveAuthError,
    * 429·5xx·403(rate limit) 및 네트워크 예외 → 지수 백오프 재시도 후 DriveApiError,
    * 그 밖의 4xx → 즉시 DriveApiError.
+   * 생성(POST) 요청은 결과를 모른 채 다시 보내면 중복이 생기므로, 네트워크 예외·5xx 뒤에는
+   * `reconcile` 로 이미 만들어졌는지 먼저 확인한다(`init.reconcile` 이 없으면 기존처럼 재시도만 한다).
    */
   private async request(url: string, init: FetchInit = {}): Promise<Response> {
     const token = await this.getAccessToken();
     const headers: Record<string, string> = { Authorization: `Bearer ${token}`, ...init.headers };
+
+    /** 이미 만들어졌으면 그 리소스를 응답처럼 돌려준다. 확인 실패는 재시도를 막지 않는다. */
+    const alreadyCreated = async (): Promise<Response | null> => {
+      if (!init.reconcile) return null;
+      try {
+        return await init.reconcile();
+      } catch (err) {
+        if (err instanceof DriveAuthError) throw err;
+        return null;
+      }
+    };
 
     for (let attempt = 0; ; attempt++) {
       let res: Response | null = null;
@@ -397,6 +464,8 @@ export class GoogleDriveClient implements DriveClient {
       }
 
       if (!res) {
+        const already = await alreadyCreated();
+        if (already) return already;
         if (attempt >= this.maxRetries) {
           throw new DriveApiError(`Drive 요청 실패(네트워크): ${errorText(failure)}`, 0);
         }
@@ -409,17 +478,37 @@ export class GoogleDriveClient implements DriveClient {
         if (!res.ok) throw await apiError(res);
         return res;
       }
+      // 5xx 는 요청이 처리됐는지 알 수 없다(프록시·게이트웨이). 429·403 은 거부된 것이 확실하므로 확인하지 않는다.
+      if (res.status >= 500) {
+        const already = await alreadyCreated();
+        if (already) return already;
+      }
       if (attempt >= this.maxRetries) throw await apiError(res);
       await this.sleep(this.backoffMs(attempt, res.headers.get('retry-after')));
     }
   }
 
-  /** 1s, 2s, 4s … 상한 32s. `Retry-After`(초)가 있으면 그 값을 우선한다. */
+  /** 1s, 2s, 4s … 상한 32s. `Retry-After`(초 또는 HTTP-date)가 있으면 그 값을 우선하되 5분까지만 기다린다. */
   private backoffMs(attempt: number, retryAfter: string | null): number {
-    const seconds = retryAfter === null ? Number.NaN : Number(retryAfter);
-    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    const asked = retryAfter === null ? Number.NaN : retryAfterMs(retryAfter);
+    if (Number.isFinite(asked) && asked >= 0) return Math.min(asked, MAX_RETRY_AFTER_MS);
     return Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS);
   }
+}
+
+/** `Retry-After` 헤더 → 대기 밀리초. 초 단위(`3`)와 HTTP-date(`Wed, 21 Oct 2015 07:28:00 GMT`)를 받는다. 해석할 수 없으면 NaN. */
+function retryAfterMs(value: string): number {
+  const text = value.trim();
+  if (text === '') return Number.NaN;
+  const seconds = Number(text);
+  if (Number.isFinite(seconds)) return seconds >= 0 ? seconds * 1000 : Number.NaN;
+  const at = Date.parse(text);
+  return Number.isNaN(at) ? Number.NaN : Math.max(0, at - Date.now());
+}
+
+/** 재시도 전 확인(reconcile)에서 찾은 리소스를 업로드 응답처럼 돌려줄 때 쓴다 */
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 }
 
 function errorText(err: unknown): string {

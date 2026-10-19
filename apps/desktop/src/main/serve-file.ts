@@ -58,18 +58,24 @@ export async function serveFile(
 
   const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get('range') ?? '');
   if (range) {
-    let start = range[1] ? Number(range[1]) : NaN;
-    let end = range[2] ? Number(range[2]) : NaN;
+    const notSatisfiable = () =>
+      new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${st.size}` } });
+    const num = (s: string) => (s === '' ? Number.NaN : Number(s));
+    const startAsked = num(range[1]);
+    const endAsked = num(range[2]);
+    // 음수·무한대(자릿수가 너무 많은 값)는 범위로 인정하지 않는다. 416 으로 돌려주고 스트림을 열지 않는다.
+    if ([startAsked, endAsked].some((n) => !Number.isNaN(n) && (!Number.isFinite(n) || n < 0))) return notSatisfiable();
+    let start = startAsked;
+    let end = endAsked;
     if (Number.isNaN(start)) {
-      // 접미사 범위: bytes=-N
+      // 접미사 범위: bytes=-N. N 은 1 이상이어야 한다 — `bytes=-`(양쪽 빈 값)는 여기서 416 이 된다.
+      if (!(end > 0)) return notSatisfiable();
       start = Math.max(0, st.size - end);
       end = st.size - 1;
     } else if (Number.isNaN(end) || end >= st.size) {
       end = st.size - 1;
     }
-    if (start > end || start >= st.size) {
-      return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${st.size}` } });
-    }
+    if (start > end || start >= st.size) return notSatisfiable();
     headers.set('Content-Range', `bytes ${start}-${end}/${st.size}`);
     headers.set('Content-Length', String(end - start + 1));
     const body = Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream;

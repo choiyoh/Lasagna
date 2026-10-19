@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { buildAuthUrl, createPkce, exchangeCode, randomState, startLoopback } from '@nopsidian/sync-gdrive';
@@ -42,11 +42,26 @@ export class CredentialStore {
     if (!this.box.available()) throw new Error('OS 키체인을 쓸 수 없어 로그인 정보를 안전하게 저장할 수 없어요');
     mkdirSync(path.dirname(this.file), { recursive: true });
     writeFileSync(this.file, JSON.stringify({ enc: this.box.encrypt(JSON.stringify(c)).toString('base64') }), { mode: 0o600 });
+    // mode 는 새로 만들 때만 적용되므로, 이미 있던 파일도 다시 0600 으로 맞춘다.
+    try {
+      chmodSync(this.file, 0o600);
+    } catch {
+      // Windows 등 권한 개념이 다른 OS 에서는 실패해도 괜찮다
+    }
   }
 
   clearTokens(): void {
     const c = this.load();
-    if (c) this.save({ clientId: c.clientId, clientSecret: c.clientSecret });
+    if (c) {
+      this.save({ clientId: c.clientId, clientSecret: c.clientSecret });
+      return;
+    }
+    // 키체인을 못 쓰거나 복호화에 실패해 load() 가 null 이어도, 암호화된 토큰이 파일에 남아 있으면 지운다.
+    try {
+      if (existsSync(this.file)) rmSync(this.file, { force: true });
+    } catch {
+      // 지우지 못해도 로그아웃 자체는 계속한다
+    }
   }
 }
 

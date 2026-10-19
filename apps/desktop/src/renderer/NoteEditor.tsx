@@ -53,8 +53,8 @@ interface Props {
   /** 노트 커버(프런트매터 `cover` 값: 볼트 이미지 또는 `gradient:<id>`)와 바꾸는 함수. 없으면 커버 UI 가 없다 */
   cover?: string | null;
   onSetCover?: (cover: string | null) => void;
-  /** 링크로 열었을 때 이동할 제목/블록 */
-  focus?: { heading: string | null; block: string | null } | null;
+  /** 링크로 열었을 때 이동할 제목/블록. tick 은 같은 곳을 다시 눌러도 다시 이동하게 하는 표시 */
+  focus?: { heading: string | null; block: string | null; tick?: number } | null;
   /** 이 노트를 가리키는 링크 이름(블록 링크 복사에 쓴다) */
   noteLinkName: string;
   /** 제목(첫 H1)을 고치고 나가면 파일 이름을 맞춘다(새 경로). 없으면 동기화하지 않는다 */
@@ -137,6 +137,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const toggleRef = useRef<() => void>(() => undefined);
   const rootRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | null>(null);
+  /** 에디터가 노트를 다 읽었는가(바깥 효과가 화면 이동을 해도 되는지 가리는 데 쓴다) */
+  const loadedRef = useRef(false);
   const modeRef = useRef<Mode>('edit');
   modeRef.current = mode;
   /** 찾기 막대: 열린 상태·처음 채울 말·초점 다시 주기·문서 변경 횟수 */
@@ -148,6 +150,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     const sourceHost = sourceHostRef.current;
     if (!host || !sourceHost) return;
     let disposed = false;
+    loadedRef.current = false;
 
     const noteDir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
     const assetHost: NopsAssetHost = {
@@ -271,6 +274,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       dirty = false;
       const first = !loaded;
       loaded = true;
+      loadedRef.current = true;
       sendOutline();
       setState('saved');
       if (!first) return;
@@ -457,11 +461,20 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       }
       toggleRef.current = () => undefined;
       editorRef.current = null;
+      loadedRef.current = false;
       setFindState(null);
       source?.destroy();
       editor.destroy();
     };
   }, [path, vaultId, assets]);
+
+  // 같은 노트가 열린 채로 이동할 곳이 바뀌면(노트 안 링크 클릭 등) 그 자리로 옮긴다.
+  // 처음 여는 노트는 load() 가 이미 옮겨 주므로, 다 읽은 뒤의 변화만 다룬다.
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    const editor = editorRef.current;
+    if (editor) scrollToFocus(editor, focus);
+  }, [focus?.heading, focus?.block, focus?.tick]);
 
   // ⌘E / Ctrl+E: 편집 모드 ↔ 소스 모드
   useEffect(() => {

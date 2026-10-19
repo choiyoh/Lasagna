@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('electron', () => ({ app: { on: vi.fn() }, session: {}, shell: {} }));
+const mocks = vi.hoisted(() => ({ openExternal: vi.fn() }));
 
-const { SECURE_WEB_PREFERENCES, buildCsp, isPermissionAllowed, isTrustedUrl } = await import('./security');
+vi.mock('electron', () => ({ app: { on: vi.fn() }, session: {}, shell: { openExternal: mocks.openExternal } }));
+
+const { SECURE_WEB_PREFERENCES, buildCsp, isPermissionAllowed, isTrustedUrl, openExternalSafe } = await import('./security');
 
 describe('webPreferences 스냅샷', () => {
   it('보안 기본값이 바뀌지 않는다', () => {
@@ -51,5 +53,23 @@ describe('권한', () => {
     for (const p of ['media', 'geolocation', 'notifications', 'clipboard-read', 'midi', 'openExternal', 'fullscreen']) {
       expect(isPermissionAllowed(p, 'app://nopsidian/index.html'), p).toBe(false);
     }
+  });
+});
+
+describe('openExternalSafe', () => {
+  beforeEach(() => mocks.openExternal.mockClear());
+
+  it('http/https 만 시스템 브라우저로 한 번 연다', () => {
+    expect(openExternalSafe('https://accounts.google.com/o/oauth2/v2/auth?client_id=x')).toBe(true);
+    // 두 번 열면 브라우저 창이 두 개 뜬다(issue #6) — 정확히 한 번만 부른다
+    expect(mocks.openExternal).toHaveBeenCalledTimes(1);
+    expect(mocks.openExternal).toHaveBeenLastCalledWith('https://accounts.google.com/o/oauth2/v2/auth?client_id=x');
+  });
+
+  it('허용하지 않는 형식은 열지 않는다', () => {
+    for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'vault://nopsidian/a.png', 'not a url', '']) {
+      expect(openExternalSafe(url), url).toBe(false);
+    }
+    expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 });

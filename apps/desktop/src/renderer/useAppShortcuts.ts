@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export interface ShortcutActions {
   /** 그래프나 데이터베이스 화면이 떠 있는가(Esc 로 닫는다) */
@@ -21,9 +21,13 @@ export interface ShortcutActions {
 }
 
 /** 앱 전체 단축키: ⌘O 전환기 · ⌘P 팔레트 · ⌘N 새 노트 · ⌘, 설정 · F1 단축키 · F2 이름 · ⌘W 탭 닫기 · ⌘⇧G 그래프 · ⌘⇧B 북마크 · ⌘⌥D 오늘 */
-export function useAppShortcuts(a: ShortcutActions) {
+export function useAppShortcuts(actions: ShortcutActions) {
+  // 매 렌더 새로 만들어지는 콜백을 그때그때 ref 에 담아 두고, 리스너는 처음 한 번만 단다
+  const latest = useRef(actions);
+  latest.current = actions;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const a = latest.current;
       const mod = e.metaKey || e.ctrlKey;
       const plain = mod && !e.shiftKey && !e.altKey;
       if (plain && e.key.toLowerCase() === 'o') {
@@ -62,5 +66,5 @@ export function useAppShortcuts(a: ShortcutActions) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [a]);
+  }, []);
 }

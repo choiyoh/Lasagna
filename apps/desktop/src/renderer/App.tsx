@@ -80,8 +80,12 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   /** 현재 탭에서 노트를 연다(이미 다른 탭에 열려 있으면 그 탭으로 간다) */
   const setSelected = useCallback((path: string) => dispatchTabs({ type: 'open', path }), []);
   const openInNewTab = useCallback((path: string) => dispatchTabs({ type: 'open', path, newTab: true }), []);
-  /** 링크로 열 때 이동할 제목/블록 */
-  const [focus, setFocus] = useState<{ heading: string | null; block: string | null } | null>(null);
+  /** 링크로 열 때 이동할 제목/블록. tick 은 같은 곳을 다시 눌러도 다시 이동하게 하는 표시 */
+  const [focus, setFocusState] = useState<{ heading: string | null; block: string | null; tick: number } | null>(null);
+  const focusTick = useRef(0);
+  const setFocus = useCallback((next: { heading: string | null; block: string | null } | null) => {
+    setFocusState(next ? { ...next, tick: ++focusTick.current } : null);
+  }, []);
   const [sideTab, setSideTab] = useState<'files' | 'tags' | 'db' | 'marks'>('files');
   const [bookmarks, setBookmarks] = useState<string[]>([]);
   const [palette, setPalette] = useState(false);

@@ -5,6 +5,7 @@ import { EdgeArrowProgram, EdgeRectangleProgram } from 'sigma/rendering';
 import type { GraphData, GraphSettings } from '@nopsidian/ipc-contract';
 import { colorForNode, matchesQuery, parseGraphQuery } from './filter';
 import type { LayoutIn, LayoutOut } from './layout-worker';
+import { adjacency, planLayout, type Point } from './layout-plan';
 import { mix, readPalette, type GraphPalette } from './palette';
 import { NodeGlowProgram } from './node-glow';
 import { webglAvailable } from './webgl';
@@ -56,6 +57,14 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   const host = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
+  /** 지난번 데이터의 이웃 집합(무엇이 바뀌었는지 가려 바뀐 노드만 움직이려고) */
+  const prevAdj = useRef<Map<string, Set<string>> | undefined>(undefined);
+  /** 지난 배치가 끝까지 가라앉았는가(도중이면 고정하지 않고 이어서 끝까지 돌린다) */
+  const prevFinished = useRef(false);
+  /** 워커가 지금 쓰고 있는 힘 설정(같은 값을 다시 보내 배치를 처음부터 다시 돌리지 않게) */
+  const workerForces = useRef<GraphSettings['forces'] | null>(null);
+  /** 다시 만들 때 화면 틀(정규화 범위)과 카메라를 이어 받는다 — 고정된 노드가 화면에서도 제자리에 있게 */
+  const view = useRef<{ bbox: { x: [number, number]; y: [number, number] }; camera: { x: number; y: number; ratio: number; angle: number } } | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const hover = useRef<string | null>(null);
   const live = useRef({ settings, current, onOpen });
@@ -86,27 +95,26 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     }
     const prev = graphRef.current;
     const graph = new Graph({ type: 'directed', multi: false });
-    const n = data.nodes.length;
-    const cached = prev ? new Map<string, [number, number]>() : loadLayout(cacheKey);
-    let known = 0;
-    // 새 노드의 처음 자리: 연결이 많은 노드를 가운데에 두는 해바라기 배열(무작위 없이 항상 같다).
-    // 최종 모양에 가깝게 시작해야 배치가 얌전히 가라앉는다.
-    const rank = new Map<string, number>();
-    [...data.nodes].sort((a, b) => b.degree - a.degree || a.id.localeCompare(b.id)).forEach((nd, i) => rank.set(nd.id, i));
+    // 이전 자리: 지금 그래프가 있으면 그 자리를, 처음 열면 저장해 둔 배치를 쓴다
+    const prevPos = new Map<string, Point>();
+    if (prev) prev.forEachNode((id, a) => prevPos.set(id, [a.x as number, a.y as number]));
+    else for (const [id, p] of loadLayout(cacheKey)) prevPos.set(id, p);
+    // 연결이 그대로인 노드는 고정하고, 바뀐 곳만 움직인다(같은 그래프를 다시 열거나 링크 하나가 늘어도 전체가 흔들리지 않게)
+    const plan = planLayout(data, prevPos, prev ? prevAdj.current : undefined);
+    // 지난 배치가 아직 도는 중이었다면(열자마자 노트가 바뀐 경우) 고정하지 않고 처음부터 끝까지 이어서 돌린다.
+    // 저장된 배치(localStorage)는 다 가라앉은 것만 저장하므로 고정해도 된다.
+    const settled = !prev || prevFinished.current;
+    prevFinished.current = false;
+    prevAdj.current = adjacency(data);
     const maxDegree = data.nodes.reduce((m, nd) => Math.max(m, nd.degree), 1);
     tint.current.clear();
     data.nodes.forEach((node) => {
-      const hit = cached.get(node.id);
-      const old = prev?.hasNode(node.id) ? prev.getNodeAttributes(node.id) : hit ? { x: hit[0], y: hit[1] } : null;
-      if (old) known++;
-      const k = rank.get(node.id) ?? 0;
-      const angle = k * 2.399963229728653; // 황금각
-      const radius = 4 * Math.sqrt(k + 0.5);
+      const [x, y] = plan.positions.get(node.id)!;
       graph.addNode(node.id, {
         label: node.label,
         size: 3 + Math.min(Math.sqrt(node.degree) * 2.3, 20),
-        x: old ? (old.x as number) : Math.cos(angle) * radius,
-        y: old ? (old.y as number) : Math.sin(angle) * radius,
+        x,
+        y,
         color: pal.current.note,
         kind: node.kind,
       });
@@ -231,6 +239,14 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
       return;
     }
     sigmaRef.current = sigma;
+    // 바뀐 곳만 다듬는 경우(warm·고정)는 이전 화면 틀과 카메라를 그대로 쓴다. 그러지 않으면 새 노드 하나로 범위가 바뀌어
+    // 그래프 전체가 커졌다 작아지며(재정규화) 흔들려 보이고, 사용자가 확대·이동한 화면도 처음으로 돌아간다.
+    const keepView = plan.warm && settled && prev !== null && view.current !== null;
+    if (keepView) {
+      sigma.setCustomBBox(view.current!.bbox);
+      sigma.getCamera().setState(view.current!.camera);
+    }
+    view.current = null;
     sigma.on('clickNode', ({ node }) => {
       if (node.startsWith('#') || node.startsWith('?')) return;
       live.current.onOpen(node);
@@ -293,12 +309,13 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
       if (moving) raf = requestAnimationFrame(follow);
       else if (finished) saveLayout(cacheKey, graph);
     };
-    const warm = n > 0 && known / n >= 0.95;
+    const warm = plan.warm && settled;
     if (!warm) setReady(false);
     worker.onmessage = (ev: MessageEvent<LayoutOut>) => {
       const { positions, done } = ev.data;
       target.set(positions);
       finished = done;
+      if (done) prevFinished.current = true;
       if (first) {
         // 미리 돌려 둔 첫 배치는 곧바로 보여 주고(자리 잡기), 이후 변화만 부드럽게 따라간다
         first = false;
@@ -311,13 +328,24 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
       } else if (!raf) raf = requestAnimationFrame(follow);
       setStats(`${ids.length}개 노드 · ${graph.size}개 링크${done ? '' : ' · 배치 중…'}`);
     };
-    const init: LayoutIn = { type: 'init', ids, positions: pos, edges: new Uint32Array(edgeArr), forces: live.current.settings.forces, warm };
+    const fixed = warm ? Uint8Array.from(ids, (id) => (plan.fixed.has(id) ? 1 : 0)) : undefined;
+    const init: LayoutIn = { type: 'init', ids, positions: pos, edges: new Uint32Array(edgeArr), forces: live.current.settings.forces, warm, ...(fixed ? { fixed } : {}) };
+    workerForces.current = init.forces;
     worker.postMessage(init);
     setStats(`${ids.length}개 노드 · ${graph.size}개 링크`);
 
     return () => {
       cancelAnimationFrame(raf);
-      saveLayout(cacheKey, graph);
+      view.current = { bbox: sigma.getCustomBBox() ?? sigma.getBBox(), camera: sigma.getCamera().getState() };
+      // 다 가라앉은 배치만 저장한다(도중에 닫은 배치를 저장하면 다음에 열 때 그 자리에 고정돼 덜 정리된 채 남는다)
+      if (finished) {
+        // 화면이 아직 목표를 따라가는 중이어도 저장은 최종 자리로 한다
+        attrs.forEach((a, i) => {
+          a.x = target[i * 2]!;
+          a.y = target[i * 2 + 1]!;
+        });
+        saveLayout(cacheKey, graph);
+      }
       worker.postMessage({ type: 'stop' } satisfies LayoutIn);
       worker.terminate();
       sigma.kill();
@@ -372,7 +400,12 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   // 힘 슬라이더
   const { gravity, repulsion, linkDistance } = settings.forces;
   useEffect(() => {
-    workerRef.current?.postMessage({ type: 'forces', forces: { gravity, repulsion, linkDistance } } satisfies LayoutIn);
+    // 마운트 직후(그리고 값이 그대로일 때)는 보내지 않는다. 예전에는 그래프를 열 때마다 이 효과가 'forces' 를 보내
+    // 워커가 고정을 풀고 300번을 다시 돌렸다(다시 열 때마다·로컬 그래프에서 노트를 바꿀 때마다 흔들림).
+    const cur = workerForces.current;
+    if (!workerRef.current || (cur && cur.gravity === gravity && cur.repulsion === repulsion && cur.linkDistance === linkDistance)) return;
+    workerForces.current = { gravity, repulsion, linkDistance };
+    workerRef.current.postMessage({ type: 'forces', forces: { gravity, repulsion, linkDistance } } satisfies LayoutIn);
   }, [gravity, repulsion, linkDistance]);
 
   return (

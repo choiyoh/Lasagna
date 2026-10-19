@@ -31,6 +31,8 @@ import { readAudit } from '@nopsidian/mcp/audit';
 import { RevertError, applyRestore, logRevert, planRevert } from '@nopsidian/mcp/revert';
 import { events, graphSettings, workspaceLayout, type EventName } from '@nopsidian/ipc-contract';
 import { configureIpc, handle, registerWebContents } from './ipc';
+import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
+import { runMcpStdio } from './mcp-stdio';
 import { installProtocols, registerSchemes } from './protocols';
 import {
   APP_ORIGIN,
@@ -72,9 +74,23 @@ const OPENABLE = /\.(pdf|txt|csv|png|jpe?g|gif|webp|svg|avif|bmp|mp3|m4a|wav|ogg
 // Windows 설치·업데이트·제거 중에 Squirrel 이 앱을 잠깐 띄운다. 바로가기를 만들고 종료한다.
 if (process.platform === 'win32' && squirrelStartup) app.quit();
 
-registerSchemes();
+// `<앱 실행 파일> --mcp-stdio …` 이면 앱이 아니라 번들된 MCP 서버(stdio)로만 동작한다.
+// RunAsNode 퓨즈를 켜지 않고(보안) Node.js 가 없는 PC 에서도 에이전트가 붙게 하는 통로다.
+// 창·트레이·프로토콜·IPC를 만들지 않고, 싱글 인스턴스 잠금도 잡지 않는다.
+const mcpStdio = isMcpStdioInvocation(process.argv);
+if (mcpStdio) {
+  app.dock?.hide(); // macOS: 독 아이콘이 떴다 사라지지 않게
+  // 창을 만들지 않으므로 GPU 가 필요 없다. 디스플레이가 없는 리눅스에서 GPU 초기화 오류를 피한다.
+  // (화면 플랫폼은 이 코드보다 먼저 정해져서 여기서 바꿀 수 없다 → 리눅스 스니펫은 `--ozone-platform=headless` 를 앞에 붙인다. mcpLaunchArgs 참고)
+  app.disableHardwareAcceleration();
+  void runMcpStdio(mcpStdioArgs(process.argv), { packaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath() }).then((code) => app.exit(code));
+}
 
-if (!app.requestSingleInstanceLock()) app.quit();
+if (!mcpStdio) {
+  registerSchemes();
+
+  if (!app.requestSingleInstanceLock()) app.quit();
+}
 
 function createWindow(openPath?: string) {
   const win = new BrowserWindow({
@@ -414,8 +430,9 @@ function registerHandlers() {
   handle('mcp.info', () => {
     const v = requireVault();
     // 패키징된 앱은 resources/ 에, 개발 중에는 저장소의 빌드 결과를 쓴다
-    const script = app.isPackaged ? path.join(process.resourcesPath, 'nopsidian-mcp.mjs') : path.resolve(app.getAppPath(), '../../packages/mcp/dist/nopsidian-mcp.mjs');
-    return { script: existsSync(script) ? script : null, vault: v.info.path };
+    const script = mcpScriptPath({ packaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath() });
+    // 패키징된 앱은 이 실행 파일 자체가 `--mcp-stdio` 로 MCP 서버가 된다(Node.js 불필요)
+    return { script: existsSync(script) ? script : null, vault: v.info.path, executable: process.execPath, packaged: app.isPackaged, launchArgs: mcpLaunchArgs(process.platform) };
   });
   handle('mcp.revert', ({ t, path: rel }) => {
     const v = requireVault();
@@ -578,6 +595,7 @@ function registerHandlers() {
 }
 
 app.whenReady().then(() => {
+  if (mcpStdio) return; // MCP 서버 모드: 창·프로토콜·IPC를 만들지 않는다
   installSessionPolicy(devServerUrl);
   if (devServerUrl) {
     // 개발 서버는 HMR 때문에 완화된 CSP를 쓴다. 운영 CSP는 app:// 응답 헤더로 강제된다.

@@ -7,6 +7,7 @@ import { colorForNode, matchesQuery, parseGraphQuery } from './filter';
 import type { LayoutIn, LayoutOut } from './layout-worker';
 import { mix, readPalette, type GraphPalette } from './palette';
 import { NodeGlowProgram } from './node-glow';
+import { webglAvailable } from './webgl';
 
 interface Props {
   data: GraphData;
@@ -60,6 +61,8 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   const live = useRef({ settings, current, onOpen });
   live.current = { settings, current, onOpen };
   const [stats, setStats] = useState('');
+  /** WebGL 을 못 쓰면 그래프 대신 안내를 보여 준다(사유가 있으면 함께 보여 준다) */
+  const [glFailure, setGlFailure] = useState<{ message: string } | null>(null);
   /** 첫 배치가 도착하기 전에는 캔버스를 숨겨 두었다가 부드럽게 나타낸다(초반의 요동을 보여 주지 않는다) */
   const [ready, setReady] = useState(false);
   /** 노드별 기본 색(연결이 많을수록 강조색에 가깝게). 테마가 바뀌거나 그래프를 다시 만들면 비운다 */
@@ -75,6 +78,12 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   useEffect(() => {
     const el = host.current;
     if (!el) return;
+    // WebGL 을 못 쓰는 환경(원격 데스크톱·가상 머신·GPU 차단 목록)에서는 sigma 가 예외를 던진다.
+    // 앱을 죽이는 대신 그래프 자리에 안내를 보여 주고, 노트·링크 기능은 그대로 쓴다.
+    if (!webglAvailable()) {
+      setGlFailure({ message: '' });
+      return;
+    }
     const prev = graphRef.current;
     const graph = new Graph({ type: 'directed', multi: false });
     const n = data.nodes.length;
@@ -112,106 +121,115 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     parsedRef.current = parseGraphQuery(live.current.settings.filter);
 
     sigmaRef.current?.kill();
-    const sigma = new Sigma(graph, el, {
-      allowInvalidContainer: true,
-      renderEdgeLabels: false,
-      labelRenderedSizeThreshold: 5,
-      labelFont: "'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif",
-      labelSize: 12,
-      labelWeight: '500',
-      labelDensity: 0.7,
-      labelGridCellSize: 110,
-      zIndex: true,
-      stagePadding: 70,
-      defaultDrawNodeLabel: (ctx, data, settings) => {
-        if (!data.label) return;
-        const p = pal.current;
-        const size = settings.labelSize;
-        ctx.font = `${settings.labelWeight} ${size}px ${settings.labelFont}`;
-        const x = data.x + data.size + 4;
-        const y = data.y + size / 3;
-        // 배경색 테두리(후광)로 선·점 위에서도 글자가 또렷하게 보인다
-        ctx.lineWidth = 3;
-        ctx.lineJoin = 'round';
-        ctx.strokeStyle = p.dark ? 'rgba(25, 25, 25, 0.85)' : 'rgba(255, 255, 255, 0.9)';
-        ctx.strokeText(data.label, x, y);
-        ctx.fillStyle = p.fg;
-        ctx.fillText(data.label, x, y);
-      },
-      defaultDrawNodeHover: (ctx, data, settings) => {
-        const p = pal.current;
-        ctx.beginPath();
-        ctx.arc(data.x, data.y, data.size + 5, 0, Math.PI * 2);
-        ctx.fillStyle = p.dark ? 'rgba(143, 143, 245, 0.22)' : 'rgba(91, 91, 214, 0.16)';
-        ctx.fill();
-        if (data.label) {
-          const size = settings.labelSize + 1;
-          ctx.font = `600 ${size}px ${settings.labelFont}`;
-          const x = data.x + data.size + 8;
+    let sigma: Sigma;
+    try {
+      sigma = new Sigma(graph, el, {
+        allowInvalidContainer: true,
+        renderEdgeLabels: false,
+        labelRenderedSizeThreshold: 5,
+        labelFont: "'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif",
+        labelSize: 12,
+        labelWeight: '500',
+        labelDensity: 0.7,
+        labelGridCellSize: 110,
+        zIndex: true,
+        stagePadding: 70,
+        defaultDrawNodeLabel: (ctx, data, settings) => {
+          if (!data.label) return;
+          const p = pal.current;
+          const size = settings.labelSize;
+          ctx.font = `${settings.labelWeight} ${size}px ${settings.labelFont}`;
+          const x = data.x + data.size + 4;
           const y = data.y + size / 3;
-          ctx.lineWidth = 4;
+          // 배경색 테두리(후광)로 선·점 위에서도 글자가 또렷하게 보인다
+          ctx.lineWidth = 3;
           ctx.lineJoin = 'round';
-          ctx.strokeStyle = p.dark ? 'rgba(25, 25, 25, 0.9)' : 'rgba(255, 255, 255, 0.95)';
+          ctx.strokeStyle = p.dark ? 'rgba(25, 25, 25, 0.85)' : 'rgba(255, 255, 255, 0.9)';
           ctx.strokeText(data.label, x, y);
           ctx.fillStyle = p.fg;
           ctx.fillText(data.label, x, y);
-        }
-      },
-      defaultEdgeType: live.current.settings.arrows ? 'arrow' : 'line',
-      defaultNodeType: 'glow',
-      nodeProgramClasses: { glow: NodeGlowProgram },
-      edgeProgramClasses: { arrow: EdgeArrowProgram, line: EdgeRectangleProgram },
-      nodeReducer: (id, attrs) => {
-        const { settings: s, current: cur } = live.current;
-        const node = nodeIndex.get(id);
-        const out = { ...attrs };
-        if (!node) return out;
-        const p = pal.current;
-        let base = tint.current.get(id);
-        if (!base) {
-          // 연결이 많은 노트일수록 강조색에 가까워진다(허브가 한눈에 보이게)
-          const t = node.kind === 'note' ? Math.min(1, Math.log2(1 + node.degree) / Math.log2(1 + maxDegree)) : 0;
-          base = node.kind === 'tag' ? p.tag : node.kind === 'unresolved' ? p.unresolved : mix(p.note, p.accent, t * 0.6);
-          tint.current.set(id, base);
-        }
-        out.color = colorForNode(node, s.groups, base);
-        out.zIndex = 1;
-        if (!matchesQuery(node, parsedRef.current)) {
-          out.color = p.dim;
-          out.label = '';
-          out.zIndex = 0;
-        }
-        const h = hover.current;
-        if (h) {
-          if (h === id) {
-            out.color = p.accent;
-            out.zIndex = 3;
-            out.forceLabel = true;
-          } else if (graph.areNeighbors(h, id)) {
-            out.color = p.accent;
-            out.zIndex = 2;
-            out.forceLabel = true;
-          } else {
+        },
+        defaultDrawNodeHover: (ctx, data, settings) => {
+          const p = pal.current;
+          ctx.beginPath();
+          ctx.arc(data.x, data.y, data.size + 5, 0, Math.PI * 2);
+          ctx.fillStyle = p.dark ? 'rgba(143, 143, 245, 0.22)' : 'rgba(91, 91, 214, 0.16)';
+          ctx.fill();
+          if (data.label) {
+            const size = settings.labelSize + 1;
+            ctx.font = `600 ${size}px ${settings.labelFont}`;
+            const x = data.x + data.size + 8;
+            const y = data.y + size / 3;
+            ctx.lineWidth = 4;
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = p.dark ? 'rgba(25, 25, 25, 0.9)' : 'rgba(255, 255, 255, 0.95)';
+            ctx.strokeText(data.label, x, y);
+            ctx.fillStyle = p.fg;
+            ctx.fillText(data.label, x, y);
+          }
+        },
+        defaultEdgeType: live.current.settings.arrows ? 'arrow' : 'line',
+        defaultNodeType: 'glow',
+        nodeProgramClasses: { glow: NodeGlowProgram },
+        edgeProgramClasses: { arrow: EdgeArrowProgram, line: EdgeRectangleProgram },
+        nodeReducer: (id, attrs) => {
+          const { settings: s, current: cur } = live.current;
+          const node = nodeIndex.get(id);
+          const out = { ...attrs };
+          if (!node) return out;
+          const p = pal.current;
+          let base = tint.current.get(id);
+          if (!base) {
+            // 연결이 많은 노트일수록 강조색에 가까워진다(허브가 한눈에 보이게)
+            const t = node.kind === 'note' ? Math.min(1, Math.log2(1 + node.degree) / Math.log2(1 + maxDegree)) : 0;
+            base = node.kind === 'tag' ? p.tag : node.kind === 'unresolved' ? p.unresolved : mix(p.note, p.accent, t * 0.6);
+            tint.current.set(id, base);
+          }
+          out.color = colorForNode(node, s.groups, base);
+          out.zIndex = 1;
+          if (!matchesQuery(node, parsedRef.current)) {
             out.color = p.dim;
             out.label = '';
             out.zIndex = 0;
           }
-        }
-        if (id === cur) {
-          out.color = p.accent;
-          out.size = (out.size ?? 4) * 1.35;
-          out.forceLabel = true;
-          out.zIndex = 3;
-        }
-        return out;
-      },
-      edgeReducer: (edge, attrs) => {
-        const h = hover.current;
-        const p = pal.current;
-        if (h) return graph.hasExtremity(edge, h) ? { ...attrs, color: p.edgeHot, size: 1.4, zIndex: 1 } : { ...attrs, color: p.edgeFaded };
-        return { ...attrs, color: p.edge };
-      },
-    });
+          const h = hover.current;
+          if (h) {
+            if (h === id) {
+              out.color = p.accent;
+              out.zIndex = 3;
+              out.forceLabel = true;
+            } else if (graph.areNeighbors(h, id)) {
+              out.color = p.accent;
+              out.zIndex = 2;
+              out.forceLabel = true;
+            } else {
+              out.color = p.dim;
+              out.label = '';
+              out.zIndex = 0;
+            }
+          }
+          if (id === cur) {
+            out.color = p.accent;
+            out.size = (out.size ?? 4) * 1.35;
+            out.forceLabel = true;
+            out.zIndex = 3;
+          }
+          return out;
+        },
+        edgeReducer: (edge, attrs) => {
+          const h = hover.current;
+          const p = pal.current;
+          if (h) return graph.hasExtremity(edge, h) ? { ...attrs, color: p.edgeHot, size: 1.4, zIndex: 1 } : { ...attrs, color: p.edgeFaded };
+          return { ...attrs, color: p.edge };
+        },
+      });
+    } catch (err) {
+      // sigma(내부는 regl)는 WebGL 컨텍스트를 못 만들면 예외를 던진다.
+      // 절반만 만들어진 것을 붙잡아 둘 수 없으니 참조를 비우고 안내 화면으로 바꾼다.
+      sigmaRef.current = null;
+      setGlFailure({ message: err instanceof Error ? err.message : String(err) });
+      return;
+    }
     sigmaRef.current = sigma;
     sigma.on('clickNode', ({ node }) => {
       if (node.startsWith('#') || node.startsWith('?')) return;
@@ -359,10 +377,24 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
 
   return (
     <div className="graphview" data-testid={testId}>
-      <div ref={host} className={ready ? 'graphview__canvas ready' : 'graphview__canvas'} />
-      <span className="graphview__stats muted small" data-testid={`${testId}-stats`}>
-        {stats}
-      </span>
+      {glFailure ? (
+        <div className="graphview__fallback" role="status" data-testid={`${testId}-fallback`}>
+          <strong>WebGL을 사용할 수 없어요</strong>
+          <p className="muted small">이 컴퓨터(또는 원격·가상 환경)에서는 그래프를 그릴 수 없어요. 노트와 링크 기능은 그대로 쓸 수 있어요.</p>
+          {glFailure.message && (
+            <pre className="graphview__error muted small">
+              <code>{glFailure.message}</code>
+            </pre>
+          )}
+        </div>
+      ) : (
+        <>
+          <div ref={host} className={ready ? 'graphview__canvas ready' : 'graphview__canvas'} />
+          <span className="graphview__stats muted small" data-testid={`${testId}-stats`}>
+            {stats}
+          </span>
+        </>
+      )}
     </div>
   );
 }

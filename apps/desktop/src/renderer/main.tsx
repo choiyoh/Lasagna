@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { ErrorBoundary } from './ErrorBoundary';
 import './styles.css';
 import { applyTheme, loadTheme } from './theme';
 import { applyPrefs, loadPrefs } from './prefs';
@@ -11,6 +12,8 @@ document.documentElement.dataset.platform = /Mac/i.test(navigator.userAgent) ? '
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

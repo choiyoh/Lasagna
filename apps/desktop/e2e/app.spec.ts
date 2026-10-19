@@ -1894,20 +1894,24 @@ views:
     await page.keyboard.press('ControlOrMeta+,');
     const settings = page.getByRole('dialog', { name: '설정' });
     const cli = settings.getByTestId('mcp-cli');
-    await expect(cli).toContainText('claude mcp add nopsidian -- node', { timeout: 8000 });
+    // 패키징된 앱은 Node.js 없이 앱 실행 파일 자체가 `--mcp-stdio` 로 MCP 서버가 된다(#8)
+    await expect(cli).toContainText('--mcp-stdio', { timeout: 8000 });
+    await expect(cli).not.toContainText('-- node ');
     await expect(cli).toContainText(vaultDir);
     await expect(cli).not.toContainText('--write');
     await settings.getByLabel('에이전트가 노트 쓰기 허용').check();
     await expect(cli).toContainText('--write');
     await expect(cli).toContainText('--write-folder "AI"');
-    const script = (await cli.innerText()).match(/node "([^"]+nopsidian-mcp\.mjs)"/)![1]!;
-    expect(existsSync(script)).toBe(true);
+    const shown = (await cli.innerText()).match(/^claude mcp add nopsidian -- "([^"]+)" (.*?--mcp-stdio)/)!;
+    const exe = shown[1]!;
+    const launchArgs = shown[2]!.split(' ');
+    expect(existsSync(exe)).toBe(true);
     await settings.getByLabel('에이전트가 노트 쓰기 허용').uncheck();
     await page.keyboard.press('Escape');
 
-    // 앱이 안내한 스크립트를 그대로 실행해 MCP(stdio)로 붙는다
+    // 앱이 안내한 실행 파일·인자를 그대로 실행해 MCP(stdio)로 붙는다(별도 Node.js 없이)
     const client = new Client({ name: 'e2e-agent', version: '1' });
-    await client.connect(new StdioClientTransport({ command: process.execPath, args: [script, '--vault', vaultDir, '--write'], stderr: 'ignore' }));
+    await client.connect(new StdioClientTransport({ command: exe, args: [...launchArgs, '--vault', vaultDir, '--write'], stderr: 'ignore' }));
     try {
       const tools = (await client.listTools()).tools.map((t) => t.name);
       expect(tools).toEqual(expect.arrayContaining(['search_notes', 'create_note', 'append_to_note', 'list_databases', 'query_database', 'add_database_row', 'update_database_row', 'append_to_daily_note']));

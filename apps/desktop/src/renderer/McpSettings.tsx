@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { mcpSnippet, type McpInfo } from './mcp-snippet';
 
 interface AuditRow {
   t: string;
@@ -21,12 +22,9 @@ const load = (): { write: boolean; folder: string } => {
   }
 };
 
-/** 셸 인자: 공백·특수문자가 있어도 안전하게 큰따옴표로 감싼다 */
-const q = (s: string) => `"${s.replace(/(["\\$`])/g, '\\$1')}"`;
-
 /** 설정 화면의 "AI 에이전트 연결(MCP)": 연결 방법 복사와 에이전트가 한 일 보기 */
 export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: string) => void; onReverted: (path: string, kind: 'restored' | 'trashed') => void }) {
-  const [info, setInfo] = useState<{ script: string | null; vault: string } | null>(null);
+  const [info, setInfo] = useState<McpInfo | null>(null);
   const [cfg, setCfg] = useState(load);
   const [audit, setAudit] = useState<AuditRow[]>([]);
   const [copied, setCopied] = useState('');
@@ -61,10 +59,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   if (!info) return null;
   /** 이미 되돌린 기록(`revert:<t>` 메모가 붙은 되돌림 기록이 가리키는 것) */
   const reverted = new Set(audit.filter((a) => a.action === 'revert' && a.note?.startsWith('revert:')).map((a) => `${a.note!.slice(7)}|${a.path}`));
-  const folder = cfg.folder.trim().replace(/^\/+|\/+$/g, '') || '.';
-  const args = info.script ? [info.script, '--vault', info.vault, ...(cfg.write ? ['--write', '--write-folder', folder] : [])] : [];
-  const cli = info.script ? `claude mcp add nopsidian -- node ${args.map((a) => (a.startsWith('--') ? a : q(a))).join(' ')}` : '';
-  const json = info.script ? JSON.stringify({ mcpServers: { nopsidian: { command: 'node', args } } }, null, 2) : '';
+  const snippet = mcpSnippet(info, { write: cfg.write, folder: cfg.folder });
   const copy = (label: string, text: string) => {
     void navigator.clipboard.writeText(text).then(() => {
       setCopied(label);
@@ -75,7 +70,10 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   return (
     <section data-testid="mcp-settings">
       <h3>AI 에이전트 연결 (MCP)</h3>
-      <p className="muted small">Claude 같은 AI 에이전트가 이 볼트의 노트를 찾아 읽고(기본), 허용하면 새 노트를 쓰게 해요. 앱이 꺼져 있어도 동작하고, Node.js 22 이상이 필요해요.</p>
+      <p className="muted small">
+        Claude 같은 AI 에이전트가 이 볼트의 노트를 찾아 읽고(기본), 허용하면 새 노트를 쓰게 해요. 앱이 꺼져 있어도 동작해요.{' '}
+        {info.packaged ? 'Node.js 없이 이 앱 실행 파일이 MCP 서버로 동작해요.' : '개발 빌드라 Node.js 22 이상이 필요해요.'}
+      </p>
       <label className="settings__row">
         <span>
           에이전트가 노트 쓰기 허용
@@ -92,21 +90,21 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
           <input className="settings__text" value={cfg.folder} onChange={(e) => setCfg({ ...cfg, folder: e.target.value })} aria-label="쓸 수 있는 폴더" />
         </label>
       )}
-      {info.script ? (
+      {snippet ? (
         <div className="mcp__snippets">
           <div>
             <div className="mcp__label">
               <strong>Claude Code</strong>
-              <button onClick={() => copy('cli', cli)}>{copied === 'cli' ? '복사했어요' : '명령 복사'}</button>
+              <button onClick={() => copy('cli', snippet.cli)}>{copied === 'cli' ? '복사했어요' : '명령 복사'}</button>
             </div>
-            <pre className="mcp__code" data-testid="mcp-cli">{cli}</pre>
+            <pre className="mcp__code" data-testid="mcp-cli">{snippet.cli}</pre>
           </div>
           <div>
             <div className="mcp__label">
               <strong>Claude Desktop 등 (JSON 설정)</strong>
-              <button onClick={() => copy('json', json)}>{copied === 'json' ? '복사했어요' : '설정 복사'}</button>
+              <button onClick={() => copy('json', snippet.json)}>{copied === 'json' ? '복사했어요' : '설정 복사'}</button>
             </div>
-            <pre className="mcp__code" data-testid="mcp-json">{json}</pre>
+            <pre className="mcp__code" data-testid="mcp-json">{snippet.json}</pre>
           </div>
         </div>
       ) : (

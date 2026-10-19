@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { DriveApiError, DriveAuthError, GoogleDriveClient, type GoogleDriveOptions } from './drive-rest.js';
 import { RevisionConflictError, type RemoteFile } from './types.js';
@@ -70,11 +70,17 @@ function required<T>(value: T | undefined, message: string): T {
   return value;
 }
 
-/** 폴더 이름 조회 요청이면 그 이름, 아니면 undefined */
+/** 폴더 이름 조회 요청이면 그 이름, 아니면 undefined(파일 조회의 `mimeType!=` 은 폴더 조회가 아니다) */
 function folderQueryName(call: Call): string | undefined {
   const q = new URL(call.url).searchParams.get('q') ?? '';
-  if (!q.includes(FOLDER_MIME)) return undefined;
+  if (!q.includes(`mimeType='${FOLDER_MIME}'`)) return undefined;
   return /^name='((?:\\.|[^'])*)'/.exec(q)?.[1];
+}
+
+/** 업로드 전 같은 이름 파일 확인(중복 방지) 조회인가 */
+function isFileLookup(call: Call): boolean {
+  const q = new URL(call.url).searchParams.get('q') ?? '';
+  return q.includes(`mimeType!='${FOLDER_MIME}'`);
 }
 
 /** 폴더 찾기(Nopsidian, <vaultName>)를 id 로 응답하는 핸들러 조각 */
@@ -226,6 +232,7 @@ describe('upload', () => {
       if (folderQueryName(call) === 'notes') return json({ files: [{ id: 'folder-notes' }] });
       const found = foundFolders(call);
       if (found) return found;
+      if (isFileLookup(call)) return json({ files: [] });
       uploaded.push(call);
       return json({
         id: 'new-1',
@@ -285,6 +292,7 @@ describe('upload', () => {
         // Nopsidian 만 없다 → 만들어진다
         return json({ files: name === 'Nopsidian' ? [] : [{ id: `found-${name}` }] });
       }
+      if (isFileLookup(call)) return json({ files: [] });
       return json({
         id: 'new-1',
         appProperties: { nopsVault: VAULT_KEY, relPath: 'notes/a.md', contentHash: sha(bytes), contentMd5: md5(bytes) },
@@ -320,6 +328,7 @@ describe('upload', () => {
     const { fetch, calls } = makeFetch((call) => {
       const found = foundFolders(call);
       if (found) return found;
+      if (isFileLookup(call)) return json({ files: [] });
       if (call.url === 'https://upload.example/session-1') {
         return json({
           id: 'big-1',
@@ -426,6 +435,196 @@ describe('upload', () => {
     ).rejects.toBeInstanceOf(RevisionConflictError);
     expect(calls.some((c) => c.url.includes('uploadType'))).toBe(false);
   });
+
+  it('같은 이름의 남의 파일이 있으면 중복을 만들지 않고 실패한다', async () => {
+    const bytes = utf8('x');
+    let uploads = 0;
+    const { fetch } = makeFetch((call) => {
+      const found = foundFolders(call);
+      if (found) return found;
+      if (call.url.includes('uploadType')) {
+        uploads++;
+        return json({ id: 'dup' });
+      }
+      // 같은 부모에 같은 이름이 있지만 이 볼트의 파일이 아니다(relPath 가 다르다)
+      return json({ files: [{ id: 'other', appProperties: { relPath: 'b.md' }, headRevisionId: 'rev-o', size: '1' }] });
+    });
+    const { client } = setup(fetch);
+
+    const error = await client.upload({ path: 'a.md', bytes, hash: sha(bytes) }).catch((err: unknown) => err);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('이미 같은 이름의 파일');
+    expect(uploads).toBe(0);
+  });
+
+  it('목록에 없던 같은 경로 파일을 찾으면 새로 만들지 않고 그 파일을 갱신한다', async () => {
+    const bytes = utf8('v2');
+    const { fetch, calls } = makeFetch((call) => {
+      if (call.url.includes('/drive/v3/files/old-1?fields=headRevisionId')) return json({ headRevisionId: 'rev-1' });
+      if (folderQueryName(call) === 'notes') return json({ files: [{ id: 'folder-notes' }] });
+      const found = foundFolders(call);
+      if (found) return found;
+      if (call.url.includes('uploadType')) {
+        return json({
+          id: 'old-1',
+          appProperties: { nopsVault: VAULT_KEY, relPath: 'notes/a.md', contentHash: sha(bytes), contentMd5: md5(bytes) },
+          headRevisionId: 'rev-2',
+          size: String(bytes.length),
+        });
+      }
+      // 경합으로 목록에는 없었지만 실제로는 같은 경로의 우리 파일이 있다
+      return json({
+        files: [
+          {
+            id: 'old-1',
+            appProperties: { nopsVault: VAULT_KEY, relPath: 'notes/a.md', contentHash: 'old-hash', contentMd5: 'old-md5' },
+            headRevisionId: 'rev-1',
+            size: '2',
+          },
+        ],
+      });
+    });
+    const { client } = setup(fetch);
+
+    const file = await client.upload({ path: 'notes/a.md', bytes, hash: sha(bytes) });
+
+    const up = required(calls.find((c) => c.url.includes('uploadType')), '업로드 요청이 없어요');
+    expect(up.method).toBe('PATCH');
+    expect(new URL(up.url).pathname).toBe('/upload/drive/v3/files/old-1');
+    expect(file).toEqual<RemoteFile>({ id: 'old-1', path: 'notes/a.md', hash: sha(bytes), revision: 'rev-2', size: bytes.length });
+  });
+
+  it('폴더 생성 POST 가 네트워크 오류로 끊기면 이미 만들어진 폴더를 찾아 재사용한다', async () => {
+    const bytes = utf8('x');
+    let folderPosts = 0;
+    let folderMade = false;
+    const { fetch, calls } = makeFetch((call) => {
+      if (call.method === 'POST' && new URL(call.url).pathname === '/drive/v3/files') {
+        folderPosts++;
+        folderMade = true; // 서버에는 만들어졌지만 응답이 유실됐다
+        throw new TypeError('fetch failed');
+      }
+      const name = folderQueryName(call);
+      if (name === 'Nopsidian') return json({ files: [{ id: 'folder-nopsidian' }] });
+      if (name === VAULT_NAME) return json({ files: [{ id: 'folder-vault' }] });
+      if (name === 'notes') return json({ files: folderMade ? [{ id: 'folder-made' }] : [] });
+      if (isFileLookup(call)) return json({ files: [] });
+      return json({
+        id: 'new-1',
+        appProperties: { nopsVault: VAULT_KEY, relPath: 'notes/a.md', contentHash: sha(bytes), contentMd5: md5(bytes) },
+        headRevisionId: 'rev-1',
+        size: String(bytes.length),
+      });
+    });
+    const { client, sleeps } = setup(fetch);
+
+    const file = await client.upload({ path: 'notes/a.md', bytes, hash: sha(bytes) });
+
+    expect(folderPosts).toBe(1); // 두 번 만들지 않았다
+    expect(file.id).toBe('new-1');
+    expect(sleeps).toEqual([]); // 확인해서 성공했으므로 기다리지 않았다
+    const up = required(calls.find((c) => c.url.includes('uploadType')), '업로드 요청이 없어요');
+    const { metadata } = splitMultipart(required(up.headers['Content-Type'], 'Content-Type 이 없어요'), required(up.body, '본문이 없어요') as Uint8Array);
+    expect((JSON.parse(metadata) as { parents: string[] }).parents).toEqual(['folder-made']);
+  });
+
+  it('새 파일 업로드 POST 가 네트워크 오류로 끊기면 이미 만들어진 파일을 찾아 재사용한다', async () => {
+    const bytes = utf8('hello');
+    let lookups = 0;
+    let uploadPosts = 0;
+    const made = makeFetch((call) => {
+      const found = foundFolders(call);
+      if (found) return found;
+      if (isFileLookup(call)) {
+        lookups++;
+        // 첫 조회(업로드 전)에는 없고, 재시도 전 조회에는 우리 업로드가 만들어 둔 파일이 있다
+        return json({
+          files:
+            lookups === 1
+              ? []
+              : [
+                  {
+                    id: 'new-1',
+                    appProperties: { nopsVault: VAULT_KEY, relPath: 'a.md', contentHash: sha(bytes) },
+                    headRevisionId: 'rev-1',
+                    size: String(bytes.length),
+                  },
+                ],
+        });
+      }
+      uploadPosts++;
+      throw new TypeError('fetch failed');
+    });
+    const { client, sleeps: slept } = setup(made.fetch);
+
+    const file = await client.upload({ path: 'a.md', bytes, hash: sha(bytes) });
+
+    expect(uploadPosts).toBe(1); // 다시 올리지 않았다
+    expect(lookups).toBe(2);
+    expect(slept).toEqual([]);
+    expect(file).toEqual<RemoteFile>({ id: 'new-1', path: 'a.md', hash: sha(bytes), revision: 'rev-1', size: bytes.length });
+  });
+
+  it('5xx 로 끊긴 새 파일 업로드도 이미 만들어졌는지 확인한 뒤 재시도한다', async () => {
+    const bytes = utf8('hello');
+    let uploadPosts = 0;
+    let made = false;
+    const { fetch } = makeFetch((call) => {
+      const found = foundFolders(call);
+      if (found) return found;
+      if (isFileLookup(call)) {
+        return json({
+          files: made
+            ? [
+                {
+                  id: 'new-1',
+                  appProperties: { nopsVault: VAULT_KEY, relPath: 'a.md', contentHash: sha(bytes) },
+                  headRevisionId: 'rev-1',
+                  size: String(bytes.length),
+                },
+              ]
+            : [],
+        });
+      }
+      uploadPosts++;
+      made = true; // 5xx 지만 실제로는 만들어졌다
+      return json({ error: { message: 'backend error' } }, 503);
+    });
+    const { client } = setup(fetch);
+
+    const file = await client.upload({ path: 'a.md', bytes, hash: sha(bytes) });
+
+    expect(uploadPosts).toBe(1);
+    expect(file.id).toBe('new-1');
+  });
+
+  it('429 는 거부된 것이 확실하므로 생성 요청도 확인 조회 없이 재시도한다', async () => {
+    const bytes = utf8('x');
+    let lookups = 0;
+    let uploadPosts = 0;
+    const { fetch } = makeFetch((call) => {
+      const found = foundFolders(call);
+      if (found) return found;
+      if (isFileLookup(call)) {
+        lookups++;
+        return json({ files: [] });
+      }
+      uploadPosts++;
+      if (uploadPosts === 1) return json({ error: {} }, 429);
+      return json({
+        id: 'new-1',
+        appProperties: { nopsVault: VAULT_KEY, relPath: 'a.md', contentHash: sha(bytes), contentMd5: md5(bytes) },
+        headRevisionId: 'rev-1',
+        size: String(bytes.length),
+      });
+    });
+    const { client } = setup(fetch);
+
+    await client.upload({ path: 'a.md', bytes, hash: sha(bytes) });
+
+    expect(uploadPosts).toBe(2);
+    expect(lookups).toBe(1); // 업로드 전 확인 한 번뿐, 재시도 전에는 조회하지 않았다
+  });
 });
 
 describe('move', () => {
@@ -519,6 +718,44 @@ describe('오류 처리와 재시도', () => {
 
     expect(calls).toHaveLength(2);
     expect(sleeps).toEqual([3000]);
+  });
+
+  it('429 의 Retry-After 가 5분을 넘으면 5분으로 잘라 기다린다', async () => {
+    const { fetch } = makeFetch((_call, index) => (index === 0 ? json({ error: {} }, 429, { 'retry-after': '3600' }) : json({ id: 'id-1' })));
+    const { client, sleeps } = setup(fetch);
+
+    await client.trash('id-1');
+
+    expect(sleeps).toEqual([300_000]);
+  });
+
+  it('Retry-After HTTP-date 는 그 시각까지 기다리고, 이미 지난 시각이면 0 이다', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-12T00:00:00Z'));
+      const future = new Date(Date.now() + 90_000).toUTCString();
+      const first = makeFetch((_call, index) => (index === 0 ? json({ error: {} }, 429, { 'retry-after': future }) : json({ id: 'id-1' })));
+      const a = setup(first.fetch);
+      await a.client.trash('id-1');
+      expect(a.sleeps).toEqual([90_000]);
+
+      const past = new Date(Date.now() - 90_000).toUTCString();
+      const second = makeFetch((_call, index) => (index === 0 ? json({ error: {} }, 429, { 'retry-after': past }) : json({ id: 'id-1' })));
+      const b = setup(second.fetch);
+      await b.client.trash('id-1');
+      expect(b.sleeps).toEqual([0]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('Retry-After 를 해석할 수 없으면 지수 백오프를 쓴다', async () => {
+    const { fetch } = makeFetch((_call, index) => (index === 0 ? json({ error: {} }, 429, { 'retry-after': '나중에' }) : json({ id: 'id-1' })));
+    const { client, sleeps } = setup(fetch);
+
+    await client.trash('id-1');
+
+    expect(sleeps).toEqual([1000]);
   });
 
   it('429(Retry-After 없음)는 1s, 2s, 4s … 로 재시도한다', async () => {
@@ -621,6 +858,7 @@ describe('오류 처리와 재시도', () => {
     const { fetch } = makeFetch((call) => {
       const found = foundFolders(call);
       if (found) return found;
+      if (isFileLookup(call)) return json({ files: [] });
       return new Response(null, { status: 200 });
     });
     const { client } = setup(fetch);

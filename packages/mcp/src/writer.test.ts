@@ -121,4 +121,22 @@ describe('NoteWriter', () => {
     advance(61_000);
     expect(code(() => writer.create('create_note', 'AI/c', '3'))).toBe('none');
   });
+  it('바뀌지 않는 modify(no-op)도 횟수 한도에 센다 — 파일은 그대로', () => {
+    const { root, writer, advance } = setup({ maxWritesPerMinute: 2 });
+    mkdirSync(path.join(root, 'AI'));
+    writeFileSync(path.join(root, 'AI/n.md'), '내용\n');
+    const noop = (disk: string) => disk;
+    const first = writer.modify('update_database_row', 'AI/n', noop);
+    expect(first).toMatchObject({ path: 'AI/n.md', status: 'saved', hash: sha256('내용\n') });
+    writer.modify('update_database_row', 'AI/n', noop);
+    expect(code(() => writer.modify('update_database_row', 'AI/n', noop))).toBe('rate-limit');
+    expect(readFileSync(path.join(root, 'AI/n.md'), 'utf8')).toBe('내용\n');
+    // 쓰지 않았으므로 역사 스냅샷도 생기지 않는다
+    expect(existsSync(path.join(root, '.nopsidian/history'))).toBe(false);
+    advance(61_000);
+    expect(code(() => writer.modify('update_database_row', 'AI/n', noop))).toBe('none');
+    // 실제로 바뀌는 수정은 그대로 저장된다
+    expect(writer.modify('update_database_row', 'AI/n', (d) => `${d}추가\n`).status).toBe('saved');
+    expect(readFileSync(path.join(root, 'AI/n.md'), 'utf8')).toBe('내용\n추가\n');
+  });
 });

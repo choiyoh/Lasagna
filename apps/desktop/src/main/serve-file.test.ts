@@ -32,4 +32,15 @@ describe('serveFile', () => {
     expect((await serveFile(path.join(dir, 'none'), req())).status).toBe(404);
     expect((await serveFile(dir, req())).status).toBe(404);
   });
+
+  it('빈 범위·0 접미사·비유한 값은 스트림을 열지 않고 416으로 거부한다', async () => {
+    // `bytes=-` 는 start·end 가 모두 NaN 이 되어 createReadStream 이 던지던 입력이다
+    const empty = await serveFile(file, req('bytes=-'));
+    expect(empty.status).toBe(416);
+    expect(empty.headers.get('content-range')).toBe('bytes */10');
+    expect((await serveFile(file, req('bytes=-0'))).status).toBe(416);
+    expect((await serveFile(file, req(`bytes=${'9'.repeat(400)}-`))).status).toBe(416); // Number → Infinity
+    expect((await serveFile(file, req(`bytes=0-${'9'.repeat(400)}`))).status).toBe(416);
+    expect((await serveFile(file, req('bytes=3-1'))).status).toBe(416);
+  });
 });

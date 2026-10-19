@@ -124,7 +124,11 @@ export class NoteWriter {
     const rel = this.guard(tool, rawPath);
     const disk = this.readDisk(tool, rel);
     const next = mutate(disk);
-    if (next === disk) return { path: rel, hash: sha256(disk), bytes: Buffer.byteLength(disk), status: 'saved' };
+    if (next === disk) {
+      // 파일은 건드리지 않지만 시도는 한도에 센다 — 같은 값으로 반복 호출해 볼트 재스캔을 일으키는 것을 막는다.
+      this.countAttempt();
+      return { path: rel, hash: sha256(disk), bytes: Buffer.byteLength(disk), status: 'saved' };
+    }
     return this.commit(tool, 'update', rel, next, disk);
   }
 
@@ -186,10 +190,15 @@ export class NoteWriter {
     const bytes = Buffer.byteLength(text);
     if (bytes > this.policy.maxBytes) this.deny(tool, rel, 'too-large', `내용이 너무 커요(${bytes}바이트, 한도 ${this.policy.maxBytes})`);
     const r = saveNote({ root: this.policy.root, rel, content: text, baseHash: disk === null ? null : sha256(disk), ...(disk !== null ? { baseContent: disk } : {}), now: this.now() });
-    this.stamps.push(this.now().getTime());
+    this.countAttempt();
     const status = r.status === 'merged' ? 'merged' : r.status === 'conflict' || r.status === 'copy' ? 'conflict' : 'saved';
     this.log({ action, tool, path: rel, hashBefore: disk === null ? null : sha256(disk), hashAfter: r.hash, bytes, ...(status !== 'saved' ? { note: status } : {}) });
     return { path: rel, hash: r.hash, bytes, status };
+  }
+
+  /** 쓰기 시도 한 건을 한도에 기록한다. `guard()` 의 검사와 짝을 이룬다(실제로 쓰지 않은 no-op 도 센다). */
+  private countAttempt(): void {
+    this.stamps.push(this.now().getTime());
   }
 
   private deny(tool: string, rel: string, code: WriteErrorCode, message: string): never {

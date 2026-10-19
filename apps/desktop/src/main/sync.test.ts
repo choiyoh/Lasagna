@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -33,6 +33,28 @@ describe('CredentialStore', () => {
     store.save({ clientId: 'c'.repeat(12), tokens: { accessToken: 'a', refreshToken: 'r', expiresAt: 1 } });
     store.clearTokens();
     expect(store.load()).toEqual({ clientId: 'c'.repeat(12) });
+  });
+  it('load() 가 실패해도(키체인 없음·복호화 실패) 파일에 남은 토큰을 지운다', () => {
+    const file = tmpFile();
+    const store = new CredentialStore(file, box());
+    store.save({ clientId: 'c'.repeat(12), tokens: { accessToken: 'a', refreshToken: 'r', expiresAt: 1 } });
+    // 키체인을 쓸 수 없게 되어 load() 가 null 을 돌려주는 상황
+    const blind = new CredentialStore(file, box(false));
+    expect(blind.load()).toBeNull();
+    blind.clearTokens();
+    expect(existsSync(file)).toBe(false);
+
+    // 파일이 아예 없어도 조용히 끝난다
+    expect(() => new CredentialStore(file, box(false)).clearTokens()).not.toThrow();
+  });
+  it('이미 있던 파일에 다시 저장해도 권한을 0600 으로 맞춘다', () => {
+    const file = tmpFile();
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, '{}', { mode: 0o644 });
+    const store = new CredentialStore(file, box());
+    store.save({ clientId: 'c'.repeat(12) });
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(store.load()).toMatchObject({ clientId: 'c'.repeat(12) });
   });
 });
 

@@ -33,7 +33,8 @@ export function useLinkHosts({ notes, selected, assets, setSelected, setFocus }:
 
   const openLink = useCallback(
     (link: WikiLinkTarget) => {
-      const id = resolver(link.target, selected ?? '');
+      // `[[#제목]]` 처럼 노트 이름이 없는 링크는 지금 열려 있는 노트를 가리킨다(색인과 같은 규칙)
+      const id = resolver(link.target || (selected ?? ''), selected ?? '');
       const note = id === undefined ? undefined : notes[id];
       if (note) {
         setFocus(link.heading || link.block ? { heading: link.heading, block: link.block } : null);

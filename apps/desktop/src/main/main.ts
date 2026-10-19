@@ -150,7 +150,6 @@ const syncController = new SyncController({
   workerFile: path.join(__dirname, 'sync-worker.cjs'),
   openExternal: (url) => {
     if (!openExternalSafe(url)) throw new Error('허용되지 않은 URL');
-    void shell.openExternal(url);
   },
   broadcast: (status) => broadcast('sync.changed', status),
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HistoryEntryDto } from './history-types';
 import { lineDiff } from '@nopsidian/core/diff';
 import { flushAll } from './flush';
@@ -21,10 +21,21 @@ export function HistoryPanel({ path, onRestored }: Props) {
   const [picked, setPicked] = useState<string | null>(null);
   const [old, setOld] = useState('');
   const [current, setCurrent] = useState('');
+  /** 다시 읽기를 여러 번 요청했을 때 늦게 도착한 이전 결과를 버리기 위한 번호 */
+  const loadSeq = useRef(0);
 
   const load = useCallback(async () => {
-    setEntries(await window.nops.history.list({ path }));
-    setCurrent((await window.nops.note.read({ path })).content);
+    const seq = ++loadSeq.current;
+    try {
+      const list = await window.nops.history.list({ path });
+      if (seq !== loadSeq.current) return;
+      setEntries(list);
+      const { content } = await window.nops.note.read({ path });
+      if (seq !== loadSeq.current) return;
+      setCurrent(content);
+    } catch {
+      // 읽지 못하면 이전 화면을 그대로 둔다(다음 변경 알림에서 다시 시도한다)
+    }
   }, [path]);
 
   useEffect(() => {
@@ -43,7 +54,19 @@ export function HistoryPanel({ path, onRestored }: Props) {
 
   useEffect(() => {
     if (!picked) return;
-    void window.nops.history.read({ path, id: picked }).then((r) => setOld(r.content));
+    let cancelled = false;
+    window.nops.history
+      .read({ path, id: picked })
+      .then((r) => {
+        // 그 사이 다른 버전을 골랐으면 늦게 온 답은 버린다
+        if (!cancelled) setOld(r.content);
+      })
+      .catch(() => {
+        // 읽지 못하면 이전 화면을 그대로 둔다
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [picked, path]);
 
   const restore = async () => {

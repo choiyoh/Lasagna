@@ -1,8 +1,10 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { subscribe, type AsyncSubscription } from '@parcel/watcher';
 import { realpathSync } from 'node:fs';
-import path from 'node:path';
+import { lstat, readdir } from 'node:fs/promises';
 import { Indexer } from './indexer';
+import { WatchRecovery } from './watch-recovery';
+import { classifyWatchEvents, type PendingKind, type WatchEvent } from './watch-events';
 import type { WorkerRequest, WorkerResponse, WorkerEvent } from './protocol';
 
 const port = parentPort!;
@@ -13,8 +15,8 @@ const watchRoot = realpathSync(root);
 
 const post = (m: WorkerResponse | WorkerEvent) => port.postMessage(m);
 
-const pending = new Map<string, 'add' | 'change' | 'unlink'>();
-const pendingAssets = new Map<string, 'add' | 'change' | 'unlink'>();
+const pending = new Map<string, PendingKind>();
+const pendingAssets = new Map<string, PendingKind>();
 let timer: NodeJS.Timeout | undefined;
 
 /** 300ms 디바운스로 모아서 처리한다. 같은 파일의 이벤트는 마지막 것만 남긴다. */
@@ -43,22 +45,59 @@ function flush() {
 }
 
 let sub: AsyncSubscription | undefined;
+/** 감시 이벤트 묶음을 받은 순서대로 처리하는 사슬 */
+let eventChain: Promise<void> = Promise.resolve();
+/** 증분 재스캔을 한 줄로 세우는 사슬(시작 직후 스캔과 복구 스캔이 겹치지 않게) */
+let scanChain: Promise<void> = Promise.resolve();
+
+/** 증분 재스캔: 감시가 놓친 사이의 변화(바뀐 것·지워진 것)를 화면에 알린다. */
+function rescan(): Promise<void> {
+  const next = scanChain.then(async () => {
+    const late = await ix.scanParallel();
+    for (const rel of late.changedPaths.slice(0, 500)) post({ type: 'event', name: 'note.changed', payload: { path: rel, kind: 'change' } });
+    for (const rel of late.removedPaths.slice(0, 500)) post({ type: 'event', name: 'note.changed', payload: { path: rel, kind: 'unlink' } });
+  });
+  scanChain = next.catch(() => undefined); // 실패해도 다음 스캔은 이어서 돈다
+  return next;
+}
+
+/** 오류를 알리고 복구(재구독 + 증분 스캔)를 예약한다. 복구는 하나만, 실패가 이어지면 물러나서. */
+const recovery = new WatchRecovery({
+  onError: (message) => post({ type: 'event', name: 'index.watchError', payload: { message } }),
+  run: async () => {
+    await sub?.unsubscribe().catch(() => undefined);
+    sub = undefined;
+    await startWatching();
+    await rescan();
+  },
+});
+
+/** 감시를 새로 건다. 구독 자체가 실패하면 복구 스케줄러가 물러나며 다시 시도한다. */
 async function startWatching() {
   sub = await subscribe(
     watchRoot,
     (err, events) => {
-      if (err) return;
-      for (const e of events) {
-        const rel = path.relative(watchRoot, e.path).split(path.sep).join('/');
-        if (rel.split('/').some((seg) => seg.startsWith('.'))) continue;
-        const kind = e.type === 'delete' ? 'unlink' : e.type === 'create' ? 'add' : 'change';
-        if (rel.toLowerCase().endsWith('.md')) pending.set(rel, kind);
-        else if (!rel.includes('.nops-tmp-')) pendingAssets.set(rel, kind);
+      if (err) {
+        recovery.fail(err.message);
+        return;
       }
-      timer ??= setTimeout(flush, 300);
+      // 분류가 실패해도 워커를 죽이지 않는다 — 복구(재구독 + 스캔)로 따라잡는다
+      // 폴더 확인(stat)이 비동기라 묶음끼리 순서가 뒤바뀌지 않게 한 줄로 세운다(create 뒤 delete 가 먼저 반영되면 지운 노트가 되살아난다)
+      eventChain = eventChain
+        .then(() => collectEvents(events))
+        .catch((e) => recovery.fail(e instanceof Error ? e.message : String(e)));
     },
     { ignore: ['**/.nopsidian/**', '**/.git/**', '**/node_modules/**'] },
   );
+}
+
+/** 감시 이벤트를 pending 큐에 모은다. 새로 만든 폴더는 이벤트가 안 오므로 안을 훑어서 채운다. */
+async function collectEvents(events: WatchEvent[]) {
+  // 폴더인지 보는 데만 쓰므로 심볼릭 링크를 따라가지 않는 lstat 을 넘긴다
+  const batch = await classifyWatchEvents(events, watchRoot, { stat: lstat, readdir });
+  for (const [rel, kind] of batch.notes) pending.set(rel, kind);
+  for (const [rel, kind] of batch.assets) pendingAssets.set(rel, kind);
+  timer ??= setTimeout(flush, 300);
 }
 
 port.on('message', (req: WorkerRequest) => {
@@ -78,6 +117,7 @@ port.on('message', (req: WorkerRequest) => {
       case 'search':
         return post({ type: 'response', id: req.id, result: ix.search(req.params.q, req.params.limit) });
       case 'close':
+        recovery.stop();
         void sub?.unsubscribe();
         ix.close();
         post({ type: 'response', id: req.id, result: null });
@@ -100,9 +140,12 @@ ix.scanParallel((done, total) => {
 })
   .then(async () => {
     post({ type: 'ready' });
-    await startWatching();
-    const late = await ix.scanParallel();
-    for (const rel of late.changedPaths.slice(0, 500)) post({ type: 'event', name: 'note.changed', payload: { path: rel, kind: 'change' } });
-    for (const rel of late.removedPaths.slice(0, 500)) post({ type: 'event', name: 'note.changed', payload: { path: rel, kind: 'unlink' } });
+    try {
+      await startWatching();
+    } catch (e) {
+      // 감시를 못 걸어도 색인 자체는 살아 있어야 한다 — 복구 스케줄러가 물러나며 다시 시도한다
+      recovery.fail(e instanceof Error ? e.message : String(e));
+    }
+    await rescan();
   })
   .catch((e) => post({ type: 'fatal', error: e instanceof Error ? e.message : String(e) }));

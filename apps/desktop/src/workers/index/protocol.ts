@@ -32,4 +32,6 @@ export type WorkerResponse =
 export type WorkerEvent =
   | { type: 'event'; name: 'note.changed'; payload: { path: string; kind: 'add' | 'change' | 'unlink'; hash?: string } }
   | { type: 'event'; name: 'asset.changed'; payload: { path: string; kind: 'add' | 'change' | 'unlink' } }
-  | { type: 'event'; name: 'index.progress'; payload: { done: number; total: number } };
+  | { type: 'event'; name: 'index.progress'; payload: { done: number; total: number } }
+  /** 파일 감시가 실패했다(복구를 시도한다). 렌더러로 보내지 않고 메인 로그로만 남긴다. */
+  | { type: 'event'; name: 'index.watchError'; payload: { message: string } };

@@ -77,6 +77,11 @@ export async function openVaultAt(root: string): Promise<VaultInfo> {
   const selfWrites = new Map<string, string>();
   const selfOrigins = new Map<string, number>();
   const index = new IndexClient(real, (e) => {
+    // 감시 오류는 IPC 계약에 없는 이벤트라 렌더러로 보내지 않고 로그로만 남긴다
+    if (e.name === 'index.watchError') {
+      console.warn(`[index] 파일 감시 오류: ${e.payload.message}`);
+      return;
+    }
     if (e.name === 'note.changed' || e.name === 'asset.changed') vaultHooks.changed?.();
     if (e.name === 'note.changed') {
       const mine = e.payload.hash !== undefined && selfWrites.get(e.payload.path) === e.payload.hash;

@@ -37,7 +37,7 @@ jobs:
       - run: pnpm -r test
 
   test-all-os:
-    if: github.event_name == 'workflow_dispatch' && inputs.all-os
+    if: github.event_name == 'workflow_dispatch' && inputs['all-os']
     strategy:
       fail-fast: false
       matrix:

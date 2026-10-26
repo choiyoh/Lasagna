@@ -241,7 +241,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     sigmaRef.current = sigma;
     // 바뀐 곳만 다듬는 경우(warm·고정)는 이전 화면 틀과 카메라를 그대로 쓴다. 그러지 않으면 새 노드 하나로 범위가 바뀌어
     // 그래프 전체가 커졌다 작아지며(재정규화) 흔들려 보이고, 사용자가 확대·이동한 화면도 처음으로 돌아간다.
-    const keepView = plan.warm && settled && prev !== null && view.current !== null;
+    const keepView = plan.warm && prev !== null && view.current !== null;
     if (keepView) {
       sigma.setCustomBBox(view.current!.bbox);
       sigma.getCamera().setState(view.current!.camera);
@@ -310,7 +310,9 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
       else if (finished) saveLayout(cacheKey, graph);
     };
     const warm = plan.warm && settled;
-    if (!warm) setReady(false);
+    // 도는 중이던 배치를 이어받을 때는 캔버스를 숨기지 않는다(숨기면 데이터가 갱신될 때마다 깜빡인다)
+    const resume = plan.warm && !settled;
+    if (!plan.warm) setReady(false);
     worker.onmessage = (ev: MessageEvent<LayoutOut>) => {
       const { positions, done } = ev.data;
       target.set(positions);
@@ -329,7 +331,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
       setStats(`${ids.length}개 노드 · ${graph.size}개 링크${done ? '' : ' · 배치 중…'}`);
     };
     const fixed = warm ? Uint8Array.from(ids, (id) => (plan.fixed.has(id) ? 1 : 0)) : undefined;
-    const init: LayoutIn = { type: 'init', ids, positions: pos, edges: new Uint32Array(edgeArr), forces: live.current.settings.forces, warm, ...(fixed ? { fixed } : {}) };
+    const init: LayoutIn = { type: 'init', ids, positions: pos, edges: new Uint32Array(edgeArr), forces: live.current.settings.forces, warm, resume, ...(fixed ? { fixed } : {}) };
     workerForces.current = init.forces;
     worker.postMessage(init);
     setStats(`${ids.length}개 노드 · ${graph.size}개 링크`);

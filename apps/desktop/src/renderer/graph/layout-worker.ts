@@ -13,6 +13,8 @@ export type LayoutIn =
       forces: Forces;
       /** 거의 모든 위치를 저장된 배치에서 가져왔으면 조금만 다듬는다 */
       warm?: boolean;
+      /** 아직 도는 중이던 배치를 이어받는다(고정 없이, 이미 어느 정도 자리 잡은 상태에서 식히며 마무리) */
+      resume?: boolean;
       /** 1 인 노드는 움직이지 않는다(연결이 그대로인 기존 노드) */
       fixed?: Uint8Array;
     }
@@ -54,7 +56,7 @@ self.onmessage = (ev: MessageEvent<LayoutIn>) => {
   }
   runner = new LayoutRunner(msg);
   // 처음 배치는 화면에 보이기 전에 미리 돌려 둔다(가장 격렬한 초반 움직임을 보여 주지 않으려고)
-  if (!msg.warm) {
+  if (!msg.warm && !msg.resume) {
     const t0 = performance.now();
     while (runner.iterations < WARMUP_ITERATIONS && performance.now() - t0 < WARMUP_MS) runner.step();
   }

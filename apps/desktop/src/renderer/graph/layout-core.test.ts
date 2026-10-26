@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHUNK, LayoutRunner, MAX_ITERATIONS, WARM_ITERATIONS } from './layout-core';
+import { CHUNK, LayoutRunner, MAX_ITERATIONS, RESUME_ITERATIONS, WARM_ITERATIONS } from './layout-core';
 
 const forces = { gravity: 0.3, repulsion: 0.3, linkDistance: 0.5 };
 
@@ -47,6 +47,14 @@ describe('LayoutRunner', () => {
     const last = delta();
     expect(r.done).toBe(true);
     expect(last).toBeLessThan(first / 10);
+  });
+
+  it('도는 중이던 배치를 이어받으면(resume) RESUME_ITERATIONS 만 돌고 고정하지 않는다', () => {
+    const r = new LayoutRunner({ ...setup(30), resume: true });
+    let steps = 0;
+    while (!r.step()) steps++;
+    expect(steps * CHUNK).toBeLessThanOrEqual(RESUME_ITERATIONS);
+    expect(steps * CHUNK).toBeGreaterThan(RESUME_ITERATIONS - 2 * CHUNK);
   });
 
   it('다듬기(warm)는 WARM_ITERATIONS 만 돈다', () => {

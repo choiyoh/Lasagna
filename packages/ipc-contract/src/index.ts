@@ -68,6 +68,14 @@ export const graphSettings = z.object({
 });
 export type GraphSettings = z.infer<typeof graphSettings>;
 
+/** `.nopsidian/graph-layout.json` — 마지막 그래프 배치. localStorage 가 재시작을 못 견뎌도 볼트 파일로 남긴다. */
+export const graphLayout = z.object({
+  v: z.literal(2),
+  done: z.boolean(),
+  pos: z.record(z.string().max(1024), z.tuple([z.number().finite(), z.number().finite()])),
+});
+export type GraphLayout = z.infer<typeof graphLayout>;
+
 
 export const syncStatus = z.object({
   /** Google 클라이언트 ID 가 저장돼 있다 */
@@ -355,6 +363,8 @@ export const contract = {
   'order.set': { input: z.record(z.string().max(1024), z.array(z.string().max(255)).max(5000)), output: z.undefined() },
   'graph.getSettings': { input: z.undefined(), output: graphSettings.nullable() },
   'graph.setSettings': { input: graphSettings, output: z.undefined() },
+  'graph.getLayout': { input: z.undefined(), output: graphLayout.nullable() },
+  'graph.setLayout': { input: graphLayout, output: z.undefined() },
   'sync.status': { input: z.undefined(), output: syncStatus },
   /** Google 클라이언트 ID(사용자 본인 GCP 프로젝트)를 OS 키체인으로 암호화해 저장한다. */
   'sync.setClient': {

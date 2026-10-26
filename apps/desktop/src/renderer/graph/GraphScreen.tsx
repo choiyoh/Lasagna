@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphSettings } from '@nopsidian/ipc-contract';
 import { useGraphData } from './graph-data';
 import { GraphView } from './GraphView';
+import { hydrateLayout, layoutCacheKey, registerLayoutPersister } from './layout-cache';
 import { DEFAULT_GRAPH_SETTINGS, GROUP_PALETTE } from './settings';
 
 interface ScreenProps {
@@ -18,6 +19,28 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
   const loaded = useRef(false);
   /** 저장된 설정을 읽기 전에는 그래프를 그리지 않는다(기본 힘으로 배치했다가 저장된 힘으로 다시 돌리며 흔들리지 않게) */
   const [settingsReady, setSettingsReady] = useState(false);
+  /** 볼트 파일의 마지막 배치를 읽었는가 — 읽기 전에 그리면 콜드로 시작해 재배치한다 */
+  const [layoutLoaded, setLayoutLoaded] = useState(false);
+  const cacheKey = layoutCacheKey(vaultId, 'global');
+  useEffect(() => {
+    registerLayoutPersister((layout) => {
+      // 볼트를 닫는 중이면 실패할 수 있다 — 저장 실패는 다음 진입이 콜드일 뿐이다
+      void window.nops.graph.setLayout(layout).catch(() => undefined);
+    });
+    let alive = true;
+    void window.nops.graph
+      .getLayout()
+      .then((layout) => {
+        if (layout) hydrateLayout(cacheKey, layout);
+      })
+      .catch(() => undefined) // 파일이 없거나 깨졌으면 콜드로 그린다
+      .finally(() => {
+        if (alive) setLayoutLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [cacheKey]);
 
   useEffect(() => {
     void window.nops.graph
@@ -160,7 +183,7 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
             + 그룹 추가
           </button>
         </aside>
-        {settingsReady && <GraphView data={data} settings={settings} current={current} onOpen={onOpen} testId="graph-global" cacheKey="global" focus={focus} />}
+        {settingsReady && layoutLoaded && <GraphView data={data} settings={settings} current={current} onOpen={onOpen} testId="graph-global" cacheKey={cacheKey} focus={focus} />}
       </div>
     </div>
   );

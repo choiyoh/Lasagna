@@ -5,9 +5,10 @@ import { EdgeArrowProgram, EdgeRectangleProgram } from 'sigma/rendering';
 import type { GraphData, GraphSettings } from '@nopsidian/ipc-contract';
 import { colorForNode, matchesQuery, parseGraphQuery } from './filter';
 import type { LayoutIn, LayoutOut } from './layout-worker';
-import { adjacency, planLayout, type Point } from './layout-plan';
+import { WARM_KNOWN_SAVED, adjacency, planLayout, type Point } from './layout-plan';
 import { mix, readPalette, type GraphPalette } from './palette';
 import { NodeGlowProgram } from './node-glow';
+import { LEGACY_GLOBAL_KEY, loadLayout, saveLayout } from './layout-cache';
 import { SETTLE_WINDOW_MS, SPINNER_DELAY_MS, isSettled, statsText } from './settle';
 import { webglAvailable } from './webgl';
 
@@ -23,33 +24,6 @@ interface Props {
   cacheKey?: string;
   /** 그래프 검색: 이 노드로 화면을 옮기고 잠깐 강조한다(tick 이 바뀔 때마다) */
   focus?: { id: string; tick: number } | null;
-}
-
-const CACHE_PREFIX = 'nops.graph.layout.';
-
-function loadLayout(key: string | undefined): Map<string, [number, number]> {
-  const out = new Map<string, [number, number]>();
-  if (!key) return out;
-  try {
-    const raw = JSON.parse(localStorage.getItem(CACHE_PREFIX + key) ?? '{}') as Record<string, [number, number]>;
-    for (const [id, p] of Object.entries(raw)) if (Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])) out.set(id, p);
-  } catch {
-    /* 캐시는 없어도 된다 */
-  }
-  return out;
-}
-
-function saveLayout(key: string | undefined, graph: Graph): void {
-  if (!key) return;
-  try {
-    const raw: Record<string, [number, number]> = {};
-    graph.forEachNode((id, a) => {
-      raw[id] = [Math.round((a.x as number) * 100) / 100, Math.round((a.y as number) * 100) / 100];
-    });
-    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(raw));
-  } catch {
-    /* 용량 초과 등은 무시 */
-  }
 }
 
 
@@ -73,8 +47,20 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   const [stats, setStats] = useState('');
   /** WebGL 을 못 쓰면 그래프 대신 안내를 보여 준다(사유가 있으면 함께 보여 준다) */
   const [glFailure, setGlFailure] = useState<{ message: string } | null>(null);
-  /** 첫 배치가 도착하기 전에는 캔버스를 숨겨 두었다가 부드럽게 나타낸다(초반의 요동을 보여 주지 않는다) */
-  const [ready, setReady] = useState(false);
+  /**
+   * 캔버스를 언제 보여 줄지. 저장된(수렴한) 배치가 이 그래프의 노드를 거의 다 덮으면
+   * 워커를 기다리지 않고 **저장된 자리로 바로** 그린다(Obsidian 처럼 진입 시 재배치하지 않는다).
+   * 콜드일 때만 첫 배치가 끝날 때까지 숨긴다.
+   */
+  const [ready, setReady] = useState(() => {
+    if (!cacheKey || data.nodes.length === 0) return false;
+    const cached = loadLayout(cacheKey, LEGACY_GLOBAL_KEY);
+    if (!cached.found) return false;
+    // 개수가 아니라 같은 id 를 덮는지 본다(다른 볼트·크게 바뀐 그래프에서 낡은 자리를 비추지 않게)
+    let known = 0;
+    for (const n of data.nodes) if (cached.positions.has(n.id)) known++;
+    return known / data.nodes.length >= WARM_KNOWN_SAVED;
+  });
   /** 실제 움직임이 잦아들었는가 — 반복 횟수가 아니라 화면 이동량에서 파생한다 */
   const [settled, setSettled] = useState(false);
   /** 400ms 넘게 안 가라앉을 때만 작은 스피너를 보여 준다 */
@@ -118,14 +104,15 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     const prev = graphRef.current;
     const graph = new Graph({ type: 'directed', multi: false });
     // 이전 자리: 지금 그래프가 있으면 그 자리를, 처음 열면 저장해 둔 배치를 쓴다
+    const cached = loadLayout(cacheKey, cacheKey ? LEGACY_GLOBAL_KEY : undefined);
     const prevPos = new Map<string, Point>();
     if (prev) prev.forEachNode((id, a) => prevPos.set(id, [a.x as number, a.y as number]));
-    else for (const [id, p] of loadLayout(cacheKey)) prevPos.set(id, p);
+    else for (const [id, p] of cached.positions) prevPos.set(id, p);
     // 연결이 그대로인 노드는 고정하고, 바뀐 곳만 움직인다(같은 그래프를 다시 열거나 링크 하나가 늘어도 전체가 흔들리지 않게)
     const plan = planLayout(data, prevPos, prev ? prevAdj.current : undefined);
-    // 지난 배치가 아직 도는 중이었다면(열자마자 노트가 바뀐 경우) 고정하지 않고 처음부터 끝까지 이어서 돌린다.
-    // 저장된 배치(localStorage)는 다 가라앉은 것만 저장하므로 고정해도 된다.
-    const settled = !prev || prevFinished.current;
+    // 지난 배치가 아직 도는 중이었다면(열자마자 노트가 바뀐 경우) 고정하지 않고 이어서 돌린다.
+    // 저장된 배치가 "수렴하지 않은"(done:false) 것이면 고정하지 않고 이어서 다듬는다(resume)
+    const settled = !prev ? cached.done : prevFinished.current;
     prevFinished.current = false;
     prevAdj.current = adjacency(data);
     const maxDegree = data.nodes.reduce((m, nd) => Math.max(m, nd.degree), 1);
@@ -268,7 +255,24 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
       sigma.setCustomBBox(view.current!.bbox);
       sigma.getCamera().setState(view.current!.camera);
     }
+    // 저장된 자리로 여는 경우(웜)는 이미 그릴 것이 있다 — 워커가 다듬는 동안에도 바로 보여 준다.
+    // (콜드일 때만 첫 배치가 끝날 때까지 캔버스를 숨긴다)
+    if (plan.warm) setReady(true);
+    // 수렴하지 않은 파일 캐시로 처음 열 때는 그 자리를 그대로 보여 주고, 워커의 이어서 다듬기는
+    // 화면에 반영하지 않고 저장만 한다(다음 진입에서 더 나은 자리로 열린다). 화면이 튀지 않는다.
+    const paintOnly = !prev && cached.found && !cached.done;
     view.current = null;
+
+    // 배치가 도는 동안에는 첫 페인트의 bbox 로 화면 틀을 고정한다(카메라는 레이아웃과 독립).
+    // 사용자가 이미 줌·이동해 둔 화면(keepView/custom bbox)은 건드리지 않는다.
+    let frozenBBox = false;
+    const freezeView = () => {
+      if (frozenBBox || keepView || sigma.getCustomBBox()) return;
+      const b = sigma.getBBox();
+      if (!b) return;
+      sigma.setCustomBBox(b);
+      frozenBBox = true;
+    };
     sigma.on('clickNode', ({ node }) => {
       if (node.startsWith('#') || node.startsWith('?')) return;
       live.current.onOpen(node);
@@ -297,8 +301,18 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     // 워커가 보내 주는 위치는 '목표'일 뿐이고, 화면의 노드는 목표를 향해 부드럽게 따라간다.
     // 배치 계산의 미세한 진동이 그대로 보이지 않고, 노드가 갑자기 튀지도 않는다.
     const target = new Float32Array(pos);
+    /** 워커가 한 번이라도 자리를 보냈는가(보내기 전에 닫으면 저장하지 않는다) */
+    let gotFirst = false;
+    /** 저장할 좌표: 화면 노드가 아니라 워커가 마지막으로 계산한 목표 자리 */
+    const snapshot = (): Map<string, [number, number]> => {
+      const out = new Map<string, [number, number]>();
+      ids.forEach((id, i) => out.set(id, [target[i * 2]!, target[i * 2 + 1]!]));
+      return out;
+    };
     let raf = 0;
     let finished = false;
+    /** 마지막으로 받은 배치가 실제로 수렴했는가(캐시를 done 으로 저장해도 되는가) */
+    let layoutSettled = false;
     let first = true;
     // 노드 속성 객체를 한 번만 찾아 두고 직접 고친다(프레임마다 1만 번 이벤트·조회를 하면 느리다).
     // 화면 갱신은 아래 `sigma.refresh()` 가 한 번에 한다.
@@ -327,32 +341,53 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
         a.x += dx * ease;
         a.y += dy * ease;
       }
-      sigma.refresh();
+      // 배치 중에는 bbox·정규화를 다시 계산하지 않는다 — 화면 배율이 흔들리지 않고(리뷰 원인 4),
+      // 색인 비용도 들지 않는다. 마지막에 한 번만 전체 refresh 로 자동 맞춤한다.
+      sigma.refresh({ skipIndexation: true });
       if (moving) raf = requestAnimationFrame(follow);
-      else if (finished) saveLayout(cacheKey, graph);
+      else if (finished) {
+        // 수렴이 끝났을 때만 한 번 자동 맞춤한다(그 전까지 배율이 흔들리지 않게 bbox 를 고정했다)
+        if (frozenBBox) sigma.setCustomBBox(null);
+        sigma.refresh();
+        saveLayout(cacheKey, snapshot(), layoutSettled);
+      }
     };
     const warm = plan.warm && settled;
     // 도는 중이던 배치를 이어받을 때는 캔버스를 숨기지 않는다(숨기면 데이터가 갱신될 때마다 깜빡인다)
     const resume = plan.warm && !settled;
     if (!plan.warm) setReady(false);
     worker.onmessage = (ev: MessageEvent<LayoutOut>) => {
-      const { positions, done } = ev.data;
+      const { positions, done, busy, settled: converged } = ev.data;
+      gotFirst = true;
       target.set(positions);
       finished = done;
+      layoutSettled = converged;
       if (done) prevFinished.current = true;
       if (first) {
-        // 미리 돌려 둔 첫 배치는 곧바로 보여 주고(자리 잡기), 이후 변화만 부드럽게 따라간다
         first = false;
-        attrs.forEach((a, i) => {
-          a.x = target[i * 2]!;
-          a.y = target[i * 2 + 1]!;
-        });
-        sigma.refresh();
-        setReady(true);
-      } else if (!raf) raf = requestAnimationFrame(follow);
+        if (paintOnly) {
+          // 캐시 자리를 이미 보여 주고 있다 — 이번 계산 결과는 저장만 하고 화면은 그대로 둔다
+          if (finished) saveLayout(cacheKey, snapshot(), layoutSettled);
+        } else {
+          // 미리 돌려 둔 첫 배치는 곧바로 보여 주고(자리 잡기), 이후 변화만 부드럽게 따라간다
+          attrs.forEach((a, i) => {
+            a.x = target[i * 2]!;
+            a.y = target[i * 2 + 1]!;
+          });
+          // 여기서 한 번 전체 refresh 해야 최종 bbox 로 화면이 맞는다(이후에는 skipIndexation)
+          sigma.refresh();
+          setReady(true);
+          if (finished) saveLayout(cacheKey, snapshot(), layoutSettled);
+          else freezeView();
+        }
+      } else if (!raf) {
+        freezeView();
+        raf = requestAnimationFrame(follow);
+      }
       // 반복 횟수(done)가 아니라 실제 이동량으로 "배치 중"을 끝낸다(캔버스가 멈춘 뒤에도 문구가 남지 않게)
       const now = performance.now();
-      let nowSettled = settledRef.current || done;
+      // 워커가 명시적으로 멈추면(busy=false) 이동량과 무관하게 문구를 닫는다(예산 초과 볼트)
+      let nowSettled = settledRef.current || done || !busy;
       if (!nowSettled) {
         const base = settleBase.current;
         if (!base) {
@@ -369,25 +404,26 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
         setSettled(nowSettled);
       }
       setStats(statsText(ids.length, graph.size, nowSettled));
+      // 예산 안에 수렴하지 못해 잠시 멈춘 배치도 남긴다 — 다음 진입에서 이어서 다듬는다(done:false)
+      if (!done && !busy) saveLayout(cacheKey, snapshot(), false);
     };
     const fixed = warm ? Uint8Array.from(ids, (id) => (plan.fixed.has(id) ? 1 : 0)) : undefined;
     const init: LayoutIn = { type: 'init', ids, positions: pos, edges: new Uint32Array(edgeArr), forces: live.current.settings.forces, warm, resume, ...(fixed ? { fixed } : {}) };
     workerForces.current = init.forces;
     worker.postMessage(init);
-    setStats(statsText(ids.length, graph.size, false));
+    // 캐시 자리를 보여 주며 뒤에서 다듬는 경우(paintOnly)는 화면이 이미 정적이다 — 문구·스피너를 켜지 않는다
+    setStats(statsText(ids.length, graph.size, paintOnly));
+    if (paintOnly) {
+      settledRef.current = true;
+      setSettled(true);
+    }
 
     return () => {
       cancelAnimationFrame(raf);
       view.current = { bbox: sigma.getCustomBBox() ?? sigma.getBBox(), camera: sigma.getCamera().getState() };
-      // 다 가라앉은 배치만 저장한다(도중에 닫은 배치를 저장하면 다음에 열 때 그 자리에 고정돼 덜 정리된 채 남는다)
-      if (finished) {
-        // 화면이 아직 목표를 따라가는 중이어도 저장은 최종 자리로 한다
-        attrs.forEach((a, i) => {
-          a.x = target[i * 2]!;
-          a.y = target[i * 2 + 1]!;
-        });
-        saveLayout(cacheKey, graph);
-      }
+      // 도중에 닫아도 다음 진입이 콜드가 되지 않게, 계산된 마지막 자리를 수렴 여부와 함께 남긴다.
+      // (수렴 전이면 done:false 로 저장돼 다음에는 고정 없이 이어서 다듬는다)
+      if (gotFirst) saveLayout(cacheKey, snapshot(), layoutSettled);
       worker.postMessage({ type: 'stop' } satisfies LayoutIn);
       worker.terminate();
       sigma.kill();

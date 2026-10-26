@@ -6,6 +6,9 @@ export const WARM_KNOWN_LIVE = 0.5;
 
 export type Point = [number, number];
 
+/** 콜드 배치의 첫 배열 반경(기존 4). 넓게 시작해 첫 반발력의 튐을 줄인다. */
+export const COLD_SEED_RADIUS = 12;
+
 export interface LayoutPlan {
   /** 노드별 시작 위치(데이터의 노드 순서와 같다) */
   positions: Map<string, Point>;
@@ -71,7 +74,9 @@ export function planLayout(data: GraphData, prevPos: Map<string, Point>, prevAdj
       positions.set(id, [cx + Math.cos(a) * 2, cy + Math.sin(a) * 2]);
     } else {
       const angle = k * 2.399963229728653; // 황금각
-      const radius = 4 * Math.sqrt(k + 0.5);
+      // 최종 배치의 폭에 가깝게 넓게 깐다. 좁게 시작하면 첫 반발력이 크게 튀어 왕복이 늘어난다
+      // (측정: 320 노드 wanderRatio 1.58 → 1.35). 콜드 첫 페인트 전에 계산하므로 화면에는 안 보인다.
+      const radius = COLD_SEED_RADIUS * Math.sqrt(k + 0.5);
       positions.set(id, [Math.cos(angle) * radius, Math.sin(angle) * radius]);
     }
   });

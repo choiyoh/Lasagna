@@ -29,7 +29,7 @@ import {
 import { existsSync, readFileSync } from 'node:fs';
 import { readAudit } from '@nopsidian/mcp/audit';
 import { RevertError, applyRestore, logRevert, planRevert } from '@nopsidian/mcp/revert';
-import { events, graphSettings, workspaceLayout, type EventName } from '@nopsidian/ipc-contract';
+import { events, graphLayout, graphSettings, workspaceLayout, type EventName } from '@nopsidian/ipc-contract';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
 import { runMcpStdio } from './mcp-stdio';
@@ -480,6 +480,20 @@ function registerHandlers() {
   handle('graph.setSettings', async (settings) => {
     const v = requireVault();
     atomicWrite(path.join(v.info.path, '.nopsidian', 'graph.json'), JSON.stringify(settings, null, 2));
+    return undefined;
+  });
+  handle('graph.getLayout', async () => {
+    const v = requireVault();
+    try {
+      const parsed = graphLayout.safeParse(JSON.parse(readFileSync(path.join(v.info.path, '.nopsidian', 'graph-layout.json'), 'utf8')));
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
+  });
+  handle('graph.setLayout', async (layout) => {
+    const v = requireVault();
+    atomicWrite(path.join(v.info.path, '.nopsidian', 'graph-layout.json'), JSON.stringify(layout));
     return undefined;
   });
   handle('sync.status', () => syncController.status());

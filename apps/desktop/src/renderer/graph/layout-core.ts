@@ -12,6 +12,8 @@ export const MAX_ITERATIONS = 700;
 export const CHUNK = 4;
 /** 거의 다 아는 배치를 다듬을 때 쓰는 반복 수 */
 export const WARM_ITERATIONS = 120;
+/** 도는 중이던 배치를 이어받을 때 남겨 두는 반복 수 */
+export const RESUME_ITERATIONS = 400;
 
 /**
  * ForceAtlas2 배치를 정해진 반복 수만큼만 돌린다(끝나면 멈춘다 — 끝없이 돌지 않는다).
@@ -23,7 +25,7 @@ export class LayoutRunner {
   forces: Forces;
   iterations = 0;
 
-  constructor(opts: { ids: string[]; positions: Float32Array; edges: Uint32Array; forces: Forces; warm?: boolean; fixed?: Uint8Array }) {
+  constructor(opts: { ids: string[]; positions: Float32Array; edges: Uint32Array; forces: Forces; warm?: boolean; resume?: boolean; fixed?: Uint8Array }) {
     this.ids = opts.ids;
     this.forces = opts.forces;
     this.graph = new Graph({ type: 'directed', multi: false });
@@ -35,7 +37,7 @@ export class LayoutRunner {
       const b = opts.ids[opts.edges[i + 1]!]!;
       if (a !== b && !this.graph.hasEdge(a, b)) this.graph.addEdge(a, b);
     }
-    this.iterations = opts.warm ? MAX_ITERATIONS - WARM_ITERATIONS : 0;
+    this.iterations = opts.warm ? MAX_ITERATIONS - WARM_ITERATIONS : opts.resume ? MAX_ITERATIONS - RESUME_ITERATIONS : 0;
     // 모든 노드가 고정이면 할 일이 없다 — 그대로 끝낸다(위치가 한 점도 바뀌지 않는다)
     if (opts.fixed && opts.ids.length > 0 && opts.fixed.every((f) => f === 1)) this.iterations = MAX_ITERATIONS;
     this.applyEdgeWeights();

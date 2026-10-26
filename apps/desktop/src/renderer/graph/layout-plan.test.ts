@@ -62,3 +62,20 @@ describe('planLayout', () => {
     expect(plan.fixed.size).toBe(0);
   });
 });
+
+describe('planLayout: 색인·동기화로 노드가 늘어나는 동안', () => {
+  it('화면에 떠 있는 그래프를 이어받을 때는 아는 노드가 절반 이상이면 처음부터 다시 배치하지 않는다', () => {
+    const before = chain(20);
+    const after = chain(30); // 새 노드 10개(33%)
+    const plan = planLayout(after, positionsOf(before), adjacency(before));
+    expect(plan.warm).toBe(true);
+    expect(plan.fixed.has('n0')).toBe(true);
+    expect(plan.fixed.has('n25')).toBe(false);
+  });
+
+  it('절반도 모르면(다른 노트의 로컬 그래프 등) 이어받아도 처음부터 다시 배치한다', () => {
+    const before = chain(10);
+    const after = chain(30);
+    expect(planLayout(after, positionsOf(before), adjacency(before)).warm).toBe(false);
+  });
+});

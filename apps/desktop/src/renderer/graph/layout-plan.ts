@@ -1,5 +1,9 @@
 import type { GraphData } from '@nopsidian/ipc-contract';
 
+/** 저장된 배치에서 시작할 때 / 화면에 떠 있는 그래프를 이어받을 때 warm 으로 보는 최소 비율 */
+export const WARM_KNOWN_SAVED = 0.95;
+export const WARM_KNOWN_LIVE = 0.5;
+
 export type Point = [number, number];
 
 export interface LayoutPlan {
@@ -53,7 +57,9 @@ export function planLayout(data: GraphData, prevPos: Map<string, Point>, prevAdj
       positions.set(nd.id, [p[0], p[1]]);
     } else unknown.push(nd.id);
   }
-  const warm = n > 0 && known / n >= 0.95;
+  // 이미 그래프가 떠 있을 때(prevAdj 가 있음) 절반 이상의 자리를 알면 이어서 다듬는다. 색인이 끝나기 전이나 동기화 중에
+  // 노드가 조금씩 늘어나는 동안 매번 처음부터 다시 배치하면 그래프가 계속 뒤집히기 때문이다.
+  const warm = n > 0 && known / n >= (prevAdj ? WARM_KNOWN_LIVE : WARM_KNOWN_SAVED);
   unknown.forEach((id, j) => {
     const k = rank.get(id) ?? 0;
     const placed = warm ? [...adj.get(id)!].map((x) => positions.get(x)).filter((p): p is Point => !!p) : [];

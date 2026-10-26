@@ -47,6 +47,8 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
 
   // 그래프 검색: 이름으로 노드를 찾아 그 자리로 화면을 옮긴다
   const [find, setFind] = useState('');
+  /** 필터 예시는 초점이 있을 때만 보여 준다(회색 예시가 적용된 필터처럼 읽히지 않게) */
+  const [filterFocused, setFilterFocused] = useState(false);
   const [focus, setFocus] = useState<{ id: string; tick: number } | null>(null);
   const matches = useMemo(() => {
     const q = find.trim().toLowerCase();
@@ -67,9 +69,11 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
         <strong>그래프</strong>
         <input
           className="graphscreen__filter"
-          placeholder="필터: 단어 tag:#x path:폴더 -제외"
+          placeholder={filterFocused ? '필터: 단어 tag:#x path:폴더 -제외' : '필터 없음'}
           value={settings.filter}
           onChange={(e) => patch({ filter: e.target.value })}
+          onFocus={() => setFilterFocused(true)}
+          onBlur={() => setFilterFocused(false)}
           aria-label="그래프 필터"
         />
         <div className="graphscreen__find">

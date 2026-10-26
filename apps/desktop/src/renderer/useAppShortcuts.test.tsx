@@ -30,6 +30,8 @@ const actions = (over: Partial<ShortcutActions> = {}): ShortcutActions => ({
   openPalette: vi.fn(),
   toggleBookmark: vi.fn(),
   openDaily: vi.fn(),
+  togglePanel: vi.fn(),
+  focusSearch: vi.fn(),
   dbOpen: false,
   ...over,
 });
@@ -99,5 +101,19 @@ describe('useAppShortcuts', () => {
     render(<Host tick={1} make={() => second} />);
     keydown({ key: 'Escape' });
     expect(second.closeOverlay).toHaveBeenCalledTimes(1);
+  });
+
+  it('⌘⇧\\ 로 도크를, ⌘⇧F 로 본문 검색을 연다', () => {
+    const a = actions();
+    render(<Host tick={0} make={() => a} />);
+
+    keydown({ key: '|', code: 'Backslash', metaKey: true, shiftKey: true });
+    expect(a.togglePanel).toHaveBeenCalledTimes(1);
+
+    keydown({ key: 'F', code: 'KeyF', metaKey: true, shiftKey: true });
+    expect(a.focusSearch).toHaveBeenCalledTimes(1);
+    // ⇧ 없는 ⌘F 는 편집기 찾기라 앱 단축키가 가로채지 않는다
+    keydown({ key: 'f', code: 'KeyF', metaKey: true });
+    expect(a.focusSearch).toHaveBeenCalledTimes(1);
   });
 });

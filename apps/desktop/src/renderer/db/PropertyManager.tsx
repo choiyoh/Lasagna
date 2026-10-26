@@ -137,10 +137,11 @@ interface Props {
   onSetProperty: (name: string, def: Property) => void;
   onRemove: (name: string) => void;
   onRename: (from: string, to: string) => void;
+  onClose: () => void;
 }
 
 /** 속성 관리: 추가·형식 변경·이름 변경·삭제. 모두 `_db.yaml` 에 바로 반영된다(이름 변경은 모든 행의 키도 바뀜). */
-export function PropertyManager({ data, onSetProperty, onRemove, onRename }: Props) {
+export function PropertyManager({ data, onSetProperty, onRemove, onRename, onClose }: Props) {
   const [name, setName] = useState('');
   const [type, setType] = useState('text');
   const [opts, setOpts] = useState('');
@@ -153,62 +154,84 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename }: Pro
 
   return (
     <div className="dbpop dbprops" role="dialog" aria-label="속성 관리">
-      {names.map((n) => {
-        const p = data.schema.properties[n]!;
-        return (
-          <div key={n} className="dbpop__row">
-            {renaming?.from === n ? (
-              <input
-                autoFocus
-                value={renaming.to}
-                onChange={(e) => setRenaming({ from: n, to: e.target.value })}
-                onBlur={() => {
-                  const to = renaming.to.trim();
-                  if (to && to !== n && !taken(to)) onRename(n, to);
-                  setRenaming(null);
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLElement).blur()}
-                aria-label="새 이름"
-              />
-            ) : (
-              <button className="dbprops__name" onClick={() => setRenaming({ from: n, to: n })} title="이름 바꾸기">
-                {n}
-              </button>
-            )}
-            <select
-              value={p.type}
-              onChange={(e) => {
-                const keep = WITH_OPTIONS.has(e.target.value) ? optionsOf(p).map((o) => o.name).join(',') : '';
-                onSetProperty(n, makeDef(e.target.value, keep));
-              }}
-              aria-label={`${n} 형식`}
-              disabled={p.type === 'relation' || p.type === 'rollup' || p.type === 'formula'}
-            >
-              {[...new Set([...CREATABLE, p.type])].map((t) => (
-                <option key={t} value={t}>{TYPE_LABEL[t] ?? t}</option>
-              ))}
-            </select>
-            {WITH_OPTIONS.has(p.type) && (
-              <input
-                defaultValue={optionsOf(p).map((o) => o.name).join(', ')}
-                placeholder="옵션(쉼표로 구분)"
-                onBlur={(e) => {
-                  const next = parseOptions(e.target.value);
-                  const same = next.map((o) => o.name).join('\n') === optionsOf(p).map((o) => o.name).join('\n');
-                  // 기존 옵션의 색·그룹은 이름이 같은 것끼리 유지한다
-                  if (!same) onSetProperty(n, { ...p, options: next.map((o) => optionsOf(p).find((x) => x.name === o.name) ?? o) } as Property);
-                }}
-                aria-label={`${n} 옵션`}
-              />
-            )}
-            {(p.type === 'relation' || p.type === 'rollup' || p.type === 'formula') && (
-              <button onClick={() => setDetail(detail === n ? null : n)} aria-label={`${n} 설정`} aria-expanded={detail === n}>설정</button>
-            )}
-            <button onClick={() => onRemove(n)} aria-label={`${n} 삭제`} title="속성 삭제(노트의 값은 남아요)">×</button>
-            {detail === n && <Details name={n} def={p} data={data} dbs={dbs} onApply={(d) => onSetProperty(n, d)} />}
-          </div>
-        );
-      })}
+      <header className="dbprops__head">
+        <strong className="dbprops__title">속성 {names.length}개</strong>
+        <button className="dbprops__x" onClick={onClose} aria-label="속성 관리 닫기" title="닫기">
+          ×
+        </button>
+      </header>
+      <div className="dbprops__cols" aria-hidden="true">
+        <span>이름</span>
+        <span>유형</span>
+        <span>옵션</span>
+        <span />
+      </div>
+      <div className="dbprops__list">
+        {names.map((n) => {
+          const p = data.schema.properties[n]!;
+          return (
+            <div key={n} className="dbprops__row">
+              <div className="dbprops__cell dbprops__cell--name">
+                {renaming?.from === n ? (
+                  <input
+                    autoFocus
+                    value={renaming.to}
+                    onChange={(e) => setRenaming({ from: n, to: e.target.value })}
+                    onBlur={() => {
+                      const to = renaming.to.trim();
+                      if (to && to !== n && !taken(to)) onRename(n, to);
+                      setRenaming(null);
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLElement).blur()}
+                    aria-label="새 이름"
+                  />
+                ) : (
+                  <button className="dbprops__name" onClick={() => setRenaming({ from: n, to: n })} title="이름 바꾸기">
+                    {n}
+                  </button>
+                )}
+              </div>
+              <div className="dbprops__cell dbprops__cell--type">
+                <select
+                  value={p.type}
+                  onChange={(e) => {
+                    const keep = WITH_OPTIONS.has(e.target.value) ? optionsOf(p).map((o) => o.name).join(',') : '';
+                    onSetProperty(n, makeDef(e.target.value, keep));
+                  }}
+                  aria-label={`${n} 형식`}
+                  disabled={p.type === 'relation' || p.type === 'rollup' || p.type === 'formula'}
+                >
+                  {[...new Set([...CREATABLE, p.type])].map((t) => (
+                    <option key={t} value={t}>{TYPE_LABEL[t] ?? t}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="dbprops__cell dbprops__cell--opts">
+                {WITH_OPTIONS.has(p.type) && (
+                  <input
+                    defaultValue={optionsOf(p).map((o) => o.name).join(', ')}
+                    placeholder="옵션(쉼표로 구분)"
+                    onBlur={(e) => {
+                      const next = parseOptions(e.target.value);
+                      const same = next.map((o) => o.name).join('\n') === optionsOf(p).map((o) => o.name).join('\n');
+                      // 기존 옵션의 색·그룹은 이름이 같은 것끼리 유지한다
+                      if (!same) onSetProperty(n, { ...p, options: next.map((o) => optionsOf(p).find((x) => x.name === o.name) ?? o) } as Property);
+                    }}
+                    aria-label={`${n} 옵션`}
+                  />
+                )}
+                {(p.type === 'relation' || p.type === 'rollup' || p.type === 'formula') && (
+                  <button onClick={() => setDetail(detail === n ? null : n)} aria-label={`${n} 설정`} aria-expanded={detail === n}>설정</button>
+                )}
+              </div>
+              <div className="dbprops__cell dbprops__cell--end">
+                <button onClick={() => onRemove(n)} aria-label={`${n} 삭제`} title="속성 삭제(노트의 값은 남아요)">×</button>
+              </div>
+              {detail === n && <Details name={n} def={p} data={data} dbs={dbs} onApply={(d) => onSetProperty(n, d)} />}
+            </div>
+          );
+        })}
+      </div>
       <div className="dbpop__row dbprops__new">
         <input value={name} placeholder="새 속성 이름" onChange={(e) => setName(e.target.value)} aria-label="새 속성 이름" />
         <select value={type} onChange={(e) => setType(e.target.value)} aria-label="새 속성 형식">

@@ -317,18 +317,21 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           CSV 가져오기
         </button>
         <button onClick={() => setShowTpl((s) => !s)} aria-expanded={showTpl}>템플릿</button>
-        <button onClick={() => setShowProps((s) => !s)} aria-expanded={showProps}>속성</button>
+        <div className="dbscreen__props">
+          <button onClick={() => setShowProps((s) => !s)} aria-expanded={showProps}>속성</button>
+          {showProps && (
+            <PropertyManager
+              data={data}
+              onClose={() => setShowProps(false)}
+              onSetProperty={(name, def) => void edit({ kind: 'setProperty', name, def })}
+              onRemove={(name) => void edit({ kind: 'removeProperty', name })}
+              onRename={(from, to) => void edit({ kind: 'renameProperty', from, to })}
+            />
+          )}
+        </div>
         <button className="primary" onClick={() => setAdding({ title: '', values: {} })}>+ 새 행</button>
         <button onClick={onClose} title="닫기 (Esc)">닫기</button>
       </header>
-      {showProps && (
-        <PropertyManager
-          data={data}
-          onSetProperty={(name, def) => void edit({ kind: 'setProperty', name, def })}
-          onRemove={(name) => void edit({ kind: 'removeProperty', name })}
-          onRename={(from, to) => void edit({ kind: 'renameProperty', from, to })}
-        />
-      )}
       {showTpl && (
         <TemplateSettings
           data={data}

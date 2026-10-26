@@ -24,6 +24,15 @@ function packagedResourcesDir(): string {
 
 const executable = packagedExecutable();
 
+/** 오른쪽 링크 도크는 창 폭 1,200px 이하에서 기본으로 접힌다 — 탭을 쓰기 전에 펼친다. */
+async function openDock(page: Page): Promise<void> {
+  const links = page.getByRole('tab', { name: '링크', exact: true });
+  if (!(await links.isVisible())) await page.getByTitle('링크 패널 열기/닫기').click();
+  await expect(links).toBeVisible();
+  // 앞선 테스트가 다른 탭(기록·개요…)을 열어 두었어도 링크 탭에서 시작한다
+  await links.click();
+}
+
 /** 시작 화면이면 볼트를 연다. beforeAll 이 이미 열어 두었으면(테스트 재시작) 그냥 지나간다. */
 async function openVaultIfNeeded(page: Page): Promise<void> {
   const openVault = page.getByRole('button', { name: '폴더 열기 / 만들기' });
@@ -106,7 +115,7 @@ test('볼트를 열고 목록·검색·미리보기가 동작한다', async () =
   await expect(page.getByRole('button', { name: 'Nopsidian', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '위험', exact: true })).toBeVisible();
 
-  await page.getByPlaceholder('전문 검색').fill('읽기 쉬운');
+  await page.getByPlaceholder('본문 검색').fill('읽기 쉬운');
   const hit = page.locator('.hit', { hasText: 'Nopsidian' });
   await expect(hit).toBeVisible();
   await hit.click();
@@ -122,7 +131,7 @@ test('렌더러는 Node에 접근할 수 없고 악성 HTML은 실행되지 않�
   }));
   expect(flags).toEqual({ require: 'undefined', process: 'undefined', nops: 'object' });
 
-  await page.getByPlaceholder('전문 검색').fill('');
+  await page.getByPlaceholder('본문 검색').fill('');
   await page.getByRole('button', { name: '위험', exact: true }).click();
   await expect(page.locator('.ProseMirror h1')).toHaveText('위험');
   await page.waitForTimeout(300);
@@ -136,9 +145,9 @@ test('앱 밖에서 만든 파일이 목록과 검색에 반영된다', async ()
   const page = await app.firstWindow();
   writeFileSync(path.join(vaultDir, '외부.md'), '# 외부 편집\n다른 편집기에서 작성한 바나나우유\n');
   await expect(page.getByRole('button', { name: '외부 편집' })).toBeVisible({ timeout: 5000 });
-  await page.getByPlaceholder('전문 검색').fill('바나나우유');
+  await page.getByPlaceholder('본문 검색').fill('바나나우유');
   await expect(page.locator('.hit', { hasText: '외부 편집' })).toBeVisible();
-  await page.getByPlaceholder('전문 검색').fill('');
+  await page.getByPlaceholder('본문 검색').fill('');
 });
 
 test('저장: 앱 편집과 외부 편집을 병합하고, 자기 쓰기는 external=false로 알린다', async () => {
@@ -610,6 +619,7 @@ test.describe('링크 코어', () => {
     note('독서/클린 코드', '---\naliases: [Clean Code]\ntags: [독서/개발]\n---\n# 클린 코드\n\n읽기 쉬운 코드\n');
     note('독서/리팩터링', '# 리팩터링\n\n함께 읽을 책은 [[클린 코드#1장|1장]]이다 #개발\n\n별칭으로도: [[Clean Code]]\n');
     await open(page, '클린 코드');
+    await openDock(page);
     await page.getByRole('tab', { name: /백링크/ }).click();
     const panel = page.getByTestId('panel-backlinks');
     await expect(panel.getByRole('button', { name: '리팩터링', exact: true })).toBeVisible({ timeout: 8000 });
@@ -700,6 +710,7 @@ test.describe('링크 코어', () => {
     note('참조A', '# 참조A\n\n[[옛이름]] 그리고 [[옛이름#소제목|보기]]\n');
     note('참조B', '---\n관련: ["[[옛이름]]"]\n---\n# 참조B\n\n`[[옛이름]]`은 코드라 그대로\n');
     await open(page, '옛이름');
+    await openDock(page);
     await expect(page.getByRole('tab', { name: /백링크/ })).toContainText('3', { timeout: 8000 });
 
     await page.keyboard.press('F2');
@@ -770,6 +781,7 @@ test.describe('링크 코어', () => {
     note('변환대상', '# 변환대상 노트\n\n본문\n');
     const mention = note('변환멘션', '# 변환멘션\n\n오늘은 변환대상 노트를 정리했다. 변환대상 노트는 두 번 나온다.\n');
     await open(page, '변환대상 노트');
+    await openDock(page);
     await page.getByRole('tab', { name: /링크 안 된 언급/ }).click();
     const panel = page.getByTestId('panel-unlinked');
     await expect(panel).toContainText('오늘은 변환대상 노트를 정리했다', { timeout: 8000 });
@@ -800,6 +812,7 @@ test.describe('링크 코어', () => {
 
     // 로컬 그래프: 오른쪽 패널의 탭
     await open(page, '그래프A');
+    await openDock(page);
     await page.getByRole('tab', { name: '로컬 그래프' }).click();
     await expect(page.getByTestId('graph-local-stats')).toContainText('2개 노드', { timeout: 8000 });
     await expect(page.getByTestId('graph-local').locator('canvas').first()).toBeAttached();
@@ -1439,9 +1452,8 @@ views:
     await page.keyboard.type(' 고침2');
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('고침2');
 
-    const historyTab = page.getByRole('tab', { name: '기록', exact: true });
-    if (!(await historyTab.isVisible())) await page.getByTitle('링크 패널 열기/닫기').click();
-    await historyTab.click();
+    await openDock(page);
+    await page.getByRole('tab', { name: '기록', exact: true }).click();
     const panel = page.getByTestId('panel-history');
     await expect(panel.getByTestId('history-entry')).not.toHaveCount(0, { timeout: 8000 });
     // 가장 오래된 기록 = 처음 내용 그대로
@@ -2003,6 +2015,7 @@ views:
     const page = await app.firstWindow();
     note('댓글노트', '# 댓글노트\n\n인용할 문장입니다\n');
     await open(page, '댓글노트');
+    await openDock(page);
     const dockTab = page.locator('.dockbody__tabs').getByRole('tab', { name: /^댓글/ });
     await dockTab.click();
     const panel = page.getByTestId('comments');
@@ -2307,6 +2320,7 @@ views:
     await expect(settings).toHaveCount(0);
 
     // 개요: 제목 목록, 누르면 그 제목으로 이동, 편집하면 바로 반영
+    await openDock(page);
     await page.getByRole('tab', { name: '개요', exact: true }).click();
     const outline = page.getByTestId('outline');
     await expect(outline.getByRole('button')).toHaveText(['개요노트', '첫째', '둘째'], { timeout: 8000 });
@@ -2320,6 +2334,7 @@ views:
     await page.keyboard.press('Enter');
     await page.keyboard.type('## 셋째');
     await expect(outline.getByRole('button')).toHaveText(['개요노트', '첫째', '둘째', '셋째'], { timeout: 8000 });
+    await openDock(page);
     await page.getByRole('tab', { name: '링크', exact: true }).click();
 
     // 폴더를 접으면 안을 그리지 않고, 접은 상태를 기억한다

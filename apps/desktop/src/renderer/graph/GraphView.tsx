@@ -8,6 +8,7 @@ import type { LayoutIn, LayoutOut } from './layout-worker';
 import { adjacency, planLayout, type Point } from './layout-plan';
 import { mix, readPalette, type GraphPalette } from './palette';
 import { NodeGlowProgram } from './node-glow';
+import { SETTLE_WINDOW_MS, SPINNER_DELAY_MS, isSettled, statsText } from './settle';
 import { webglAvailable } from './webgl';
 
 interface Props {
@@ -74,6 +75,13 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   const [glFailure, setGlFailure] = useState<{ message: string } | null>(null);
   /** 첫 배치가 도착하기 전에는 캔버스를 숨겨 두었다가 부드럽게 나타낸다(초반의 요동을 보여 주지 않는다) */
   const [ready, setReady] = useState(false);
+  /** 실제 움직임이 잦아들었는가 — 반복 횟수가 아니라 화면 이동량에서 파생한다 */
+  const [settled, setSettled] = useState(false);
+  /** 400ms 넘게 안 가라앉을 때만 작은 스피너를 보여 준다 */
+  const [slow, setSlow] = useState(false);
+  const settledRef = useRef(false);
+  const settleBase = useRef<Float32Array | null>(null);
+  const settleAt = useRef(0);
   /** 노드별 기본 색(연결이 많을수록 강조색에 가깝게). 테마가 바뀌거나 그래프를 다시 만들면 비운다 */
   const tint = useRef(new Map<string, string>());
   /** 테마가 바뀌면 다시 읽는다 */
@@ -83,10 +91,24 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   const parsed = useMemo(() => parseGraphQuery(settings.filter), [settings.filter]);
   const filterKey = settings.filter + JSON.stringify(settings.groups);
 
+  // 가라앉기 전에도 잠깐이면 스피너를 띄우지 않는다(첫 프레임에서 깜빡이지 않게)
+  useEffect(() => {
+    if (settled) {
+      setSlow(false);
+      return;
+    }
+    const t = setTimeout(() => setSlow(true), SPINNER_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [settled]);
+
   // 데이터가 바뀔 때마다 그래프와 워커를 새로 만든다. 이전 위치는 id 기준으로 이어 받는다.
   useEffect(() => {
     const el = host.current;
     if (!el) return;
+    settledRef.current = false;
+    settleBase.current = null;
+    settleAt.current = 0;
+    setSettled(false);
     // WebGL 을 못 쓰는 환경(원격 데스크톱·가상 머신·GPU 차단 목록)에서는 sigma 가 예외를 던진다.
     // 앱을 죽이는 대신 그래프 자리에 안내를 보여 주고, 노트·링크 기능은 그대로 쓴다.
     if (!webglAvailable()) {
@@ -328,13 +350,31 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
         sigma.refresh();
         setReady(true);
       } else if (!raf) raf = requestAnimationFrame(follow);
-      setStats(`${ids.length}개 노드 · ${graph.size}개 링크${done ? '' : ' · 배치 중…'}`);
+      // 반복 횟수(done)가 아니라 실제 이동량으로 "배치 중"을 끝낸다(캔버스가 멈춘 뒤에도 문구가 남지 않게)
+      const now = performance.now();
+      let nowSettled = settledRef.current || done;
+      if (!nowSettled) {
+        const base = settleBase.current;
+        if (!base) {
+          settleBase.current = positions.slice();
+          settleAt.current = now;
+        } else if (now - settleAt.current >= SETTLE_WINDOW_MS) {
+          nowSettled = isSettled(base, positions, now - settleAt.current);
+          settleBase.current = positions.slice();
+          settleAt.current = now;
+        }
+      }
+      if (nowSettled !== settledRef.current) {
+        settledRef.current = nowSettled;
+        setSettled(nowSettled);
+      }
+      setStats(statsText(ids.length, graph.size, nowSettled));
     };
     const fixed = warm ? Uint8Array.from(ids, (id) => (plan.fixed.has(id) ? 1 : 0)) : undefined;
     const init: LayoutIn = { type: 'init', ids, positions: pos, edges: new Uint32Array(edgeArr), forces: live.current.settings.forces, warm, resume, ...(fixed ? { fixed } : {}) };
     workerForces.current = init.forces;
     worker.postMessage(init);
-    setStats(`${ids.length}개 노드 · ${graph.size}개 링크`);
+    setStats(statsText(ids.length, graph.size, false));
 
     return () => {
       cancelAnimationFrame(raf);
@@ -426,6 +466,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
         <>
           <div ref={host} className={ready ? 'graphview__canvas ready' : 'graphview__canvas'} />
           <span className="graphview__stats muted small" data-testid={`${testId}-stats`}>
+            {slow && <i className="graphview__spin" role="img" aria-label="배치 중" />}
             {stats}
           </span>
         </>

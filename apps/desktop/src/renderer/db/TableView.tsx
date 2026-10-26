@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CellEditor, CellView, isEditable } from './CellEditor';
+import { COL_MIN, columnWidths } from './column-widths';
 import { movedColumns, movedRows } from './view-edit';
 import { cellOf, TITLE, visibleColumns, type CellValue, type DbData, type DbGroupDto, type DbRowDto } from './types';
 
@@ -55,7 +56,6 @@ const CALC_LABEL: Record<string, string> = {
 const fmtCalc = (v: unknown) => (typeof v === 'number' ? String(Math.round(v * 1000) / 1000) : v === null || v === undefined ? '' : String(v));
 
 const ROW_H = 32;
-const DEFAULT_W = 180;
 
 /** 표 뷰: 행을 가상화해(2만 행도 보이는 만큼만 그림) 셀을 눌러 바로 고친다. */
 export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide, onColumns, onFilter, onReorderRows, startRenaming, onStartedRenaming, onRowAction }: Props) {
@@ -91,8 +91,23 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
   const sortOf = (c: string) => data.view.sort.find((r) => r.prop === c)?.dir ?? null;
   const cols = visibleColumns(data);
   const widths = data.view.widths ?? {};
-  const w = (c: string) => widths[c] ?? (c === TITLE ? 260 : DEFAULT_W);
   const scroller = useRef<HTMLDivElement>(null);
+  /** 표에 실제로 주어진 폭. 열 폭은 여기서 나눈다(고정 180px 이면 마지막 열이 화면 밖으로 밀린다) */
+  const [avail, setAvail] = useState(0);
+  // 첫 페인트 전에 재서 좁은 열이 한 프레임 보였다가 넓어지는 깜빡임을 막는다
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const sync = () => setAvail((cur) => (Math.abs(cur - el.clientWidth) < 1 ? cur : el.clientWidth));
+    sync();
+    // jsdom 에는 ResizeObserver 가 없다(테스트는 0 으로 두고 최소 폭을 쓴다)
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const layout = useMemo(() => columnWidths(avail, cols, TITLE, widths), [avail, cols, widths]);
+  const w = (c: string) => layout.widths[c] ?? COL_MIN;
   const [editing, setEditing] = useState<{ path: string; prop: string } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   useEffect(() => {
@@ -104,7 +119,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
   const openTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const items = useMemo(() => flatten(rows, data.groups), [rows, data.groups]);
   const v = useVirtualizer({ count: items.length, getScrollElement: () => scroller.current, estimateSize: () => ROW_H, overscan: 12 });
-  const total = cols.reduce((n, c) => n + w(c), 0) + 40;
+  const total = layout.total;
 
   const drag = (c: string, e: React.PointerEvent) => {
     e.preventDefault();

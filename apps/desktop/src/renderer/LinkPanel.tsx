@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BacklinkContext, OutgoingLink, UnlinkedMention } from '@nopsidian/ipc-contract';
+import { cleanSnippet, noteNameOf } from './link-snippet';
+import { matchParts } from './search-highlight';
 
 type Tab = 'backlinks' | 'outgoing' | 'unlinked';
 
@@ -16,6 +18,11 @@ interface Data {
 }
 
 const EMPTY: Data = { backlinks: [], outgoing: [], unlinked: null };
+
+/** 스니펫에서 지금 노트의 이름과 겹치는 글자만 표시한다 */
+function Highlighted({ text, term }: { text: string; term: string }) {
+  return <>{matchParts(text, term).map((p, i) => (p.hit ? <mark key={i}>{p.text}</mark> : p.text))}</>;
+}
 
 function groupBy<T extends { path: string }>(items: T[]) {
   const map = new Map<string, T[]>();
@@ -75,6 +82,8 @@ export function LinkPanel({ path, onOpen }: Props) {
     ['outgoing', '나가는 링크', data.outgoing.length],
     ['unlinked', '링크 안 된 언급', data.unlinked?.length ?? null],
   ];
+  /** 스니펫에서 강조할 말 = 지금 노트의 파일 이름 */
+  const term = noteNameOf(path);
 
   return (
     <aside className="linkpanel" aria-label="링크 패널">
@@ -97,8 +106,10 @@ export function LinkPanel({ path, onOpen }: Props) {
                   {items[0]!.title}
                 </button>
                 {items.map((it, i) => (
-                  <button key={i} className="linkpanel__snippet" onClick={() => onOpen(p)} title={`${p}:${it.line}`}>
-                    {it.snippet || '(문맥 없음)'}
+                  <button key={i} className="linkpanel__snippet" onClick={() => onOpen(p)} title={`${p}:${it.line} — ${it.snippet}`}>
+                    <span className="linkpanel__text">
+                      <Highlighted text={cleanSnippet(it.snippet) || '(문맥 없음)'} term={term} />
+                    </span>
                     {it.kind !== 'wikilink' && <span className="kind">{it.kind === 'relation' ? '속성' : it.kind === 'embed' ? '임베드' : '링크'}</span>}
                   </button>
                 ))}
@@ -139,8 +150,10 @@ export function LinkPanel({ path, onOpen }: Props) {
                 </button>
                 {items.map((it, i) => (
                   <div key={i} className="linkpanel__mention">
-                    <button className="linkpanel__snippet" onClick={() => onOpen(p)} title={`${p}:${it.line}`}>
-                      {it.snippet}
+                    <button className="linkpanel__snippet" onClick={() => onOpen(p)} title={`${p}:${it.line} — ${it.snippet}`}>
+                      <span className="linkpanel__text">
+                        <Highlighted text={cleanSnippet(it.snippet)} term={term} />
+                      </span>
                     </button>
                     <button
                       className="linkpanel__convert"

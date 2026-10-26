@@ -38,6 +38,21 @@ import { linkNameFor } from './link-host';
 import { QuickSwitcher } from './QuickSwitcher';
 import { CommandPalette, type PaletteCommand } from './CommandPalette';
 import { TagPanel } from './TagPanel';
+import { dockAvailable, loadDockMode, nextDockMode, resolveDockOpen, saveDockMode, type DockMode } from './dock';
+import { matchParts } from './search-highlight';
+
+const DOCK_TITLE: Record<'links' | 'outline' | 'comments' | 'graph' | 'history', string> = {
+  links: '링크',
+  outline: '개요',
+  comments: '댓글',
+  graph: '로컬 그래프',
+  history: '기록',
+};
+
+/** 검색 결과에서 일치한 글자만 강조한다(원문은 그대로) */
+function Marked({ text, query }: { text: string; query: string }) {
+  return <>{matchParts(text, query).map((p, i) => (p.hit ? <mark key={i}>{p.text}</mark> : p.text))}</>;
+}
 
 export function App() {
   const [vault, setVault] = useState<VaultInfo | null | undefined>(undefined);
@@ -75,6 +90,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const [tabs, dispatchTabs] = useReducer(tabsReducer, undefined, initialTabs);
   const selected = selectedOf(tabs);
   /** 현재 탭에서 노트를 연다(이미 다른 탭에 열려 있으면 그 탭으로 간다) */
@@ -109,7 +125,24 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       return next;
     });
   }, []);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpenMode, setPanelOpenMode] = useState<DockMode>(loadDockMode);
+  /** 창 폭이 바뀌면 도크 기본값이 달라진다(1,200px 이하 접힘) */
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const panelOpen = resolveDockOpen(panelOpenMode, viewportWidth);
+  const togglePanel = useCallback(() => {
+    const next = nextDockMode(panelOpen);
+    setPanelOpenMode(next);
+    saveDockMode(next);
+  }, [panelOpen]);
+  /** 명령 팔레트에서 "패널 열기" — 이번 실행에서만 연다(사용자가 직접 토글한 선택만 저장한다) */
+  const openPanel = useCallback(() => {
+    setPanelOpenMode('open');
+  }, []);
   const [switcher, setSwitcher] = useState(false);
   /** 전환기에서 고른 노트를 새 탭으로 열 때 */
   const [switcherNewTab, setSwitcherNewTab] = useState(false);
@@ -184,6 +217,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     return window.nops.on('sync.changed', (s) => setSync(s as SyncStatus));
   }, []);
 
+  /** 도크는 노트를 볼 때만 붙는다(DB·전체 그래프 화면은 폭을 콘텐츠에 준다) */
+  const dockVisible = dockAvailable({ hasNote: !!selected, dbOpen: dbOpen !== null, graphOpen });
+
   useAppShortcuts({
     overlayOpen: graphOpen,
     dbOpen: dbOpen !== null,
@@ -205,6 +241,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     openPalette: () => setPalette(true),
     toggleBookmark,
     openDaily: () => void openDaily(),
+    togglePanel: () => {
+      if (dockVisible) togglePanel();
+    },
+    focusSearch: () => searchRef.current?.focus(),
   });
 
   // 시작: `?open=` 로 열린 창이면 그 노트, 아니면 저장된 탭·분할 배치를 복원한다
@@ -246,8 +286,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'rename', label: '현재 노트 이름 바꾸기', hint: 'F2', keywords: ['rename', '이름', '이동'], enabled: !!selected, run: () => void renameCurrent() },
       { id: 'delete', label: '현재 노트 삭제 (휴지통)', keywords: ['delete', 'remove', 'trash', '삭제', '지우기', '휴지통'], enabled: !!selected, run: () => selected && deleteEntry(selected, false) },
       { id: 'source', label: '소스 모드 전환', hint: '⌘E', keywords: ['source', 'markdown', '소스', '원문'], enabled: !!selected, run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', metaKey: true })) },
-      { id: 'links', label: '링크·기록 패널 열기', keywords: ['panel', '패널', '백링크', '기록', '링크'], enabled: !!selected, run: () => setPanelOpen(true) },
-      { id: 'history', label: '버전 기록 보기', keywords: ['history', '기록', '버전', '복원'], enabled: !!selected, run: () => { setPanelOpen(true); setDockTab('history'); } },
+      { id: 'links', label: '링크·기록 패널 열기', keywords: ['panel', '패널', '백링크', '기록', '링크'], enabled: dockVisible, run: () => openPanel() },
+      { id: 'history', label: '버전 기록 보기', keywords: ['history', '기록', '버전', '복원'], enabled: dockVisible, run: () => { openPanel(); setDockTab('history'); } },
       { id: 'tags', label: '태그 목록', keywords: ['tags', '태그'], run: () => setSideTab('tags') },
       { id: 'dbs', label: '데이터베이스 목록', keywords: ['database', 'db', '데이터베이스'], run: () => setSideTab('db') },
       { id: 'files', label: '파일 목록', keywords: ['files', '파일', '탐색기'], run: () => setSideTab('files') },
@@ -265,7 +305,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'theme', label: '테마 바꾸기 (시스템 → 라이트 → 다크)', keywords: ['theme', 'dark', 'light', '다크', '라이트', '테마', '다크모드'], run: cycleTheme },
       { id: 'close', label: '다른 볼트 열기', keywords: ['vault', '볼트', '닫기'], run: onClose },
     ],
-    [selected, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, cycleTheme, deleteEntry, newFolder, quickNote, onClose, tabs.activePane, tabs.panes.length],
+    [selected, dockVisible, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, cycleTheme, deleteEntry, newFolder, quickNote, onClose, openPanel, tabs.activePane, tabs.panes.length],
   );
 
   useEffect(() => {
@@ -338,9 +378,11 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           </button>
         </header>
         <nav className="sidebar__nav" aria-label="빠른 메뉴">
-          <button className="navitem" onClick={() => setSwitcher(true)} title={keys('노트 찾기 (⌘O)')} aria-label="노트 찾기">
+          <button className="navitem" onClick={() => setSwitcher(true)} title={keys('빠른 이동 — 제목·경로 (⌘O)')} aria-label="노트 찾기">
             <span className="navitem__icon" aria-hidden>⌕</span>
-            <span className="navitem__label">노트 찾기</span>
+            <span className="navitem__label">
+              빠른 이동<span className="navitem__sub">제목·경로</span>
+            </span>
             <kbd>{keys('⌘O')}</kbd>
           </button>
           <button className="navitem" onClick={() => void quickNote('')} title={keys('새 노트 (⌘N)')} aria-label="새 노트">
@@ -364,7 +406,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             <span className="navitem__label">휴지통</span>
           </button>
         </nav>
-        <input className="search" placeholder="전문 검색" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <label className="searchbox">
+          <span className="searchbox__icon" aria-hidden>⌕</span>
+          <input ref={searchRef} className="search" type="search" placeholder="본문 검색" aria-label="본문 검색" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </label>
         <div className="sidebar__tabs" role="tablist">
           <button role="tab" aria-selected={sideTab === 'files'} className={sideTab === 'files' ? 'active' : ''} onClick={() => setSideTab('files')}>
             파일
@@ -405,13 +450,23 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             hits.length === 0 ? (
               <p className="muted small pad">결과 없음</p>
             ) : (
-              hits.map((h) => (
-                <button key={h.path} className="hit" onClick={() => setSelected(h.path)}>
-                  <strong>{h.title}</strong>
-                  <span className="muted small">{h.path}</span>
-                  <span className="snippet small">{h.snippet}</span>
-                </button>
-              ))
+              <>
+                <p className="searchcount muted small" role="status">
+                  {hits.length}
+                  {hits.length >= 50 ? '+' : ''}개
+                </p>
+                {hits.map((h) => (
+                  <button key={h.path} className="hit" onClick={() => setSelected(h.path)}>
+                    <strong>
+                      <Marked text={h.title} query={query} />
+                    </strong>
+                    <span className="muted small">{h.path}</span>
+                    <span className="snippet small">
+                      <Marked text={h.snippet} query={query} />
+                    </span>
+                  </button>
+                ))}
+              </>
             )
           ) : sideTab === 'marks' ? (
             <div className="marks" data-testid="bookmarks">
@@ -555,13 +610,16 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           />
         )}
       </main>
-      {selected && (
+      {dockVisible && selected && (
         <div className={panelOpen ? 'rightdock open' : 'rightdock'}>
-          <button className="rightdock__toggle" onClick={() => setPanelOpen((o) => !o)} title="링크 패널 열기/닫기" aria-expanded={panelOpen}>
-            {panelOpen ? '›' : '‹'}
-          </button>
-          {panelOpen && (
+          {panelOpen ? (
             <div className="dockbody">
+              <div className="dockhead">
+                <strong className="dockhead__title">{DOCK_TITLE[dockTab]}</strong>
+                <button className="dockhead__close" onClick={togglePanel} title="링크 패널 열기/닫기" aria-label="링크 패널 닫기" aria-expanded>
+                  »
+                </button>
+              </div>
               <div className="dockbody__tabs" role="tablist">
                 <button role="tab" aria-selected={dockTab === 'links'} className={dockTab === 'links' ? 'active' : ''} onClick={() => setDockTab('links')}>
                   링크
@@ -583,6 +641,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 {dockTab === 'links' ? <LinkPanel path={selected} onOpen={setSelected} /> : dockTab === 'outline' ? <OutlinePanel path={selected} /> : dockTab === 'comments' ? <CommentsPanel path={selected} onChanged={countComments} /> : dockTab === 'history' ? <HistoryPanel path={selected} onRestored={(message) => setToast({ message })} /> : <LocalGraph path={selected} onOpen={setSelected} />}
               </ErrorBoundary>
             </div>
+          ) : (
+            <button className="rightdock__rail" onClick={togglePanel} title="링크 패널 열기/닫기" aria-label="링크 패널 열기" aria-expanded={false}>
+              ‹
+            </button>
           )}
         </div>
       )}

@@ -821,6 +821,12 @@ test.describe('링크 코어', () => {
     await page.getByRole('button', { name: '그래프', exact: true }).click();
     await expect(page.getByTestId('graph-screen')).toBeVisible();
     await expect(page.getByTestId('graph-global-stats')).toContainText('개 노드', { timeout: 8000 });
+    // 캔버스가 컨테이너보다 반 픽셀만 커도 .content 에 스크롤바가 생겨 폭이 줄고(윈도우·리눅스의 일반 스크롤바), 그래프가 계속 다시 맞춰지며 흔들린다
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => {
+      const c = document.querySelector('.content')!;
+      return [c.scrollWidth - c.clientWidth, c.scrollHeight - c.clientHeight];
+    })).toEqual([0, 0]);
     await page.getByLabel('그래프 필터').fill('tag:#그래프태그');
     await expect
       .poll(

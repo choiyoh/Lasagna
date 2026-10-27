@@ -384,6 +384,7 @@ nopsidian/
 ### 7단계 진행 (2026-10-13~)
 - [x] 버전 기록: 저장 때 남기는 스냅샷(`.nopsidian/history/`) 목록·줄 단위 비교·복원("기록" 탭), 보존 정책(2일 전부·30일 하루 하나·그 이후 삭제).
 - [x] 명령 팔레트(⌘P, 한글 초성 검색), 내보내기: 노트 → HTML(이미지 data URI, 스크립트 차단 CSP)·PDF(`printToPDF`), 볼트 전체 → 정적 사이트(상대 링크·첨부 복사·index.html).
+- [x] Markdown 파일·폴더 가져오기: 명령 팔레트/시작 화면에서 `.md` 여러 개 또는 폴더(Obsidian 볼트 등)를 골라 복사, 사이드바에 끌어 놓기 지원. 이름 겹치면 번호(`이름 1.md`), 폴더는 구조·이미지/PDF 첨부 유지, 점 폴더·심볼릭 링크 제외.
 - [x] Notion ZIP 가져오기(Markdown & CSV): ID 이름 정리, 페이지 링크 → 위키링크, 첨부 경로, CSV+행 노트 → `_db.yaml`+프런트매터, `<aside>` → 콜아웃, 안쪽 ZIP·경로 탈출 방어.
 - [x] 탭·분할·새 창: 창당 분할 칸 1~2개(좌우/상하), 칸마다 탭, 같은 노트는 한 곳에서만, 배치는 `.nopsidian/workspace.json`(기기별), ⌘W/⌘-클릭, 새 창(`?open=`)에서 고친 내용은 다른 창에 외부 변경으로 전달.
 - [x] 패키징: macOS dmg·zip, Windows Squirrel 설치 exe·zip 설정과 CI(`docs/packaging.md`). Windows 설치 파일은 CI 첫 실행 후 실제 확인 필요.

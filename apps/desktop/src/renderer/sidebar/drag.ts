@@ -93,21 +93,29 @@ export function entryDropProps(path: string, isFolder: boolean, open: boolean, o
 }
 
 /** 폴더(또는 맨 위 빈 곳)에 놓을 수 있게 하는 이벤트 묶음. 놓을 수 있는 동안 `drop` 클래스를 단다. */
-export function dropProps(onDropEntry: (items: Entry[]) => void) {
+export function dropProps(onDropEntry: (items: Entry[]) => void, onDropFiles?: (paths: string[]) => void) {
   const has = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes(DRAG_TYPE);
+  const hasFiles = (e: React.DragEvent) => !!onDropFiles && Array.from(e.dataTransfer.types).includes('Files');
   return {
     onDragOver: (e: React.DragEvent) => {
-      if (!has(e)) return;
+      if (!has(e) && !hasFiles(e)) return;
       e.preventDefault();
       e.stopPropagation();
-      e.dataTransfer.dropEffect = 'move';
+      e.dataTransfer.dropEffect = has(e) ? 'move' : 'copy';
       e.currentTarget.classList.add('drop');
     },
     onDragLeave: (e: React.DragEvent) => e.currentTarget.classList.remove('drop'),
     onDrop: (e: React.DragEvent) => {
       e.currentTarget.classList.remove('drop');
       const raw = e.dataTransfer.getData(DRAG_TYPE);
-      if (!raw) return;
+      if (!raw) {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const paths = Array.from(e.dataTransfer.files).map((f) => window.nops.pathForFile(f)).filter(Boolean);
+        if (paths.length) onDropFiles?.(paths);
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       dragging = null;

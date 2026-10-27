@@ -159,22 +159,26 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
           ))}
           <h4>색 그룹</h4>
           {settings.groups.map((g, i) => (
-            <div key={i} className="graphscreen__group">
-              <input
-                type="color"
-                value={g.color}
-                onChange={(e) => patch({ groups: settings.groups.map((x, j) => (j === i ? { ...x, color: e.target.value } : x)) })}
-                aria-label="그룹 색"
-              />
-              <input
-                value={g.query}
-                placeholder="tag:#x"
-                onChange={(e) => patch({ groups: settings.groups.map((x, j) => (j === i ? { ...x, query: e.target.value } : x)) })}
-                aria-label="그룹 질의"
-              />
-              <button onClick={() => patch({ groups: settings.groups.filter((_, j) => j !== i) })} aria-label="그룹 삭제">
-                ×
-              </button>
+            <div key={i} className="graphscreen__groupwrap">
+              <div className="graphscreen__group">
+                <input
+                  type="color"
+                  value={g.color}
+                  disabled={!g.query.trim()}
+                  onChange={(e) => patch({ groups: settings.groups.map((x, j) => (j === i ? { ...x, color: e.target.value } : x)) })}
+                  aria-label="그룹 색"
+                />
+                <input
+                  value={g.query}
+                  placeholder="tag:#x"
+                  onChange={(e) => patch({ groups: settings.groups.map((x, j) => (j === i ? { ...x, query: e.target.value } : x)) })}
+                  aria-label="그룹 질의"
+                />
+                <button onClick={() => patch({ groups: settings.groups.filter((_, j) => j !== i) })} aria-label="그룹 삭제">
+                  ×
+                </button>
+              </div>
+              {!g.query.trim() && <p className="muted graphscreen__grouphint">조건을 입력하면 이 색이 적용돼요</p>}
             </div>
           ))}
           <button
@@ -183,7 +187,7 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
             + 그룹 추가
           </button>
         </aside>
-        {settingsReady && layoutLoaded && <GraphView data={data} settings={settings} current={current} onOpen={onOpen} testId="graph-global" cacheKey={cacheKey} focus={focus} />}
+        {settingsReady && layoutLoaded && <GraphView data={data} settings={settings} current={current} onOpen={onOpen} testId="graph-global" cacheKey={cacheKey} focus={focus} onClearFilter={() => patch({ filter: '' })} />}
       </div>
     </div>
   );

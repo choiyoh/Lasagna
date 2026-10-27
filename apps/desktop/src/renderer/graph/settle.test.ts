@@ -58,4 +58,11 @@ describe('statsText', () => {
     expect(statsText(7, 4, false)).toBe('7개 노드 · 4개 링크 · 배치 중…');
     expect(statsText(7, 4, true)).toBe('7개 노드 · 4개 링크');
   });
+
+  it('필터가 걸리면 일치 / 전체로 보여 준다', () => {
+    expect(statsText(320, 956, true, 0)).toBe('0 / 320개 노드 · 956개 링크');
+    expect(statsText(320, 956, true, 120)).toBe('120 / 320개 노드 · 956개 링크');
+    // 전체와 같으면 예전 표기 그대로
+    expect(statsText(320, 956, true, 320)).toBe('320개 노드 · 956개 링크');
+  });
 });

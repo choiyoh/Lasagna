@@ -34,12 +34,29 @@ describe('columnWidths', () => {
     expect(widths['담당']).toBe(176);
   });
 
-  it('제목 열 폭을 직접 줄였으면 남는 폭을 먹지 않는다', () => {
+  it('제목 열 폭을 직접 줄였으면 남는 폭을 먹지 않고, 남는 폭은 속성 열이 나눠 가진다', () => {
     // 예전에는 max(120, 남는 폭) 로 되돌아가 리사이즈가 고장난 것처럼 보였다
     expect(columnWidths(1180, SIX, 'title', { title: 120 }).widths.title).toBe(120);
     expect(columnWidths(1180, SIX, 'title', { title: 200 }).widths.title).toBe(200);
     // 명시하지 않았을 때는 그대로 남는 폭을 먹는다
     expect(columnWidths(1600, ['title', '상태', '담당'], 'title').widths.title).toBe(1600 - ADD_COL_W - COL_MAX * 2);
+  });
+
+  it('제목 142 로 좁힌 뒤 남는 160px 를 마지막 속성부터 채운다', () => {
+    const { widths, total } = columnWidths(1172, SIX, 'title', { title: 142 });
+    expect(widths.title).toBe(142);
+    // 열 합 + 오른쪽 여유가 표 폭과 정확히 맞는다(빈 밴드 없음)
+    expect(Object.values(widths).reduce((n, w) => n + w, 0) + ADD_COL_W).toBe(total);
+    expect(total).toBe(1172);
+    expect(widths['진척']).toBe(COL_MAX);
+    // 사용자가 끈 폭은 그대로
+    expect(widths.title).toBe(142);
+  });
+
+  it('모든 열 폭을 사용자가 정했으면 남는 폭을 억지로 바꾸지 않는다', () => {
+    const all = { title: 142, 상태: 180, 담당: 180, 마감: 180, 우선순위: 180, 진척: 180 };
+    const { widths } = columnWidths(1180, SIX, 'title', all);
+    expect(widths).toEqual(all);
   });
 
   it('폭을 재지 못했을 때(0)도 NaN·음수를 만들지 않는다', () => {

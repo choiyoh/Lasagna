@@ -3,7 +3,7 @@ import Graph from 'graphology';
 import Sigma from 'sigma';
 import { EdgeArrowProgram, EdgeRectangleProgram } from 'sigma/rendering';
 import type { GraphData, GraphSettings } from '@nopsidian/ipc-contract';
-import { colorForNode, matchesQuery, parseGraphQuery } from './filter';
+import { colorForNode, filterNodes, matchesQuery, parseGraphQuery } from './filter';
 import type { LayoutIn, LayoutOut } from './layout-worker';
 import { WARM_KNOWN_SAVED, adjacency, planLayout, type Point } from './layout-plan';
 import { mix, readPalette, type GraphPalette } from './palette';
@@ -24,11 +24,13 @@ interface Props {
   cacheKey?: string;
   /** 그래프 검색: 이 노드로 화면을 옮기고 잠깐 강조한다(tick 이 바뀔 때마다) */
   focus?: { id: string; tick: number } | null;
+  /** 필터가 0건일 때 "필터 지우기" — 없으면 버튼을 숨긴다(로컬 그래프) */
+  onClearFilter?: () => void;
 }
 
 
 /** sigma + graphology 로 그래프를 그린다. 레이아웃은 워커에서 돌고, 위치만 받아 갱신한다. */
-export function GraphView({ data, settings, current, onOpen, testId, cacheKey, focus }: Props) {
+export function GraphView({ data, settings, current, onOpen, testId, cacheKey, focus, onClearFilter }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
@@ -76,6 +78,11 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   const parsedRef = useRef(parseGraphQuery(settings.filter));
   const parsed = useMemo(() => parseGraphQuery(settings.filter), [settings.filter]);
   const filterKey = settings.filter + JSON.stringify(settings.groups);
+  /** 필터와 일치하는 노드 수(0이면 안내를 띄운다) */
+  const matchCount = useMemo(() => filterNodes(data.nodes, settings.filter).length, [data, settings.filter]);
+  const filteredOut = settings.filter.trim().length > 0 && matchCount === 0;
+  const matchRef = useRef(matchCount);
+  matchRef.current = matchCount;
 
   // 가라앉기 전에도 잠깐이면 스피너를 띄우지 않는다(첫 프레임에서 깜빡이지 않게)
   useEffect(() => {
@@ -403,7 +410,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
         settledRef.current = nowSettled;
         setSettled(nowSettled);
       }
-      setStats(statsText(ids.length, graph.size, nowSettled));
+      setStats(statsText(ids.length, graph.size, nowSettled, matchRef.current));
       // 예산 안에 수렴하지 못해 잠시 멈춘 배치도 남긴다 — 다음 진입에서 이어서 다듬는다(done:false)
       if (!done && !busy) saveLayout(cacheKey, snapshot(), false);
     };
@@ -412,7 +419,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     workerForces.current = init.forces;
     worker.postMessage(init);
     // 캐시 자리를 보여 주며 뒤에서 다듬는 경우(paintOnly)는 화면이 이미 정적이다 — 문구·스피너를 켜지 않는다
-    setStats(statsText(ids.length, graph.size, paintOnly));
+    setStats(statsText(ids.length, graph.size, paintOnly, matchRef.current));
     if (paintOnly) {
       settledRef.current = true;
       setSettled(true);
@@ -453,6 +460,13 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     parsedRef.current = parsed;
     sigmaRef.current?.refresh({ skipIndexation: true });
   }, [parsed, filterKey, current]);
+
+  // 필터 일치 수가 바뀌면 통계 문구(0 / 320)도 바로 따라간다
+  useEffect(() => {
+    const g = graphRef.current;
+    if (!g) return;
+    setStats(statsText(data.nodes.length, g.size, settledRef.current, matchCount));
+  }, [matchCount, data]);
 
   // 그래프 검색으로 고른 노드로 이동
   useEffect(() => {
@@ -501,6 +515,15 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
       ) : (
         <>
           <div ref={host} className={ready ? 'graphview__canvas ready' : 'graphview__canvas'} />
+          {filteredOut && (
+            <div className="graphview__empty" role="status">
+              <div className="graphview__emptycard">
+                <strong>일치하는 노드가 없어요</strong>
+                <p className="muted small">필터: {settings.filter}</p>
+                {onClearFilter && <button onClick={onClearFilter}>필터 지우기</button>}
+              </div>
+            </div>
+          )}
           <span className="graphview__stats muted small" data-testid={`${testId}-stats`}>
             {slow && <i className="graphview__spin" role="img" aria-label="배치 중" />}
             {stats}

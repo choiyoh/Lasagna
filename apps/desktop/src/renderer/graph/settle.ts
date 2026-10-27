@@ -46,6 +46,8 @@ export function isSettled(prev: Float32Array, next: Float32Array, windowMs: numb
   return maxDisplacement(prev, next) / extent < SETTLE_RATIO;
 }
 
-export function statsText(nodes: number, links: number, settled: boolean): string {
-  return `${nodes}개 노드 · ${links}개 링크${settled ? '' : ' · 배치 중…'}`;
+export function statsText(nodes: number, links: number, settled: boolean, matched = nodes): string {
+  // 필터가 걸려 있으면 "일치 / 전체"로 보여 준다 — 0건일 때 멈춘 것처럼 보이지 않게
+  const head = matched === nodes ? `${nodes}개 노드` : `${matched} / ${nodes}개 노드`;
+  return `${head} · ${links}개 링크${settled ? '' : ' · 배치 중…'}`;
 }

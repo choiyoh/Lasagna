@@ -39,15 +39,8 @@ import { QuickSwitcher } from './QuickSwitcher';
 import { CommandPalette, type PaletteCommand } from './CommandPalette';
 import { TagPanel } from './TagPanel';
 import { dockAvailable, loadDockMode, nextDockMode, resolveDockOpen, saveDockMode, type DockMode } from './dock';
+import { cleanSearchSnippet } from './link-snippet';
 import { matchParts } from './search-highlight';
-
-const DOCK_TITLE: Record<'links' | 'outline' | 'comments' | 'graph' | 'history', string> = {
-  links: '링크',
-  outline: '개요',
-  comments: '댓글',
-  graph: '로컬 그래프',
-  history: '기록',
-};
 
 /** 검색 결과에서 일치한 글자만 강조한다(원문은 그대로) */
 function Marked({ text, query }: { text: string; query: string }) {
@@ -126,7 +119,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     });
   }, []);
   const [panelOpenMode, setPanelOpenMode] = useState<DockMode>(loadDockMode);
-  /** 창 폭이 바뀌면 도크 기본값이 달라진다(1,200px 이하 접힘) */
+  /** 창 폭이 바뀌면 도크 기본값이 달라진다(1,340px 이하 접힘) */
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth);
@@ -464,7 +457,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                     </strong>
                     <span className="muted small">{h.path}</span>
                     <span className="snippet small">
-                      <Marked text={h.snippet} query={query} />
+                      <Marked text={cleanSearchSnippet(h.snippet)} query={query} />
                     </span>
                   </button>
                 ))}
@@ -617,27 +610,26 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         <div className={panelOpen ? 'rightdock open' : 'rightdock'}>
           {panelOpen ? (
             <div className="dockbody">
-              <div className="dockhead">
-                <strong className="dockhead__title">{DOCK_TITLE[dockTab]}</strong>
-                <button className="dockhead__close" onClick={togglePanel} title="링크 패널 열기/닫기" aria-label="링크 패널 닫기" aria-expanded>
-                  »
-                </button>
-              </div>
-              <div className="dockbody__tabs" role="tablist">
-                <button role="tab" aria-selected={dockTab === 'links'} className={dockTab === 'links' ? 'active' : ''} onClick={() => setDockTab('links')}>
-                  링크
-                </button>
-                <button role="tab" aria-selected={dockTab === 'outline'} className={dockTab === 'outline' ? 'active' : ''} onClick={() => setDockTab('outline')}>
-                  개요
-                </button>
-                <button role="tab" aria-selected={dockTab === 'comments'} className={dockTab === 'comments' ? 'active' : ''} onClick={() => setDockTab('comments')}>
-                  댓글{commentCount > 0 && <span className="count"> {commentCount}</span>}
-                </button>
-                <button role="tab" aria-selected={dockTab === 'graph'} className={dockTab === 'graph' ? 'active' : ''} onClick={() => setDockTab('graph')}>
-                  로컬 그래프
-                </button>
-                <button role="tab" aria-selected={dockTab === 'history'} className={dockTab === 'history' ? 'active' : ''} onClick={() => setDockTab('history')}>
-                  기록
+              <div className="dockbody__bar">
+                <div className="dockbody__tabs" role="tablist">
+                  <button role="tab" aria-selected={dockTab === 'links'} className={dockTab === 'links' ? 'active' : ''} onClick={() => setDockTab('links')}>
+                    링크
+                  </button>
+                  <button role="tab" aria-selected={dockTab === 'outline'} className={dockTab === 'outline' ? 'active' : ''} onClick={() => setDockTab('outline')}>
+                    개요
+                  </button>
+                  <button role="tab" aria-selected={dockTab === 'comments'} className={dockTab === 'comments' ? 'active' : ''} onClick={() => setDockTab('comments')}>
+                    댓글{commentCount > 0 && <span className="count"> {commentCount}</span>}
+                  </button>
+                  <button role="tab" aria-selected={dockTab === 'graph'} className={dockTab === 'graph' ? 'active' : ''} onClick={() => setDockTab('graph')}>
+                    로컬 그래프
+                  </button>
+                  <button role="tab" aria-selected={dockTab === 'history'} className={dockTab === 'history' ? 'active' : ''} onClick={() => setDockTab('history')}>
+                    기록
+                  </button>
+                </div>
+                <button className="dockbody__close" onClick={togglePanel} title="링크 패널 열기/닫기" aria-label="링크 패널 닫기" aria-expanded>
+                  ×
                 </button>
               </div>
               <ErrorBoundary label="패널" resetKeys={[dockTab, selected]}>
@@ -646,7 +638,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             </div>
           ) : (
             <button className="rightdock__rail" onClick={togglePanel} title="링크 패널 열기/닫기" aria-label="링크 패널 열기" aria-expanded={false}>
-              ‹
+              <span className="rightdock__railtop" aria-hidden>‹</span>
+              <span className="rightdock__raillabel" aria-hidden>링크</span>
             </button>
           )}
         </div>

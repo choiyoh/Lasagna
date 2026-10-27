@@ -138,12 +138,12 @@ button.link { color: var(--muted); }
 .rightdock { display: flex; border-left: 1px solid var(--border); background: var(--bg-side); }
 .rightdock.open { width: 300px; }
 /* 접혔을 때: 20px 레일. 열었을 때: 40px 헤더의 24×24 닫기 버튼 */
-.rightdock__rail { width: 20px; color: var(--muted); text-align: center; font-size: 14px; }
+.rightdock__rail { width: 28px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 10px; color: var(--muted); text-align: center; }
 .rightdock__rail:hover { background: var(--hover); color: var(--fg); }
-.dockhead { flex: none; height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 6px 0 14px; border-bottom: 1px solid var(--border); }
-.dockhead__title { font-size: 12.5px; font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dockhead__close { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: 6px; color: var(--muted); font-size: 15px; line-height: 1; }
-.dockhead__close:hover { background: var(--hover); color: var(--fg); }
+.rightdock__railtop { font-size: 14px; line-height: 1; }
+.rightdock__raillabel { writing-mode: vertical-rl; font-size: 10px; letter-spacing: 0.08em; }
+.dockbody__close { width: 24px; height: 24px; flex: none; margin-left: auto; display: grid; place-items: center; border-radius: 6px; color: var(--muted); font-size: 15px; line-height: 1; }
+.dockbody__close:hover { background: var(--hover); color: var(--fg); }
 .linkpanel { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .linkpanel__tabs { display: flex; gap: 12px; padding: 4px 14px 0; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
 .linkpanel__tabs button { padding: 5px 0 6px; font-size: 12px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
@@ -193,7 +193,9 @@ button.link { color: var(--muted); }
 
 /* 그래프 */
 .dockbody { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.dockbody__tabs { display: flex; gap: 14px; padding: 10px 14px 0; border-bottom: 1px solid var(--border); }
+.dockbody__bar { display: flex; align-items: center; gap: 6px; padding: 10px 6px 0 14px; border-bottom: 1px solid var(--border); }
+.dockbody__tabs { flex: 1; min-width: 0; display: flex; gap: 14px; overflow-x: auto; scrollbar-width: none; }
+.dockbody__tabs::-webkit-scrollbar { display: none; }
 .dockbody__tabs button { padding: 5px 0 6px; font-size: 12.5px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .dockbody__tabs button.active { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
 .dockbody .linkpanel__tabs { padding-top: 6px; }
@@ -203,6 +205,11 @@ button.link { color: var(--muted); }
 .graphview__canvas { position: absolute; inset: 0; overflow: hidden; opacity: 0; transition: opacity 0.45s ease; }
 .graphview__canvas.ready { opacity: 1; }
 .graphview__stats { position: absolute; left: 8px; bottom: 6px; pointer-events: none; display: inline-flex; align-items: center; gap: 6px; }
+.graphview__empty { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; padding: 24px; pointer-events: none; }
+.graphview__emptycard { pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 340px; padding: 14px 18px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--bg) 92%, transparent); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18); text-align: center; }
+.graphview__emptycard p { margin: 0; overflow-wrap: anywhere; }
+.graphview__emptycard button { padding: 4px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; }
+.graphview__emptycard button:hover { background: var(--hover); }
 .graphview__spin { width: 12px; height: 12px; flex: none; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: graphspin 0.8s linear infinite; }
 @keyframes graphspin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .graphview__spin { animation: none; } }
@@ -213,7 +220,9 @@ button.link { color: var(--muted); }
 .graphscreen__side { width: 220px; padding: 10px 12px; overflow: auto; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .graphscreen__side h4 { margin: 10px 0 2px; font-size: 12px; color: var(--muted); }
 .graphscreen__slider { display: flex; flex-direction: column; gap: 2px; }
+.graphscreen__groupwrap { display: flex; flex-direction: column; gap: 2px; }
 .graphscreen__group { display: flex; gap: 4px; align-items: center; }
+.graphscreen__grouphint { margin: -2px 0 2px 2px; font-size: 11px; }
 .graphscreen__group input:not([type='color']) { flex: 1; min-width: 0; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
 
 /* 동기화 */
@@ -236,16 +245,33 @@ button.link { color: var(--muted); }
 .syncdialog__ops li { padding: 1px 0; word-break: break-all; }
 /* 데이터베이스 */
 .dbscreen { flex: 1; display: flex; flex-direction: column; min-height: 0; height: 100%; position: relative; }
-.dbscreen__head { display: flex; align-items: center; gap: 10px; padding: 38px 16px 6px; }
-.dbscreen__head h2 { margin: 0; font-size: 18px; }
+.dbscreen__head { display: flex; align-items: center; gap: 8px; padding: 24px 16px 6px; min-width: 0; }
+.dbscreen__title { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 0 1 auto; }
+.dbscreen__title h2 { margin: 0; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dbscreen__count { flex: none; white-space: nowrap; }
+.dbscreen__head button { flex: none; white-space: nowrap; }
+.dbscreen__head select { flex: none; }
+.dbscreen__peek { display: flex; align-items: center; gap: 4px; flex: none; white-space: nowrap; }
+/* 좁은 창: CSV·템플릿·속성을 ⋯ 메뉴로 접고 + 새 행/닫기만 남긴다 */
+.dbscreen__more { position: relative; display: flex; flex: none; }
+.dbscreen__menumask { position: fixed; inset: 0; z-index: 29; }
+.dbscreen__menu { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; min-width: 170px; padding: 4px; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22); }
+.dbscreen__menu button { width: 100%; padding: 6px 10px; border: 0; border-radius: var(--radius); text-align: left; font-size: 13px; white-space: nowrap; }
+.dbscreen__menu button:hover { background: var(--hover); }
 .dbscreen__head .spacer { flex: 1; }
 .dbscreen__head button, .dbtoolbar button, .dbpop button, .dbadd button { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border); }
+/* 헤더 공통 버튼 규칙보다 메뉴 항목이 우선한다 */
+.dbscreen__head .dbscreen__menu button { padding: 6px 10px; border: 0; text-align: left; }
 .dbscreen button.primary, .dbpop button.primary, .dbadd button.primary { background: var(--accent); border-color: transparent; color: #fff; }
 .dbscreen button:disabled { opacity: 0.5; }
 .dbscreen button.danger { color: #d44; }
 .dbtabs { display: flex; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--border); }
 .dbtabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 5px 10px; color: var(--muted); }
 .dbtabs button.active { color: var(--fg); border-bottom-color: var(--accent); }
+/* 보기 삭제는 실수하기 쉬워 탭 줄에 마우스를 올렸을 때만 보인다 */
+.dbtabs__del { margin-left: 2px; color: var(--muted); opacity: 0; pointer-events: none; }
+.dbtabs:hover .dbtabs__del, .dbtabs__del:focus-visible { opacity: 1; pointer-events: auto; }
+.dbtabs__del:hover { color: #d1453b; background: var(--hover); }
 .dbtoolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 16px; position: relative; font-size: 13px; }
 .dbtoolbar button.on { background: var(--hover); }
 .dbtoolbar select, .dbpop select, .dbpop input, .dbadd input, .dbprops input { padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
@@ -259,8 +285,9 @@ button.link { color: var(--muted); }
 .dbpop__actions { display: flex; gap: 6px; }
 .dbprops__name { border: 0 !important; padding: 0 !important; min-width: 110px; text-align: left; font-weight: 600; }
 /* 속성 관리: 버튼 바로 아래에 붙어 자기를 연 버튼을 가리지 않는다 */
-.dbscreen__props { position: relative; display: flex; }
-.dbscreen__props > .dbprops { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; left: auto; width: min(430px, calc(100vw - 340px)); min-width: 0; max-width: none; max-height: min(72vh, 620px); overflow: auto; padding: 0; gap: 0; }
+.dbscreen__props { display: flex; }
+.dbscreen__popanchor { position: relative; }
+.dbscreen__popanchor > .dbprops { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; left: auto; width: min(430px, calc(100vw - 340px)); min-width: 0; max-width: none; max-height: min(72vh, 620px); overflow: auto; padding: 0; gap: 0; }
 .dbprops__head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 40px; padding: 0 6px 0 12px; background: var(--bg); border-bottom: 1px solid var(--border); }
 .dbprops__title { font-size: 13px; }
 .dbprops__x { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; color: var(--muted); font-size: 16px; line-height: 1; }
@@ -310,7 +337,7 @@ button.link { color: var(--muted); }
 .dbboard__col { width: 260px; flex: none; display: flex; flex-direction: column; min-height: 100%; background: var(--bg-side); border-radius: 10px; padding: 8px; }
 .dbboard__col.over { outline: 2px dashed var(--accent); }
 .dbboard__col h4 { position: sticky; top: 0; z-index: 1; margin: 0 0 8px; padding-top: 4px; border-top: 3px solid transparent; font-size: 13px; background: var(--bg-side); }
-.dbboard__cards { flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 96px; overflow: auto; }
+.dbboard__cards { flex: 0 1 auto; display: flex; flex-direction: column; gap: 6px; min-height: 96px; overflow: auto; }
 .dbboard__add { width: 100%; margin-top: 6px; border: 0 !important; color: var(--muted); text-align: left; }
 .dbcard { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px; cursor: grab; }
 .dbcard__title { font-weight: 600; text-align: left; border: 0 !important; padding: 0 !important; }
@@ -338,7 +365,10 @@ button.link { color: var(--muted); }
 .cell__relhits button:hover { background: var(--hover); }
 .dbcal { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .dbcal__bar { display: flex; gap: 8px; align-items: center; padding: 6px 16px; }
-.dbcal__grid { flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: minmax(88px, auto); gap: 1px; background: var(--border); margin: 0 16px 12px; border: 1px solid var(--border); overflow: auto; }
+.dbcal__grid { flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: 24px; grid-auto-rows: minmax(0, 1fr); gap: 1px; background: var(--border); margin: 0 16px 12px; border: 1px solid var(--border); overflow: auto; scrollbar-gutter: stable; }
+/* 캘린더도 넘칠 때만 스크롤 — macOS 오버레이 스크롤바는 높이가 0이라 항상 보이게 한다 */
+.dbcal__grid::-webkit-scrollbar { width: 8px; height: 8px; }
+.dbcal__grid::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--fg) 22%, transparent); border-radius: 4px; }
 .dbcal__grid.week { grid-auto-rows: minmax(260px, auto); }
 .dbcal__dow { background: var(--bg-side); padding: 3px 6px; font-size: 12px; color: var(--muted); grid-row: 1; min-height: 0; height: 24px; }
 .dbcal__day { background: var(--bg); padding: 3px 4px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }

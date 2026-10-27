@@ -223,6 +223,16 @@ describe('colorForNode', () => {
   it('일치하는 그룹이 없으면 폴백', () => {
     expect(colorForNode(note, [], '#ccc')).toBe('#ccc');
   });
+
+  it('빈 질의 그룹은 아무 색도 칠하지 않는다(모든 노드와 일치하므로)', () => {
+    const empty: ColorGroup[] = [
+      { query: '', color: '#f00' },
+      { query: '   ', color: '#0f0' },
+      { query: 'tag:책', color: '#00f' },
+    ];
+    expect(colorForNode(note, empty, '#ccc')).toBe('#00f');
+    expect(colorForNode(rootNote, empty, '#ccc')).toBe('#ccc');
+  });
 });
 
 describe('filterNodes', () => {
@@ -236,5 +246,10 @@ describe('filterNodes', () => {
 
   it('빈 질의는 전부 그대로', () => {
     expect(filterNodes(nodes, '  ')).toEqual(nodes);
+  });
+
+  it('일치 0건이면 빈 배열(0 / 전체 안내에 쓴다)', () => {
+    expect(filterNodes(nodes, 'tag:없는태그')).toEqual([]);
+    expect(filterNodes(nodes, 'path:없는폴더/')).toEqual([]);
   });
 });

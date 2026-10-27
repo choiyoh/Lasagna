@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanSnippet, noteNameOf } from './link-snippet';
+import { cleanSearchSnippet, cleanSnippet, noteNameOf } from './link-snippet';
 
 describe('cleanSnippet', () => {
   it('위키링크는 보이는 글자만 남긴다', () => {
@@ -28,6 +28,17 @@ describe('cleanSnippet', () => {
     expect(cleanSnippet('\\[\\[가짜\\]\\]')).toBe('[[가짜]]');
   });
 
+  it('인접한 링크는 한 단어로 붙지 않게 띄운다', () => {
+    expect(cleanSnippet('[[노트 000]][[노트 290]][[노트 077]]')).toBe('노트 000 노트 290 노트 077');
+    expect(cleanSnippet('[[a]] [[b]]')).toBe('a b');
+    expect(cleanSnippet('![[그림]][[b]]')).toBe('그림 b');
+  });
+
+  it('링크에 붙은 조사는 원문대로 둔다', () => {
+    expect(cleanSnippet('[[프로젝트/로드맵]]도 참고')).toBe('프로젝트/로드맵도 참고');
+    expect(cleanSnippet('[[클린 코드#1장|1장]]이다')).toBe('1장이다');
+  });
+
   it('제목만 가리키는 링크는 #만 벗긴다', () => {
     expect(cleanSnippet('[[#제목]]')).toBe('제목');
     expect(cleanSnippet('[[#제목|보기]]')).toBe('보기');
@@ -42,5 +53,29 @@ describe('noteNameOf', () => {
   it('경로에서 파일 이름만 꺼낸다', () => {
     expect(noteNameOf('독서/클린 코드.md')).toBe('클린 코드');
     expect(noteNameOf('노트')).toBe('노트');
+  });
+});
+
+
+describe('cleanSearchSnippet', () => {
+  it('끝에서 잘린 링크 조각을 지운다', () => {
+    expect(cleanSearchSnippet('# 노트 100 - [[노트 172')).toBe('노트 100 -');
+    expect(cleanSearchSnippet('본문 [[노트')).toBe('본문');
+    expect(cleanSearchSnippet('그림 ![[첨부')).toBe('그림');
+  });
+
+  it('선행 헤딩 마커만 지운다', () => {
+    expect(cleanSearchSnippet('# 제목 본문')).toBe('제목 본문');
+    expect(cleanSearchSnippet('### 소제목')).toBe('소제목');
+    // 본문 중간의 # 은 태그/문장 일부라 그대로
+    expect(cleanSearchSnippet('본문 # 태그')).toBe('본문 # 태그');
+  });
+
+  it('정상 링크는 그대로 정리한다', () => {
+    expect(cleanSearchSnippet('[[노트 172]] 참고')).toBe('노트 172 참고');
+  });
+
+  it('잘린 조각을 지운 뒤 남는 구분자는 유지한다(FTS 대괄호 포함)', () => {
+    expect(cleanSearchSnippet('# [노트 100] - [[노트 172')).toBe('[노트 100] -');
   });
 });

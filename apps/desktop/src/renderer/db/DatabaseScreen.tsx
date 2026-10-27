@@ -5,6 +5,7 @@ import { BoardView } from './BoardView';
 import { CalendarView } from './CalendarView';
 import { TimelineView } from './TimelineView';
 import { GalleryView, ListView } from './ListGalleryViews';
+import { ConfirmDialog } from '../ConfirmDialog';
 import { CsvImportDialog } from './CsvImportDialog';
 import { PropertyManager } from './PropertyManager';
 import { TableView, type RowAction } from './TableView';
@@ -43,6 +44,20 @@ const asData = (r: DbQueryResult): DbData => r as unknown as DbData;
 const sameView = (a: View, b: View) => JSON.stringify(a) === JSON.stringify(b);
 const uid = () => `v${Math.random().toString(36).slice(2, 7)}`;
 
+/** 창 폭이 max 이하인가(헤더를 접을지 결정). 리사이즈에 즉시 반응한다. */
+function useNarrow(max: number): boolean {
+  const query = `(max-width: ${max}px)`;
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setNarrow(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [query]);
+  return narrow;
+}
+
 /** 데이터베이스 한 개의 화면: 보기 탭 · 필터/정렬/그룹 · 표/보드/목록/갤러리 · 속성 관리 · 새 행. */
 export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, onRenameNote, renderNote }: Props) {
   const [data, setData] = useState<DbData | null>(null);
@@ -60,7 +75,14 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   const [peek, setPeek] = useState<string | null>(null);
   const [showTpl, setShowTpl] = useState(false);
   const [importing, setImporting] = useState<Parameters<typeof CsvImportDialog>[0]['preview'] | null>(null);
+  /** 삭제 확인 중인 보기 */
+  const [confirmDeleteView, setConfirmDeleteView] = useState<View | null>(null);
+  /** 좁은 창에서 접힌 헤더 메뉴 */
+  const [moreOpen, setMoreOpen] = useState(false);
   const seq = useRef(0);
+  const narrow = useNarrow(1100);
+  // 폭이 바뀌면 접힌 메뉴는 닫는다
+  useEffect(() => setMoreOpen(false), [narrow]);
 
   const load = useCallback(
     async (override?: View | null) => {
@@ -257,6 +279,17 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   }, [peek]);
 
   const rowTitle = (p: string) => notes.find((n) => n.path === p)?.title ?? p.replace(/^.*\//, '').replace(/\.md$/, '');
+
+  const exportCsv = () =>
+    void window.nops.db.exportCsv({ folder, viewId: data?.view.id ?? '' }).then(
+      (r) => r && setNotice(`${r.rows}행을 CSV로 저장했어요`),
+      (e) => setError(String(e)),
+    );
+  const importCsv = () =>
+    void window.nops.db.importCsvPreview().then(
+      (p) => p && setImporting(p),
+      (e) => setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)),
+    );
   const tabs = data?.schema.views ?? [];
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const flat = useMemo(() => (data?.groups ? data.groups.flatMap((g) => g.rows) : rows), [data, rows]);
@@ -265,28 +298,40 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
     return <div className="dbscreen">{error ? <p className="warn pad" role="alert">{error}</p> : <p className="muted pad">불러오는 중…</p>}</div>;
   }
   const current: DbData = { ...data, view };
+  const propertyManager = showProps ? (
+    <PropertyManager
+      data={data}
+      onClose={() => setShowProps(false)}
+      onSetProperty={(name, def) => void edit({ kind: 'setProperty', name, def })}
+      onRemove={(name) => void edit({ kind: 'removeProperty', name })}
+      onRename={(from, to) => void edit({ kind: 'renameProperty', from, to })}
+    />
+  ) : null;
 
   return (
     <div className="dbscreen" data-testid="db-screen">
       <header className="dbscreen__head">
-        <h2>{data.schema.title ?? '데이터베이스'}</h2>
-        <span className="muted small">
-          {data.matched === data.total ? `${data.total}행` : `${data.matched} / ${data.total}행`}
-        </span>
+        <div className="dbscreen__title">
+          <h2 title={data.schema.title ?? '데이터베이스'}>{data.schema.title ?? '데이터베이스'}</h2>
+          <span className="dbscreen__count muted small">
+            {data.matched === data.total ? `${data.total}행` : `${data.matched} / ${data.total}행`}
+          </span>
+        </div>
         <span className="spacer" />
-        <button
-          onClick={() =>
-            void window.nops.db.exportCsv({ folder, viewId: data.view.id }).then(
-              (r) => r && setNotice(`${r.rows}행을 CSV로 저장했어요`),
-              (e) => setError(String(e)),
-            )
-          }
-        >
-          CSV 내보내기
-        </button>
+        {!narrow && (
+          <>
+            <button onClick={exportCsv}>CSV 내보내기</button>
+            <button onClick={importCsv}>CSV 가져오기</button>
+            <button onClick={() => setShowTpl((s) => !s)} aria-expanded={showTpl}>템플릿</button>
+            <div className="dbscreen__props dbscreen__popanchor">
+              <button onClick={() => setShowProps((s) => !s)} aria-expanded={showProps}>속성</button>
+              {propertyManager}
+            </div>
+          </>
+        )}
         {renderNote && (
-          <label className="small">
-            <span className="muted">행 열기 </span>
+          <label className="dbscreen__peek small">
+            {!narrow && <span className="muted">행 열기 </span>}
             <select
               value={peekMode}
               onChange={(e) => {
@@ -306,29 +351,23 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             </select>
           </label>
         )}
-        <button
-          onClick={() =>
-            void window.nops.db.importCsvPreview().then(
-              (p) => p && setImporting(p),
-              (e) => setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)),
-            )
-          }
-        >
-          CSV 가져오기
-        </button>
-        <button onClick={() => setShowTpl((s) => !s)} aria-expanded={showTpl}>템플릿</button>
-        <div className="dbscreen__props">
-          <button onClick={() => setShowProps((s) => !s)} aria-expanded={showProps}>속성</button>
-          {showProps && (
-            <PropertyManager
-              data={data}
-              onClose={() => setShowProps(false)}
-              onSetProperty={(name, def) => void edit({ kind: 'setProperty', name, def })}
-              onRemove={(name) => void edit({ kind: 'removeProperty', name })}
-              onRename={(from, to) => void edit({ kind: 'renameProperty', from, to })}
-            />
-          )}
-        </div>
+        {narrow && (
+          <div className="dbscreen__more dbscreen__popanchor">
+            <button aria-label="더 보기" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}>⋯</button>
+            {moreOpen && (
+              <>
+                <div className="dbscreen__menumask" onMouseDown={() => setMoreOpen(false)} />
+                <div className="dbscreen__menu" role="menu" aria-label="데이터베이스 메뉴">
+                  <button role="menuitem" onClick={() => { setMoreOpen(false); exportCsv(); }}>CSV 내보내기</button>
+                  <button role="menuitem" onClick={() => { setMoreOpen(false); importCsv(); }}>CSV 가져오기</button>
+                  <button role="menuitem" onClick={() => { setMoreOpen(false); setShowTpl(true); }}>템플릿</button>
+                  <button role="menuitem" onClick={() => { setMoreOpen(false); setShowProps(true); }}>속성</button>
+                </div>
+              </>
+            )}
+            {propertyManager}
+          </div>
+        )}
         <button className="primary" onClick={() => setAdding({ title: '', values: {} })}>+ 새 행</button>
         <button onClick={onClose} title="닫기 (Esc)">닫기</button>
       </header>
@@ -369,16 +408,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           +
         </button>
         {tabs.length > 1 && (
-          <button
-            className="danger"
-            onClick={() => {
-              void edit({ kind: 'removeView', id: data.view.id });
-              setDraft(null);
-              setViewId(null);
-            }}
-            aria-label="이 보기 삭제"
-            title="이 보기 삭제"
-          >
+          <button className="dbtabs__del" onClick={() => setConfirmDeleteView(data.view)} aria-label="이 보기 삭제" title="이 보기 삭제">
             ×
           </button>
         )}
@@ -523,6 +553,21 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           onDone={() => {
             setImporting(null);
             void load();
+          }}
+        />
+      )}
+      {confirmDeleteView && (
+        <ConfirmDialog
+          title="보기 삭제"
+          lines={[`‘${confirmDeleteView.name}’ 보기를 삭제할까요?`, '필터·정렬·그룹·열 폭 설정이 함께 사라지며 되돌릴 수 없어요.']}
+          confirmLabel="삭제"
+          onCancel={() => setConfirmDeleteView(null)}
+          onConfirm={() => {
+            const id = confirmDeleteView.id;
+            setConfirmDeleteView(null);
+            void edit({ kind: 'removeView', id });
+            setDraft(null);
+            setViewId(null);
           }}
         />
       )}

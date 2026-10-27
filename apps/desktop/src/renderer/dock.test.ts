@@ -5,20 +5,20 @@ import { DOCK_BREAKPOINT, dockAvailable, loadDockMode, nextDockMode, resolveDock
 beforeEach(() => localStorage.clear());
 
 describe('resolveDockOpen', () => {
-  it('auto 는 1,200px 이하에서 접고 그보다 넓으면 편다', () => {
+  it('auto 는 1,340px 이하에서 접고 그보다 넓으면 편다', () => {
     expect(resolveDockOpen('auto', 1440)).toBe(true);
     expect(resolveDockOpen('auto', 920)).toBe(false);
   });
 
-  it('경계값 1,199 / 1,200 / 1,201', () => {
-    expect(DOCK_BREAKPOINT).toBe(1200);
-    expect(resolveDockOpen('auto', 1199)).toBe(false);
-    expect(resolveDockOpen('auto', 1200)).toBe(false);
-    expect(resolveDockOpen('auto', 1201)).toBe(true);
+  it('경계값 1,339 / 1,340 / 1,341 — 열어도 본문 668px이 유지되는 폭', () => {
+    expect(DOCK_BREAKPOINT).toBe(1340);
+    expect(resolveDockOpen('auto', 1339)).toBe(false);
+    expect(resolveDockOpen('auto', 1340)).toBe(false);
+    expect(resolveDockOpen('auto', 1341)).toBe(true);
   });
 
   it('사용자가 고른 값은 창 폭이 바뀌어도 그대로다', () => {
-    for (const w of [640, 1199, 1200, 1201, 1440]) {
+    for (const w of [640, 1200, 1340, 1341, 1440]) {
       expect(resolveDockOpen('closed', w)).toBe(false);
       expect(resolveDockOpen('open', w)).toBe(true);
     }

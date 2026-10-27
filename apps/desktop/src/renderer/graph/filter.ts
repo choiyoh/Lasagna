@@ -148,9 +148,11 @@ export function matchesQuery(node: FilterNode, q: string | ParsedQuery): boolean
   return true;
 }
 
-/** 위에서부터 처음 일치하는 그룹의 색, 없으면 fallback. */
+/** 위에서부터 처음 일치하는 그룹의 색, 없으면 fallback. 빈 질의는 아무 색도 칠하지 않는다. */
 export function colorForNode(node: FilterNode, groups: ColorGroup[], fallback: string): string {
   for (const group of groups) {
+    // 새 그룹은 질의를 입력하기 전까지 빈 문자열이다 — 빈 질의는 모든 노드와 일치하므로 건너뛴다
+    if (!group.query.trim()) continue;
     if (matchesQuery(node, group.query)) return group.color;
   }
   return fallback;

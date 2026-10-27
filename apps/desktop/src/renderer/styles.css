@@ -199,8 +199,8 @@ button.link { color: var(--muted); }
 .dockbody .linkpanel__tabs { padding-top: 6px; }
 .localgraph { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .localgraph__bar { display: flex; gap: 8px; padding: 6px 8px; font-size: 12px; }
-.graphview { position: relative; flex: 1; min-height: 0; min-width: 0; background: radial-gradient(900px 600px at 50% 40%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%), radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--fg) 9%, transparent) 1px, transparent 0) 0 0 / 26px 26px, var(--bg); }
-.graphview__canvas { position: absolute; inset: 0; opacity: 0; transition: opacity 0.45s ease; }
+.graphview { position: relative; flex: 1; min-height: 0; min-width: 0; overflow: hidden; background: radial-gradient(900px 600px at 50% 40%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%), radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--fg) 9%, transparent) 1px, transparent 0) 0 0 / 26px 26px, var(--bg); }
+.graphview__canvas { position: absolute; inset: 0; overflow: hidden; opacity: 0; transition: opacity 0.45s ease; }
 .graphview__canvas.ready { opacity: 1; }
 .graphview__stats { position: absolute; left: 8px; bottom: 6px; pointer-events: none; display: inline-flex; align-items: center; gap: 6px; }
 .graphview__spin { width: 12px; height: 12px; flex: none; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: graphspin 0.8s linear infinite; }

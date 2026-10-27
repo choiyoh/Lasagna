@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { contract, events, type Channel, type EventName } from '@nopsidian/ipc-contract';
 
 /** 계약의 채널 `a.b`를 `window.nops.a.b(input)`로 노출한다. 그 외 IPC는 열지 않는다. */
@@ -15,4 +15,4 @@ const on = (event: EventName, cb: (payload: unknown) => void) => {
   return () => void ipcRenderer.removeListener(event, listener);
 };
 
-contextBridge.exposeInMainWorld('nops', { ...api, on });
+contextBridge.exposeInMainWorld('nops', { ...api, on, pathForFile: (file: File) => webUtils.getPathForFile(file) });

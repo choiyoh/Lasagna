@@ -269,7 +269,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     return () => clearTimeout(t);
   }, [tabs, openedWith]);
 
-  const { exportNote, exportVault, importNotion } = useImportExport({ selected, refresh, setToast });
+  const { exportNote, exportVault, importNotion, importMarkdown } = useImportExport({ selected, refresh, setToast });
 
   const commands = useMemo<PaletteCommand[]>(
     () => [
@@ -295,6 +295,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'export-html', label: '현재 노트를 HTML로 내보내기', keywords: ['export', 'html', '내보내기'], enabled: !!selected, run: () => void exportNote('html') },
       { id: 'export-pdf', label: '현재 노트를 PDF로 내보내기', keywords: ['export', 'pdf', '내보내기'], enabled: !!selected, run: () => void exportNote('pdf') },
       { id: 'export-vault', label: '볼트 전체를 HTML 사이트로 내보내기', keywords: ['export', 'site', 'html', '내보내기', '사이트'], run: () => void exportVault() },
+      { id: 'import-md-files', label: 'Markdown 파일 가져오기 (컴퓨터에서 .md 선택)', keywords: ['import', 'markdown', 'md', '가져오기', '마크다운'], run: () => void importMarkdown('files') },
+      { id: 'import-md-folder', label: 'Markdown 폴더 가져오기 (Obsidian 볼트 등)', keywords: ['import', 'markdown', 'folder', 'obsidian', '옵시디언', '가져오기', '폴더'], run: () => void importMarkdown('folder') },
       { id: 'import-notion', label: 'Notion에서 가져오기 (내보낸 ZIP 파일)', keywords: ['import', 'notion', '노션', '가져오기'], run: () => void importNotion() },
       { id: 'tab-new', label: '새 탭에서 노트 열기', keywords: ['tab', '탭'], run: () => { setSwitcherNewTab(true); setSwitcher(true); } },
       { id: 'tab-close', label: '현재 탭 닫기', hint: '⌘W', keywords: ['close', 'tab', '탭', '닫기'], enabled: !!selected, run: () => selected && dispatchTabs({ type: 'close', pane: tabs.activePane, path: selected }) },
@@ -305,7 +307,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'theme', label: '테마 바꾸기 (시스템 → 라이트 → 다크)', keywords: ['theme', 'dark', 'light', '다크', '라이트', '테마', '다크모드'], run: cycleTheme },
       { id: 'close', label: '다른 볼트 열기', keywords: ['vault', '볼트', '닫기'], run: onClose },
     ],
-    [selected, dockVisible, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, cycleTheme, deleteEntry, newFolder, quickNote, onClose, openPanel, tabs.activePane, tabs.panes.length],
+    [selected, dockVisible, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, importMarkdown, cycleTheme, deleteEntry, newFolder, quickNote, onClose, openPanel, tabs.activePane, tabs.panes.length],
   );
 
   useEffect(() => {
@@ -431,7 +433,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         )}
         <nav
           className="list"
-          {...dropProps((items) => moveEntries(items, ''))}
+          {...dropProps((items) => moveEntries(items, ''), (paths) => void importMarkdown('paths', paths))}
           onKeyDown={(e) =>
             sel.onKeyDown(e, {
               isOpen: folderOpen.isOpen,
@@ -581,6 +583,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                   { icon: '⌕', label: '노트 찾기', hint: '⌘O', run: () => setSwitcher(true) },
                   { icon: '⌘', label: '명령 팔레트', hint: '⌘P', run: () => setPalette(true) },
                   { icon: '◎', label: '그래프', hint: '⌘⇧G', run: () => { setDbOpen(null); setGraphOpen(true); } },
+                  { icon: '⇩', label: 'Markdown 가져오기', hint: '', run: () => void importMarkdown('files') },
                   { icon: '⇪', label: 'Notion 가져오기', hint: '', run: () => void importNotion() },
                 ]}
               />

@@ -314,6 +314,14 @@ export const contract = {
       issues: z.array(z.string()),
     }),
   },
+  /**
+   * 컴퓨터의 Markdown 파일(`files`)·폴더(`folder`)를 골라 `into`(없으면 볼트 루트)로 복사한다.
+   * `paths` 는 끌어 놓은 파일·폴더 경로(대화상자 없이 가져온다). 취소하면 imported 가 빈 배열
+   */
+  'import.markdown': {
+    input: z.object({ mode: z.enum(['files', 'folder', 'paths']), paths: z.array(z.string().min(1).max(4096)).max(10_000).optional(), into: z.string().max(1024).optional() }),
+    output: z.object({ notes: z.number(), assets: z.number(), renamed: z.number(), imported: z.array(z.string()), skipped: z.array(z.string()) }),
+  },
   /** 이 기기의 탭·분할 배치(`.nopsidian/workspace.json`, 동기화하지 않음) */
   'workspace.get': { input: z.undefined(), output: workspaceLayout.nullable() },
   'workspace.set': { input: workspaceLayout, output: z.undefined() },
@@ -512,5 +520,7 @@ type Fn<C extends Channel> = undefined extends ChannelInput<C>
 export type NopsApi = {
   [N in Namespace<Channel>]: { [C in Channel as Method<C & `${N}.${string}`>]: Fn<C> };
 } & {
+  /** 끌어 놓은 파일·폴더의 실제 경로(preload 가 webUtils 로 구한다) */
+  pathForFile(file: File): string;
   on<E extends EventName>(event: E, cb: (payload: z.output<(typeof events)[E]>) => void): () => void;
 };

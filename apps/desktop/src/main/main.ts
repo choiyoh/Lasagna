@@ -57,6 +57,7 @@ import {
 import { readFile } from 'node:fs/promises';
 import { CredentialStore, SyncController } from './sync';
 import { createFolder, listFolders, listTrash, moveToTrash, purgeTrash, restoreFromTrash, duplicateNote } from './trash';
+import { importMarkdownInto } from './markdown-import';
 import { importNotionInto, readZipEntries } from './notion-import';
 import { exportVaultSite, renderNoteDocument, type ExportContext } from './export';
 import { addRow, createDatabase, editSchema, exportCsv, importCsvApply, importCsvPreview, updateCell } from './db';
@@ -375,6 +376,21 @@ function registerHandlers() {
       unresolvedLinks: res.stats.unresolvedLinks,
       issues: res.issues.slice(0, 30),
     };
+  });
+  handle('import.markdown', async (input, e) => {
+    const v = requireVault();
+    let paths = input.paths ?? [];
+    if (input.mode !== 'paths') {
+      const parent = BrowserWindow.fromWebContents(e.sender);
+      const opts =
+        input.mode === 'files'
+          ? { title: 'Markdown 파일 가져오기', properties: ['openFile' as const, 'multiSelections' as const], filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }] }
+          : { title: 'Markdown 폴더 가져오기', properties: ['openDirectory' as const, 'multiSelections' as const] };
+      const r = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
+      if (r.canceled) return { notes: 0, assets: 0, renamed: 0, imported: [], skipped: [] };
+      paths = r.filePaths;
+    }
+    return importMarkdownInto(v.info.path, paths, input.into);
   });
   handle('export.vault', async (_i, e) => {
     const v = requireVault();

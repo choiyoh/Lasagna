@@ -1911,6 +1911,7 @@ views:
     const page = await app.firstWindow();
     await page.keyboard.press('ControlOrMeta+,');
     const settings = page.getByRole('dialog', { name: '설정' });
+    await settings.getByRole('tab', { name: 'Claude Code' }).click();
     const cli = settings.getByTestId('mcp-cli');
     // 패키징된 앱은 Node.js 없이 앱 실행 파일 자체가 `--mcp-stdio` 로 MCP 서버가 된다(#8)
     await expect(cli).toContainText('--mcp-stdio', { timeout: 8000 });
@@ -1920,9 +1921,10 @@ views:
     await settings.getByLabel('에이전트가 노트 쓰기 허용').check();
     await expect(cli).toContainText('--write');
     await expect(cli).toContainText('--write-folder "AI"');
-    const shown = (await cli.innerText()).match(/^claude mcp add nopsidian -- "([^"]+)" (.*?--mcp-stdio)/)!;
-    const exe = shown[1]!;
-    const launchArgs = shown[2]!.split(' ');
+    const shown = (await cli.innerText()).match(/^claude mcp add -s user ([^ ]+) -- "([^"]+)" (.*?--mcp-stdio)/)!;
+    expect(shown[1]).toMatch(/^nopsidian-/);
+    const exe = shown[2]!;
+    const launchArgs = shown[3]!.split(' ');
     expect(existsSync(exe)).toBe(true);
     await settings.getByLabel('에이전트가 노트 쓰기 허용').uncheck();
     await page.keyboard.press('Escape');

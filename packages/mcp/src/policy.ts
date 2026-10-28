@@ -1,5 +1,8 @@
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { PolicyError, folderCovers, normalizeFolder } from './folders.js';
+
+export { PolicyError, normalizeFolder };
 
 /** MCP 서버가 볼트에 할 수 있는 일의 한도. 기본은 읽기 전용이고, 쓰기는 켜야만 되며 폴더도 좁힌다. */
 export interface McpPolicy {
@@ -19,8 +22,6 @@ export const DEFAULT_WRITE_FOLDER = 'AI';
 export const DEFAULT_MAX_WRITES_PER_MINUTE = 30;
 export const DEFAULT_MAX_BYTES = 1_000_000;
 
-export class PolicyError extends Error {}
-
 export const USAGE = `nopsidian-mcp — Nopsidian 볼트를 MCP(stdio)로 열어 줍니다.
 
 사용법: node nopsidian-mcp.mjs --vault <볼트 폴더> [옵션]
@@ -32,15 +33,6 @@ export const USAGE = `nopsidian-mcp — Nopsidian 볼트를 MCP(stdio)로 열어
   --max-writes-per-minute <N>  1분당 쓰기 횟수 한도(기본 ${DEFAULT_MAX_WRITES_PER_MINUTE})
   --help                       이 도움말
 `;
-
-/** 쓰기 폴더 입력을 볼트 상대 경로로 다듬는다. '.'·'' 는 볼트 전체('') */
-export function normalizeFolder(input: string): string {
-  const f = input.normalize('NFC').replace(/\\/g, '/').replace(/^\.?\/+|\/+$/g, '').trim();
-  if (f === '' || f === '.') return '';
-  const parts = f.split('/');
-  if (parts.some((p) => p === '' || p === '..' || p.startsWith('.'))) throw new PolicyError(`쓰기 폴더로 쓸 수 없는 경로예요: ${input}`);
-  return parts.join('/');
-}
 
 /** 명령줄 인자·환경 변수에서 정책을 만든다. 잘못되면 PolicyError */
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): McpPolicy | 'help' {
@@ -98,5 +90,5 @@ export function validateNotePath(input: string): string {
 /** 이 경로에 쓰기가 허용되는가 */
 export function canWrite(policy: McpPolicy, rel: string): boolean {
   if (!policy.write) return false;
-  return policy.writeFolders.some((f) => f === '' || rel === f || rel.startsWith(`${f}/`));
+  return policy.writeFolders.some((f) => folderCovers(f, rel));
 }

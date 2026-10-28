@@ -447,7 +447,16 @@ function registerHandlers() {
     // 패키징된 앱은 resources/ 에, 개발 중에는 저장소의 빌드 결과를 쓴다
     const script = mcpScriptPath({ packaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath() });
     // 패키징된 앱은 이 실행 파일 자체가 `--mcp-stdio` 로 MCP 서버가 된다(Node.js 불필요)
-    return { script: existsSync(script) ? script : null, vault: v.info.path, executable: process.execPath, packaged: app.isPackaged, launchArgs: mcpLaunchArgs(process.platform) };
+    return {
+      script: existsSync(script) ? script : null,
+      vault: v.info.path,
+      vaultName: v.info.name,
+      vaultId: v.info.id,
+      dailyFolder: readVaultConfig(v.info.path).dailyFolder,
+      executable: process.execPath,
+      packaged: app.isPackaged,
+      launchArgs: mcpLaunchArgs(process.platform),
+    };
   });
   handle('mcp.revert', ({ t, path: rel }) => {
     const v = requireVault();

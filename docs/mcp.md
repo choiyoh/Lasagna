@@ -4,8 +4,24 @@ Claude 같은 AI 에이전트가 Nopsidian 볼트의 노트를 **찾아 읽고**
 
 ## 연결하기
 1. 앱의 **설정(⌘,) → AI 에이전트 연결(MCP)** 을 엽니다.
-2. 필요하면 "에이전트가 노트 쓰기 허용"을 켜고 쓸 폴더(기본 `AI`)를 정합니다. 끄면 읽기 전용입니다.
-3. 보이는 명령(Claude Code)이나 JSON(Claude Desktop 등)을 복사해 붙여 넣습니다.
+2. 필요하면 "에이전트가 노트 쓰기 허용"을 켜고 쓸 폴더(기본 `AI`)를 정합니다. 끄면 읽기 전용입니다. 오늘의 노트에도 쓰려면 **"오늘의 노트 폴더도 허용"** 을 켭니다. 이걸 끄면 `append_to_daily_note` 는 데일리 폴더(기본 `일기/`)가 허용 폴더에 없어 `forbidden-folder` 로 거부되고, 설정 화면에도 그 이유가 표시됩니다.
+3. 클라이언트 탭(Claude Code / Claude Desktop / Codex / Cursor / VS Code / Gemini CLI)을 고르고, 보이는 명령이나 설정을 **복사**해 해당 위치에 붙여 넣습니다.
+4. 서버 이름은 기본 **`nopsidian-<볼트 슬러그>`** 입니다. 같은 클라이언트에 볼트 두 개를 등록해도 서로 덮지 않게 볼트마다 다른 이름이 붙고, 직접 바꿀 수 있습니다. 이름을 바꾸면 이미 등록한 항목은 새 이름으로 다시 추가해야 합니다.
+
+### 클라이언트별 설정 위치
+
+| 클라이언트 | 넣을 곳 | 형식 |
+|---|---|---|
+| **Claude Code** | 터미널에서 한 번 실행 | `claude mcp add -s user <이름> -- <명령> <인자…>` (`-s user` 라서 어느 폴더에서 연 Claude Code 에서도 보임) |
+| **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` (Windows: `%APPDATA%\Claude\claude_desktop_config.json`) | `mcpServers` JSON |
+| **Codex** | `~/.codex/config.toml` | `[mcp_servers."<이름>"]` TOML (`command`, `args`) |
+| **Cursor** | `~/.cursor/mcp.json` (프로젝트별: `.cursor/mcp.json`) | `mcpServers` JSON |
+| **VS Code** | `.vscode/mcp.json` (모든 워크스페이스: 명령 팔레트 → “MCP: Open User Configuration”) | `servers` JSON + `"type": "stdio"` |
+| **Gemini CLI** | `~/.gemini/settings.json` | `mcpServers` JSON |
+
+설정을 저장한 뒤 클라이언트를 다시 시작해야 목록에 나타나는 경우가 있습니다. Claude Code 는 `claude mcp list`, Codex 는 `codex mcp list` 로 확인합니다.
+
+**볼트 두 개**: 설정 화면의 값(이름·쓰기 폴더·오늘의 노트 허용·선택한 클라이언트)은 **볼트별로 저장**됩니다. 볼트 A 와 B 를 각각 열어 스니펫을 만들면 이름은 `nopsidian-a`, `nopsidian-b` 처럼 다르고, 각 스니펫의 `--vault` 도 그 볼트를 가리킵니다. 같은 이름을 쓰는 다른 볼트 설정이 있으면 저장 전에 경고합니다.
 
 패키징된 앱이 안내하는 설정은 **앱 실행 파일 자체를 `--mcp-stdio` 모드로 띄우는** 것입니다(예: `"/Applications/Nopsidian.app/Contents/MacOS/nopsidian" --mcp-stdio --vault <볼트 폴더>`). 앱에 들어 있는 서버 번들(`resources/nopsidian-mcp.mjs`)을 실행하므로 **Node.js 를 따로 설치하지 않아도 됩니다**. 개발 빌드(`pnpm start`)에서는 저장소의 `packages/mcp/dist/nopsidian-mcp.mjs` 를 `node` 로 실행하는 설정을 안내합니다(이때는 Node.js 22 이상 필요).
 
@@ -24,7 +40,7 @@ Electron 의 `RunAsNode` 퓨즈를 켜면 `ELECTRON_RUN_AS_NODE=1` 로 **아무 
 지우기·이동·이름 바꾸기는 없습니다.
 
 ## 안전장치
-- **기본은 읽기 전용.** 쓰기는 `--write` 로 명시해야 하고, **허용 폴더(기본 `AI/`) 밖은 거부**합니다. 볼트 전체는 `--write-folder .`.
+- **기본은 읽기 전용.** 쓰기는 `--write` 로 명시해야 하고, **허용 폴더(기본 `AI/`) 밖은 거부**합니다. 볼트 전체는 `--write-folder .`. 허용 폴더는 여러 번 줄 수 있어요(예: `--write --write-folder AI --write-folder 일기`). 오늘의 노트 폴더를 허용하지 않으면 `append_to_daily_note` 는 `forbidden-folder` 로 거부됩니다.
 - 경로 검사: 절대 경로·`..`·점으로 시작하는 폴더/파일(`.nopsidian`, `.git`)·이상한 글자 거부, 심볼릭 링크는 따라가지 않음.
 - 기존 노트는 덧붙이기이거나 최신 해시를 확인한 교체만 됩니다. 덮어쓰기 전 내용은 노트의 **버전 기록**에 남아 되돌릴 수 있습니다(앱과 같은 저장 경로).
 - 1분당 쓰기 횟수(기본 30)·한 번에 쓰는 크기(1MB) 한도.

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { mcpSnippet, type McpInfo } from './mcp-snippet';
+import { defaultServerName, isValidServerName, mcpSnippet, type McpInfo } from './mcp-snippet';
+import { loadMcpSettings, saveMcpSettings, serverNameConflict, type McpSettingsConfig } from './mcp-settings';
 
 interface AuditRow {
   t: string;
@@ -10,22 +11,12 @@ interface AuditRow {
   note?: string;
 }
 
-const KEY = 'nops.mcp';
 const ACTION_LABEL: Record<AuditRow['action'], string> = { create: '새로 만듦', append: '덧붙임', update: '고침', denied: '거부됨', revert: '되돌림', comment: '댓글' };
 
-const load = (): { write: boolean; folder: string } => {
-  try {
-    const v = JSON.parse(localStorage.getItem(KEY) ?? '{}') as { write?: boolean; folder?: string };
-    return { write: !!v.write, folder: typeof v.folder === 'string' ? v.folder : 'AI' };
-  } catch {
-    return { write: false, folder: 'AI' };
-  }
-};
-
-/** 설정 화면의 "AI 에이전트 연결(MCP)": 연결 방법 복사와 에이전트가 한 일 보기 */
+/** 설정 화면의 "AI 에이전트 연결(MCP)": 클라이언트별 연결 방법 복사와 에이전트가 한 일 보기 */
 export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: string) => void; onReverted: (path: string, kind: 'restored' | 'trashed') => void }) {
   const [info, setInfo] = useState<McpInfo | null>(null);
-  const [cfg, setCfg] = useState(load);
+  const [cfg, setCfg] = useState<McpSettingsConfig | null>(null);
   const [audit, setAudit] = useState<AuditRow[]>([]);
   const [copied, setCopied] = useState('');
   /** 되돌리기 확인 중인 기록과 결과 문구 */
@@ -45,27 +36,37 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
 
   const refresh = useCallback(() => void window.nops.mcp.audit({ limit: 30 }).then(setAudit), []);
   useEffect(() => {
-    void window.nops.mcp.info().then(setInfo);
+    void window.nops.mcp.info().then((next) => {
+      setInfo(next);
+      setCfg(loadMcpSettings(next.vaultId, next.vaultName));
+    });
     refresh();
   }, [refresh]);
-  useEffect(() => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(cfg));
-    } catch {
-      /* 저장 못 해도 이번 실행에는 적용된다 */
-    }
-  }, [cfg]);
 
   if (!info) return null;
+  /** 설정은 볼트마다 따로 저장한다. 바뀔 때마다 이 볼트에만 쓴다. */
+  const initial: McpSettingsConfig = { write: false, folder: 'AI', allowDailyFolder: false, name: defaultServerName(info), client: 'claude-code' };
+  const current = cfg ?? initial;
+  const update = (patch: Partial<McpSettingsConfig>) => {
+    const next = { ...current, ...patch };
+    setCfg(next);
+    saveMcpSettings(info.vaultId, next);
+  };
   /** 이미 되돌린 기록(`revert:<t>` 메모가 붙은 되돌림 기록이 가리키는 것) */
   const reverted = new Set(audit.filter((a) => a.action === 'revert' && a.note?.startsWith('revert:')).map((a) => `${a.note!.slice(7)}|${a.path}`));
-  const snippet = mcpSnippet(info, { write: cfg.write, folder: cfg.folder });
+  const snippet = mcpSnippet(info, { write: current.write, folder: current.folder, allowDailyFolder: current.allowDailyFolder, dailyFolder: info.dailyFolder, name: current.name });
+  const active = snippet?.clients.find((c) => c.id === current.client) ?? snippet?.clients[0];
   const copy = (label: string, text: string) => {
     void navigator.clipboard.writeText(text).then(() => {
       setCopied(label);
       setTimeout(() => setCopied(''), 1800);
     });
   };
+  const folderNormalized = current.folder.trim().replace(/^\/+|\/+$/g, '');
+  /** 데일리 폴더가 이미 허용 범위(볼트 전체 또는 같은 폴더)에 들어 있는가 */
+  const dailyCovered = folderNormalized === '' || folderNormalized === '.' || folderNormalized === info.dailyFolder;
+  const nameOk = !current.name.trim() || isValidServerName(current.name);
+  const conflict = nameOk && current.name.trim() !== '' && serverNameConflict(current.name, info.vaultId);
 
   return (
     <section data-testid="mcp-settings">
@@ -79,32 +80,83 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
           에이전트가 노트 쓰기 허용
           <small className="muted">끄면 읽기만 가능해요. 쓰기는 아래 폴더 안에서만, 기존 노트는 덧붙이기·해시 확인 후 고치기만 돼요.</small>
         </span>
-        <input type="checkbox" checked={cfg.write} onChange={(e) => setCfg({ ...cfg, write: e.target.checked })} aria-label="에이전트가 노트 쓰기 허용" />
+        <input type="checkbox" checked={current.write} onChange={(e) => update({ write: e.target.checked })} aria-label="에이전트가 노트 쓰기 허용" />
       </label>
-      {cfg.write && (
-        <label className="settings__row">
-          <span>
-            쓸 수 있는 폴더
-            <small className="muted">볼트 전체는 .(점)으로 적어요.</small>
-          </span>
-          <input className="settings__text" value={cfg.folder} onChange={(e) => setCfg({ ...cfg, folder: e.target.value })} aria-label="쓸 수 있는 폴더" />
-        </label>
+      {current.write && (
+        <>
+          <label className="settings__row">
+            <span>
+              쓸 수 있는 폴더
+              <small className="muted">볼트 전체는 .(점)으로 적어요.</small>
+            </span>
+            <input className="settings__text" value={current.folder} onChange={(e) => update({ folder: e.target.value })} aria-label="쓸 수 있는 폴더" />
+          </label>
+          <label className="settings__row">
+            <span>
+              오늘의 노트 폴더도 허용
+              <small className="muted">
+                켜면 {info.dailyFolder}/ 도 쓰기 허용 폴더에 넣어요. 끄면 append_to_daily_note 가 forbidden-folder 로 거부돼요.
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={current.allowDailyFolder}
+              onChange={(e) => update({ allowDailyFolder: e.target.checked })}
+              aria-label="오늘의 노트 폴더도 허용"
+            />
+          </label>
+          {!current.allowDailyFolder && !dailyCovered && (
+            <p className="warn small" data-testid="mcp-daily-warning">
+              오늘의 노트 폴더({info.dailyFolder}/)가 허용 폴더에 없어요. 이대로면 오늘의 노트에 쓰기는 forbidden-folder 로 실패해요.
+            </p>
+          )}
+        </>
       )}
-      {snippet ? (
+      <label className="settings__row">
+        <span>
+          서버 이름
+          <small className="muted">클라이언트 설정 파일의 키예요. 두 볼트를 함께 등록해도 겹치지 않게 볼트 이름이 붙어요.</small>
+        </span>
+        <input
+          className="settings__text"
+          value={current.name}
+          placeholder={defaultServerName(info)}
+          onChange={(e) => update({ name: e.target.value })}
+          aria-label="MCP 서버 이름"
+        />
+      </label>
+      {!nameOk && (
+        <p className="warn small" data-testid="mcp-name-warning">
+          이름에는 공백 없이 글자·숫자와 . _ - 만 쓸 수 있어요.
+        </p>
+      )}
+      {conflict && (
+        <p className="warn small" data-testid="mcp-name-conflict">
+          같은 이름을 쓰는 다른 볼트 설정이 있어요. 두 볼트를 함께 등록하면 나중에 등록한 쪽이 앞의 것을 덮어써요.
+        </p>
+      )}
+      {snippet && active ? (
         <div className="mcp__snippets">
-          <div>
-            <div className="mcp__label">
-              <strong>Claude Code</strong>
-              <button onClick={() => copy('cli', snippet.cli)}>{copied === 'cli' ? '복사했어요' : '명령 복사'}</button>
-            </div>
-            <pre className="mcp__code" data-testid="mcp-cli">{snippet.cli}</pre>
+          <div className="mcp__tabs" role="tablist" aria-label="MCP 클라이언트">
+            {snippet.clients.map((c) => (
+              <button key={c.id} role="tab" aria-selected={c.id === active.id} className={c.id === active.id ? 'on' : ''} onClick={() => update({ client: c.id })}>
+                {c.label}
+              </button>
+            ))}
           </div>
           <div>
             <div className="mcp__label">
-              <strong>Claude Desktop 등 (JSON 설정)</strong>
-              <button onClick={() => copy('json', snippet.json)}>{copied === 'json' ? '복사했어요' : '설정 복사'}</button>
+              <strong>{active.label}</strong>
+              <span className="muted small">{active.target}</span>
+              <button onClick={() => copy(active.id, active.code)}>{copied === active.id ? '복사했어요' : '복사'}</button>
             </div>
-            <pre className="mcp__code" data-testid="mcp-json">{snippet.json}</pre>
+            <pre
+              className="mcp__code"
+              data-testid={active.id === 'claude-code' ? 'mcp-cli' : active.id === 'claude-desktop' ? 'mcp-json' : `mcp-code-${active.id}`}
+            >
+              {active.code}
+            </pre>
+            <p className="muted small">{active.hint}</p>
           </div>
         </div>
       ) : (

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { mcpSnippet, shellQuote, type McpInfo } from './mcp-snippet';
+import { defaultServerName, isValidServerName, mcpSnippet, shellQuote, snippetWriteFolders, type McpInfo, type McpSnippetOptions } from './mcp-snippet';
 
 const packaged = (over: Partial<McpInfo> = {}): McpInfo => ({
   script: '/앱/Contents/Resources/nopsidian-mcp.mjs',
   vault: '/내 볼트',
+  vaultName: 'Work Notes',
+  vaultId: 'abc123def456',
+  dailyFolder: '일기',
   executable: '/Applications/Nopsidian.app/Contents/MacOS/nopsidian',
   packaged: true,
   launchArgs: ['--mcp-stdio'],
@@ -12,42 +15,126 @@ const packaged = (over: Partial<McpInfo> = {}): McpInfo => ({
 
 const dev = (over: Partial<McpInfo> = {}): McpInfo => packaged({ packaged: false, executable: '/usr/local/bin/electron', ...over });
 
+const opts = (over: Partial<McpSnippetOptions> = {}): McpSnippetOptions => ({
+  write: false,
+  folder: 'AI',
+  allowDailyFolder: false,
+  dailyFolder: '일기',
+  name: '',
+  ...over,
+});
+
 describe('mcpSnippet', () => {
   it('서버 파일이 없으면 null', () => {
-    expect(mcpSnippet(packaged({ script: null }), { write: false, folder: 'AI' })).toBeNull();
+    expect(mcpSnippet(packaged({ script: null }), opts())).toBeNull();
   });
 
   it('패키징된 앱은 앱 실행 파일 + --mcp-stdio 로 연결한다', () => {
-    const s = mcpSnippet(packaged(), { write: false, folder: 'AI' })!;
+    const s = mcpSnippet(packaged(), opts())!;
     expect(s.command).toBe('/Applications/Nopsidian.app/Contents/MacOS/nopsidian');
     expect(s.args).toEqual(['--mcp-stdio', '--vault', '/내 볼트']);
-    expect(s.cli).toBe('claude mcp add nopsidian -- "/Applications/Nopsidian.app/Contents/MacOS/nopsidian" --mcp-stdio --vault "/내 볼트"');
-    expect(JSON.parse(s.json)).toEqual({ mcpServers: { nopsidian: { command: s.command, args: s.args } } });
-    expect(s.cli).not.toContain('node');
+    expect(s.cli).toBe('claude mcp add -s user nopsidian-work-notes -- "/Applications/Nopsidian.app/Contents/MacOS/nopsidian" --mcp-stdio --vault "/내 볼트"');
+    expect(s.cli).not.toContain('-- node ');
+    expect(JSON.parse(s.json)).toEqual({ mcpServers: { 'nopsidian-work-notes': { command: s.command, args: s.args } } });
   });
 
-  it('개발 빌드는 지금처럼 node 로 번들을 실행한다', () => {
-    const s = mcpSnippet(dev(), { write: false, folder: 'AI' })!;
+  it('개발 빌드는 node 로 번들을 실행한다', () => {
+    const s = mcpSnippet(dev(), opts())!;
     expect(s.command).toBe('node');
     expect(s.args).toEqual(['/앱/Contents/Resources/nopsidian-mcp.mjs', '--vault', '/내 볼트']);
-    expect(s.cli).toBe('claude mcp add nopsidian -- node "/앱/Contents/Resources/nopsidian-mcp.mjs" --vault "/내 볼트"');
+    expect(s.cli).toBe('claude mcp add -s user nopsidian-work-notes -- node "/앱/Contents/Resources/nopsidian-mcp.mjs" --vault "/내 볼트"');
     expect(s.args).not.toContain('--mcp-stdio');
   });
 
-  it('쓰기 허용이면 두 형태 모두 --write 와 폴더를 붙인다', () => {
-    const s = mcpSnippet(packaged(), { write: true, folder: '메모/AI/' })!;
+  it('Claude Code 명령은 사용자 범위(-s user)를 쓴다', () => {
+    const s = mcpSnippet(packaged(), opts())!;
+    expect(s.cli.startsWith('claude mcp add -s user ')).toBe(true);
+    expect(s.clients.find((c) => c.id === 'claude-code')!.code).toBe(s.cli);
+  });
+
+  it('쓰기 허용이면 --write 와 폴더를 붙인다', () => {
+    const s = mcpSnippet(packaged(), opts({ write: true, folder: '메모/AI/' }))!;
     expect(s.args).toEqual(['--mcp-stdio', '--vault', '/내 볼트', '--write', '--write-folder', '메모/AI']);
     expect(s.cli).toContain('--write --write-folder "메모/AI"');
-    const all = mcpSnippet(packaged(), { write: true, folder: '  ' })!;
+    const all = mcpSnippet(packaged(), opts({ write: true, folder: '  ' }))!;
     expect(all.args.at(-1)).toBe('.');
-    expect(JSON.parse(all.json).mcpServers.nopsidian.args.at(-1)).toBe('.');
+    expect(JSON.parse(all.json).mcpServers['nopsidian-work-notes'].args.at(-1)).toBe('.');
+  });
+
+  it('오늘의 노트 폴더를 허용하면 --write-folder 를 하나 더 붙인다', () => {
+    const s = mcpSnippet(packaged(), opts({ write: true, allowDailyFolder: true, dailyFolder: '저널' }))!;
+    expect(s.args).toEqual(['--mcp-stdio', '--vault', '/내 볼트', '--write', '--write-folder', 'AI', '--write-folder', '저널']);
+    expect(s.cli).toContain('--write-folder "AI" --write-folder "저널"');
+  });
+
+  it('데일리 폴더가 이미 허용 범위면 중복해서 넣지 않는다', () => {
+    expect(snippetWriteFolders({ write: true, folder: 'AI', allowDailyFolder: true, dailyFolder: 'AI' })).toEqual(['AI']);
+    expect(snippetWriteFolders({ write: true, folder: '.', allowDailyFolder: true, dailyFolder: '일기' })).toEqual(['']);
+    expect(snippetWriteFolders({ write: true, folder: 'AI', allowDailyFolder: false, dailyFolder: '일기' })).toEqual(['AI']);
+    expect(snippetWriteFolders({ write: false, folder: 'AI', allowDailyFolder: true, dailyFolder: '일기' })).toEqual([]);
+  });
+
+  it('이름을 바꾸면 6종 스니펫 모두에 그 이름이 들어간다', () => {
+    const s = mcpSnippet(packaged(), opts({ write: true, name: 'my-vault' }))!;
+    expect(s.name).toBe('my-vault');
+    expect(s.clients).toHaveLength(6);
+    expect(s.clients.map((c) => c.id)).toEqual(['claude-code', 'claude-desktop', 'codex', 'cursor', 'vscode', 'gemini-cli']);
+    expect(s.clients.find((c) => c.id === 'claude-desktop')!.code).toContain('"my-vault"');
+    expect(s.clients.find((c) => c.id === 'codex')!.code).toContain('[mcp_servers."my-vault"]');
+    expect(s.clients.find((c) => c.id === 'vscode')!.code).toContain('"my-vault"');
+    expect(s.clients.find((c) => c.id === 'cursor')!.code).toContain('"my-vault"');
+    expect(s.clients.find((c) => c.id === 'gemini-cli')!.code).toContain('"my-vault"');
+    expect(s.clients.find((c) => c.id === 'claude-code')!.code).toContain('my-vault');
+  });
+
+  it('Codex 는 TOML [mcp_servers."<이름>"] 형식이다', () => {
+    const code = mcpSnippet(packaged(), opts({ write: true, allowDailyFolder: true }))!.clients.find((c) => c.id === 'codex')!;
+    expect(code.format).toBe('toml');
+    expect(code.target).toBe('~/.codex/config.toml');
+    expect(code.code).toContain('[mcp_servers."nopsidian-work-notes"]');
+    expect(code.code).toContain('command = "/Applications/Nopsidian.app/Contents/MacOS/nopsidian"');
+    expect(code.code).toContain('args = ["--mcp-stdio", "--vault", "/내 볼트", "--write", "--write-folder", "AI", "--write-folder", "일기"]');
+  });
+
+  it('VS Code 는 servers + type:stdio 형식이다', () => {
+    const code = mcpSnippet(packaged(), opts())!.clients.find((c) => c.id === 'vscode')!;
+    expect(code.target).toBe('.vscode/mcp.json (워크스페이스)');
+    expect(JSON.parse(code.code)).toEqual({
+      servers: { 'nopsidian-work-notes': { type: 'stdio', command: '/Applications/Nopsidian.app/Contents/MacOS/nopsidian', args: ['--mcp-stdio', '--vault', '/내 볼트'] } },
+    });
+  });
+
+  it('Claude Desktop·Cursor·Gemini CLI 는 mcpServers JSON 형식이다', () => {
+    const s = mcpSnippet(packaged(), opts())!;
+    for (const id of ['claude-desktop', 'cursor', 'gemini-cli'] as const) {
+      const c = s.clients.find((x) => x.id === id)!;
+      expect(c.format).toBe('json');
+      expect(JSON.parse(c.code).mcpServers['nopsidian-work-notes']).toEqual({ command: s.command, args: s.args });
+    }
+    expect(s.clients.find((c) => c.id === 'claude-desktop')!.target).toContain('claude_desktop_config.json');
+    expect(s.clients.find((c) => c.id === 'cursor')!.target).toBe('~/.cursor/mcp.json');
+    expect(s.clients.find((c) => c.id === 'gemini-cli')!.target).toBe('~/.gemini/settings.json');
+  });
+
+  it('볼트 이름이 ASCII 가 아니면 볼트 id 로 기본 이름을 만든다', () => {
+    expect(defaultServerName({ vaultName: 'Work Notes', vaultId: 'abc123def456' })).toBe('nopsidian-work-notes');
+    expect(defaultServerName({ vaultName: '내 볼트', vaultId: 'abc123def456' })).toBe('nopsidian-vault-abc123');
+    expect(defaultServerName({ vaultName: '  ', vaultId: 'ZZZ' })).toBe('nopsidian-vault-zzz');
+  });
+
+  it('서버 이름은 공백 없는 글자·숫자·._- 만 허용한다', () => {
+    expect(isValidServerName('nopsidian-work')).toBe(true);
+    expect(isValidServerName('내-볼트_2')).toBe(true);
+    expect(isValidServerName('내 볼트')).toBe(false);
+    expect(isValidServerName('-시작')).toBe(false);
+    expect(isValidServerName('')).toBe(false);
   });
 
   it('경로의 공백·큰따옴표·역슬래시를 안전하게 감싼다', () => {
     const exe = String.raw`C:\Program Files\Nopsidian\nopsidian.exe`;
-    const s = mcpSnippet(packaged({ executable: exe, vault: '/볼트 "A"' }), { write: false, folder: 'AI' })!;
+    const s = mcpSnippet(packaged({ executable: exe, vault: '/볼트 "A"' }), opts())!;
     expect(s.cli).toContain(`${shellQuote(exe)} --mcp-stdio --vault ${shellQuote('/볼트 "A"')}`);
-    expect(JSON.parse(s.json).mcpServers.nopsidian.command).toBe(exe);
+    expect(JSON.parse(s.json).mcpServers['nopsidian-work-notes'].command).toBe(exe);
   });
 
   it('shellQuote: 따옴표·역슬래시·$·백틱을 이스케이프한다', () => {
@@ -59,8 +146,10 @@ describe('mcpSnippet', () => {
 
 describe('mcpSnippet — 리눅스', () => {
   it('화면 없는 리눅스에서도 뜨도록 launchArgs(--ozone-platform=headless)를 앞에 붙인다', () => {
-    const s = mcpSnippet(packaged({ executable: '/opt/Nopsidian/nopsidian', launchArgs: ['--ozone-platform=headless', '--mcp-stdio'] }), { write: false, folder: 'AI' })!;
+    const s = mcpSnippet(packaged({ executable: '/opt/Nopsidian/nopsidian', launchArgs: ['--ozone-platform=headless', '--mcp-stdio'] }), opts())!;
     expect(s.args).toEqual(['--ozone-platform=headless', '--mcp-stdio', '--vault', '/내 볼트']);
-    expect(s.cli).toBe('claude mcp add nopsidian -- "/opt/Nopsidian/nopsidian" --ozone-platform=headless --mcp-stdio --vault "/내 볼트"');
+    expect(s.cli).toBe(
+      'claude mcp add -s user nopsidian-work-notes -- "/opt/Nopsidian/nopsidian" --ozone-platform=headless --mcp-stdio --vault "/내 볼트"',
+    );
   });
 });

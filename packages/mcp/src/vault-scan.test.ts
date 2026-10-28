@@ -230,6 +230,17 @@ describe('refresh 증분', () => {
   });
 });
 
+describe('각주 호환', () => {
+  it('각주 정의가 검색·백링크를 깨뜨리지 않는다', () => {
+    const root = makeVault({ 'a.md': '# A\n\n본문[^1] [[b]]\n\n[^1]: 각주 검색어\n', 'b.md': '# B\n' });
+    const scanner = new VaultScanner(root);
+    scanner.refresh();
+    expect(scanner.search('각주 검색어').map((h) => h.path)).toContain('a.md');
+    expect(scanner.backlinks('b.md').map((h) => h.path)).toContain('a.md');
+    expect(scanner.list().map((n) => n.path)).toEqual(['a.md', 'b.md']);
+  });
+});
+
 describe('search', () => {
   it('모든 토큰이 있어야 하고(AND) 한글 부분 문자열도 찾는다', () => {
     const root = makeVault({

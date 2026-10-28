@@ -48,6 +48,20 @@ describe('renderNoteBody', () => {
     expect(h).toContain('<mark>중요</mark>');
     expect(h).toContain('<math');
   });
+  it('각주 참조·정의·인라인 각주를 내보낸다', () => {
+    const h = renderNoteBody('본문[^1]과 ^[인라인 내용]\n\n[^1]: 정의 내용\n', opts);
+    expect(h).toContain('data-footnote-ref');
+    expect(h).toContain('<section data-footnotes');
+    expect(h).toContain('정의 내용');
+    expect(h).toContain('인라인 내용');
+  });
+
+  it('Mermaid 펜스는 원문 코드 블록으로 내보낸다(앱에서만 SVG)', () => {
+    const h = renderNoteBody('```mermaid\nflowchart TD\n  A --> B\n```\n', opts);
+    expect(h).toContain('language-mermaid');
+    expect(h).toContain('flowchart TD');
+  });
+
   it('코드 안의 [[ ]] 는 그대로 둔다', () => {
     expect(renderNoteBody('`[[x]]`\n\n```\n[[y]]\n```\n', opts)).not.toContain('unresolved');
   });

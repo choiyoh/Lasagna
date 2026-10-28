@@ -136,7 +136,7 @@ export function parseNote(source: string): ParsedNote {
     }
   });
 
-  const meta = extractMeta(source, frontmatter, tree, blocks, blockIds, lineBase);
+  const meta = extractMeta(source, frontmatter, tree, blocks, blockIds, lineBase, bodyOffset);
   return { source, frontmatter, blocks, meta };
 }
 
@@ -147,10 +147,15 @@ function extractMeta(
   blocks: Block[],
   blockIds: ParsedBlockId[],
   lineBase: number,
+  bodyOffset: number,
 ): NoteMeta {
   const links: ParsedLink[] = [];
   const tags: ParsedTag[] = [];
   const headings: ParsedHeading[] = [];
+  // 각주 정의(`[^id]: …`) 안의 제목은 노트 개요·제목으로 세지 않는다.
+  const footnoteRanges = blocks.filter((b) => /^\[\^[^\]]+\]:/.test(b.source)).map((b) => [b.start, b.end] as const);
+  const inFootnote = (offset: number | undefined) =>
+    offset !== undefined && footnoteRanges.some(([start, end]) => offset + bodyOffset >= start && offset + bodyOffset < end);
 
   // 위키링크·임베드·인라인 태그는 원문에서 직접 찾는다(강조 기호 등으로 텍스트 노드가 쪼개져도 안전).
   for (const b of blocks) {
@@ -163,6 +168,7 @@ function extractMeta(
 
   visit(tree, (node) => {
     if (node.type === 'heading') {
+      if (inFootnote(node.position?.start.offset)) return;
       const text = toString(node).replace(/\s+\^[A-Za-z0-9-]+\s*$/, '').replace(/\s*\{\.toggle\}\s*$/, '').trim();
       headings.push({
         level: node.depth,

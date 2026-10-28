@@ -35,6 +35,27 @@ describe('parseNote: 프런트매터', () => {
   });
 });
 
+describe('parseNote: 각주', () => {
+  it('각주 참조·정의를 블록으로 보존하고 assemble 이 원문을 되돌린다', () => {
+    const src = '본문[^1]\n\n[^1]: 각주 내용\n    이어짐\n';
+    const note = parseNote(src);
+    expect(note.blocks).toHaveLength(2);
+    expect(note.blocks[1]!.source).toBe('[^1]: 각주 내용\n    이어짐');
+    expect(assemble(note)).toBe(src);
+  });
+
+  it('각주 정의 안의 제목은 개요·제목으로 세지 않는다', () => {
+    const note = parseNote('본문[^1]\n\n[^1]: 각주\n    ## 내부 제목\n');
+    expect(note.meta.headings).toEqual([]);
+  });
+
+  it('코드 안의 [^1] 은 각주 참조로 세지 않는다', () => {
+    const note = parseNote('```\n[^1]\n```\n\n`[^1]`\n');
+    expect(note.blocks).toHaveLength(2);
+    expect(note.blocks[0]!.kind).toBe('code');
+  });
+});
+
 describe('parseNote: 링크·태그·제목·블록 ID', () => {
   const note = parseNote(fixture('클린 코드.md'));
 

@@ -84,10 +84,13 @@ function foldableView(kind: 'callout' | 'toggle') {
 }
 
 import { mathBlockView, mathInlineView } from './math';
+import { footnoteDefView, footnoteRefView } from './footnotes';
 
 export const nopsNodeViews = {
   math_inline: mathInlineView,
   math_block: mathBlockView,
+  footnote_ref: footnoteRefView,
+  footnote_def: footnoteDefView,
   callout: foldableView('callout'),
   toggle: foldableView('toggle'),
 };

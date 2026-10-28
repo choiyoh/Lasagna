@@ -167,6 +167,65 @@ const mathBlock: NodeSpec = {
   toDOM: () => ['pre', { 'data-math-block': '' }, ['code', 0]]
 };
 
+const footnoteRef: NodeSpec = {
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  attrs: {
+    identifier: { default: null },
+    label: { default: null },
+    inline: { default: false },
+    text: { default: null }
+  },
+  parseDOM: [
+    {
+      tag: 'sup[data-footnote-ref]',
+      getAttrs: (d) => {
+        const el = d as HTMLElement;
+        return {
+          identifier: el.getAttribute('data-footnote-ref'),
+          label: el.getAttribute('data-footnote-label'),
+          inline: el.getAttribute('data-footnote-inline') === '1',
+          text: el.getAttribute('data-footnote-text')
+        };
+      }
+    }
+  ],
+  toDOM: (node) => {
+    const { identifier, label, inline, text } = node.attrs;
+    return [
+      'sup',
+      {
+        class: 'nops-footnote-ref',
+        'data-footnote-ref': identifier ?? '',
+        ...(label ? { 'data-footnote-label': label } : {}),
+        ...(inline ? { 'data-footnote-inline': '1' } : {}),
+        ...(text ? { 'data-footnote-text': text } : {})
+      },
+      inline ? '^' : `[^${label ?? identifier ?? ''}]`
+    ];
+  }
+};
+
+const footnoteDef: NodeSpec = {
+  group: 'block',
+  atom: true,
+  selectable: false,
+  draggable: false,
+  attrs: { identifier: { default: '' }, label: { default: '' }, source: { default: '' } },
+  parseDOM: [
+    {
+      tag: 'div[data-footnote-def]',
+      getAttrs: (d) => {
+        const el = d as HTMLElement;
+        return { identifier: el.getAttribute('data-footnote-def') ?? '', label: el.getAttribute('data-footnote-label') ?? '', source: el.textContent ?? '' };
+      }
+    }
+  ],
+  toDOM: (node) => ['div', { class: 'nops-footnote-def', 'data-footnote-def': node.attrs.identifier, 'data-footnote-label': node.attrs.label, hidden: 'hidden' }, node.attrs.source]
+};
+
 const inlineImage: NodeSpec = {
   group: 'inline',
   inline: true,
@@ -273,6 +332,8 @@ function buildNodes() {
     column,
     wikilink,
     embed,
+    footnote_ref: footnoteRef,
+    footnote_def: footnoteDef,
     math_inline: mathInline,
     math_block: mathBlock,
     inline_image: inlineImage,

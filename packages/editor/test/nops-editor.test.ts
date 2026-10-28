@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
-import { createNopsEditor, insertCallout, insertColumns, insertMarkdown, insertToggle, parseDocument, serializeDocument } from '../src/nops';
+import { createNopsEditor, insertCallout, insertColumns, insertMarkdown, insertToggle, nopsSlashItems, parseDocument, serializeDocument } from '../src/nops';
 
 function setup(src = '') {
   const host = document.createElement('div');
@@ -204,5 +204,15 @@ describe('flashBlock', () => {
     expect(host.querySelector('.nops-flash')?.textContent).toBe('나');
     await new Promise((r) => setTimeout(r, 80));
     expect(host.querySelector('.nops-flash')).toBeNull();
+  });
+});
+
+
+describe('Markdown 호환 슬래시 항목', () => {
+  it('다이어그램(Mermaid)과 각주 항목이 있다', () => {
+    const labels = nopsSlashItems.map((i) => i.label);
+    expect(labels).toContain('다이어그램 (Mermaid)');
+    expect(labels).toContain('각주');
+    expect(nopsSlashItems.find((i) => i.label === '다이어그램 (Mermaid)')!.keywords).toContain('mermaid');
   });
 });

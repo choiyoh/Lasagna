@@ -44,7 +44,7 @@
     "@parcel/watcher": "^2.6.0",
     "@tanstack/react-virtual": "^3.14.15",
     "better-sqlite3": "^13.0.3",
-    "dompurify": "^3.4.16",
+    "dompurify": "^3.4.17",
     "electron-squirrel-startup": "^1.0.1",
     "emojibase-data": "^17.0.0",
     "fflate": "^0.8.3",

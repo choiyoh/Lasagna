@@ -9,7 +9,7 @@ import type { ParsedNote } from './types.js';
  * (길이와 줄바꿈이 같으므로 블록 경계·오프셋이 원문과 그대로 일치한다.)
  * 자리표시자 형식: [MARK][인덱스 상위][인덱스 하위][FILL…]  — 모두 유니코드 사설 영역 문자.
  */
-export type InlineTokenKind = 'wikilink' | 'embed' | 'highlight';
+export type InlineTokenKind = 'wikilink' | 'embed' | 'highlight' | 'footnote-inline';
 
 export interface InlineToken {
   kind: InlineTokenKind;
@@ -36,6 +36,7 @@ export interface EditorParse {
 const WIKI = /(!?)\[\[([^[\]\n]+?)\]\]/g;
 const HIGHLIGHT = /==([^=\n*_`~[\]\\<>|]+?)==/g;
 const INLINE_MATH = /\$[^$\n]+\$/g;
+const INLINE_FOOTNOTE = /\^\[([^[\]\n]+?)\]/g;
 
 function blank(s: string, re: RegExp): string {
   return s.replace(re, (m) => ' '.repeat(m.length));
@@ -63,6 +64,13 @@ function maskSegment(segment: string, tokens: InlineToken[], inTable: boolean): 
     const start = m.index ?? 0;
     if (start > 0 && withoutLinks[start - 1] === '\\') continue;
     found.push({ start, token: { kind: 'highlight', inner: unescape(m[1] ?? ''), length: m[0].length } });
+  }
+  // Obsidian 인라인 각주 `^[내용]` — 위키링크·하이라이트·코드 안은 제외한다.
+  const withoutHighlight = blank(withoutLinks, HIGHLIGHT);
+  for (const m of withoutHighlight.matchAll(INLINE_FOOTNOTE)) {
+    const start = m.index ?? 0;
+    if (start > 0 && withoutHighlight[start - 1] === '\\') continue;
+    found.push({ start, token: { kind: 'footnote-inline', inner: unescape(m[1] ?? ''), length: m[0].length } });
   }
   if (found.length === 0) return segment;
   found.sort((a, b) => a.start - b.start);

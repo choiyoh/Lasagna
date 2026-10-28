@@ -64,6 +64,17 @@ describe('볼트별 MCP 설정', () => {
     expect(loadMcpSettings('vault-a', 'A', store).folder).toBe('새 폴더');
   });
 
+  it('볼트별 설정이 이미 있어도 전역 설정이 새 볼트로 새지 않는다', () => {
+    const store = new MemoryStorage();
+    saveMcpSettings('vault-a', cfg({ write: false, folder: 'AI' }), store);
+    store.setItem(LEGACY_KEY, JSON.stringify({ write: true, folder: '옛 폴더' }));
+    // 이 볼트는 자기 설정을 그대로 쓰고, 남은 전역 설정은 정리한다
+    expect(loadMcpSettings('vault-a', 'A', store)).toMatchObject({ write: false, folder: 'AI' });
+    expect(store.getItem(LEGACY_KEY)).toBeNull();
+    // 나중에 처음 여는 볼트도 전역 write 값을 물려받지 않는다
+    expect(loadMcpSettings('vault-c', 'C', store)).toMatchObject({ write: false, folder: 'AI' });
+  });
+
   it('전역 키를 지울 수 없어도 마이그레이션은 한 번만 한다', () => {
     const map = new Map<string, string>([[LEGACY_KEY, JSON.stringify({ write: true, folder: '옛 폴더' })]]);
     const store = {

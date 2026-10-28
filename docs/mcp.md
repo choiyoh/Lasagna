@@ -23,7 +23,7 @@ Claude 같은 AI 에이전트가 Nopsidian 볼트의 노트를 **찾아 읽고**
 
 **볼트 두 개**: 설정 화면의 값(이름·쓰기 폴더·오늘의 노트 허용·선택한 클라이언트)은 **볼트별로 저장**됩니다. 볼트 A 와 B 를 각각 열어 스니펫을 만들면 이름은 `nopsidian-a-<해시>`, `nopsidian-b-<해시>` 처럼 다르고, 각 스니펫의 `--vault` 도 그 볼트를 가리킵니다. 같은 이름을 쓰는 다른 볼트 설정이 있으면 저장 전에 경고합니다. 예전 전역 설정(`nops.mcp`)은 **처음 연 볼트 하나에만** 옮겨지고, 그 뒤 새 볼트는 읽기 전용 기본값으로 시작합니다.
 
-예전 안내대로 서버 이름을 `nopsidian` 으로 등록했다면 `claude mcp remove nopsidian -s user` 로 지운 뒤 새 이름으로 다시 등록하세요. 다른 클라이언트는 설정 파일에서 그 항목을 지우면 됩니다.
+예전 안내대로 서버 이름을 `nopsidian` 으로 등록했다면 **처음 등록한 폴더에서** `claude mcp remove nopsidian` 을 실행해 지운 뒤 새 이름으로 다시 등록하세요. 예전 스니펫은 범위를 지정하지 않아 local 범위에 등록됐으므로, `-s user` 를 붙이면 그 등록은 지워지지 않습니다. 다른 클라이언트는 설정 파일에서 그 항목을 지우면 됩니다.
 
 패키징된 앱이 안내하는 설정은 **앱 실행 파일 자체를 `--mcp-stdio` 모드로 띄우는** 것입니다(예: `"/Applications/Nopsidian.app/Contents/MacOS/nopsidian" --mcp-stdio --vault <볼트 폴더>`). 앱에 들어 있는 서버 번들(`resources/nopsidian-mcp.mjs`)을 실행하므로 **Node.js 를 따로 설치하지 않아도 됩니다**. 개발 빌드(`pnpm start`)에서는 저장소의 `packages/mcp/dist/nopsidian-mcp.mjs` 를 `node` 로 실행하는 설정을 안내합니다(이때는 Node.js 22 이상 필요).
 

@@ -40,23 +40,41 @@ const normalize = (v: Partial<McpSettingsConfig> | null, vaultName: string, vaul
   client: CLIENT_IDS.includes(v?.client as McpClientId) ? (v!.client as McpClientId) : 'claude-code',
 });
 
+/** 예전 전역 설정을 더 이상 쓰지 않도록 정리한다. 지우지 못해도 마커로 새 볼트 유출을 막는다. */
+function retireLegacy(storage: Store): void {
+  try {
+    storage.removeItem?.(LEGACY_KEY);
+  } catch {
+    /* 지우지 못하면 아래 마커로 막는다 */
+  }
+  try {
+    storage.setItem(LEGACY_MIGRATED_KEY, '1');
+  } catch {
+    /* 저장이 막히면(사생활 보호 모드 등) 다음에 다시 시도한다 */
+  }
+}
+
 /**
  * 이 볼트의 설정을 읽는다. 볼트별 설정이 없고 예전 전역 설정이 남아 있으면
  * 처음 연 이 볼트에만 옮겨 저장하고 전역 키를 지운다. 새 볼트는 읽기 전용으로 시작한다.
+ * 볼트별 설정이 이미 있으면 그 설정을 쓰고, 남은 전역 설정은 새 볼트로 새지 않게 정리만 한다.
  */
 export function loadMcpSettings(vaultId: string, vaultName: string, storage: Store = localStorage): McpSettingsConfig {
   const own = parse(storage.getItem(storageKey(vaultId)));
-  if (own) return normalize(own, vaultName, vaultId);
+  if (own) {
+    if (storage.getItem(LEGACY_KEY) !== null) retireLegacy(storage);
+    return normalize(own, vaultName, vaultId);
+  }
   const legacy = parse(storage.getItem(LEGACY_KEY));
   if (!legacy || storage.getItem(LEGACY_MIGRATED_KEY)) return normalize(null, vaultName, vaultId);
   const migrated = normalize(legacy, vaultName, vaultId);
   try {
     storage.setItem(storageKey(vaultId), JSON.stringify(migrated));
-    storage.setItem(LEGACY_MIGRATED_KEY, '1');
-    storage.removeItem?.(LEGACY_KEY);
   } catch {
-    // 저장이 막히면(사생활 보호 모드 등) 전역 설정을 지우지 않고 다음에 다시 시도한다
+    // 저장이 막히면 전역 설정을 남겨 두고 다음에 다시 시도한다
+    return migrated;
   }
+  retireLegacy(storage);
   return migrated;
 }
 

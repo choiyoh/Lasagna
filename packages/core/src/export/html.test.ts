@@ -56,6 +56,12 @@ describe('renderNoteBody', () => {
     expect(h).toContain('인라인 내용');
   });
 
+  it('인라인 각주 식별자가 실제 [^inline-1] 정의와 겹치지 않는다', () => {
+    const h = renderNoteBody('본문 ^[인라인]\n\n[^inline-1]: 실제 정의\n', opts);
+    expect(h).toContain('nops-inline-1');
+    expect(h).toContain('inline-1');
+  });
+
   it('Mermaid 펜스는 원문 코드 블록으로 내보낸다(앱에서만 SVG)', () => {
     const h = renderNoteBody('```mermaid\nflowchart TD\n  A --> B\n```\n', opts);
     expect(h).toContain('language-mermaid');

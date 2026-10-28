@@ -95,7 +95,7 @@ function expandText(value: string, opts: HtmlExportOptions, footnotes: InlineFoo
   for (const m of value.matchAll(re)) {
     const at = m.index ?? 0;
     if (at > last) out.push(...expandWikiText(value.slice(last, at), opts));
-    const identifier = `inline-${footnotes.length + 1}`;
+    const identifier = `nops-inline-${footnotes.length + 1}`;
     footnotes.push({ identifier, content: m[1] ?? '' });
     out.push({ type: 'footnoteReference', identifier, label: identifier } as RootContent);
     last = at + m[0].length;

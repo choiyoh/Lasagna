@@ -30,6 +30,8 @@ const CASES: [string, boolean, string][] = [
   ['.nopsidian/mcp-policy.json', false, 'MCP 쓰기 정책(기기별 연결 설정)'],
   ['.nopsidian/index.sqlite-wal', false, '인덱스 WAL'],
   ['.nopsidian/trash/note.md', false, '휴지통'],
+  ['.nopsidian/sync/device.json', false, '기기별 동기화 상태'],
+  ['.nopsidian/sync/state.sqlite', false, '기기별 동기화 기록'],
   ['.nopsidian/history/2026-10-12/note.md', false, '히스토리'],
   ['.nopsidian/comments.md', false, '이름이 comments 인 파일은 아님'],
 

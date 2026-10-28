@@ -87,12 +87,54 @@ export const syncStatus = z.object({
   /** 첫 동기화 계획을 확인하고 한 번 실행했다 — 그 뒤부터 자동 동기화 */
   confirmedFirst: z.boolean(),
   state: z.enum(['off', 'idle', 'syncing', 'offline', 'error', 'needsAuth', 'blocked']),
+  /** 마지막으로 성공한 동기화 시각(epoch ms) */
   lastSync: z.number().nullable(),
+  /** 마지막으로 동기화를 실행하거나 계획을 세운 시각(epoch ms) */
+  lastAttempt: z.number().nullable(),
   message: z.string().nullable(),
   /** 충돌 표식이 남았거나 충돌 사본이 생긴 노트 */
   conflicts: z.array(z.string()),
 });
 export type SyncStatus = z.infer<typeof syncStatus>;
+
+/** 사용자에게 보여 줄 동기화 실패 한 건. 원문 오류·경로·토큰은 담지 않는다. */
+export const syncFailure = z.object({
+  at: z.number(),
+  /** 접힌 상세에 보여 줄 기술 코드(HTTP 401, FOLDER_MISSING 등) */
+  code: z.string(),
+  title: z.string(),
+  action: z.string(),
+  /** docs/sync-setup.md 의 해당 단계 */
+  docs: z.string(),
+});
+export type SyncFailure = z.infer<typeof syncFailure>;
+
+/** Drive 쪽 이 볼트 폴더의 읽기 전용 상태. */
+export const syncFolder = z.object({
+  name: z.string(),
+  path: z.string(),
+  id: z.string().nullable(),
+  exists: z.boolean(),
+  checkedAt: z.number().nullable(),
+});
+export type SyncFolder = z.infer<typeof syncFolder>;
+
+/** '지금 확인'·대화상자 진단에 쓰는 값. 비밀·전체 이메일·노트 경로는 절대 담지 않는다. */
+export const syncDiagnostics = z.object({
+  clientIdSuffix: z.string().nullable(),
+  clientSecretSuffix: z.string().nullable(),
+  /** 마스킹된 계정 이메일(예: ab***@gmail.com) */
+  accountEmail: z.string().nullable(),
+  tokenExpiresAt: z.number().nullable(),
+  /** 만료 시각이 지나지 않았고 토큰이 있다 */
+  tokenValid: z.boolean(),
+  lastRefreshFailure: syncFailure.nullable(),
+  /** null = 아직 로컬 스캔 전 */
+  pendingChanges: z.number().nullable(),
+  folder: syncFolder,
+  lastFailure: syncFailure.nullable(),
+});
+export type SyncDiagnostics = z.infer<typeof syncDiagnostics>;
 
 export const syncPlanSummary = z.object({
   firstSync: z.boolean(),
@@ -398,6 +440,10 @@ export const contract = {
   /** 아무것도 바꾸지 않고 무엇을 할지 계산만 한다(첫 동기화 확인용). */
   'sync.plan': { input: z.undefined(), output: syncPlanSummary },
   'sync.run': { input: z.object({ force: z.boolean().default(false) }), output: syncRunSummary },
+  /** 저장된 진단 값 + 로컬 대기 변경 수(네트워크 요청 없음) */
+  'sync.diagnostics': { input: z.undefined(), output: syncDiagnostics },
+  /** 토큰 갱신·Drive 폴더 접근을 읽기 전용으로 확인한다. 동기화·업로드·삭제는 하지 않는다. */
+  'sync.check': { input: z.undefined(), output: syncDiagnostics },
   'db.list': { input: z.undefined(), output: z.array(dbInfo) },
   'db.query': { input: dbQueryInput, output: dbQueryOutput },
   /** 노트가 데이터베이스의 행이면 그 데이터베이스(스키마)와 계산이 끝난 행 값. 아니면 null */

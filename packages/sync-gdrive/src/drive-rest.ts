@@ -12,7 +12,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { DriveClient, RemoteFile, SyncPath } from './types.js';
+import type { DriveClient, RemoteFile, SyncPath, VaultFolderInfo } from './types.js';
 import { RevisionConflictError } from './types.js';
 
 /** 메타데이터·목록 조회 기본 엔드포인트 */
@@ -44,6 +44,8 @@ export class DriveApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    /** Google API 오류 사유(예: accessNotConfigured, storageQuotaExceeded) */
+    public readonly reason?: string,
   ) {
     super(message);
     this.name = 'DriveApiError';
@@ -106,6 +108,10 @@ interface DriveErrorBody {
   error?: { errors?: Array<{ reason?: string }> };
 }
 
+interface AboutResponse {
+  user?: { emailAddress?: string };
+}
+
 const sha256Hex = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const md5Hex = (bytes: Uint8Array): string => createHash('md5').update(bytes).digest('hex');
 
@@ -160,6 +166,35 @@ export class GoogleDriveClient implements DriveClient {
     this.vaultName = opts.vaultName;
     this.sleep = opts.sleep ?? defaultSleep;
     this.maxRetries = opts.maxRetries ?? 5;
+  }
+
+  /** Drive about.user 의 이메일(읽기 전용). 이 권한으로 볼 수 없으면 null. 인증 오류는 그대로 알린다. */
+  async accountEmail(): Promise<string | null> {
+    try {
+      const res = await this.request(`${API_BASE}/about?fields=user`);
+      const data = (await res.json()) as AboutResponse;
+      const email = data.user?.emailAddress;
+      return typeof email === 'string' && email.includes('@') ? email : null;
+    } catch (e) {
+      const name = e instanceof Error ? e.name : '';
+      if (e instanceof DriveAuthError || name === 'AuthRevokedError' || name === 'OAuthError') throw e;
+      return null;
+    }
+  }
+
+  /**
+   * 이 볼트의 `Nopsidian/<vaultName>` 폴더를 읽기 전용으로 확인한다.
+   * 없으면 exists=false 로 돌려주고 절대 만들지 않는다('지금 확인'이 동기화 동작을 바꾸지 않게).
+   */
+  async inspectVaultFolder(): Promise<VaultFolderInfo> {
+    const path = `Nopsidian/${this.vaultName}`;
+    let parent = 'root';
+    for (const name of ['Nopsidian', this.vaultName]) {
+      const id = await this.findFolder(name, parent);
+      if (id === undefined) return { name: this.vaultName, path, id: null, exists: false };
+      parent = id;
+    }
+    return { name: this.vaultName, path, id: parent, exists: true };
   }
 
   async list(): Promise<RemoteFile[]> {
@@ -530,10 +565,18 @@ async function isRetryable(res: Response): Promise<boolean> {
 
 async function apiError(res: Response): Promise<DriveApiError> {
   let detail = '';
+  let reason: string | undefined;
   try {
-    detail = (await res.text()).slice(0, 300);
+    const bodyText = await res.text();
+    detail = bodyText.slice(0, 300);
+    try {
+      const body = JSON.parse(bodyText) as DriveErrorBody;
+      reason = body.error?.errors?.[0]?.reason;
+    } catch {
+      // JSON 이 아니면 사유를 알 수 없다
+    }
   } catch {
     // 본문이 없거나 읽을 수 없으면 statusText 만 남긴다
   }
-  return new DriveApiError(`Drive API ${res.status}: ${detail || res.statusText}`, res.status);
+  return new DriveApiError(`Drive API ${res.status}: ${detail || res.statusText}`, res.status, reason);
 }

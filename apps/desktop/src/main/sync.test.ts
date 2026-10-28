@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSy
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CredentialStore, vaultKeyFor, type SecretBox } from './sync';
+import { DriveApiError, DriveAuthError } from '@nopsidian/sync-gdrive';
+import { CredentialStore, credentialSuffix, maskEmail, syncFailureFor, vaultKeyFor, type SecretBox } from './sync';
 
 /** 테스트용 가짜 키체인: 뒤집기만 한다(평문이 파일에 남지 않는지 확인하려는 용도) */
 const box = (available = true): SecretBox => ({
@@ -63,5 +64,57 @@ describe('vaultKeyFor', () => {
     expect(vaultKeyFor('내 볼트')).toBe(vaultKeyFor('내 볼트'.normalize('NFD')));
     expect(vaultKeyFor('a')).not.toBe(vaultKeyFor('b'));
     expect(vaultKeyFor('a')).toMatch(/^[0-9a-f]{16}$/);
+  });
+});
+
+
+describe('동기화 진단 문구', () => {
+  it('오류 상태·사유를 사람이 읽는 문구와 문서 링크로 바꾼다', () => {
+    expect(syncFailureFor({ name: 'DriveAuthError' }, 1)).toMatchObject({ code: 'HTTP 401', title: 'Google 로그인이 만료됐어요' });
+    expect(syncFailureFor({ name: 'DriveApiError', status: 403, reason: 'accessNotConfigured' }, 2)).toMatchObject({
+      code: 'HTTP 403 · accessNotConfigured',
+      title: 'Google Drive API가 꺼져 있어요',
+    });
+    expect(syncFailureFor({ name: 'DriveApiError', status: 403, reason: 'storageQuotaExceeded' }, 3)).toMatchObject({
+      code: 'HTTP 403 · storageQuotaExceeded',
+      title: 'Google Drive 저장 공간이 부족해요',
+    });
+    expect(syncFailureFor({ name: 'DriveApiError', status: 429 }, 4)).toMatchObject({ code: 'HTTP 429/403 · rateLimitExceeded' });
+    expect(syncFailureFor({ name: 'DriveApiError', status: 0 }, 5)).toMatchObject({ code: 'NETWORK' });
+    expect(syncFailureFor({ code: 'folderMissing' }, 6)).toMatchObject({ code: 'FOLDER_MISSING' });
+    expect(syncFailureFor({ kind: 'auth', message: 'Google 계정이 연결되지 않았어요' }, 7)).toMatchObject({
+      code: 'NOT_CONNECTED',
+      title: 'Google 계정이 연결되지 않았어요',
+    });
+    expect(syncFailureFor({ message: '삭제가 너무 많아 멈췄어요' }, 8)).toMatchObject({ code: 'BLOCKED' });
+    expect(syncFailureFor({ code: 'HTTP 403 · accessNotConfigured' }, 9)).toMatchObject({ code: 'HTTP 403 · accessNotConfigured' });
+    expect(syncFailureFor({ code: 'HTTP 403 · storageQuotaExceeded' }, 10)).toMatchObject({ title: 'Google Drive 저장 공간이 부족해요' });
+  });
+
+  it('실제 Drive 오류 클래스(가짜 fetch가 만든 오류)도 같은 문구로 바꾼다', () => {
+    expect(syncFailureFor(new DriveAuthError())).toMatchObject({ code: 'HTTP 401' });
+    expect(syncFailureFor(new DriveApiError('x', 403, 'accessNotConfigured'))).toMatchObject({ code: 'HTTP 403 · accessNotConfigured' });
+    expect(syncFailureFor(new DriveApiError('x', 403, 'storageQuotaExceeded'))).toMatchObject({ code: 'HTTP 403 · storageQuotaExceeded' });
+    expect(syncFailureFor(new DriveApiError('x', 403, 'rateLimitExceeded'))).toMatchObject({ code: 'HTTP 429/403 · rateLimitExceeded' });
+    expect(syncFailureFor(new DriveApiError('x', 429))).toMatchObject({ code: 'HTTP 429/403 · rateLimitExceeded' });
+    expect(syncFailureFor(new DriveApiError('x', 0))).toMatchObject({ code: 'NETWORK' });
+    expect(syncFailureFor(new TypeError('fetch failed'))).toMatchObject({ code: 'NETWORK' });
+  });
+
+  it('모든 문구에 docs/sync-setup.md 단계 링크가 붙는다', () => {
+    const f = syncFailureFor({ code: 'rateLimit' });
+    expect(f.docs).toContain('docs/sync-setup.md#');
+    expect(f.action).toContain('다시');
+  });
+
+  it('클라이언트 접미사는 Google 도메인을 빼고 끝 4자리만 남긴다', () => {
+    expect(credentialSuffix('1234567890-abcdefghijk.apps.googleusercontent.com')).toBe('hijk');
+    expect(credentialSuffix('short')).toBe('hort');
+  });
+
+  it('이메일은 앞 2자와 도메인만 남긴다', () => {
+    expect(maskEmail('someone@example.com')).toBe('so***@example.com');
+    expect(maskEmail('a@example.com')).toBe('a***@example.com');
+    expect(maskEmail('invalid')).toBe('•••');
   });
 });

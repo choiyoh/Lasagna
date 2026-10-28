@@ -241,6 +241,12 @@ button.link { color: var(--muted); }
 .syncdialog button:disabled { opacity: 0.5; }
 .syncdialog .warn { color: #d99a1b; margin: 0; }
 .syncdialog .dialog__actions.left { justify-content: flex-start; margin-top: 4px; }
+.syncdialog__failure { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 8px 10px; border: 1px solid color-mix(in srgb, #d99a1b 45%, var(--border)); border-radius: 8px; background: color-mix(in srgb, #d99a1b 8%, transparent); }
+.syncdialog__failure p { margin: 0; }
+.syncdialog__failure a { color: var(--accent); font-size: 12.5px; }
+.syncdialog__failure details { width: 100%; }
+.syncdialog__failure summary { cursor: pointer; }
+.syncdialog [data-testid='sync-folder'] { word-break: break-all; }
 .syncdialog__ops { list-style: none; margin: 0; padding: 0; max-height: 28vh; overflow: auto; width: 100%; font-size: 12.5px; }
 .syncdialog__ops li { padding: 1px 0; word-break: break-all; }
 /* 데이터베이스 */

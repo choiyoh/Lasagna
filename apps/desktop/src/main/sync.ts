@@ -3,8 +3,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { buildAuthUrl, createPkce, exchangeCode, randomState, startLoopback } from '@nopsidian/sync-gdrive';
-import type { SyncStatus } from '@nopsidian/ipc-contract';
-import type { PlanSummary, RunSummary, SyncResponse, SyncWorkerData } from '../workers/sync/protocol';
+import type { SyncDiagnostics, SyncFailure, SyncStatus } from '@nopsidian/ipc-contract';
+import type { DiagnosticsSummary, PlanSummary, RunSummary, SyncResponse, SyncWorkerData } from '../workers/sync/protocol';
 
 type Tokens = SyncWorkerData['tokens'];
 
@@ -20,6 +20,96 @@ interface Credentials {
   clientSecret?: string;
   tokens?: Tokens;
 }
+
+/** 오류 코드 → 사람이 읽는 제목·다음 행동·문서 단계. 원문 오류는 화면에 그대로 쓰지 않는다. */
+const DOCS_BASE = 'https://github.com/choiyoh/Nopsidian/blob/main/docs/sync-setup.md';
+const FAILURES: Record<string, { code: string; title: string; action: string; anchor: string }> = {
+  auth: { code: 'HTTP 401', title: 'Google 로그인이 만료됐어요', action: 'Google 계정을 다시 연결해 주세요', anchor: '2-앱에서-연결' },
+  authCheck: { code: 'HTTP 401', title: 'Google 로그인을 확인하지 못했어요', action: '잠시 뒤 ‘지금 확인’을 다시 시도해 주세요', anchor: '문제-해결' },
+  authRevoked: { code: 'invalid_grant', title: 'Google 연결이 해제됐어요', action: 'Google 계정을 다시 연결해 주세요', anchor: '2-앱에서-연결' },
+  notConnected: { code: 'NOT_CONNECTED', title: 'Google 계정이 연결되지 않았어요', action: 'Google 계정을 연결해 주세요', anchor: '2-앱에서-연결' },
+  apiDisabled: { code: 'HTTP 403 · accessNotConfigured', title: 'Google Drive API가 꺼져 있어요', action: 'Google Cloud에서 Drive API를 켜 주세요', anchor: '1-google-cloud-설정-한-번만' },
+  quota: { code: 'HTTP 403 · storageQuotaExceeded', title: 'Google Drive 저장 공간이 부족해요', action: 'Drive 저장 공간을 확인해 주세요', anchor: '문제-해결' },
+  rateLimit: { code: 'HTTP 429/403 · rateLimitExceeded', title: 'Google이 잠시 요청을 제한했어요', action: '1~5분 뒤 다시 확인해 주세요', anchor: '문제-해결' },
+  network: { code: 'NETWORK', title: '인터넷에 연결되지 않았어요', action: '연결을 확인한 뒤 다시 시도해 주세요', anchor: '문제-해결' },
+  server: { code: 'HTTP 5xx', title: 'Google 쪽 일시 오류예요', action: '잠시 뒤 다시 시도하세요', anchor: '문제-해결' },
+  notFound: { code: 'HTTP 404', title: 'Drive에서 파일이나 폴더를 찾을 수 없어요', action: '다시 확인하거나 동기화를 다시 실행해 주세요', anchor: '문제-해결' },
+  forbidden: { code: 'HTTP 403', title: 'Drive 접근 권한이 없어요', action: 'Google 계정 권한을 확인해 주세요', anchor: '문제-해결' },
+  folderMissing: { code: 'FOLDER_MISSING', title: 'Drive에서 이 볼트의 폴더를 찾을 수 없어요', action: '같은 이름의 볼트인지 확인하거나 첫 동기화를 실행해 주세요', anchor: '3-두-번째-기기' },
+  partial: { code: 'PARTIAL', title: '일부 파일을 동기화하지 못했어요', action: '진단 정보를 복사해 실패한 파일을 확인해 주세요', anchor: '문제-해결' },
+  blocked: { code: 'BLOCKED', title: '삭제가 너무 많아 동기화를 멈췄어요', action: '계획을 확인한 뒤 필요하면 한 번만 강제 실행해 주세요', anchor: '문제-해결' },
+  busy: { code: 'BUSY', title: '지금 동기화 중이에요', action: '동기화가 끝난 뒤 다시 확인해 주세요', anchor: '문제-해결' },
+  unknown: { code: 'UNKNOWN', title: '동기화 중 문제가 생겼어요', action: '진단 정보를 복사해 확인해 주세요', anchor: '문제-해결' },
+};
+
+export interface FailureLike {
+  name?: string;
+  code?: string;
+  key?: string;
+  status?: number;
+  reason?: string;
+  kind?: string;
+  message?: string;
+}
+
+const failureKey = (e: FailureLike): string => {
+  if (e.key !== undefined && Object.hasOwn(FAILURES, e.key)) return e.key;
+  if (e.code !== undefined && Object.hasOwn(FAILURES, e.code)) return e.code;
+  // 예전 기기 상태·직접 만든 오류와의 호환용. 워커는 key 를 보낸다.
+  if (e.code === 'HTTP 401') return 'auth';
+  if (e.code === 'invalid_grant') return 'authRevoked';
+  if (e.code?.includes('accessNotConfigured') === true) return 'apiDisabled';
+  if (e.code?.includes('storageQuotaExceeded') === true) return 'quota';
+  if (e.code?.includes('rateLimitExceeded') === true || e.code?.includes('dailyLimitExceeded') === true) return 'rateLimit';
+  if (e.code === 'NETWORK') return 'network';
+  if (e.code === 'FOLDER_MISSING') return 'folderMissing';
+  if (e.code === 'HTTP 404') return 'notFound';
+  if (e.code?.startsWith('HTTP 5') === true) return 'server';
+  if (e.kind === 'auth' && e.message?.includes('연결되지 않았어요') === true) return 'notConnected';
+  if (e.kind === 'auth') return 'auth';
+  if (e.kind === 'offline') return 'network';
+  if (e.name === 'DriveAuthError') return 'auth';
+  if (e.name === 'AuthRevokedError') return 'authRevoked';
+  if (e.name === 'DriveApiError') {
+    if (e.status === 0) return 'network';
+    if (e.status === 401) return 'auth';
+    if (e.status === 429) return 'rateLimit';
+    if (e.status === 403) {
+      if (e.reason === 'accessNotConfigured') return 'apiDisabled';
+      if (e.reason === 'storageQuotaExceeded') return 'quota';
+      if (e.reason === 'rateLimitExceeded' || e.reason === 'userRateLimitExceeded' || e.reason === 'dailyLimitExceeded') return 'rateLimit';
+    }
+  }
+  if (e.name === 'OAuthError' || e.name === 'TypeError') return 'network';
+  if (e.message?.includes('멈췄어요') === true) return 'blocked';
+  if (e.message?.includes('이미 동기화 중') === true) return 'busy';
+  return 'unknown';
+};
+
+/** 워커·메인 어디서 온 오류든 화면용 실패 한 건으로 정규화한다. */
+export function syncFailureFor(e: FailureLike, at = Date.now()): SyncFailure {
+  const key = failureKey(e);
+  const f = FAILURES[key] ?? FAILURES.unknown!;
+  // 서버·404·일반 403 은 실제 HTTP 상태를 접힌 코드에 남긴다.
+  const code = (key === 'server' || key === 'notFound' || key === 'forbidden') && e.code !== undefined ? e.code : f.code;
+  return { at, code, title: f.title, action: f.action, docs: `${DOCS_BASE}#${f.anchor}` };
+}
+
+/** 로컬 진단에 쓰는 접미사. 클라이언트 ID 의 `.apps.googleusercontent.com` 은 빼고 보여 준다. */
+export const credentialSuffix = (value: string): string => {
+  const base = value.replace(/\.apps\.googleusercontent\.com$/i, '');
+  return base.length <= 4 ? base : base.slice(-4);
+};
+
+/** 화면·복사 모두에서 쓰는 이메일 마스킹. 전체 이메일은 렌더러로 보내지 않는다. */
+export const maskEmail = (email: string): string => {
+  const at = email.lastIndexOf('@');
+  if (at <= 0) return '•••';
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const head = local.slice(0, Math.min(2, local.length));
+  return `${head}***@${domain}`;
+};
 
 /** 클라이언트 ID·secret·토큰은 userData 에 암호화해 둔다. 볼트(동기화 대상)에는 절대 두지 않는다. */
 export class CredentialStore {
@@ -70,7 +160,27 @@ interface DeviceSettings {
   /** 첫 동기화 계획을 사용자가 확인하고 한 번 실행했는지 — 그 전에는 자동 동기화를 하지 않는다 */
   confirmedFirst: boolean;
   lastSync: number | null;
+  /** 마지막 실행·계획·확인 시도 */
+  lastAttempt: number | null;
+  lastFailure: SyncFailure | null;
+  /** access token 갱신이 실패한 마지막 기록(성공하면 지운다) */
+  lastRefreshFailure: SyncFailure | null;
+  /** 마지막 '지금 확인'에서 읽은 폴더 상태(읽기 전용 캐시) */
+  lastFolder: SyncDiagnostics['folder'] | null;
+  /** 마지막으로 확인한 계정 이메일의 마스킹 값만 저장한다(원문은 저장하지 않는다) */
+  lastAccountEmail: string | null;
 }
+
+const emptyDevice = (): DeviceSettings => ({
+  enabled: false,
+  confirmedFirst: false,
+  lastSync: null,
+  lastAttempt: null,
+  lastFailure: null,
+  lastRefreshFailure: null,
+  lastFolder: null,
+  lastAccountEmail: null,
+});
 
 /** 볼트 이름으로 정한 식별자 — 두 기기에서 같은 이름의 볼트를 열면 같은 Drive 폴더를 쓴다. */
 export const vaultKeyFor = (name: string) => createHash('sha256').update(`nopsidian:vault:${name.normalize('NFC')}`).digest('hex').slice(0, 16);
@@ -89,7 +199,7 @@ export interface SyncControllerOptions {
 export class SyncController {
   private root: string | null = null;
   private name = '';
-  private device: DeviceSettings = { enabled: false, confirmedFirst: false, lastSync: null };
+  private device: DeviceSettings = emptyDevice();
   private worker: Worker | null = null;
   private calls = new Map<string, { resolve: (v: never) => void; reject: (e: Error) => void }>();
   private state: SyncStatus['state'] = 'off';
@@ -117,6 +227,7 @@ export class SyncController {
       confirmedFirst: this.device.confirmedFirst,
       state: !enabled ? 'off' : !connected ? 'needsAuth' : this.state === 'off' ? 'idle' : this.state,
       lastSync: this.device.lastSync,
+      lastAttempt: this.device.lastAttempt,
       message: this.message,
       conflicts: this.conflicts,
     };
@@ -132,9 +243,10 @@ export class SyncController {
     this.root = root;
     this.name = name;
     try {
-      this.device = { ...this.device, ...(JSON.parse(readFileSync(this.deviceFile, 'utf8')) as Partial<DeviceSettings>) };
+      const saved = JSON.parse(readFileSync(this.deviceFile, 'utf8')) as Partial<DeviceSettings>;
+      this.device = { ...emptyDevice(), ...saved };
     } catch {
-      this.device = { enabled: false, confirmedFirst: false, lastSync: null };
+      this.device = emptyDevice();
     }
     this.state = 'off';
     this.message = null;
@@ -160,7 +272,13 @@ export class SyncController {
   // ── 설정·연결 ─────────────────────────────────────────────────
   setClient(clientId: string, clientSecret?: string) {
     const prev = this.o.credentials.load();
-    this.o.credentials.save({ clientId, clientSecret: clientSecret || undefined, tokens: prev?.clientId === clientId ? prev.tokens : undefined });
+    const same = prev?.clientId === clientId;
+    this.o.credentials.save({ clientId, clientSecret: clientSecret || undefined, tokens: same ? prev.tokens : undefined });
+    if (!same) {
+      this.device.lastRefreshFailure = null;
+      this.device.lastAccountEmail = null;
+      this.saveDevice();
+    }
     void this.stopWorker();
     this.emit();
   }
@@ -187,6 +305,9 @@ export class SyncController {
       if (!tokens.refreshToken) throw new Error('Google이 refresh token을 주지 않았어요. 클라이언트 유형이 "데스크톱 앱"인지 확인해 주세요');
       this.o.credentials.save({ ...c, tokens });
       await this.stopWorker();
+      this.device.lastRefreshFailure = null;
+      this.device.lastAccountEmail = null;
+      this.saveDevice();
       this.state = 'idle';
       this.message = null;
       this.emit();
@@ -202,6 +323,9 @@ export class SyncController {
     this.cancelConnect?.();
     await this.stopWorker();
     this.o.credentials.clearTokens();
+    this.device.lastRefreshFailure = null;
+    this.device.lastAccountEmail = null;
+    this.saveDevice();
     this.state = 'off';
     this.message = null;
     this.emit();
@@ -236,32 +360,153 @@ export class SyncController {
   }
 
   async plan(): Promise<PlanSummary> {
-    return this.call<PlanSummary>({ method: 'plan' });
+    this.device.lastAttempt = Date.now();
+    this.saveDevice();
+    try {
+      const result = await this.call<PlanSummary>({ method: 'plan' });
+      this.emit();
+      return result;
+    } catch (e) {
+      const failure = syncFailureFor(e as FailureLike);
+      this.device.lastFailure = failure;
+      this.saveDevice();
+      this.emit();
+      throw Object.assign(new Error(failure.title), { code: failure.code });
+    }
   }
 
   async run(force: boolean): Promise<RunSummary> {
     if (this.running) throw new Error('이미 동기화 중이에요');
     this.running = true;
     this.state = 'syncing';
+    this.device.lastAttempt = Date.now();
+    this.saveDevice();
     this.emit();
     try {
       const r = await this.call<RunSummary>({ method: 'run', params: { force } });
-      this.device.lastSync = Date.now();
+      if (r.failed === 0) this.device.lastSync = Date.now();
       this.device.confirmedFirst = true;
+      this.device.lastFailure = r.failed > 0 ? syncFailureFor({ code: 'partial' }) : null;
       this.saveDevice();
       this.conflicts = r.conflictPaths;
       this.state = r.failed > 0 ? 'error' : 'idle';
       this.message = r.failed > 0 ? `${r.failed}개 파일을 동기화하지 못했어요` : null;
       return r;
     } catch (e) {
-      const err = e as Error & { kind?: string };
+      const err = e as Error & { kind?: string; key?: string; code?: string; status?: number; reason?: string };
       this.state = err.kind === 'auth' ? 'needsAuth' : err.kind === 'offline' ? 'offline' : /멈췄어요/.test(err.message) ? 'blocked' : 'error';
-      this.message = err.message;
+      const failure = syncFailureFor(err);
+      this.message = this.state === 'blocked' ? err.message : failure.title;
+      this.device.lastFailure = failure;
+      this.saveDevice();
       if (err.kind === 'auth') this.o.credentials.clearTokens();
-      throw e;
+      throw Object.assign(new Error(this.message), { kind: err.kind, code: failure.code });
     } finally {
       this.running = false;
       this.emit();
+    }
+  }
+
+  // ── 진단 ──────────────────────────────────────────────────────
+  private emptyFolder(): SyncDiagnostics['folder'] {
+    return { name: this.name, path: this.name === '' ? 'Nopsidian' : `Nopsidian/${this.name}`, id: null, exists: false, checkedAt: null };
+  }
+
+  private diagnosticsBase(c: Credentials | null): SyncDiagnostics {
+    return {
+      clientIdSuffix: c?.clientId === undefined ? null : credentialSuffix(c.clientId),
+      clientSecretSuffix: c?.clientSecret === undefined ? null : credentialSuffix(c.clientSecret),
+      accountEmail: this.device.lastAccountEmail,
+      tokenExpiresAt: c?.tokens?.expiresAt ?? null,
+      tokenValid: c?.tokens !== undefined && c.tokens.expiresAt > Date.now(),
+      lastRefreshFailure: this.device.lastRefreshFailure,
+      pendingChanges: null,
+      folder: this.device.lastFolder ?? this.emptyFolder(),
+      lastFailure: this.device.lastFailure,
+    };
+  }
+
+  /** 네트워크 없이 저장된 값 + 로컬 스캔만. 연결 전이거나 스캔이 실패해도 화면은 열린다. */
+  async diagnostics(): Promise<SyncDiagnostics> {
+    const c = this.o.credentials.load();
+    const base = this.diagnosticsBase(c);
+    if (!this.root || c?.tokens === undefined) return base;
+    try {
+      const r = await this.call<DiagnosticsSummary>({ method: 'diagnose', params: { remote: false } });
+      return { ...base, pendingChanges: r.pendingChanges, tokenExpiresAt: r.tokenExpiresAt };
+    } catch {
+      return base;
+    }
+  }
+
+  /**
+   * '지금 확인' — 토큰 갱신과 Drive 폴더 읽기만 한다.
+   * 업로드·다운로드·삭제·폴더 생성은 하지 않으며, 실패해도 예외 대신 마지막 실패를 담아 돌려준다.
+   */
+  async check(): Promise<SyncDiagnostics> {
+    const c = this.o.credentials.load();
+    let base = this.diagnosticsBase(c);
+    if (!this.root || c?.tokens === undefined) {
+      const failure = syncFailureFor({ code: 'notConnected' });
+      this.device.lastFailure = failure;
+      this.saveDevice();
+      return { ...base, lastFailure: failure, tokenValid: false };
+    }
+    try {
+      const r = await this.call<DiagnosticsSummary>({ method: 'diagnose', params: { remote: true } });
+      if (r.folder === null) throw new Error('Drive 폴더를 확인하지 못했어요');
+      const folder: SyncDiagnostics['folder'] = { ...r.folder, checkedAt: r.checkedAt };
+      this.device.lastFolder = folder;
+      this.device.lastAccountEmail = r.accountEmail === null ? this.device.lastAccountEmail : maskEmail(r.accountEmail);
+      // 첫 동기화 전에는 폴더가 없는 게 정상이다. 이미 동기화한 볼트에서만 실패로 기록한다.
+      if (!folder.exists && this.device.confirmedFirst) {
+        this.device.lastFailure = syncFailureFor({ code: 'folderMissing' }, r.checkedAt);
+      } else if (folder.exists && this.device.lastFailure !== null) {
+        // 연결·인증 문제는 이번 확인이 성공했으므로 지운다. 파일 동기화 실패(PARTIAL 등)는 남긴다.
+        const code = this.device.lastFailure.code;
+        const cleared = new Set([
+          'FOLDER_MISSING',
+          'NETWORK',
+          'HTTP 401',
+          'invalid_grant',
+          'HTTP 403 · accessNotConfigured',
+          'HTTP 403 · storageQuotaExceeded',
+          'HTTP 429/403 · rateLimitExceeded',
+        ]);
+        if (cleared.has(code) || /^HTTP 5\d\d$/.test(code)) this.device.lastFailure = null;
+      }
+      this.saveDevice();
+      base = this.diagnosticsBase(c);
+      return {
+        ...base,
+        pendingChanges: r.pendingChanges,
+        tokenExpiresAt: r.tokenExpiresAt,
+        tokenValid: r.tokenExpiresAt > Date.now(),
+        folder,
+        lastFailure: this.device.lastFailure,
+      };
+    } catch (e) {
+      const key = failureKey(e as FailureLike);
+      // 동기화 중이라 확인만 못한 경우는 '실패'가 아니다. 화면에는 알리고 기록은 남기지 않는다.
+      if (key === 'busy') throw Object.assign(new Error('지금 동기화 중이에요'), { key: 'busy', code: 'BUSY' });
+      const failure = syncFailureFor(key === 'auth' ? { key: 'authCheck', code: 'HTTP 401' } : (e as FailureLike));
+      this.device.lastFailure = failure;
+      // refresh token 이 invalid_grant 로 확실히 거부된 경우에만 로그아웃한다.
+      const revoked = key === 'authRevoked';
+      if (revoked) {
+        this.o.credentials.clearTokens();
+        this.device.lastAccountEmail = null;
+      }
+      this.saveDevice();
+      if (revoked) {
+        this.emit();
+        base = this.diagnosticsBase(this.o.credentials.load());
+      }
+      return {
+        ...base,
+        lastFailure: failure,
+        tokenValid: key === 'auth' || revoked ? false : base.tokenValid,
+      };
     }
   }
 
@@ -280,15 +525,20 @@ export class SyncController {
     };
     const w = new Worker(this.o.workerFile, { workerData: data });
     w.on('message', (m: SyncResponse) => {
-      if (m.type === 'tokens') {
-        const cur = this.o.credentials.load();
-        if (cur) this.o.credentials.save({ ...cur, tokens: m.tokens });
-      } else if (m.type === 'response') {
+      if (m.type === 'response') {
         const call = this.calls.get(m.id);
         if (!call) return;
         this.calls.delete(m.id);
-        if ('error' in m) call.reject(Object.assign(new Error(m.error), { kind: m.kind }));
+        if ('error' in m) call.reject(Object.assign(new Error(m.error), { kind: m.kind, key: m.key, code: m.code, status: m.status, reason: m.reason }));
         else call.resolve(m.result as never);
+      } else if (m.type === 'tokenError') {
+        this.device.lastRefreshFailure = syncFailureFor({ key: m.key, code: m.code, kind: m.kind, status: m.status, reason: m.reason, message: m.error }, m.at);
+        this.saveDevice();
+      } else if (m.type === 'tokens') {
+        this.device.lastRefreshFailure = null;
+        this.saveDevice();
+        const cur = this.o.credentials.load();
+        if (cur) this.o.credentials.save({ ...cur, tokens: m.tokens });
       } else if (m.type === 'fatal') {
         this.failAll(new Error(m.error));
       }
@@ -309,7 +559,7 @@ export class SyncController {
     this.calls.clear();
   }
 
-  private call<T>(req: { method: 'plan' } | { method: 'run'; params: { force: boolean } }): Promise<T> {
+  private call<T>(req: { method: 'plan' } | { method: 'run'; params: { force: boolean } } | { method: 'diagnose'; params: { remote: boolean } }): Promise<T> {
     const w = this.ensureWorker();
     const id = randomUUID();
     return new Promise<T>((resolve, reject) => {

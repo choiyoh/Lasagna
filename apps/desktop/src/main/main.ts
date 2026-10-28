@@ -546,6 +546,8 @@ function registerHandlers() {
   handle('sync.enable', ({ enabled }) => syncController.setEnabled(enabled));
   handle('sync.plan', () => syncController.plan());
   handle('sync.run', ({ force }) => syncController.run(force ?? false));
+  handle('sync.diagnostics', () => syncController.diagnostics());
+  handle('sync.check', () => syncController.check());
   handle('db.list', async () => {
     const v = requireVault();
     await v.index.ready;

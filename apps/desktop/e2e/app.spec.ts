@@ -905,10 +905,18 @@ test.describe('링크 코어', () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Google 계정 연결' })).toBeDisabled();
     await expect(dialog.getByRole('checkbox')).toBeDisabled();
+    const diagnostics = dialog.getByTestId('sync-diagnostics');
+    await expect(diagnostics).toContainText('등록 안 됨');
+    await expect(diagnostics).toContainText('연결 안 됨');
+    await expect(dialog.getByTestId('sync-check')).toBeDisabled();
     await dialog.getByLabel('클라이언트 ID').fill('1234567890-abcdefghijk.apps.googleusercontent.com');
     await dialog.getByRole('button', { name: '저장' }).click();
     await expect(dialog.getByRole('button', { name: 'Google 계정 연결' })).toBeEnabled({ timeout: 8000 });
     await expect(dialog).toContainText('클라이언트 ID가 저장돼 있어요');
+    await expect(diagnostics).toContainText('…hijk', { timeout: 8000 });
+    await expect(dialog.getByTestId('sync-check')).toBeDisabled();
+    await dialog.getByTestId('sync-copy-diagnostics').click();
+    await expect(dialog).toContainText('복사했어요');
     expect(await page.evaluate(() => window.nops.sync.status())).toMatchObject({ configured: true, connected: false, enabled: false, state: 'off' });
     // 아직 연결 전이니 계획을 세울 수 없다
     await expect(page.evaluate(() => window.nops.sync.plan())).rejects.toThrow(/연결되지 않았어요/);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { SyncStatus } from '@nopsidian/ipc-contract';
+import type { SyncDiagnostics, SyncStatus } from '@nopsidian/ipc-contract';
+import { formatSyncDiagnostics } from './sync-diagnostics';
 
 type Plan = Awaited<ReturnType<typeof window.nops.sync.plan>>;
 type Run = Awaited<ReturnType<typeof window.nops.sync.run>>;
@@ -36,6 +37,8 @@ const ago = (t: number | null) => {
   return new Date(t).toLocaleString('ko-KR');
 };
 
+const at = (t: number | null) => (t === null ? '없음' : new Date(t).toLocaleString('ko-KR'));
+
 interface Props {
   status: SyncStatus | null;
   onClose: () => void;
@@ -50,6 +53,25 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
   const [result, setResult] = useState<Run | null>(null);
+  const [diag, setDiag] = useState<SyncDiagnostics | null>(null);
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (status?.state === 'syncing') return;
+    let live = true;
+    setDiagLoading(true);
+    void window.nops.sync
+      .diagnostics()
+      .then((d) => live && setDiag(d))
+      .catch(() => undefined)
+      .finally(() => {
+        if (live) setDiagLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [status?.configured, status?.connected, status?.state]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -69,7 +91,32 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
     }
   }, []);
 
+  const copyDiagnostics = useCallback(async () => {
+    if (!status || !diag) return;
+    try {
+      await navigator.clipboard.writeText(formatSyncDiagnostics(status, diag));
+      setCopied('복사했어요');
+    } catch {
+      setCopied('복사하지 못했어요');
+    }
+    setTimeout(() => setCopied(null), 2500);
+  }, [status, diag]);
+
   const s = status;
+  const tokenText = !s?.connected
+    ? '없음'
+    : diag === null
+      ? '확인 중…'
+      : diag.tokenValid
+        ? `유효 · ${at(diag.tokenExpiresAt)}까지`
+        : `만료됨 · '지금 확인' 때 갱신을 시도해요`;
+  const folder = diag?.folder;
+  const folderText =
+    folder === undefined || folder.checkedAt === null
+      ? '확인 전'
+      : folder.exists
+        ? `확인됨${folder.id === null ? '' : ` · ID ${folder.id}`}`
+        : '아직 없음';
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog syncdialog" role="dialog" aria-modal="true" aria-label="Google Drive 동기화">
@@ -115,10 +162,105 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
           </p>
           {s?.message && <p className="small warn">{s.message}</p>}
           <div className="dialog__actions left">
-            <button disabled={!s?.enabled || !s.connected || !!busy} onClick={() => void act('plan', async () => { setResult(null); setPlan(await window.nops.sync.plan()); })}>
+            <button disabled={!s?.enabled || !s.connected || !!busy || diagLoading} onClick={() => void act('plan', async () => { setResult(null); setPlan(await window.nops.sync.plan()); })}>
               {s?.confirmedFirst ? '지금 동기화…' : '첫 동기화 미리보기'}
             </button>
           </div>
+        </section>
+
+        <section data-testid="sync-diagnostics">
+          <h3>4. 진단</h3>
+          <p className="small">
+            Google 클라이언트:{' '}
+            {diag?.clientIdSuffix
+              ? `등록됨 (…${diag.clientIdSuffix})`
+              : s?.configured
+                ? '등록됨'
+                : '등록 안 됨'}
+            {' · '}보안 비밀:{' '}
+            {diag?.clientSecretSuffix ? `등록됨 (…${diag.clientSecretSuffix})` : '등록 안 됨'}
+          </p>
+          <p className="small" data-testid="sync-account">
+            계정:{' '}
+            {diag?.accountEmail ??
+              (s?.connected
+                ? diag?.folder.checkedAt
+                  ? '이메일을 읽을 수 없어요'
+                  : '아직 확인 전 — ‘지금 확인’을 눌러 주세요'
+                : '연결 안 됨')}
+          </p>
+          <p className="small" data-testid="sync-token">
+            토큰: {tokenText}
+          </p>
+          {diag?.lastRefreshFailure && (
+            <div className="syncdialog__failure" data-testid="sync-refresh-failure">
+              <strong className="small">토큰 갱신 실패: {diag.lastRefreshFailure.title}</strong>
+              <p className="small">{diag.lastRefreshFailure.action}</p>
+              <a href={diag.lastRefreshFailure.docs} target="_blank" rel="noreferrer">
+                단계별 안내 (docs/sync-setup.md)
+              </a>
+              <details>
+                <summary className="muted small">오류 코드: {diag.lastRefreshFailure.code}</summary>
+                <p className="muted small">{at(diag.lastRefreshFailure.at)}</p>
+              </details>
+            </div>
+          )}
+          <p className="small">
+            마지막 성공: {s?.lastSync ? at(s.lastSync) : '아직 없음'}
+            {' · '}마지막 시도: {s?.lastAttempt ? at(s.lastAttempt) : '아직 없음'}
+          </p>
+          <p className="small" data-testid="sync-pending">
+            이 기기에서 바뀐 파일: {diag?.pendingChanges === null || diag === null ? '확인 전' : `${diag.pendingChanges}개`}
+            {' · '}
+            {s && s.conflicts.length > 0 ? (
+              <button
+                className="link"
+                data-testid="sync-conflicts-count"
+                onClick={() => document.querySelector('[data-testid="sync-conflicts"]')?.scrollIntoView({ block: 'nearest' })}
+              >
+                충돌: {s.conflicts.length}건
+              </button>
+            ) : (
+              <>충돌: 0건</>
+            )}
+          </p>
+          <p className="small" data-testid="sync-folder">
+            Drive 폴더: {folder?.path ?? 'Nopsidian/…'} · {folderText}
+            {folder?.checkedAt ? ` · ${at(folder.checkedAt)} 확인` : ''}
+          </p>
+          {diag?.lastFailure && (
+            <div className="syncdialog__failure" data-testid="sync-last-failure">
+              <strong className="small">{diag.lastFailure.title}</strong>
+              <p className="small">{diag.lastFailure.action}</p>
+              <a href={diag.lastFailure.docs} target="_blank" rel="noreferrer">
+                단계별 안내 (docs/sync-setup.md)
+              </a>
+              <details>
+                <summary className="muted small">오류 코드: {diag.lastFailure.code}</summary>
+                <p className="muted small">{at(diag.lastFailure.at)}</p>
+              </details>
+            </div>
+          )}
+          <div className="dialog__actions left">
+            <button
+              data-testid="sync-check"
+              disabled={!s?.connected || !!busy || diagLoading || s?.state === 'syncing'}
+              onClick={() =>
+                void act('check', async () => {
+                  setCopied(null);
+                  setDiag(await window.nops.sync.check());
+                })
+              }
+            >
+              {busy === 'check' || diagLoading ? '확인 중…' : '지금 확인'}
+            </button>
+            <button data-testid="sync-copy-diagnostics" disabled={!diag} onClick={() => void copyDiagnostics()}>
+              진단 정보 복사
+            </button>
+            {copied && <span className="muted small">{copied}</span>}
+          </div>
+          <p className="muted small">‘지금 확인’은 토큰과 Drive 폴더만 읽고, 동기화·업로드·삭제는 하지 않아요.</p>
+          <p className="muted small">복사에는 비밀 값·이메일·폴더 ID/경로가 들어가지 않아요.</p>
         </section>
 
         {plan && (

@@ -867,3 +867,63 @@ describe('오류 처리와 재시도', () => {
     expect(error).toBeInstanceOf(DriveApiError);
   });
 });
+
+
+describe('inspectVaultFolder — 지금 확인용 읽기 전용', () => {
+  it('Nopsidian/<볼트> 폴더를 찾고 id 를 돌려준다(생성 요청 없음)', async () => {
+    const { fetch, calls } = makeFetch((call) => foundFolders(call) ?? json({ files: [] }));
+    const { client } = setup(fetch);
+    await expect(client.inspectVaultFolder()).resolves.toEqual({
+      name: VAULT_NAME,
+      path: `Nopsidian/${VAULT_NAME}`,
+      id: 'folder-vault',
+      exists: true,
+    });
+    expect(calls.every((c) => c.method === 'GET')).toBe(true);
+    expect(calls.some((c) => c.url.includes('/upload/'))).toBe(false);
+  });
+
+  it('폴더가 없으면 exists=false 이고 폴더를 만들지 않는다', async () => {
+    const { fetch, calls } = makeFetch((call) => {
+      if (folderQueryName(call) === 'Nopsidian') return json({ files: [] });
+      return json({ files: [] });
+    });
+    const { client } = setup(fetch);
+    await expect(client.inspectVaultFolder()).resolves.toMatchObject({ exists: false, id: null });
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+  });
+});
+
+describe('DriveApiError 사유', () => {
+  it('403 본문의 reason 을 보존한다', async () => {
+    const { fetch } = makeFetch(() =>
+      json({ error: { errors: [{ reason: 'accessNotConfigured' }] } }, 403),
+    );
+    const { client } = setup(fetch, { maxRetries: 0 });
+    await expect(client.list()).rejects.toMatchObject({
+      name: 'DriveApiError',
+      status: 403,
+      reason: 'accessNotConfigured',
+    });
+  });
+});
+
+
+describe('accountEmail — 진단용 읽기 전용', () => {
+  it('about.user 의 이메일을 돌려준다', async () => {
+    const { fetch, calls } = makeFetch(() => json({ user: { emailAddress: 'me@example.com' } }));
+    const { client } = setup(fetch);
+    await expect(client.accountEmail()).resolves.toBe('me@example.com');
+    expect(calls[0]?.url).toContain('/about?fields=user');
+  });
+
+  it('볼 수 없으면 null 이고 인증 오류는 숨기지 않는다', async () => {
+    const { fetch } = makeFetch(() => json({ error: { errors: [{ reason: 'forbidden' }] } }, 403));
+    const { client } = setup(fetch, { maxRetries: 0 });
+    await expect(client.accountEmail()).resolves.toBeNull();
+
+    const auth = makeFetch(() => json({}, 401));
+    const { client: authClient } = setup(auth.fetch);
+    await expect(authClient.accountEmail()).rejects.toBeInstanceOf(DriveAuthError);
+  });
+});

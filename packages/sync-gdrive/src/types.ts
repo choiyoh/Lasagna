@@ -44,6 +44,16 @@ export class RevisionConflictError extends Error {
   }
 }
 
+/** '지금 확인'용 — 네트워크에서 읽기만 하고 폴더를 만들지 않는다. */
+export interface VaultFolderInfo {
+  /** Drive 폴더 이름(볼트 이름) */
+  name: string;
+  /** 표시용 경로: Nopsidian/<볼트 이름> */
+  path: string;
+  id: string | null;
+  exists: boolean;
+}
+
 export interface DriveClient {
   /** 이 볼트의 동기화 대상 파일 전체(휴지통 제외) */
   list(): Promise<RemoteFile[]>;

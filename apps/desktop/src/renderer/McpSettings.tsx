@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { defaultServerName, isValidServerName, mcpSnippet, type McpInfo } from './mcp-snippet';
+import { defaultServerName, folderContains, folderError, isValidServerName, mcpSnippet, type McpInfo } from './mcp-snippet';
 import { loadMcpSettings, saveMcpSettings, serverNameConflict, type McpSettingsConfig } from './mcp-settings';
 
 interface AuditRow {
@@ -54,7 +54,14 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   };
   /** 이미 되돌린 기록(`revert:<t>` 메모가 붙은 되돌림 기록이 가리키는 것) */
   const reverted = new Set(audit.filter((a) => a.action === 'revert' && a.note?.startsWith('revert:')).map((a) => `${a.note!.slice(7)}|${a.path}`));
-  const snippet = mcpSnippet(info, { write: current.write, folder: current.folder, allowDailyFolder: current.allowDailyFolder, dailyFolder: info.dailyFolder, name: current.name });
+  const nameOk = !current.name.trim() || isValidServerName(current.name);
+  const conflict = nameOk && current.name.trim() !== '' && serverNameConflict(current.name, info.vaultId);
+  const folderIssue = current.write ? folderError(current.folder) : null;
+  const dailyIssue = current.write && current.allowDailyFolder ? folderError(info.dailyFolder) : null;
+  const invalidFolder = folderIssue ?? dailyIssue;
+  /** 데일리 폴더가 이미 허용 범위(볼트 전체 또는 상위 폴더)에 들어 있는가 — 정책의 canWrite 와 같은 판정 */
+  const dailyCovered = !folderIssue && folderContains(current.folder, info.dailyFolder);
+  const snippet = invalidFolder || !nameOk ? null : mcpSnippet(info, { write: current.write, folder: current.folder, allowDailyFolder: current.allowDailyFolder, dailyFolder: info.dailyFolder, name: current.name });
   const active = snippet?.clients.find((c) => c.id === current.client) ?? snippet?.clients[0];
   const copy = (label: string, text: string) => {
     void navigator.clipboard.writeText(text).then(() => {
@@ -62,11 +69,6 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
       setTimeout(() => setCopied(''), 1800);
     });
   };
-  const folderNormalized = current.folder.trim().replace(/^\/+|\/+$/g, '');
-  /** 데일리 폴더가 이미 허용 범위(볼트 전체 또는 같은 폴더)에 들어 있는가 */
-  const dailyCovered = folderNormalized === '' || folderNormalized === '.' || folderNormalized === info.dailyFolder;
-  const nameOk = !current.name.trim() || isValidServerName(current.name);
-  const conflict = nameOk && current.name.trim() !== '' && serverNameConflict(current.name, info.vaultId);
 
   return (
     <section data-testid="mcp-settings">
@@ -91,6 +93,11 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
             </span>
             <input className="settings__text" value={current.folder} onChange={(e) => update({ folder: e.target.value })} aria-label="쓸 수 있는 폴더" />
           </label>
+          {folderIssue && (
+            <p className="warn small" data-testid="mcp-folder-warning">
+              {folderIssue} 폴더를 고치기 전에는 붙여 넣을 스니펫을 만들지 않아요.
+            </p>
+          )}
           <label className="settings__row">
             <span>
               오늘의 노트 폴더도 허용
@@ -105,7 +112,12 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
               aria-label="오늘의 노트 폴더도 허용"
             />
           </label>
-          {!current.allowDailyFolder && !dailyCovered && (
+          {dailyIssue && (
+            <p className="warn small" data-testid="mcp-folder-warning">
+              {dailyIssue} 오늘의 노트 폴더 설정을 앱에서 고쳐 주세요.
+            </p>
+          )}
+          {!current.allowDailyFolder && !folderIssue && !dailyCovered && (
             <p className="warn small" data-testid="mcp-daily-warning">
               오늘의 노트 폴더({info.dailyFolder}/)가 허용 폴더에 없어요. 이대로면 오늘의 노트에 쓰기는 forbidden-folder 로 실패해요.
             </p>
@@ -127,7 +139,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
       </label>
       {!nameOk && (
         <p className="warn small" data-testid="mcp-name-warning">
-          이름에는 공백 없이 글자·숫자와 . _ - 만 쓸 수 있어요.
+          이름에는 공백 없이 글자·숫자와 . _ - 만 쓸 수 있어요. 고치기 전에는 붙여 넣을 스니펫을 만들지 않아요.
         </p>
       )}
       {conflict && (
@@ -135,7 +147,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
           같은 이름을 쓰는 다른 볼트 설정이 있어요. 두 볼트를 함께 등록하면 나중에 등록한 쪽이 앞의 것을 덮어써요.
         </p>
       )}
-      {snippet && active ? (
+      {invalidFolder || !nameOk ? null : snippet && active ? (
         <div className="mcp__snippets">
           <div className="mcp__tabs" role="tablist" aria-label="MCP 클라이언트">
             {snippet.clients.map((c) => (

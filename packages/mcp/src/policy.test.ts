@@ -60,6 +60,7 @@ describe('경로 검증', () => {
   it('폴더 정규화', () => {
     expect(normalizeFolder('')).toBe('');
     expect(normalizeFolder('/AI/하위/')).toBe('AI/하위');
+    expect(normalizeFolder(' 메모\\AI/ ')).toBe('메모/AI');
   });
   it('canWrite: 폴더 경계를 지킨다', () => {
     const p = { write: true, writeFolders: ['AI'] } as McpPolicy;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KEY_PREFIX, LEGACY_KEY, loadMcpSettings, saveMcpSettings, serverNameConflict, storageKey, type McpSettingsConfig } from './mcp-settings';
-import type { McpClientId } from './mcp-snippet';
+import { defaultServerName, type McpClientId } from './mcp-snippet';
 
 class MemoryStorage {
   private map = new Map<string, string>();
@@ -42,17 +42,40 @@ describe('볼트별 MCP 설정', () => {
 
   it('설정이 없는 볼트는 기본값(읽기 전용, AI, Claude Code)을 쓴다', () => {
     const got = loadMcpSettings('vault-new', 'Work Notes', new MemoryStorage());
-    expect(got).toEqual({ write: false, folder: 'AI', allowDailyFolder: false, name: 'nopsidian-work-notes', client: 'claude-code' });
+    expect(got).toEqual({
+      write: false,
+      folder: 'AI',
+      allowDailyFolder: false,
+      name: defaultServerName({ vaultName: 'Work Notes', vaultId: 'vault-new' }),
+      client: 'claude-code',
+    });
   });
 
-  it('예전 전역 설정은 새 볼트 설정이 없을 때 한 번 물려받는다', () => {
+  it('예전 전역 설정은 처음 연 볼트 하나에만 옮긴다', () => {
     const store = new MemoryStorage();
     store.setItem(LEGACY_KEY, JSON.stringify({ write: true, folder: '옛 폴더' }));
-    expect(loadMcpSettings('vault-a', 'A', store)).toMatchObject({ write: true, folder: '옛 폴더', name: 'nopsidian-a' });
+    expect(loadMcpSettings('vault-a', 'A', store)).toMatchObject({ write: true, folder: '옛 폴더', name: defaultServerName({ vaultName: 'A', vaultId: 'vault-a' }) });
+    // 옮긴 뒤 전역 키는 지운다
+    expect(store.getItem(LEGACY_KEY)).toBeNull();
+    expect(loadMcpSettings('vault-a', 'A', store)).toMatchObject({ write: true, folder: '옛 폴더' });
+    // 새 볼트는 전역 쓰기 설정을 물려받지 않고 읽기 전용으로 시작한다
+    expect(loadMcpSettings('vault-b', 'B', store)).toMatchObject({ write: false, folder: 'AI' });
     saveMcpSettings('vault-a', cfg({ folder: '새 폴더' }), store);
     expect(loadMcpSettings('vault-a', 'A', store).folder).toBe('새 폴더');
-    // 다른 볼트는 여전히 전역 설정을 물려받는다
-    expect(loadMcpSettings('vault-b', 'B', store).folder).toBe('옛 폴더');
+  });
+
+  it('전역 키를 지울 수 없어도 마이그레이션은 한 번만 한다', () => {
+    const map = new Map<string, string>([[LEGACY_KEY, JSON.stringify({ write: true, folder: '옛 폴더' })]]);
+    const store = {
+      get length() {
+        return map.size;
+      },
+      key: (i: number) => [...map.keys()][i] ?? null,
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => void map.set(k, v),
+    };
+    expect(loadMcpSettings('vault-a', 'A', store as unknown as Storage)).toMatchObject({ write: true, folder: '옛 폴더' });
+    expect(loadMcpSettings('vault-b', 'B', store as unknown as Storage)).toMatchObject({ write: false, folder: 'AI' });
   });
 
   it('망가진 설정·알 수 없는 클라이언트는 기본값으로 되돌린다', () => {
@@ -62,7 +85,7 @@ describe('볼트별 MCP 설정', () => {
     store.setItem(storageKey('vault-a'), JSON.stringify({ ...cfg(), client: '없는클라이언트' }));
     expect(loadMcpSettings('vault-a', 'A', store).client).toBe('claude-code');
     store.setItem(storageKey('vault-a'), JSON.stringify({ ...cfg(), name: '   ' }));
-    expect(loadMcpSettings('vault-a', 'A', store).name).toBe('nopsidian-a');
+    expect(loadMcpSettings('vault-a', 'A', store).name).toBe(defaultServerName({ vaultName: 'A', vaultId: 'vault-a' }));
   });
 
   it('저장이 막혀도(사생활 보호 모드) 예외를 던지지 않는다', () => {

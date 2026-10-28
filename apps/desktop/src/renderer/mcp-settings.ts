@@ -8,14 +8,16 @@ export interface McpSettingsConfig {
   client: McpClientId;
 }
 
-/** 예전 전역 키. 볼트 id 가 없던 시절 설정은 볼트별 설정이 없을 때 기본값으로 물려받는다. */
+/** 예전 전역 키. 볼트 id 가 없던 시절 설정은 처음 연 볼트 하나에만 옮긴다. */
 export const LEGACY_KEY = 'nops.mcp';
+/** 예전 설정을 이미 옮겼다는 표시. 전역 키를 지우지 못하는 저장소에서도 한 번만 옮긴다. */
+export const LEGACY_MIGRATED_KEY = 'nops.mcp.legacy-migrated';
 /** 볼트별 설정 키 접두사. 두 볼트를 오가도 이름·폴더가 섞이지 않는다. */
 export const KEY_PREFIX = 'nops.mcp.v2.';
 
 export const storageKey = (vaultId: string) => `${KEY_PREFIX}${vaultId}`;
 
-type Store = Pick<Storage, 'getItem' | 'setItem'>;
+type Store = Pick<Storage, 'getItem' | 'setItem'> & Partial<Pick<Storage, 'removeItem'>>;
 type ReadStore = Pick<Storage, 'length' | 'key' | 'getItem'>;
 
 const CLIENT_IDS: McpClientId[] = ['claude-code', 'claude-desktop', 'codex', 'cursor', 'vscode', 'gemini-cli'];
@@ -38,10 +40,24 @@ const normalize = (v: Partial<McpSettingsConfig> | null, vaultName: string, vaul
   client: CLIENT_IDS.includes(v?.client as McpClientId) ? (v!.client as McpClientId) : 'claude-code',
 });
 
-/** 이 볼트의 설정을 읽는다. 볼트별 설정이 없으면 예전 전역 설정을 한 번 물려받는다. */
+/**
+ * 이 볼트의 설정을 읽는다. 볼트별 설정이 없고 예전 전역 설정이 남아 있으면
+ * 처음 연 이 볼트에만 옮겨 저장하고 전역 키를 지운다. 새 볼트는 읽기 전용으로 시작한다.
+ */
 export function loadMcpSettings(vaultId: string, vaultName: string, storage: Store = localStorage): McpSettingsConfig {
   const own = parse(storage.getItem(storageKey(vaultId)));
-  return normalize(own ?? parse(storage.getItem(LEGACY_KEY)), vaultName, vaultId);
+  if (own) return normalize(own, vaultName, vaultId);
+  const legacy = parse(storage.getItem(LEGACY_KEY));
+  if (!legacy || storage.getItem(LEGACY_MIGRATED_KEY)) return normalize(null, vaultName, vaultId);
+  const migrated = normalize(legacy, vaultName, vaultId);
+  try {
+    storage.setItem(storageKey(vaultId), JSON.stringify(migrated));
+    storage.setItem(LEGACY_MIGRATED_KEY, '1');
+    storage.removeItem?.(LEGACY_KEY);
+  } catch {
+    // 저장이 막히면(사생활 보호 모드 등) 전역 설정을 지우지 않고 다음에 다시 시도한다
+  }
+  return migrated;
 }
 
 /** 이 볼트의 설정만 저장한다. 저장 못 해도(사생활 보호 모드 등) 이번 실행에는 적용된다. */

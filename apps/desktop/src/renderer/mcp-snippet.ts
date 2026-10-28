@@ -1,3 +1,5 @@
+import { folderCovers, normalizeFolder } from '@nopsidian/mcp/folders';
+
 /** `mcp.info` IPC 가 돌려주는 것: 번들된 서버 경로·볼트·앱 실행 파일·패키징 여부 */
 export interface McpInfo {
   script: string | null;
@@ -51,14 +53,27 @@ export interface McpSnippet {
 /** 셸 인자: 공백·특수문자가 있어도 안전하게 큰따옴표로 감싼다 */
 export const shellQuote = (s: string) => `"${s.replace(/(["\\$`])/g, '\\$1')}"`;
 
-/** 쓰기 폴더 입력을 다듬는다(앞뒤 슬래시 제거, 빈 값·`.` 은 볼트 전체 = '') */
-const writeFolder = (folder: string) => {
-  const f = folder.trim().replace(/^\/+|\/+$/g, '');
-  return f === '.' ? '' : f;
-};
+/** 쓰기 폴더를 서버와 같은 규칙으로 검증한다. 문제가 있으면 화면에 보여 줄 이유, 없으면 null. */
+export function folderError(folder: string): string | null {
+  try {
+    normalizeFolder(folder);
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
 
-/** 볼트 이름에서 기본 서버 이름에 쓸 슬러그를 만든다. 한글처럼 ASCII 로 바꿀 수 없으면 볼트 id 를 쓴다. */
-export function vaultSlug(name: string, id: string): string {
+/** 입력한 상위 폴더가 하위 경로(데일리 폴더 등)를 포함하는가. 잘못된 경로면 false. */
+export function folderContains(parent: string, child: string): boolean {
+  try {
+    return folderCovers(normalizeFolder(parent), normalizeFolder(child));
+  } catch {
+    return false;
+  }
+}
+
+/** 볼트 이름에서 기본 서버 이름에 쓸 슬러그를 만든다. 한글처럼 ASCII 로 바꿀 수 없으면 `vault`. */
+export function vaultSlug(name: string): string {
   const ascii = name
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -66,12 +81,22 @@ export function vaultSlug(name: string, id: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 32);
-  return ascii || `vault-${id.replace(/[^a-z0-9]/gi, '').slice(0, 6).toLowerCase() || 'local'}`;
+  return ascii || 'vault';
 }
 
-/** 기본 서버 이름: `nopsidian-<볼트 슬러그>` */
+/** 볼트 id 의 짧은 해시(FNV-1a, base36). 같은 이름의 볼트도 기본 이름이 겹치지 않게 한다. */
+function vaultHash(id: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36).padStart(7, '0');
+}
+
+/** 기본 서버 이름: `nopsidian-<볼트 슬러그>-<볼트 해시>` */
 export function defaultServerName(info: Pick<McpInfo, 'vaultName' | 'vaultId'>): string {
-  return `nopsidian-${vaultSlug(info.vaultName, info.vaultId)}`;
+  return `nopsidian-${vaultSlug(info.vaultName)}-${vaultHash(info.vaultId)}`;
 }
 
 /** 클라이언트 설정 파일 키로 쓸 수 있는 이름인가(공백 없이 글자·숫자·`._-`) */
@@ -79,14 +104,16 @@ export function isValidServerName(name: string): boolean {
   return /^[\p{L}\p{N}][\p{L}\p{N}._-]*$/u.test(name.trim());
 }
 
-/** 스니펫에 넣을 쓰기 허용 폴더 목록. 중복·불필요한 데일리 폴더는 넣지 않는다. */
+/** 스니펫에 넣을 쓰기 허용 폴더 목록. 서버 정책과 같은 규칙으로 검증하고, 덮이는 데일리 폴더는 넣지 않는다. */
 export function snippetWriteFolders(opts: Pick<McpSnippetOptions, 'write' | 'folder' | 'allowDailyFolder' | 'dailyFolder'>): string[] {
   if (!opts.write) return [];
-  const main = writeFolder(opts.folder);
+  const main = normalizeFolder(opts.folder);
   if (main === '') return ['']; // 볼트 전체
   const folders = [main];
-  const daily = writeFolder(opts.dailyFolder);
-  if (opts.allowDailyFolder && daily && daily !== main) folders.push(daily);
+  if (opts.allowDailyFolder) {
+    const daily = normalizeFolder(opts.dailyFolder);
+    if (daily && !folderCovers(main, daily)) folders.push(daily);
+  }
   return folders;
 }
 
@@ -104,8 +131,16 @@ function claudeCodeCli(name: string, head: string, args: string[]): string {
 export function mcpSnippet(info: McpInfo, opts: McpSnippetOptions): McpSnippet | null {
   if (!info.script) return null;
   const name = opts.name.trim() || defaultServerName(info);
+  // 이름이 CLI 옵션처럼 보이거나 설정 키로 쓸 수 없으면 복사할 수 있는 스니펫을 만들지 않는다
+  if (!isValidServerName(name)) return null;
   const command = info.packaged ? info.executable : 'node';
-  const folders = snippetWriteFolders({ ...opts, dailyFolder: opts.dailyFolder || info.dailyFolder });
+  let folders: string[];
+  try {
+    folders = snippetWriteFolders({ ...opts, dailyFolder: opts.dailyFolder || info.dailyFolder });
+  } catch {
+    // 잘못된 폴더는 서버가 시작할 때 PolicyError 로 죽는다. 이유는 설정 화면이 보여 준다.
+    return null;
+  }
   const args = [
     ...(info.packaged ? info.launchArgs : [info.script]),
     '--vault',

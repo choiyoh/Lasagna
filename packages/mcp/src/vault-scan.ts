@@ -1,4 +1,5 @@
-import { lstatSync, readdirSync, readFileSync, type Stats } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync, type Stats } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import {
   createLinkResolver,
@@ -70,6 +71,10 @@ const SEARCH_MAX_LIMIT = 100;
 const SNIPPET_RADIUS = 60;
 /** 백링크 문맥 줄 길이 상한. */
 const CONTEXT_MAX_CHARS = 200;
+/** 캐시 형식이 바뀌면 올린다. 다르면 캐시를 버리고 전체를 다시 읽는다. */
+const CACHE_VERSION = 1;
+/** 볼트의 `.nopsidian/` 아래에 두는 보조 캐시. 동기화 대상이 아니고, 점 폴더라 스캔에서도 빠진다. */
+const CACHE_FILE = 'mcp-cache.json';
 
 /** 캐시에 담는 노트 하나: 파싱 결과 + 검색·스니펫에 쓰는 본문 사본 */
 interface CachedNote {
@@ -96,6 +101,41 @@ interface ScoredHit {
   mtimeMs: number;
 }
 
+/** 디스크에 저장하는 링크: `resolved` 는 노트 집합이 정해진 뒤 계산하므로 캐시에는 넣지 않는다. */
+type CacheLink = Omit<ScannedLink, 'resolved'>;
+
+/** 캐시 파일의 노트 하나. 파싱 결과와 검색·스니펫에 필요한 본문 사본을 담는다. */
+interface CacheEntry {
+  path: string;
+  mtimeMs: number;
+  size: number;
+  title: string;
+  aliases: string[];
+  tags: string[];
+  headings: ScannedNote['headings'];
+  links: CacheLink[];
+  hash: string;
+  properties: Record<string, unknown>;
+  /** 프런트매터를 뺀 본문(MAX_BODY_CHARS 까지) */
+  body: string;
+  /** 프런트매터 원문(줄 번호 계산용) */
+  frontmatter: string;
+}
+
+interface CacheFile {
+  version: number;
+  /** 본문 보관 상한이 바뀌면 예전 캐시를 버린다 */
+  bodyLimit: number;
+  entries: CacheEntry[];
+}
+
+export interface VaultScannerOptions {
+  /** false 면 캐시를 읽지도 쓰지도 않는다(테스트·진단용) */
+  cache?: boolean;
+  /** 캐시 파일 경로. 기본 `<볼트>/.nopsidian/mcp-cache.json` */
+  cachePath?: string;
+}
+
 export class VaultScanner {
   private readonly root: string;
   /** 볼트 상대 경로(NFC) → 캐시 */
@@ -105,9 +145,71 @@ export class VaultScanner {
   private resolver: LinkResolver | null = null;
   /** 경로·제목·별칭 구성 지문 — 바뀌었을 때만 리졸버를 다시 만든다 */
   private resolutionKey = '';
+  private readonly cachePath: string | null;
+  /** 이번에 새로 파싱했거나 노트 집합이 바뀌어 캐시를 다시 써야 하는가 */
+  private cacheDirty = false;
+  /** 캐시를 한 번 쓰지 못했으면 이 프로세스에서는 더 시도하지 않는다(읽기 전용 볼트) */
+  private cacheWriteBlocked = false;
+  /** 마지막 refresh() 결과(테스트·진단용) */
+  readonly scanStats = { parsed: 0, reused: 0, cacheLoaded: 0, cacheSaved: false };
 
-  constructor(root: string) {
+  constructor(root: string, opts: VaultScannerOptions = {}) {
     this.root = path.resolve(root);
+    this.cachePath = opts.cache === false ? null : path.resolve(opts.cachePath ?? path.join(this.root, '.nopsidian', CACHE_FILE));
+    if (this.cachePath) this.loadCache();
+  }
+
+  /** 캐시가 있으면 메모리에 올린다. 없거나 깨졌으면 조용히 전체 스캔으로 돌아간다. */
+  private loadCache(): void {
+    if (!this.cachePath) return;
+    let raw: string;
+    try {
+      raw = readFileSync(this.cachePath, 'utf8');
+    } catch {
+      return; // 캐시 없음
+    }
+    const entries = parseCacheFile(raw);
+    if (!entries) {
+      this.cacheDirty = true; // 깨졌거나 버전이 다르면 전체 스캔 후 새로 쓴다
+      return;
+    }
+    for (const [rel, entry] of entries) this.notes.set(rel, entry);
+    this.scanStats.cacheLoaded = entries.size;
+  }
+
+  /** 이번 스캔 결과를 원자적으로 캐시에 쓴다. `.nopsidian/`에 쓸 수 없으면 조용히 넘어간다. */
+  private saveCache(): void {
+    if (!this.cachePath || this.cacheWriteBlocked) return;
+    if (!existsSync(this.root)) return; // 없는 볼트 폴더를 캐시가 만들지 않게 한다
+    try {
+      const entries = [...this.notes.values()].sort((a, b) => compareStrings(a.note.path, b.note.path)).map(toCacheEntry);
+      const data = JSON.stringify({ version: CACHE_VERSION, bodyLimit: MAX_BODY_CHARS, entries } satisfies CacheFile);
+      mkdirSync(path.dirname(this.cachePath), { recursive: true });
+      // 같은 파일을 쓰는 서버가 둘 이상이어도 각자 다른 임시 파일을 쓴 뒤 rename 하므로 반쯤 쓴 JSON 이 보이지 않는다.
+      const tmp = `${this.cachePath}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+      try {
+        const fd = openSync(tmp, 'w', 0o600); // 노트 본문이 들어가므로 소유자만 읽게 한다
+        try {
+          writeFileSync(fd, data);
+          fsyncSync(fd);
+        } finally {
+          closeSync(fd);
+        }
+        renameSync(tmp, this.cachePath);
+      } catch (e) {
+        try {
+          unlinkSync(tmp);
+        } catch {
+          /* 이미 없으면 무시 */
+        }
+        throw e;
+      }
+      this.cacheDirty = false;
+      this.scanStats.cacheSaved = true;
+    } catch {
+      // `.nopsidian` 이 없거나 읽기 전용이면 캐시 없이 지금처럼 동작한다. 다음 프로세스에서 다시 시도한다.
+      this.cacheWriteBlocked = true;
+    }
   }
 
   /**
@@ -115,22 +217,34 @@ export class VaultScanner {
    * 노트 집합(경로·제목·별칭)이 바뀌면 링크 리졸버를 다시 만들고 모든 링크를 다시 해석한다.
    */
   refresh(): void {
+    this.scanStats.parsed = 0;
+    this.scanStats.reused = 0;
+    this.scanStats.cacheSaved = false;
     const found = walkMarkdownFiles(this.root);
+    let changed = false;
     for (const rel of [...this.notes.keys()]) {
-      if (!found.has(rel)) this.notes.delete(rel);
+      if (!found.has(rel)) {
+        this.notes.delete(rel);
+        changed = true;
+      }
     }
 
     const reparsed: string[] = [];
     for (const [rel, file] of found) {
       const cached = this.notes.get(rel);
-      if (cached && cached.note.mtimeMs === file.mtimeMs && cached.note.size === file.size) continue;
+      if (cached && cached.note.mtimeMs === file.mtimeMs && cached.note.size === file.size) {
+        this.scanStats.reused++;
+        continue;
+      }
       const entry = readNote(rel, file);
       if (entry) {
         this.notes.set(rel, entry);
         reparsed.push(rel);
+        this.scanStats.parsed++;
+        changed = true;
       } else {
         // 읽을 수 없는 파일은 조용히 캐시에서 뺀다
-        this.notes.delete(rel);
+        if (this.notes.delete(rel)) changed = true;
       }
     }
 
@@ -147,6 +261,8 @@ export class VaultScanner {
       this.resolver = createLinkResolver(pages, aliases);
       this.resolutionKey = key;
       for (const cached of this.notes.values()) resolveLinks(this.resolver, this.pages, cached);
+      if (changed) this.cacheDirty = true;
+      if (this.cacheDirty) this.saveCache();
       return;
     }
     // 해석 입력이 그대로면 이번에 새로 파싱한 노트의 링크만 계산하면 된다.
@@ -154,6 +270,8 @@ export class VaultScanner {
       const cached = this.notes.get(rel);
       if (cached) resolveLinks(this.resolver, this.pages, cached);
     }
+    if (changed) this.cacheDirty = true;
+    if (this.cacheDirty) this.saveCache();
   }
 
   /** 경로 정렬된 노트 목록. folder(하위 포함)·tag 로 거르기 */
@@ -364,6 +482,113 @@ function resolutionKeyOf(pages: ResolvablePage[], aliases: ResolvableAlias[]): s
   for (const a of aliases) parts.push(`${a.pageId}\u0000${a.alias}`);
   return parts.join('\u0001');
 }
+
+/** 캐시에 쓸 형태로 바꾼다. `resolved` 는 노트 집합이 정해질 때 다시 계산한다. */
+function toCacheEntry(cached: CachedNote): CacheEntry {
+  const { note } = cached;
+  return {
+    path: note.path,
+    mtimeMs: note.mtimeMs,
+    size: note.size,
+    title: note.title,
+    aliases: note.aliases,
+    tags: note.tags,
+    headings: note.headings,
+    links: note.links.map((link) => {
+      const out: CacheLink = { target: link.target, kind: link.kind, line: link.line };
+      if (link.heading !== undefined) out.heading = link.heading;
+      if (link.block !== undefined) out.block = link.block;
+      return out;
+    }),
+    hash: note.hash,
+    properties: note.properties,
+    body: cached.body,
+    frontmatter: cached.frontmatter,
+  };
+}
+
+/** 캐시 파일 전체를 읽는다. 형식·버전이 다르거나 한 항목이라도 깨졌으면 null(전체 스캔). */
+function parseCacheFile(raw: string): Map<string, CachedNote> | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isRecord(data) || data.version !== CACHE_VERSION || data.bodyLimit !== MAX_BODY_CHARS || !Array.isArray(data.entries)) return null;
+  const out = new Map<string, CachedNote>();
+  for (const rawEntry of data.entries) {
+    const entry = parseCacheEntry(rawEntry);
+    if (!entry) return null;
+    if (out.has(entry.note.path)) return null;
+    out.set(entry.note.path, entry);
+  }
+  return out;
+}
+
+function parseCacheEntry(raw: unknown): CachedNote | null {
+  if (!isRecord(raw)) return null;
+  const rel = raw.path;
+  if (typeof rel !== 'string' || !isVaultNotePath(rel)) return null;
+  const { mtimeMs, size, title, hash, body, frontmatter } = raw;
+  if (typeof mtimeMs !== 'number' || !Number.isFinite(mtimeMs) || mtimeMs < 0) return null;
+  if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) return null;
+  if (typeof title !== 'string' || typeof hash !== 'string' || typeof body !== 'string' || typeof frontmatter !== 'string') return null;
+  const aliases = raw.aliases;
+  const tags = raw.tags;
+  if (!isStringArray(aliases) || !isStringArray(tags)) return null;
+  if (!isRecord(raw.properties)) return null;
+  const headings = parseCacheHeadings(raw.headings);
+  if (!headings) return null;
+  const links = parseCacheLinks(raw.links);
+  if (!links) return null;
+
+  const keptBody = body.slice(0, MAX_BODY_CHARS);
+  return {
+    note: { path: rel, title, aliases, tags, headings, links, mtimeMs, size, hash, properties: raw.properties },
+    body: keptBody,
+    bodyLower: keptBody.toLowerCase(),
+    frontmatter,
+    lineBase: countNewlines(frontmatter),
+  };
+}
+
+function parseCacheHeadings(raw: unknown): ScannedNote['headings'] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: ScannedNote['headings'] = [];
+  for (const h of raw) {
+    if (!isRecord(h) || typeof h.level !== 'number' || !Number.isInteger(h.level) || typeof h.text !== 'string' || typeof h.line !== 'number' || !Number.isInteger(h.line)) {
+      return null;
+    }
+    out.push({ level: h.level, text: h.text, line: h.line });
+  }
+  return out;
+}
+
+function parseCacheLinks(raw: unknown): ScannedLink[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: ScannedLink[] = [];
+  for (const l of raw) {
+    if (!isRecord(l) || typeof l.target !== 'string' || typeof l.line !== 'number' || !Number.isInteger(l.line)) return null;
+    if (l.kind !== 'wikilink' && l.kind !== 'embed' && l.kind !== 'md' && l.kind !== 'relation') return null;
+    if (l.heading !== undefined && typeof l.heading !== 'string') return null;
+    if (l.block !== undefined && typeof l.block !== 'string') return null;
+    const link: ScannedLink = { target: l.target, kind: l.kind, line: l.line, resolved: null };
+    if (l.heading !== undefined) link.heading = l.heading;
+    if (l.block !== undefined) link.block = l.block;
+    out.push(link);
+  }
+  return out;
+}
+
+function isVaultNotePath(rel: string): boolean {
+  if (!rel || rel.includes('\0') || rel.normalize('NFC') !== rel || rel.includes('\\') || path.isAbsolute(rel) || /^[A-Za-z]:/.test(rel) || !rel.toLowerCase().endsWith('.md')) return false;
+  return rel.split('/').every((part) => part !== '' && part !== '.' && part !== '..' && !part.startsWith('.'));
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+const isStringArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
 
 /** 모든 토큰이 어딘가에 있어야 점수를 낸다(없으면 null). 본문은 캐시해 둔 소문자 본문을 쓴다. */
 function scoreNote(cached: CachedNote, tokens: string[]): number | null {

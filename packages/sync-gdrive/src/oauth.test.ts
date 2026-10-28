@@ -305,6 +305,18 @@ describe('TokenProvider', () => {
     expect(provider.current().accessToken).toBe('AT1');
   });
 
+  it('forceRefresh 는 만료 전이어도 refresh token 으로 한 번 갱신한다', async () => {
+    const { fetchImpl, calls } = fakeFetch(() => jsonResponse({ access_token: 'AT2', expires_in: 3600 }));
+    const onTokens = vi.fn();
+    const provider = new TokenProvider({ clientId: 'cid', fetch: fetchImpl, now: () => 0, tokens: tokens(), onTokens });
+
+    expect(await provider.getAccessToken()).toBe('AT1');
+    expect(calls).toHaveLength(0);
+    expect(await provider.forceRefresh()).toBe('AT2');
+    expect(calls).toHaveLength(1);
+    expect(onTokens).toHaveBeenCalledWith({ accessToken: 'AT2', refreshToken: 'RT1', expiresAt: 3_600_000 });
+  });
+
   it('동시 호출은 하나의 갱신 요청을 공유하고 onTokens 는 한 번만 부른다', async () => {
     let release!: (res: Response) => void;
     const gate = new Promise<Response>((resolve) => {

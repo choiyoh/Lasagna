@@ -25,12 +25,16 @@ interface Credentials {
 const DOCS_BASE = 'https://github.com/choiyoh/Nopsidian/blob/main/docs/sync-setup.md';
 const FAILURES: Record<string, { code: string; title: string; action: string; anchor: string }> = {
   auth: { code: 'HTTP 401', title: 'Google 로그인이 만료됐어요', action: 'Google 계정을 다시 연결해 주세요', anchor: '2-앱에서-연결' },
+  authCheck: { code: 'HTTP 401', title: 'Google 로그인을 확인하지 못했어요', action: '잠시 뒤 ‘지금 확인’을 다시 시도해 주세요', anchor: '문제-해결' },
   authRevoked: { code: 'invalid_grant', title: 'Google 연결이 해제됐어요', action: 'Google 계정을 다시 연결해 주세요', anchor: '2-앱에서-연결' },
   notConnected: { code: 'NOT_CONNECTED', title: 'Google 계정이 연결되지 않았어요', action: 'Google 계정을 연결해 주세요', anchor: '2-앱에서-연결' },
-  driveApiDisabled: { code: 'HTTP 403 · accessNotConfigured', title: 'Google Drive API가 꺼져 있어요', action: 'Google Cloud에서 Drive API를 켜 주세요', anchor: '1-google-cloud-설정-한-번만' },
-  storageQuota: { code: 'HTTP 403 · storageQuotaExceeded', title: 'Google Drive 저장 공간이 부족해요', action: 'Drive 저장 공간을 확인해 주세요', anchor: '문제-해결' },
+  apiDisabled: { code: 'HTTP 403 · accessNotConfigured', title: 'Google Drive API가 꺼져 있어요', action: 'Google Cloud에서 Drive API를 켜 주세요', anchor: '1-google-cloud-설정-한-번만' },
+  quota: { code: 'HTTP 403 · storageQuotaExceeded', title: 'Google Drive 저장 공간이 부족해요', action: 'Drive 저장 공간을 확인해 주세요', anchor: '문제-해결' },
   rateLimit: { code: 'HTTP 429/403 · rateLimitExceeded', title: 'Google이 잠시 요청을 제한했어요', action: '1~5분 뒤 다시 확인해 주세요', anchor: '문제-해결' },
   network: { code: 'NETWORK', title: '인터넷에 연결되지 않았어요', action: '연결을 확인한 뒤 다시 시도해 주세요', anchor: '문제-해결' },
+  server: { code: 'HTTP 5xx', title: 'Google 쪽 일시 오류예요', action: '잠시 뒤 다시 시도하세요', anchor: '문제-해결' },
+  notFound: { code: 'HTTP 404', title: 'Drive에서 파일이나 폴더를 찾을 수 없어요', action: '다시 확인하거나 동기화를 다시 실행해 주세요', anchor: '문제-해결' },
+  forbidden: { code: 'HTTP 403', title: 'Drive 접근 권한이 없어요', action: 'Google 계정 권한을 확인해 주세요', anchor: '문제-해결' },
   folderMissing: { code: 'FOLDER_MISSING', title: 'Drive에서 이 볼트의 폴더를 찾을 수 없어요', action: '같은 이름의 볼트인지 확인하거나 첫 동기화를 실행해 주세요', anchor: '3-두-번째-기기' },
   partial: { code: 'PARTIAL', title: '일부 파일을 동기화하지 못했어요', action: '진단 정보를 복사해 실패한 파일을 확인해 주세요', anchor: '문제-해결' },
   blocked: { code: 'BLOCKED', title: '삭제가 너무 많아 동기화를 멈췄어요', action: '계획을 확인한 뒤 필요하면 한 번만 강제 실행해 주세요', anchor: '문제-해결' },
@@ -41,6 +45,7 @@ const FAILURES: Record<string, { code: string; title: string; action: string; an
 export interface FailureLike {
   name?: string;
   code?: string;
+  key?: string;
   status?: number;
   reason?: string;
   kind?: string;
@@ -48,15 +53,18 @@ export interface FailureLike {
 }
 
 const failureKey = (e: FailureLike): string => {
-  if (e.code !== undefined && e.code in FAILURES) return e.code;
-  // 워커가 보내는 화면용 코드도 다시 내부 키로 되돌린다(재시작·오류 응답 공통).
+  if (e.key !== undefined && Object.hasOwn(FAILURES, e.key)) return e.key;
+  if (e.code !== undefined && Object.hasOwn(FAILURES, e.code)) return e.code;
+  // 예전 기기 상태·직접 만든 오류와의 호환용. 워커는 key 를 보낸다.
   if (e.code === 'HTTP 401') return 'auth';
   if (e.code === 'invalid_grant') return 'authRevoked';
-  if (e.code?.includes('accessNotConfigured') === true) return 'driveApiDisabled';
-  if (e.code?.includes('storageQuotaExceeded') === true) return 'storageQuota';
-  if (e.code?.includes('rateLimitExceeded') === true) return 'rateLimit';
+  if (e.code?.includes('accessNotConfigured') === true) return 'apiDisabled';
+  if (e.code?.includes('storageQuotaExceeded') === true) return 'quota';
+  if (e.code?.includes('rateLimitExceeded') === true || e.code?.includes('dailyLimitExceeded') === true) return 'rateLimit';
   if (e.code === 'NETWORK') return 'network';
   if (e.code === 'FOLDER_MISSING') return 'folderMissing';
+  if (e.code === 'HTTP 404') return 'notFound';
+  if (e.code?.startsWith('HTTP 5') === true) return 'server';
   if (e.kind === 'auth' && e.message?.includes('연결되지 않았어요') === true) return 'notConnected';
   if (e.kind === 'auth') return 'auth';
   if (e.kind === 'offline') return 'network';
@@ -67,9 +75,9 @@ const failureKey = (e: FailureLike): string => {
     if (e.status === 401) return 'auth';
     if (e.status === 429) return 'rateLimit';
     if (e.status === 403) {
-      if (e.reason === 'accessNotConfigured') return 'driveApiDisabled';
-      if (e.reason === 'storageQuotaExceeded') return 'storageQuota';
-      if (e.reason === 'rateLimitExceeded' || e.reason === 'userRateLimitExceeded') return 'rateLimit';
+      if (e.reason === 'accessNotConfigured') return 'apiDisabled';
+      if (e.reason === 'storageQuotaExceeded') return 'quota';
+      if (e.reason === 'rateLimitExceeded' || e.reason === 'userRateLimitExceeded' || e.reason === 'dailyLimitExceeded') return 'rateLimit';
     }
   }
   if (e.name === 'OAuthError' || e.name === 'TypeError') return 'network';
@@ -82,7 +90,9 @@ const failureKey = (e: FailureLike): string => {
 export function syncFailureFor(e: FailureLike, at = Date.now()): SyncFailure {
   const key = failureKey(e);
   const f = FAILURES[key] ?? FAILURES.unknown!;
-  return { at, code: f.code, title: f.title, action: f.action, docs: `${DOCS_BASE}#${f.anchor}` };
+  // 서버·404·일반 403 은 실제 HTTP 상태를 접힌 코드에 남긴다.
+  const code = (key === 'server' || key === 'notFound' || key === 'forbidden') && e.code !== undefined ? e.code : f.code;
+  return { at, code, title: f.title, action: f.action, docs: `${DOCS_BASE}#${f.anchor}` };
 }
 
 /** 로컬 진단에 쓰는 접미사. 클라이언트 ID 의 `.apps.googleusercontent.com` 은 빼고 보여 준다. */
@@ -294,9 +304,8 @@ export class SyncController {
       });
       if (!tokens.refreshToken) throw new Error('Google이 refresh token을 주지 않았어요. 클라이언트 유형이 "데스크톱 앱"인지 확인해 주세요');
       this.o.credentials.save({ ...c, tokens });
-      this.device.lastRefreshFailure = null;
-      this.saveDevice();
       await this.stopWorker();
+      this.device.lastRefreshFailure = null;
       this.device.lastAccountEmail = null;
       this.saveDevice();
       this.state = 'idle';
@@ -384,7 +393,7 @@ export class SyncController {
       this.message = r.failed > 0 ? `${r.failed}개 파일을 동기화하지 못했어요` : null;
       return r;
     } catch (e) {
-      const err = e as Error & { kind?: string; code?: string; status?: number; reason?: string };
+      const err = e as Error & { kind?: string; key?: string; code?: string; status?: number; reason?: string };
       this.state = err.kind === 'auth' ? 'needsAuth' : err.kind === 'offline' ? 'offline' : /멈췄어요/.test(err.message) ? 'blocked' : 'error';
       const failure = syncFailureFor(err);
       this.message = this.state === 'blocked' ? err.message : failure.title;
@@ -454,6 +463,7 @@ export class SyncController {
         this.device.lastFailure = syncFailureFor({ code: 'folderMissing' }, r.checkedAt);
       } else if (folder.exists && this.device.lastFailure !== null) {
         // 연결·인증 문제는 이번 확인이 성공했으므로 지운다. 파일 동기화 실패(PARTIAL 등)는 남긴다.
+        const code = this.device.lastFailure.code;
         const cleared = new Set([
           'FOLDER_MISSING',
           'NETWORK',
@@ -463,7 +473,7 @@ export class SyncController {
           'HTTP 403 · storageQuotaExceeded',
           'HTTP 429/403 · rateLimitExceeded',
         ]);
-        if (cleared.has(this.device.lastFailure.code)) this.device.lastFailure = null;
+        if (cleared.has(code) || /^HTTP 5\d\d$/.test(code)) this.device.lastFailure = null;
       }
       this.saveDevice();
       base = this.diagnosticsBase(c);
@@ -476,19 +486,27 @@ export class SyncController {
         lastFailure: this.device.lastFailure,
       };
     } catch (e) {
-      const failure = syncFailureFor(e as FailureLike);
+      const key = failureKey(e as FailureLike);
+      // 동기화 중이라 확인만 못한 경우는 '실패'가 아니다. 화면에는 알리고 기록은 남기지 않는다.
+      if (key === 'busy') throw Object.assign(new Error('지금 동기화 중이에요'), { key: 'busy', code: 'BUSY' });
+      const failure = syncFailureFor(key === 'auth' ? { key: 'authCheck', code: 'HTTP 401' } : (e as FailureLike));
       this.device.lastFailure = failure;
-      const authFailure = failure.code === 'HTTP 401' || failure.code === 'invalid_grant';
-      if (authFailure) {
+      // refresh token 이 invalid_grant 로 확실히 거부된 경우에만 로그아웃한다.
+      const revoked = key === 'authRevoked';
+      if (revoked) {
         this.o.credentials.clearTokens();
         this.device.lastAccountEmail = null;
       }
       this.saveDevice();
-      if (authFailure) {
+      if (revoked) {
         this.emit();
         base = this.diagnosticsBase(this.o.credentials.load());
       }
-      return { ...base, lastFailure: failure, tokenValid: authFailure ? false : base.tokenValid };
+      return {
+        ...base,
+        lastFailure: failure,
+        tokenValid: key === 'auth' || revoked ? false : base.tokenValid,
+      };
     }
   }
 
@@ -511,10 +529,10 @@ export class SyncController {
         const call = this.calls.get(m.id);
         if (!call) return;
         this.calls.delete(m.id);
-        if ('error' in m) call.reject(Object.assign(new Error(m.error), { kind: m.kind, code: m.code, status: m.status, reason: m.reason }));
+        if ('error' in m) call.reject(Object.assign(new Error(m.error), { kind: m.kind, key: m.key, code: m.code, status: m.status, reason: m.reason }));
         else call.resolve(m.result as never);
       } else if (m.type === 'tokenError') {
-        this.device.lastRefreshFailure = syncFailureFor({ code: m.code, name: m.kind === 'auth' ? 'AuthRevokedError' : undefined }, m.at);
+        this.device.lastRefreshFailure = syncFailureFor({ key: m.key, code: m.code, kind: m.kind, status: m.status, reason: m.reason, message: m.error }, m.at);
         this.saveDevice();
       } else if (m.type === 'tokens') {
         this.device.lastRefreshFailure = null;

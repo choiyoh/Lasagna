@@ -260,6 +260,7 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
             {copied && <span className="muted small">{copied}</span>}
           </div>
           <p className="muted small">‘지금 확인’은 토큰과 Drive 폴더만 읽고, 동기화·업로드·삭제는 하지 않아요.</p>
+          <p className="muted small">복사에는 비밀 값·이메일·폴더 ID/경로가 들어가지 않아요.</p>
         </section>
 
         {plan && (

@@ -2,7 +2,6 @@ import { parentPort, workerData } from 'node:worker_threads';
 import path from 'node:path';
 import { merge3 } from '@nopsidian/core';
 import {
-  DriveApiError,
   GoogleDriveClient,
   TokenProvider,
   buildPlan,
@@ -11,13 +10,12 @@ import {
   type SyncOp,
   type SyncPlan,
 } from '@nopsidian/sync-gdrive';
+import { errorDetails, withRefreshOn401 } from './error-info';
 import { FsLocalStore } from './fs-local-store';
 import type {
   DiagnosticsSummary,
   PlanSummary,
   RunSummary,
-  SyncErrorDetails,
-  SyncErrorKind,
   SyncRequest,
   SyncResponse,
   SyncWorkerData,
@@ -94,47 +92,6 @@ function summarizePlan(plan: SyncPlan): PlanSummary {
   };
 }
 
-const RATE_LIMIT_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded']);
-
-/** 오류를 화면용 코드로 바꾼다. 원문 메시지는 사용자에게 그대로 보여 주지 않는다. */
-function errorDetails(e: unknown): SyncErrorDetails {
-  const err = e instanceof Error ? e : new Error(String(e));
-  const maybe = err as unknown as { status?: unknown; reason?: unknown };
-  const status = typeof maybe.status === 'number' ? maybe.status : undefined;
-  const reason = typeof maybe.reason === 'string' ? maybe.reason : undefined;
-
-  let kind: SyncErrorKind = 'other';
-  let code = 'UNKNOWN';
-  if (err.name === 'DriveAuthError') {
-    kind = 'auth';
-    code = 'HTTP 401';
-  } else if (err.name === 'AuthRevokedError') {
-    kind = 'auth';
-    code = 'invalid_grant';
-  } else if (err.name === 'DriveApiError' && status === 0) {
-    kind = 'offline';
-    code = 'NETWORK';
-  } else if (err.name === 'OAuthError' || err instanceof TypeError) {
-    kind = 'offline';
-    code = 'NETWORK';
-  } else if (err instanceof DriveApiError) {
-    if (status === 401) {
-      kind = 'auth';
-      code = 'HTTP 401';
-    } else if (status === 429) {
-      code = 'HTTP 429 · rateLimitExceeded';
-    } else if (status === 403 && reason !== undefined) {
-      if (reason === 'accessNotConfigured') code = 'HTTP 403 · accessNotConfigured';
-      else if (reason === 'storageQuotaExceeded') code = 'HTTP 403 · storageQuotaExceeded';
-      else if (RATE_LIMIT_REASONS.has(reason)) code = 'HTTP 403 · rateLimitExceeded';
-      else code = `HTTP 403 · ${reason}`;
-    } else if (status !== undefined) {
-      code = `HTTP ${status}`;
-    }
-  }
-  return { error: err.message, kind, code, ...(status === undefined ? {} : { status }), ...(reason === undefined ? {} : { reason }) };
-}
-
 /** 로컬 스캔 + 상태 기록만으로 '이 기기에서 바뀐 파일' 수를 센다. 네트워크를 쓰지 않는다. */
 async function diagnose(remote: boolean): Promise<DiagnosticsSummary> {
   const local = await deps.local.scan();
@@ -151,8 +108,8 @@ async function diagnose(remote: boolean): Promise<DiagnosticsSummary> {
   }
 
   // '지금 확인'만 토큰을 갱신하고 Drive 폴더·계정을 읽는다. 폴더를 만들지 않는다.
-  const folder = remote ? await drive.inspectVaultFolder() : null;
-  const accountEmail = remote ? await drive.accountEmail() : null;
+  const folder = remote ? await withRefreshOn401(() => drive.inspectVaultFolder(), () => tokens.forceRefresh()) : null;
+  const accountEmail = remote ? await withRefreshOn401(() => drive.accountEmail(), () => tokens.forceRefresh()) : null;
   return { checkedAt: Date.now(), pendingChanges, folder, accountEmail, tokenExpiresAt: tokens.current().expiresAt };
 }
 

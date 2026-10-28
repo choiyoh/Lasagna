@@ -45,9 +45,25 @@ export interface RunSummary {
 
 export type SyncErrorKind = 'auth' | 'offline' | 'other';
 
+/** 워커 경계를 넘어도 유지되는 안정적인 분류 키. Main 은 name 대신 이 값을 쓴다. */
+export type SyncErrorKey =
+  | 'auth'
+  | 'authRevoked'
+  | 'apiDisabled'
+  | 'quota'
+  | 'rateLimit'
+  | 'network'
+  | 'server'
+  | 'notFound'
+  | 'forbidden'
+  | 'busy'
+  | 'blocked'
+  | 'unknown';
+
 export interface SyncErrorDetails {
   error: string;
   kind: SyncErrorKind;
+  key: SyncErrorKey;
   /** 화면에 접어 보여 줄 기술 코드 */
   code: string;
   status?: number;

@@ -250,6 +250,11 @@ export class TokenProvider {
     return this.refresh();
   }
 
+  /** '지금 확인'이 Drive 401을 받았을 때 만료 시각과 무관하게 refresh token으로 한 번 갱신한다. */
+  forceRefresh(): Promise<string> {
+    return this.refresh();
+  }
+
   /** 진행 중인 갱신이 있으면 그걸 함께 기다린다. */
   private refresh(): Promise<string> {
     if (this.pending === null) {

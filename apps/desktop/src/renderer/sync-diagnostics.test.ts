@@ -32,9 +32,12 @@ describe('formatSyncDiagnostics', () => {
     expect(text).toContain('상태: idle');
     expect(text).toContain('마지막 시도: 2023-11-14T22:15:00.000Z');
     expect(text).toContain('이 기기에서 바뀐 파일: 3개');
-    expect(text).toContain('so***@example.com');
+    expect(text).toContain('계정 연결됨');
+    expect(text).not.toContain('so***@example.com');
     expect(text).not.toContain('Nopsidian/MyVault');
     expect(text).not.toContain('MyVault');
+    expect(text).not.toContain('folder-secret-id');
+    expect(text).not.toContain('…cret');
     expect(text).toContain('NETWORK');
   });
 
@@ -43,6 +46,7 @@ describe('formatSyncDiagnostics', () => {
     expect(text).not.toContain('accessToken');
     expect(text).not.toContain('refreshToken');
     expect(text).not.toContain('someone@example.com');
+    expect(text).not.toContain('example.com');
     expect(text).not.toContain('private-note.md');
     expect(text).toContain('노트 이름·경로는 이 진단에 포함하지 않았습니다.');
   });

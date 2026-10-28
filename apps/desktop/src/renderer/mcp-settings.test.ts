@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KEY_PREFIX, LEGACY_KEY, loadMcpSettings, saveMcpSettings, serverNameConflict, storageKey, type McpSettingsConfig } from './mcp-settings';
+import { KEY_PREFIX, LEGACY_KEY, configFromPolicy, loadMcpSettings, policyFolders, saveMcpSettings, serverNameConflict, storageKey, type McpSettingsConfig } from './mcp-settings';
 import { defaultServerName, type McpClientId } from './mcp-snippet';
 
 class MemoryStorage {
@@ -25,6 +25,7 @@ const cfg = (over: Partial<McpSettingsConfig> = {}): McpSettingsConfig => ({
   write: true,
   folder: 'AI',
   allowDailyFolder: true,
+  maxWritesPerMinute: 30,
   name: 'nopsidian-a',
   client: 'codex',
   ...over,
@@ -46,6 +47,7 @@ describe('볼트별 MCP 설정', () => {
       write: false,
       folder: 'AI',
       allowDailyFolder: false,
+      maxWritesPerMinute: 30,
       name: defaultServerName({ vaultName: 'Work Notes', vaultId: 'vault-new' }),
       client: 'claude-code',
     });
@@ -107,6 +109,28 @@ describe('볼트별 MCP 설정', () => {
       },
     };
     expect(() => saveMcpSettings('vault-a', cfg(), store as unknown as Storage)).not.toThrow();
+  });
+});
+
+describe('앱 정책 파일 ↔ 화면 값', () => {
+  it('정책의 폴더 목록을 단일 폴더·오늘의 노트 체크로 되돌린다', () => {
+    expect(configFromPolicy({ write: true, writeFolders: ['AI', '일기'], maxWritesPerMinute: 12 }, '일기')).toEqual({
+      write: true,
+      folder: 'AI',
+      allowDailyFolder: true,
+      maxWritesPerMinute: 12,
+    });
+    expect(configFromPolicy({ write: true, writeFolders: ['AI'], maxWritesPerMinute: 30 }, '일기')).toMatchObject({ folder: 'AI', allowDailyFolder: false });
+    expect(configFromPolicy({ write: true, writeFolders: [''], maxWritesPerMinute: 30 }, '일기')).toMatchObject({ folder: '.', allowDailyFolder: true });
+    expect(configFromPolicy({ write: false, writeFolders: ['메모', '일기'], maxWritesPerMinute: 5 }, '일기')).toMatchObject({ write: false, folder: '메모', allowDailyFolder: true });
+  });
+
+  it('화면 값을 정책 파일의 폴더 목록으로 바꾸고 덮이는 데일리 폴더는 뺀다', () => {
+    expect(policyFolders('AI', true, '일기')).toEqual(['AI', '일기']);
+    expect(policyFolders('', true, '일기')).toEqual(['']);
+    expect(policyFolders('.', true, '일기')).toEqual(['']);
+    expect(policyFolders('Daily', true, 'Daily/2026')).toEqual(['Daily']);
+    expect(policyFolders('AI/', false, '일기')).toEqual(['AI']);
   });
 });
 

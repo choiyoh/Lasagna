@@ -242,6 +242,17 @@ export const searchHit = z.object({
 });
 export type SearchHit = z.infer<typeof searchHit>;
 
+/** `.nopsidian/mcp-policy.json` — 앱이 정본으로 쓰는 MCP 쓰기 정책 */
+export const mcpPolicyFile = z
+  .object({
+    version: z.literal(1),
+    write: z.boolean(),
+    writeFolders: z.array(z.string().max(1024)).max(50),
+    maxWritesPerMinute: z.number().int().min(1).max(1000),
+  })
+  .strict();
+export type McpPolicyFile = z.infer<typeof mcpPolicyFile>;
+
 /**
  * 렌더러가 호출할 수 있는 모든 채널의 단일 정의.
  * 여기에 없는 채널은 main이 등록하지 않고, preload도 노출하지 않는다.
@@ -472,6 +483,20 @@ export const contract = {
       packaged: z.boolean(),
       launchArgs: z.array(z.string()),
     }),
+  },
+  /** 앱이 정본으로 쓰는 MCP 쓰기 정책 파일. 없으면 exists=false, 깨졌으면 policy=null + error */
+  'mcp.policyGet': {
+    input: z.undefined(),
+    output: z.object({ exists: z.boolean(), policy: mcpPolicyFile.nullable(), error: z.string().nullable() }),
+  },
+  /** 앱 설정 변경을 정책 파일에 원자적으로 저장한다. 폴더는 서버와 같은 규칙으로 검증된다. */
+  'mcp.policySet': {
+    input: z.object({
+      write: z.boolean(),
+      writeFolders: z.array(z.string().max(1024)).max(50),
+      maxWritesPerMinute: z.number().int().min(1).max(1000),
+    }),
+    output: mcpPolicyFile,
   },
   /** 에이전트가 한 쓰기·거부된 시도의 감사 기록(최신순) */
   'mcp.audit': {

@@ -4,7 +4,21 @@ import { stringify } from 'yaml';
 import { appendAudit, type AuditEntry } from './audit.js';
 import { canWrite, validateNotePath, type McpPolicy } from './policy.js';
 
-export type WriteErrorCode = 'read-only' | 'forbidden-folder' | 'exists' | 'not-found' | 'stale' | 'rate-limit' | 'too-large' | 'bad-heading' | 'bad-input' | 'partial';
+export type WriteErrorCode =
+  | 'read-only'
+  | 'forbidden-folder'
+  | 'exists'
+  | 'not-found'
+  | 'stale'
+  | 'rate-limit'
+  | 'too-large'
+  | 'bad-heading'
+  | 'bad-input'
+  | 'partial'
+  | 'no-match'
+  | 'ambiguous-match'
+  | 'policy-disabled'
+  | 'policy-invalid';
 
 /** read_note 가 노트의 일부만 돌려줬을 때 hash 앞에 붙는 접두사 */
 export const PARTIAL_HASH_PREFIX = 'partial:';
@@ -24,6 +38,49 @@ export interface WriteResult {
   bytes: number;
   /** 저장 중 파일이 바뀌어 합쳤다면 'merged' / 'conflict' */
   status: 'saved' | 'merged' | 'conflict';
+}
+
+interface TextMatch {
+  start: number;
+  end: number;
+}
+
+/** oldText 의 표기 변형(CRLF/LF, NFC/NFD)을 찾아 서로 같은 위치는 한 번만 센다. */
+function findTextMatches(content: string, oldText: string): TextMatch[] {
+  const nfc = oldText.normalize('NFC');
+  const nfd = nfc.normalize('NFD');
+  const variants = new Set<string>();
+  const add = (text: string) => {
+    if (!text) return;
+    variants.add(text);
+    const lf = text.replace(/\r\n/g, '\n');
+    variants.add(lf);
+    variants.add(lf.replace(/\n/g, '\r\n'));
+  };
+  add(oldText);
+  add(nfc);
+  if (nfd !== nfc) add(nfd);
+
+  const found = new Map<string, TextMatch>();
+  for (const text of variants) {
+    let at = content.indexOf(text);
+    while (at !== -1) {
+      const key = `${at}:${at + text.length}`;
+      if (!found.has(key)) found.set(key, { start: at, end: at + text.length });
+      at = content.indexOf(text, at + 1);
+    }
+  }
+  return [...found.values()].sort((a, b) => a.start - b.start);
+}
+
+/** 새 텍스트의 표기를 매치된 구간에 맞춘다. 구간에 NFD 한글이 없으면 NFC 를 기본으로 쓴다. */
+function adaptReplacement(text: string, content: string, match: TextMatch): string {
+  const matched = content.slice(match.start, match.end);
+  // 매치 구간에 한글이 없으면 NFC 를 기본으로 쓴다(다른 곳의 NFD 글자에 끌려가지 않게).
+  const nfd = /[\u1100-\u11FF\u3131-\u318E\uA960-\uA97F\uAC00-\uD7A3\uD7B0-\uD7FF]/.test(matched) && matched !== matched.normalize('NFC');
+  let out = text.normalize(nfd ? 'NFD' : 'NFC');
+  out = content.includes('\r\n') ? out.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n') : out.replace(/\r\n/g, '\n');
+  return out;
 }
 
 const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -72,10 +129,15 @@ export class NoteWriter {
   private stamps: number[] = [];
 
   constructor(
-    private readonly policy: McpPolicy,
+    private policy: McpPolicy,
     private readonly client: () => string | undefined = () => undefined,
     private readonly now: () => Date = () => new Date(),
   ) {}
+
+  /** 서버가 매 요청마다 정책 파일을 반영할 때 쓴다. */
+  setPolicy(policy: McpPolicy): void {
+    this.policy = policy;
+  }
 
   create(tool: string, rawPath: string, content: string, opts: { title?: string; tags?: string[]; properties?: Record<string, unknown> } = {}): WriteResult {
     const rel = this.guard(tool, rawPath);
@@ -110,6 +172,42 @@ export class NoteWriter {
       );
     }
     return this.commit(tool, 'update', rel, text, disk);
+  }
+
+  /**
+   * 노트 안에서 정확히 한 번 나오는 `oldText`만 `newText`로 바꾼다.
+   * CRLF/LF 와 NFC/NFD 표기가 달라도 같은 글로 보고, 파일의 표기 방식을 유지한다.
+   */
+  edit(tool: string, rawPath: string, oldText: string, newText: string, baseHash: string): WriteResult {
+    const rel = this.guard(tool, rawPath);
+    const disk = this.readDisk(tool, rel);
+    const partial = baseHash.startsWith(PARTIAL_HASH_PREFIX);
+    const expected = partial ? baseHash.slice(PARTIAL_HASH_PREFIX.length) : baseHash;
+    if (sha256(disk) !== expected) this.deny(tool, rel, 'stale', '노트가 읽은 뒤에 바뀌었어요. read_note 로 다시 읽고 최신 hash 로 시도하세요');
+
+    const matches = findTextMatches(disk, oldText);
+    if (matches.length !== 1) {
+      const message =
+        matches.length === 0
+          ? 'old_text was not found in the note (0 occurrences). Nothing was changed.'
+          : `old_text must occur exactly once in the note; found ${matches.length} occurrences. Nothing was changed.`;
+      this.deny(tool, rel, matches.length === 0 ? 'no-match' : 'ambiguous-match', message);
+    }
+    const match = matches[0]!;
+    const replacement = adaptReplacement(newText, disk, match);
+    const next = `${disk.slice(0, match.start)}${replacement}${disk.slice(match.end)}`;
+    return this.commit(tool, 'update', rel, next, disk);
+  }
+
+  /** 서버가 정책 파일 때문에 거부할 때 감사 기록을 남기고 던진다. */
+  denyRequest(tool: string, rawPath: string, code: WriteErrorCode, message: string): never {
+    let rel = rawPath;
+    try {
+      rel = validateNotePath(rawPath);
+    } catch {
+      /* 경로가 이미 잘못됐어도 감사 기록에는 원문을 남긴다 */
+    }
+    this.deny(tool, rel, code, message);
   }
 
   /** 이미 완성된 노트 전문을 그대로 새 노트로 쓴다(데이터베이스 행처럼 프런트매터를 직접 만든 경우). 있으면 실패. */

@@ -30,6 +30,7 @@ const render = async () => {
   root = createRoot(container);
   await act(async () => root!.render(<McpSettings onOpenNote={() => {}} onReverted={() => {}} />));
   await flush();
+  await flush();
 };
 
 const tab = (label: string) => [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find((el) => el.textContent === label)!;
@@ -43,15 +44,19 @@ const typeInto = async (el: HTMLInputElement, value: string) => {
 };
 
 let info: McpInfo;
+let policyGet: ReturnType<typeof vi.fn>;
+let policySet: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   info = { ...BASE_INFO };
+  policyGet = vi.fn(async () => ({ exists: false, policy: null, error: null }));
+  policySet = vi.fn(async (p: { write: boolean; writeFolders: string[]; maxWritesPerMinute: number }) => ({ version: 1 as const, ...p }));
   container = document.createElement('div');
   document.body.append(container);
   localStorage.clear();
   Object.defineProperty(window, 'nops', {
     configurable: true,
-    value: { mcp: { info: vi.fn(async () => info), audit: vi.fn(async () => []), revert: vi.fn() } },
+    value: { mcp: { info: vi.fn(async () => info), audit: vi.fn(async () => []), revert: vi.fn(), policyGet, policySet } },
   });
 });
 
@@ -105,6 +110,57 @@ describe('McpSettings', () => {
     localStorage.setItem(storageKey('vault-b'), JSON.stringify({ name: defaultServerName(info) }));
     await render();
     expect(container.querySelector('[data-testid="mcp-name-conflict"]')?.textContent).toContain('덮어써요');
+  });
+
+  it('정책 파일이 있으면 localStorage 값보다 우선하고 이미 연결된 에이전트 안내를 보여 준다', async () => {
+    localStorage.setItem(storageKey('vault-a'), JSON.stringify({ write: false, folder: '옛 폴더' }));
+    policyGet.mockResolvedValue({
+      exists: true,
+      policy: { version: 1, write: true, writeFolders: ['메모', '일기'], maxWritesPerMinute: 7 },
+      error: null,
+    });
+    await render();
+    expect(input('에이전트가 노트 쓰기 허용').checked).toBe(true);
+    expect(input('쓸 수 있는 폴더').value).toBe('메모');
+    expect(input('오늘의 노트 폴더도 허용').checked).toBe(true);
+    expect(container.querySelector('[data-testid="mcp-policy-note"]')?.textContent).toContain('이미 연결된 에이전트');
+    expect(container.querySelector('[data-testid="mcp-policy-missing"]')).toBeNull();
+    expect(container.querySelector('[data-testid="mcp-policy-device-note"]')?.textContent).toContain('다른 기기');
+    expect(container.querySelector('[data-testid="mcp-cli"]')?.textContent).toContain('--write-folder "메모" --write-folder "일기"');
+  });
+
+  it('정책 파일이 없으면 인자 기반 동작을 안내하고 현재 값으로 파일을 만들 수 있다', async () => {
+    await render();
+    const missing = container.querySelector('[data-testid="mcp-policy-missing"]');
+    expect(missing?.textContent).toContain('에이전트 연결 인자');
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="mcp-policy-create"]')!.click());
+    await flush();
+    expect(policySet).toHaveBeenCalledWith({ write: false, writeFolders: ['AI'], maxWritesPerMinute: 30 });
+    expect(container.querySelector('[data-testid="mcp-policy-missing"]')).toBeNull();
+  });
+
+  it('정책 파일이 없어도 쓰기를 끄면 곧바로 write=false 파일을 만든다', async () => {
+    localStorage.setItem(storageKey('vault-a'), JSON.stringify({ write: true, folder: 'AI', allowDailyFolder: false, name: 'nopsidian-a', client: 'claude-code' }));
+    await render();
+    expect(input('에이전트가 노트 쓰기 허용').checked).toBe(true);
+    await act(async () => input('에이전트가 노트 쓰기 허용').click());
+    await flush();
+    expect(policySet).toHaveBeenCalledWith({ write: false, writeFolders: ['AI'], maxWritesPerMinute: 30 });
+    expect(container.querySelector('[data-testid="mcp-policy-missing"]')).toBeNull();
+  });
+
+  it('스위치를 켜면 정책 파일을 쓰기 허용과 폴더로 저장한다', async () => {
+    await render();
+    await act(async () => input('에이전트가 노트 쓰기 허용').click());
+    await flush();
+    expect(policySet).toHaveBeenCalledWith({ write: true, writeFolders: ['AI'], maxWritesPerMinute: 30 });
+  });
+
+  it('정책 파일이 깨졌으면 쓰기를 꺼진 것으로 보여 주고 이유를 알린다', async () => {
+    policyGet.mockResolvedValue({ exists: true, policy: null, error: '정책 파일이 올바른 JSON 이 아니에요' });
+    await render();
+    expect(input('에이전트가 노트 쓰기 허용').checked).toBe(false);
+    expect(container.querySelector('[data-testid="mcp-policy-warning"]')?.textContent).toContain('올바른 JSON');
   });
 
   it('이름에 공백을 넣으면 경고한다', async () => {

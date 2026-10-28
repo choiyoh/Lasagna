@@ -28,6 +28,7 @@
     ".": "./src/index.ts",
     "./audit": "./src/audit.ts",
     "./revert": "./src/revert.ts",
-    "./folders": "./src/folders.ts"
+    "./folders": "./src/folders.ts",
+    "./policy-file": "./src/policy-file.ts"
   }
 }

@@ -5,6 +5,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { readAudit } from './audit.js';
+import { planRevert } from './revert.js';
 import type { McpPolicy } from './policy.js';
 import { createServer } from './server.js';
 
@@ -400,5 +401,180 @@ describe('MCP 서버 — 댓글', () => {
     // 없는 노트·빈 댓글
     expect((await call('add_comment', { path: '없음', text: 'x' })).text).toContain('not-found');
     expect((await call('add_comment', { path: '회의록', text: '   ' })).isError).toBe(true);
+  });
+});
+
+describe('MCP 서버 — 앱 정책 파일', () => {
+  const write = { write: true, writeFolders: ['AI'] };
+  const policyPath = (root: string) => path.join(root, '.nopsidian', 'mcp-policy.json');
+  const setPolicy = (root: string, over: Record<string, unknown> = {}) => {
+    mkdirSync(path.dirname(policyPath(root)), { recursive: true });
+    writeFileSync(policyPath(root), JSON.stringify({ version: 1, write: true, writeFolders: ['AI'], maxWritesPerMinute: 30, ...over }));
+  };
+
+  it('파일이 없으면 서버 인자 그대로 동작한다', async () => {
+    const { call } = await connect(write);
+    const p = await call('get_write_policy');
+    expect(p.json).toMatchObject({ write: true, source: 'args', reason: null });
+    expect((await call('create_note', { path: 'AI/no-policy', content: 'x' })).isError).toBe(false);
+  });
+
+  it('파일이 쓰기를 끄면 도구는 남아 있고 다음 쓰기부터 policy-disabled 로 거부하며, 다시 켜면 복구한다', async () => {
+    const { call, root, client } = await connect(write);
+    expect((await client.listTools()).tools.map((t) => t.name)).toContain('create_note');
+
+    setPolicy(root, { write: false });
+    const denied = await call('create_note', { path: 'AI/blocked', content: 'x' });
+    expect(denied.isError).toBe(true);
+    expect(denied.text).toContain('policy-disabled');
+    expect(existsSync(path.join(root, 'AI/blocked.md'))).toBe(false);
+    expect(readAudit(root).some((e) => e.action === 'denied' && e.tool === 'create_note')).toBe(true);
+    expect((await call('get_write_policy')).json).toMatchObject({ write: false, source: 'file', reason: 'policy-disabled' });
+
+    setPolicy(root, { write: true });
+    expect((await call('create_note', { path: 'AI/recovered', content: 'x' })).isError).toBe(false);
+    expect((await call('get_write_policy')).json).toMatchObject({ write: true, source: 'file', reason: null });
+  });
+
+  it('깨진 파일은 policy-invalid 로 안전하게 거부하고 이유를 보여 준다', async () => {
+    const { call, root } = await connect(write);
+    mkdirSync(path.dirname(policyPath(root)), { recursive: true });
+    writeFileSync(policyPath(root), '{깨짐');
+    const denied = await call('create_note', { path: 'AI/invalid', content: 'x' });
+    expect(denied.isError).toBe(true);
+    expect(denied.text).toContain('policy-invalid');
+    expect((await call('get_write_policy')).json).toMatchObject({ write: false, reason: 'policy-invalid' });
+  });
+
+  it('파일 폴더와 인자 폴더의 교집합만 허용한다', async () => {
+    const { call, root } = await connect({ write: true, writeFolders: ['AI', '일기'] });
+    setPolicy(root, { writeFolders: ['AI'] });
+    expect((await call('create_note', { path: 'AI/inside', content: 'x' })).isError).toBe(false);
+    const out = await call('create_note', { path: '일기/outside', content: 'x' });
+    expect(out.isError).toBe(true);
+    expect(out.text).toContain('forbidden-folder');
+    expect((await call('get_write_policy')).json).toMatchObject({ folders: ['AI'], source: 'file' });
+  });
+
+  it('파일이 쓰기를 끄면 add_comment 도 거부한다', async () => {
+    const { call, root } = await connect(write);
+    setPolicy(root, { write: false });
+    const r = await call('add_comment', { path: '회의록', text: '정책 확인' });
+    expect(r.isError).toBe(true);
+    expect(r.text).toContain('policy-disabled');
+    expect(readAudit(root).some((e) => e.action === 'denied' && e.tool === 'add_comment')).toBe(true);
+  });
+
+  it('.nopsidian 안에는 MCP 쓰기 도구로 쓸 수 없다', async () => {
+    const { call } = await connect({ write: true, writeFolders: [''] });
+    const r = await call('create_note', { path: '.nopsidian/정책', content: 'x' });
+    expect(r.isError).toBe(true);
+    expect(r.text).toContain('bad-input');
+  });
+});
+
+describe('MCP 서버 — edit_note', () => {
+  const write = { write: true, writeFolders: ['AI'] };
+
+  it('정확히 한 곳만 바꾸고 감사·버전 기록에 남긴다', async () => {
+    const { call, root } = await connect(write);
+    expect((await call('create_note', { path: 'AI/edit', content: '# 편집\n\n빨강 사과 하나' })).isError).toBe(false);
+    const r = await call('read_note', { path: 'AI/edit' });
+    const e = await call('edit_note', { path: 'AI/edit', old_text: '빨강 사과', new_text: '초록 사과', base_hash: r.json.hash });
+    expect(e.isError).toBe(false);
+    expect(readFileSync(path.join(root, 'AI/edit.md'), 'utf8')).toBe('# 편집\n\n초록 사과 하나\n');
+    const entry = readAudit(root).find((x) => x.tool === 'edit_note')!;
+    expect(entry).toMatchObject({ action: 'update', path: 'AI/edit.md' });
+    const revert = planRevert(root, entry.t, entry.path);
+    expect(revert.plan).toMatchObject({ action: 'restore' });
+    if (revert.plan.action === 'restore') expect(revert.plan.content).toContain('빨강 사과');
+  });
+
+  it('0곳·2곳 이상은 일치 개수를 담아 거부하고 파일을 바꾸지 않는다', async () => {
+    const { call, root } = await connect(write);
+    expect((await call('create_note', { path: 'AI/repeat', content: '# 제목\n\n반복 반복' })).isError).toBe(false);
+    const before = readFileSync(path.join(root, 'AI/repeat.md'), 'utf8');
+    const r = await call('read_note', { path: 'AI/repeat' });
+    const two = await call('edit_note', { path: 'AI/repeat', old_text: '반복', new_text: '한 번', base_hash: r.json.hash });
+    expect(two.isError).toBe(true);
+    expect(two.text).toContain('2 occurrences');
+    const none = await call('edit_note', { path: 'AI/repeat', old_text: '없는 말', new_text: 'x', base_hash: r.json.hash });
+    expect(none.isError).toBe(true);
+    expect(none.text).toContain('0 occurrences');
+    expect(readFileSync(path.join(root, 'AI/repeat.md'), 'utf8')).toBe(before);
+    expect(readAudit(root).filter((e) => e.action === 'denied' && e.tool === 'edit_note').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('낡은 해시와 허용 폴더 밖은 거부한다', async () => {
+    const { call, root } = await connect(write);
+    await call('create_note', { path: 'AI/stale', content: '처음' });
+    const r = await call('read_note', { path: 'AI/stale' });
+    await call('append_to_note', { path: 'AI/stale', content: '바뀜' });
+    const stale = await call('edit_note', { path: 'AI/stale', old_text: '처음', new_text: '다시', base_hash: r.json.hash });
+    expect(stale.isError).toBe(true);
+    expect(stale.text).toContain('stale');
+    const outside = await call('read_note', { path: '프로젝트/계획.md' });
+    const denied = await call('edit_note', { path: '프로젝트/계획.md', old_text: '설계', new_text: '다른 설계', base_hash: outside.json.hash });
+    expect(denied.isError).toBe(true);
+    expect(denied.text).toContain('forbidden-folder');
+    expect(readFileSync(path.join(root, '프로젝트/계획.md'), 'utf8')).toContain('설계');
+  });
+
+  it('긴 노트의 partial 해시로도 한 곳만 바꾼다(전체를 잃지 않는다)', async () => {
+    const { call, root } = await connect(write);
+    const long = `${Array.from({ length: 1200 }, (_, i) => `- line ${String(i).padStart(5, '0')} ${'x'.repeat(40)}`).join('\n')}\n`;
+    mkdirSync(path.join(root, 'AI'), { recursive: true });
+    writeFileSync(path.join(root, 'AI/long-edit.md'), long);
+    const first = await call('read_note', { path: 'AI/long-edit.md' });
+    expect(first.json.hash).toMatch(/^partial:/);
+    const e = await call('edit_note', { path: 'AI/long-edit.md', old_text: 'line 00001', new_text: 'line EDITED', base_hash: first.json.hash });
+    expect(e.isError).toBe(false);
+    const after = readFileSync(path.join(root, 'AI/long-edit.md'), 'utf8');
+    expect(after).toContain('line EDITED');
+    expect(after.length).toBeGreaterThan(40_000);
+    expect(after).toContain('line 01199');
+  });
+
+  it('프런트매터 안의 문자열도 바꾼다', async () => {
+    const { call, root } = await connect(write);
+    expect((await call('create_note', { path: 'AI/fm', content: '---\ntitle: 옛 제목\n---\n# 본문\n' })).isError).toBe(false);
+    const r = await call('read_note', { path: 'AI/fm' });
+    const e = await call('edit_note', { path: 'AI/fm', old_text: 'title: 옛 제목', new_text: 'title: 새 제목', base_hash: r.json.hash });
+    expect(e.isError).toBe(false);
+    expect(readFileSync(path.join(root, 'AI/fm.md'), 'utf8')).toContain('title: 새 제목');
+  });
+
+  it('CRLF 노트는 LF 로 준 old_text 도 찾고 줄바꿈 표기를 유지한다', async () => {
+    const { call, root } = await connect(write);
+    mkdirSync(path.join(root, 'AI'), { recursive: true });
+    writeFileSync(path.join(root, 'AI/crlf.md'), '# CRLF\r\n\r\n- 하나\r\n- 둘\r\n');
+    const r = await call('read_note', { path: 'AI/crlf.md' });
+    const e = await call('edit_note', { path: 'AI/crlf.md', old_text: '- 하나\n- 둘', new_text: '- ONE\n- TWO', base_hash: r.json.hash });
+    expect(e.isError).toBe(false);
+    const text = readFileSync(path.join(root, 'AI/crlf.md'), 'utf8');
+    expect(text).toContain('- ONE\r\n- TWO\r\n');
+    expect(text).not.toMatch(/[^\r]\n/);
+  });
+
+  it('NFD 글자가 다른 곳에 있어도 매치 구간이 ASCII 면 새 한글은 NFC 로 넣는다', async () => {
+    const { call, root } = await connect(write);
+    mkdirSync(path.join(root, 'AI'), { recursive: true });
+    writeFileSync(path.join(root, 'AI/mixed.md'), `# ${'가'.normalize('NFD')}\n\nfoo\n`);
+    const r = await call('read_note', { path: 'AI/mixed.md' });
+    const e = await call('edit_note', { path: 'AI/mixed.md', old_text: 'foo', new_text: '한글', base_hash: r.json.hash });
+    expect(e.isError).toBe(false);
+    const text = readFileSync(path.join(root, 'AI/mixed.md'), 'utf8');
+    expect(text).toContain('한글'); // NFC
+    expect(text).not.toContain('한글'.normalize('NFD'));
+  });
+
+  it('NFD 노트는 NFC 로 준 old_text 도 찾고 표기를 유지한다', async () => {
+    const { call, root } = await connect(write);
+    mkdirSync(path.join(root, 'AI'), { recursive: true });
+    writeFileSync(path.join(root, 'AI/nfd.md'), `# ${'한글'.normalize('NFD')}\n\n${'수정 전'.normalize('NFD')}\n`);
+    const r = await call('read_note', { path: 'AI/nfd.md' });
+    const e = await call('edit_note', { path: 'AI/nfd.md', old_text: '수정 전', new_text: '수정 후', base_hash: r.json.hash });
+    expect(e.isError).toBe(false);
+    expect(readFileSync(path.join(root, 'AI/nfd.md'), 'utf8')).toContain('수정 후'.normalize('NFD'));
   });
 });

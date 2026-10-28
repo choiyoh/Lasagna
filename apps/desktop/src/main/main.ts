@@ -29,6 +29,7 @@ import {
 import { existsSync, readFileSync } from 'node:fs';
 import { readAudit } from '@nopsidian/mcp/audit';
 import { RevertError, applyRestore, logRevert, planRevert } from '@nopsidian/mcp/revert';
+import { readPolicyFile, writePolicyFile } from '@nopsidian/mcp/policy-file';
 import { events, graphLayout, graphSettings, workspaceLayout, type EventName } from '@nopsidian/ipc-contract';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
@@ -457,6 +458,17 @@ function registerHandlers() {
       packaged: app.isPackaged,
       launchArgs: mcpLaunchArgs(process.platform),
     };
+  });
+  handle('mcp.policyGet', () => {
+    const v = requireVault();
+    const read = readPolicyFile(v.info.path);
+    if (read.kind === 'ok') return { exists: true, policy: read.policy, error: null };
+    if (read.kind === 'missing') return { exists: false, policy: null, error: null };
+    return { exists: true, policy: null, error: read.error };
+  });
+  handle('mcp.policySet', ({ write, writeFolders, maxWritesPerMinute }) => {
+    const v = requireVault();
+    return writePolicyFile(v.info.path, { version: 1, write, writeFolders, maxWritesPerMinute });
   });
   handle('mcp.revert', ({ t, path: rel }) => {
     const v = requireVault();

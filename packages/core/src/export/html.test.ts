@@ -48,6 +48,26 @@ describe('renderNoteBody', () => {
     expect(h).toContain('<mark>중요</mark>');
     expect(h).toContain('<math');
   });
+  it('각주 참조·정의·인라인 각주를 내보낸다', () => {
+    const h = renderNoteBody('본문[^1]과 ^[인라인 내용]\n\n[^1]: 정의 내용\n', opts);
+    expect(h).toContain('data-footnote-ref');
+    expect(h).toContain('<section data-footnotes');
+    expect(h).toContain('정의 내용');
+    expect(h).toContain('인라인 내용');
+  });
+
+  it('인라인 각주 식별자가 실제 [^inline-1] 정의와 겹치지 않는다', () => {
+    const h = renderNoteBody('본문 ^[인라인]\n\n[^inline-1]: 실제 정의\n', opts);
+    expect(h).toContain('nops-inline-1');
+    expect(h).toContain('inline-1');
+  });
+
+  it('Mermaid 펜스는 원문 코드 블록으로 내보낸다(앱에서만 SVG)', () => {
+    const h = renderNoteBody('```mermaid\nflowchart TD\n  A --> B\n```\n', opts);
+    expect(h).toContain('language-mermaid');
+    expect(h).toContain('flowchart TD');
+  });
+
   it('코드 안의 [[ ]] 는 그대로 둔다', () => {
     expect(renderNoteBody('`[[x]]`\n\n```\n[[y]]\n```\n', opts)).not.toContain('unresolved');
   });

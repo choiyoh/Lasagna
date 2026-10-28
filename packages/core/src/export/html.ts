@@ -34,7 +34,7 @@ function math(src: string, display: boolean): string {
 }
 
 /** 텍스트 한 덩어리를 위키링크·임베드·하이라이트가 풀린 노드들로 쪼갠다. */
-function expandText(value: string, opts: HtmlExportOptions): RootContent[] {
+function expandWikiText(value: string, opts: HtmlExportOptions): RootContent[] {
   const out: RootContent[] = [];
   let last = 0;
   for (const m of value.matchAll(TOKEN)) {
@@ -82,16 +82,38 @@ function expandText(value: string, opts: HtmlExportOptions): RootContent[] {
   return out;
 }
 
+interface InlineFootnote {
+  identifier: string;
+  content: string;
+}
+
+/** Obsidian 인라인 각주 `^[내용]` 을 표준 각주 참조로 바꾸고, 정의는 나중에 트리 끝에 붙인다. */
+function expandText(value: string, opts: HtmlExportOptions, footnotes: InlineFootnote[]): RootContent[] {
+  const out: RootContent[] = [];
+  const re = /(?<!\\)\^\[([^\]\n]+)\]/g;
+  let last = 0;
+  for (const m of value.matchAll(re)) {
+    const at = m.index ?? 0;
+    if (at > last) out.push(...expandWikiText(value.slice(last, at), opts));
+    const identifier = `nops-inline-${footnotes.length + 1}`;
+    footnotes.push({ identifier, content: m[1] ?? '' });
+    out.push({ type: 'footnoteReference', identifier, label: identifier } as RootContent);
+    last = at + m[0].length;
+  }
+  out.push(...expandWikiText(value.slice(last), opts));
+  return out;
+}
+
 function textOf(node: Parent): string {
   return node.children.map((c) => ('value' in c && typeof c.value === 'string' ? c.value : 'children' in c ? textOf(c as Parent) : '')).join('');
 }
 
 /** 트리를 제자리에서 고친다(위키링크·콜아웃·열·블록 ID·수식·하이라이트). */
-function transform(node: Parent, opts: HtmlExportOptions): void {
+function transform(node: Parent, opts: HtmlExportOptions, footnotes: InlineFootnote[]): void {
   const next: RootContent[] = [];
   for (const child of node.children as RootContent[]) {
     if (child.type === 'text') {
-      next.push(...expandText((child as Text).value, opts));
+      next.push(...expandText((child as Text).value, opts, footnotes));
       continue;
     }
     if (child.type === 'inlineMath') {
@@ -156,7 +178,7 @@ function transform(node: Parent, opts: HtmlExportOptions): void {
           if (!firstText.value) first.children.shift();
         }
         if (first.children.length === 0) child.children.shift();
-        transform(child, opts);
+        transform(child, opts, footnotes);
         const title = esc(head.title || head.type);
         const open = head.fold
           ? `<details class="callout callout-${esc(head.type)}"${head.fold === '+' ? ' open' : ''}><summary>${title}</summary>`
@@ -167,7 +189,7 @@ function transform(node: Parent, opts: HtmlExportOptions): void {
     }
 
     if ('children' in child) {
-      transform(child as Parent, opts);
+      transform(child as Parent, opts, footnotes);
     }
     next.push(child);
   }
@@ -181,7 +203,16 @@ export function renderNoteBody(markdown: string, opts: HtmlExportOptions): strin
   const fm = splitFrontmatter(markdown);
   const body = fm ? markdown.slice(fm.end) : markdown;
   const tree = processor.parse(body) as Root;
-  transform(tree, opts);
+  const inlineFootnotes: InlineFootnote[] = [];
+  transform(tree, opts, inlineFootnotes);
+  for (const fn of inlineFootnotes) {
+    tree.children.push({
+      type: 'footnoteDefinition',
+      identifier: fn.identifier,
+      label: fn.identifier,
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: fn.content }] }],
+    } as RootContent);
+  }
   const hast = unified().use(remarkRehype, { allowDangerousHtml: true }).runSync(tree);
   return unified().use(rehypeStringify, { allowDangerousHtml: true }).stringify(hast);
 }
@@ -207,6 +238,9 @@ mark { background: #ffe58f; color: #222; border-radius: 3px; padding: 0 .15em; }
 .fence-columns { display: flex; gap: 24px; } .fence-columns > .fence-column { flex: 1; min-width: 0; }
 .embed-note { margin: 1em 0; padding: 4px 16px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .placeholder { color: var(--muted); font-style: italic; }
+.footnotes { margin-top: 2em; border-top: 1px solid var(--line); font-size: .9em; }
+.footnotes h2 { font-size: .85em; color: var(--muted); }
+.footnotes ol { padding-left: 1.5em; }
 ul.contains-task-list { list-style: none; padding-left: 1.2em; }
 .meta { color: var(--muted); font-size: .85em; margin-bottom: 1.5em; }
 @media print { main { max-width: none; padding: 0; } a { color: inherit; } pre { white-space: pre-wrap; } }

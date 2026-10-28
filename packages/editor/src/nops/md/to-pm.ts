@@ -23,6 +23,8 @@ interface Ctx {
   /** 프런트매터를 뺀 본문 — mdast 위치(offset)가 이 문자열 기준이다 */
   body: string;
   tokens: InlineToken[];
+  /** 각주 정의 노드의 안정적인 편집 키(직렬화하지 않는다) */
+  nextFootnoteKey: number;
 }
 
 const CALLOUT_HEAD = /^\[!([A-Za-z][\w-]*)\]([+-])?[ \t]*/;
@@ -46,18 +48,37 @@ function slice(ctx: Ctx, node: { position?: import('unist').Position }): string 
 
 // ───────────────────────── 인라인 ─────────────────────────
 
+const FOOTNOTE_TEXT = /(?<!\\)\[\^([^[\]\n]+?)\]/g;
+
+/** 정의가 아직 없는 각주 참조도 편집기에서 각주로 보이게 텍스트를 나눈다. */
+function textAndFootnotes(schema: Schema, value: string, marks: readonly Mark[]): PMNode[] {
+  const out: PMNode[] = [];
+  let last = 0;
+  for (const m of value.matchAll(FOOTNOTE_TEXT)) {
+    const at = m.index ?? 0;
+    if (at > last) out.push(schema.text(value.slice(last, at), marks));
+    const label = m[1] ?? '';
+    out.push(schema.nodes.footnote_ref!.create({ identifier: label, label, inline: false, text: null }, null, marks));
+    last = at + m[0].length;
+  }
+  if (last < value.length) out.push(schema.text(value.slice(last), marks));
+  return out;
+}
+
 function textNodes(ctx: Ctx, rawValue: string, marks: readonly Mark[]): PMNode[] {
   const { schema } = ctx;
   const value = lf(rawValue);
   const out: PMNode[] = [];
   for (const part of decodeInline(value, ctx.tokens)) {
     if (typeof part === 'string') {
-      if (part) out.push(schema.text(part, marks));
+      out.push(...textAndFootnotes(schema, part, marks));
       continue;
     }
     const { kind, inner } = part.token;
     if (kind === 'highlight') {
       out.push(schema.text(inner, schema.marks.highlight!.create().addToSet(marks)));
+    } else if (kind === 'footnote-inline') {
+      out.push(schema.nodes.footnote_ref!.create({ identifier: null, label: null, inline: true, text: inner }, null, marks));
     } else {
       const link = parseWikiInner(inner, kind === 'embed', 0);
       out.push(
@@ -116,6 +137,15 @@ export function inlineToPm(ctx: Ctx, children: PhrasingContent[], marks: readonl
         break;
       case 'inlineMath':
         out.push(schema.nodes.math_inline!.create({ value: child.value }, null, cur()));
+        break;
+      case 'footnoteReference':
+        out.push(
+          schema.nodes.footnote_ref!.create(
+            { identifier: child.identifier, label: child.label ?? child.identifier, inline: false, text: null },
+            null,
+            cur(),
+          ),
+        );
         break;
       case 'html': {
         const v = child.value.toLowerCase();
@@ -291,6 +321,8 @@ export function blockToPm(ctx: Ctx, node: RootContent): PMNode {
       return tableToPm(ctx, node);
     case 'math':
       return schema.nodes.math_block!.create(null, node.value ? schema.text(lf(node.value)) : null);
+    case 'footnoteDefinition':
+      return schema.nodes.footnote_def!.create({ identifier: node.identifier, label: node.label ?? node.identifier, source: slice(ctx, node), key: `fn-${ctx.nextFootnoteKey++}` });
     default:
       return raw(ctx, node);
   }
@@ -356,7 +388,7 @@ export interface ConvertedDocument {
 }
 
 export function convertParsed(schema: Schema, ep: EditorParse): ConvertedDocument {
-  const ctx: Ctx = { schema, body: ep.body, tokens: ep.tokens };
+  const ctx: Ctx = { schema, body: ep.body, tokens: ep.tokens, nextFootnoteKey: 0 };
   const segments = convertRange(ctx, ep, 0, ep.note.blocks.length);
   const children = segments.map((s) => s.node);
   const doc = schema.topNodeType.create(null, children.length ? children : [schema.nodes.paragraph!.create()]);

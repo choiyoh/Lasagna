@@ -10,11 +10,15 @@ allowBuilds:
   macos-alias: true
   fs-xattr: true
   electron-winstaller: true
+# pnpm 11: 값은 분. 1일(1440분) 지난 버전만 설치한다.
+minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - '@oh-new-editor/core'
 overrides:
   # GHSA-238p-pmpm-9mq7(katex <0.18.2) — remark-math>micromark-extension-math 가 katex ^0.16.0 을 고정하고 있어
   # 직접 의존성만 올리면 취약한 사본이 남는다. 쓰는 API 가 renderToString 뿐이라 0.19.x 로 맞춘다.
   katex: ^0.19.0
+  # Mermaid SVG 정화에 쓰는 DOMPurify 3.4.17(2026-10-12 게시)로 고정한다. 3.4.16 의 critical/high/low 수정본이다.
+  dompurify: ^3.4.17
 # Electron Forge는 pnpm에서 hoisted 레이아웃을 요구한다.
 nodeLinker: hoisted

@@ -12,6 +12,8 @@ import { createFilesPlugin } from './files-plugin';
 import { createFlashPlugin } from './flash';
 import { createTocPlugin, tocNodeView, tocSlashItem } from './toc';
 import { createMathActivePlugin } from './math';
+import { createFootnotePlugin, footnoteSlashItem } from './footnotes';
+import { createMermaidActivePlugin, mermaidBlockView, mermaidSlashItem } from './mermaid';
 import { createRowPropsPlugin, type NopsRowPropsHost } from './row-props';
 import { createToggleHeadingPlugin, toggleHeadingCommand } from './toggle-heading';
 import { createLinkPreviewPlugin } from './link-preview';
@@ -62,6 +64,8 @@ export const nopsSlashItems: SlashItemSpec[] = [
   { icon: '▥', label: '2열', description: '두 열로 나란히 배치', category: 'advanced', keywords: ['columns', '열', '컬럼', '2열', '두열', '레이아웃'], run: (v) => insertColumns(2)(v.state, v.dispatch) },
   { icon: '▥', label: '3열', description: '세 열로 나란히 배치', category: 'advanced', keywords: ['columns', '열', '컬럼', '3열', '세열', '레이아웃'], run: (v) => insertColumns(3)(v.state, v.dispatch) },
   { icon: '∑', label: '수식 블록', description: 'LaTeX 수식', category: 'advanced', keywords: ['math', 'latex', '수식', '공식', 'katex'], run: (v) => insertMathBlock()(v.state, v.dispatch) },
+  footnoteSlashItem,
+  mermaidSlashItem,
 ];
 
 /** Nopsidian 스키마·노드 뷰·입력 규칙·슬래시 항목을 갖춘 에디터를 만든다. */
@@ -103,6 +107,7 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
       ...(assets ? { embed: createEmbedView(assets, options.onOpenLink, options.peek) } : {}),
       // ```dbview → 데이터베이스 보기, ```toc → 자동 목차, 나머지 코드 블록은 기본 렌더링
       code_block: (node, view, getPos) => {
+        if (node.attrs.language === 'mermaid') return mermaidBlockView(node, view);
         const toc = tocNodeView(node, view);
         if (toc) return toc;
         return dbViewNode ? dbViewNode(node, view) : (undefined as never);
@@ -126,6 +131,8 @@ export function createNopsEditor(host: HTMLElement, options: NopsEditorOptions =
       createTitlePlugin(),
       createToggleHeadingPlugin(),
       createMathActivePlugin(),
+      createMermaidActivePlugin(),
+      createFootnotePlugin(host),
       createTocPlugin(),
       ...(options.dbView ? [createHideCodeChipPlugin()] : []),
       ...(options.rowProps ? [createRowPropsPlugin(options.rowProps)] : []),

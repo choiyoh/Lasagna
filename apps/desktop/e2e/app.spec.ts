@@ -541,11 +541,11 @@ test.describe('소스 모드와 코드 강조', () => {
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 소스전환\n\n처음 추가\n');
   });
 
-  test('에디터가 모르는 문법(각주)도 소스 모드에서 손실 없이 고칠 수 있다', async () => {
+  test('각주도 소스 모드에서 손실 없이 고칠 수 있다', async () => {
     const page = await app.firstWindow();
     const file = await openNote(page, '소스각주', '# 소스각주\n\n본문[^1]\n\n[^1]: 각주 내용\n');
-    // 편집 모드에서는 원문 블록으로 보존된다
-    await expect(page.locator('.nops-raw')).toContainText('[^1]: 각주 내용');
+    await expect(page.locator('.nops-footnote-ref').first()).toHaveText('1');
+    await expect(page.getByTestId('footnotes').locator('textarea').first()).toHaveValue('각주 내용');
     await page.getByRole('button', { name: '소스 모드' }).click();
     const cm = page.locator('.cm-content');
     await expect(cm).toContainText('[^1]: 각주 내용', { timeout: 10000 });
@@ -554,7 +554,7 @@ test.describe('소스 모드와 코드 강조', () => {
     await page.keyboard.type('\n[^2]: 둘째 각주\n');
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 소스각주\n\n본문[^1]\n\n[^1]: 각주 내용\n\n[^2]: 둘째 각주\n');
     await page.getByRole('button', { name: '편집 모드' }).click();
-    await expect(page.locator('.nops-raw').nth(1)).toContainText('[^2]: 둘째 각주');
+    await expect(page.getByTestId('footnotes')).toContainText('[^2]');
     expect(readFileSync(file, 'utf8')).toBe('# 소스각주\n\n본문[^1]\n\n[^1]: 각주 내용\n\n[^2]: 둘째 각주\n');
   });
 
@@ -613,6 +613,59 @@ test.describe('링크 코어', () => {
     await page.getByRole('button', { name: title, exact: true }).first().click();
     await expect(page.locator('.ProseMirror')).toBeVisible();
   };
+
+  test('Mermaid 코드 펜스는 SVG로 그리고, 오류는 원문과 함께 보여 준다', async () => {
+    const page = await app.firstWindow();
+    const requests: string[] = [];
+    page.on('request', (r) => requests.push(r.url()));
+    const src = '# Mermaid호환\n\n```mermaid\nflowchart TD\n  A --> B\n```\n';
+    const file = note('Mermaid호환', src);
+    await open(page, 'Mermaid호환');
+    const svg = page.locator('.nops-mermaid__render svg');
+    await expect(svg).toBeVisible({ timeout: 20000 });
+    expect(await svg.locator('text').count()).toBeGreaterThan(0); // 정화 후에도 라벨이 남는다
+    expect(readFileSync(file, 'utf8')).toBe(src);
+    expect(requests.some((u) => u.startsWith('http://') || u.startsWith('https://'))).toBe(false);
+    // 테마가 바뀌면 Mermaid SVG도 다시 그린다.
+    const lightSvg = await svg.innerHTML();
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
+    await expect.poll(() => svg.innerHTML(), { timeout: 10000 }).not.toBe(lightSvg);
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+
+    note('Mermaid오류', '# Mermaid오류\n\n```mermaid\nflowchart TD\n  A -->\n```\n');
+    await open(page, 'Mermaid오류');
+    await expect(page.locator('.nops-mermaid.is-error')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('.nops-mermaid pre')).toContainText('flowchart TD');
+
+    // 악성 라벨·htmlLabels/securityLevel 우회·javascript: 클릭도 DOM 에 위험 요소를 남기지 않는다.
+    note(
+      'Mermaid악성',
+      '# Mermaid악성\n\n```mermaid\nflowchart TD\n  A["<script>alert(1)</script>"] --> B\n  click A "javascript:alert(1)"\n```\n\n```mermaid\n%%{init: {"securityLevel": "loose", "htmlLabels": true}}%%\nflowchart TD\n  A["<img src=x onerror=alert(1)>"] --> B\n```\n',
+    );
+    await open(page, 'Mermaid악성');
+    await expect(page.locator('.nops-mermaid').nth(1)).toBeVisible({ timeout: 20000 });
+    const danger = await page.evaluate(() => ({
+      scripts: document.querySelectorAll('.nops-mermaid__render script').length,
+      handlers: document.querySelectorAll('.nops-mermaid__render [onerror], .nops-mermaid__render [onclick]').length,
+      jsLinks: [...document.querySelectorAll<HTMLAnchorElement>('.nops-mermaid__render a')].filter((a) => a.getAttribute('href')?.startsWith('javascript:')).length,
+      foreign: document.querySelectorAll('.nops-mermaid__render foreignObject').length,
+    }));
+    expect(danger).toEqual({ scripts: 0, handlers: 0, jsLinks: 0, foreign: 0 });
+  });
+
+  test('각주: 위첨자·아래 각주 영역·정의 편집이 원문 위치를 유지한다', async () => {
+    const page = await app.firstWindow();
+    const src = '# 각주호환\n\n본문[^1]과 ^[인라인]\n\n[^1]: 첫째\n\n끝 문단\n';
+    const file = note('각주호환', src);
+    await open(page, '각주호환');
+    await expect(page.locator('.nops-footnote-ref').first()).toHaveText('1');
+    const panel = page.getByTestId('footnotes');
+    const area = panel.locator('textarea').first();
+    await expect(area).toHaveValue('첫째');
+    await area.fill('고친 정의');
+    await area.blur();
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 각주호환\n\n본문[^1]과 ^[인라인]\n\n[^1]: 고친 정의\n\n끝 문단\n');
+  });
 
   test('백링크 패널: 이 노트를 가리키는 노트와 링크가 놓인 문맥이 보인다', async () => {
     const page = await app.firstWindow();
@@ -2098,6 +2151,12 @@ views:
     await expect(panel.getByTestId('comment')).toHaveCount(1, { timeout: 8000 });
 
     // 에이전트(MCP)가 단 댓글도 보인다: 창에 돌아올 때 다시 읽는다
+    // 앞선 앱 정책 테스트가 쓰기를 꺼 두었을 수 있으므로 이 테스트는 쓰기 허용 정책을 명시한다.
+    mkdirSync(path.join(vaultDir, '.nopsidian'), { recursive: true });
+    writeFileSync(
+      path.join(vaultDir, '.nopsidian/mcp-policy.json'),
+      JSON.stringify({ version: 1, write: true, writeFolders: ['AI'], maxWritesPerMinute: 30 }),
+    );
     const script = path.join(packagedResourcesDir(), 'nopsidian-mcp.mjs');
     const client = new Client({ name: 'review-agent', version: '1' });
     await client.connect(new StdioClientTransport({ command: process.execPath, args: [script, '--vault', vaultDir, '--write'], stderr: 'ignore' }));
@@ -2436,7 +2495,7 @@ views:
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'comment', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'mcp', 'note', 'on', 'order', 'search', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'comment', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'mcp', 'note', 'on', 'order', 'pathForFile', 'search', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

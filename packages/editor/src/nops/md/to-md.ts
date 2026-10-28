@@ -55,6 +55,8 @@ function leafOf(node: PMNode): Any | null {
     }
     case 'math_inline':
       return { type: 'inlineMath', value: a.value };
+    case 'footnote_ref':
+      return raw(a.inline ? `^[${a.text ?? ''}]` : `[^${a.label ?? a.identifier ?? ''}]`);
     case 'inline_image':
       return { type: 'image', url: a.src, alt: a.alt ?? '', title: a.title ?? null };
     case 'raw_inline':
@@ -197,6 +199,8 @@ export function blockToMdast(node: PMNode): Any | null {
       return { type: 'table', align: a.align ?? null, children: rows };
     }
     case 'raw_block':
+      return raw(a.source);
+    case 'footnote_def':
       return raw(a.source);
     default:
       return node.textContent ? { type: 'paragraph', children: [{ type: 'text', value: node.textContent }] } : null;

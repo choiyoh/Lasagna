@@ -90,15 +90,22 @@ describe('Markdown → PM', () => {
     expect(kids(mixed)[0]!.child(1).type.name).toBe('inline_image');
   });
 
-  it('알 수 없는 구문과 HTML 블록은 raw_block으로 보존한다', () => {
+  it('알 수 없는 HTML은 raw_block, 각주 정의는 footnote_def로 보존한다', () => {
     const { doc: d } = parseDocument('<div class="x">\n html\n</div>\n\n[^1]: 각주 정의\n');
-    expect(types(d)).toEqual(['raw_block', 'raw_block']);
-    expect(kids(d)[1]!.attrs.source).toBe('[^1]: 각주 정의');
+    expect(types(d)).toEqual(['raw_block', 'footnote_def']);
+    expect(kids(d)[1]!.attrs).toMatchObject({ identifier: '1', label: '1', source: '[^1]: 각주 정의' });
   });
 
   it('잘못된 열(1개뿐)은 일반 문단으로 남는다', () => {
     const { doc: d } = parseDocument(':::columns\n\n:::\n');
     expect(types(d)).not.toContain('columns');
+  });
+  it('mermaid 펜스는 코드 블록으로 읽고 원문을 그대로 저장한다', () => {
+    const src = '```mermaid\nflowchart TD\n  A --> B\n```\n';
+    const { doc, baseline } = parseDocument(src);
+    expect(types(doc)).toEqual(['code_block']);
+    expect(kids(doc)[0]!.attrs.language).toBe('mermaid');
+    expect(serializeDocument(doc, baseline)).toBe(src);
   });
 });
 
@@ -250,5 +257,39 @@ describe('새로 직렬화한 Markdown은 다시 읽으면 같은 문서가 된�
 describe('blockToMarkdown', () => {
   it('빈 문단은 아무것도 쓰지 않는다', () => {
     expect(blockToMarkdown(nopsSchema.nodes.paragraph!.create())).toBe('');
+  });
+});
+
+
+describe('각주', () => {
+  it('참조·정의·인라인 각주를 노드로 만들고 원문을 바이트 그대로 저장한다', () => {
+    const src = '본문[^1]과 [^이름] 그리고 ^[인라인]\n\n[^1]: 첫째\n    이어짐\n\n[^이름]: 둘째\n';
+    const { doc, baseline } = parseDocument(src);
+    expect(types(doc)).toEqual(['paragraph', 'footnote_def', 'footnote_def']);
+    const refs: PMNode[] = [];
+    doc.descendants((n) => {
+      if (n.type.name === 'footnote_ref') refs.push(n);
+    });
+    expect(refs.map((n) => n.attrs)).toEqual([
+      { identifier: '1', label: '1', inline: false, text: null },
+      { identifier: '이름', label: '이름', inline: false, text: null },
+      { identifier: null, label: null, inline: true, text: '인라인' },
+    ]);
+    expect(kids(doc)[1]!.attrs.source).toBe('[^1]: 첫째\n    이어짐');
+    expect(serializeDocument(doc, baseline)).toBe(src);
+  });
+
+  it('정의 없는 참조·쓰이지 않는 정의·중복 정의·코드 안 각주를 잃지 않는다', () => {
+    const src = '없는 참조[^없음]\n\n[^안씀]: 쓰이지 않음\n\n[^dup]: 하나\n\n[^dup]: 둘\n\n```\n[^코드]\n```\n\n`[^인라인코드]`\n\n본문 ^abc\n';
+    const { doc, baseline } = parseDocument(src);
+    expect(types(doc)).toEqual(['paragraph', 'footnote_def', 'footnote_def', 'footnote_def', 'code_block', 'paragraph', 'paragraph']);
+    expect(serializeDocument(doc, baseline)).toBe(src);
+  });
+
+  it('정의가 문서 중간에 있어도 위치·순서를 유지한다', () => {
+    const src = '앞[^a]\n\n[^a]: 중간 정의\n    계속 줄\n\n뒤\n';
+    const { doc, baseline } = parseDocument(src);
+    expect(types(doc)).toEqual(['paragraph', 'footnote_def', 'paragraph']);
+    expect(serializeDocument(doc, baseline)).toBe(src);
   });
 });

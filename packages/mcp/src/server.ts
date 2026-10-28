@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { listComments } from '@nopsidian/core';
 import { DatabaseAccess, FILTER_OPS } from './databases.js';
 import { canWrite, type McpPolicy } from './policy.js';
+import { effectivePolicy, readPolicyFile, type EffectivePolicy } from './policy-file.js';
 import { VaultScanner } from './vault-scan.js';
 import { NoteWriter, PARTIAL_HASH_PREFIX, WriteError, type WriteResult } from './writer.js';
 
@@ -37,8 +38,9 @@ export function instructionsFor(policy: McpPolicy): string {
     const where = policy.writeFolders.map((f) => (f ? `"${f}/"` : 'anywhere in the vault')).join(', ');
     lines.push(
       `Writing is enabled, but only inside: ${where}. Other folders are read-only.`,
+      'The Nopsidian app can also disable or narrow writing at any time. Call get_write_policy for the effective policy before writing.',
       'For databases use add_database_row / update_database_row (values are validated against the property types and select options) instead of hand-writing frontmatter.',
-      'Workflow: search first to avoid duplicates; create_note for new notes; append_to_note to add to an existing note (optionally under a heading); update_note replaces a whole note and needs the hash from a fresh read_note (it fails if the note changed since).',
+      'Workflow: search first to avoid duplicates; create_note for new notes; append_to_note to add to an existing note (optionally under a heading); edit_note for a small change when old_text occurs exactly once (0 or 2+ occurrences are refused); update_note replaces a whole note. Both edit_note and update_note need the hash from a fresh read_note and fail if the note changed since.',
       'Write notes in the language the user uses. Link related notes with [[wikilinks]] to existing note titles. Never invent facts; every write is recorded in an audit log the user can review.',
     );
   } else {
@@ -71,6 +73,21 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
   const fresh = () => scanner.refresh();
   const dbs = new DatabaseAccess(policy.root, scanner);
   const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false } as const;
+  /** 매 쓰기 요청마다 앱 정책 파일을 다시 읽어 인자와의 교집합을 적용한다. */
+  const currentPolicy = (): EffectivePolicy => effectivePolicy(policy, readPolicyFile(policy.root));
+  /** 정책상 쓸 수 없으면 감사 기록에 denied 를 남기고 도구 오류를 돌려준다. */
+  const guardWrite = (tool: string, path: string): ToolResult | null => {
+    const effective = currentPolicy();
+    writer.setPolicy(effective);
+    if (effective.write) return null;
+    try {
+      writer.denyRequest(tool, path, effective.reason ?? 'policy-disabled', effective.message ?? '쓰기가 꺼져 있어요');
+    } catch (e) {
+      if (e instanceof WriteError) return fail(`${tool} refused (${e.code}): ${e.message}`);
+      return fail(`${tool} failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    return null;
+  };
 
   server.registerTool(
     'search_notes',
@@ -254,7 +271,9 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
   if (!policy.write) return { server, scanner };
 
   const writeHint = (title: string, destructive: boolean) => ({ title, readOnlyHint: false, destructiveHint: destructive, idempotentHint: false, openWorldHint: false });
-  const run = (tool: string, fn: () => WriteResult): ToolResult => {
+  const run = (tool: string, path: string, fn: () => WriteResult): ToolResult => {
+    const denied = guardWrite(tool, path);
+    if (denied) return denied;
     try {
       fresh(); // 디스크의 최신 상태에서 검증한다(고유 ID 계산 등)
       const r = fn();
@@ -281,7 +300,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       },
       annotations: writeHint('Create a note', false),
     },
-    async ({ path, content, title, tags, properties }) => run('create_note', () => writer.create('create_note', path, content, { title, tags, properties })),
+    async ({ path, content, title, tags, properties }) => run('create_note', path, () => writer.create('create_note', path, content, { title, tags, properties })),
   );
 
   server.registerTool(
@@ -296,7 +315,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       },
       annotations: writeHint('Append to a note', false),
     },
-    async ({ path, content, heading }) => run('append_to_note', () => writer.append('append_to_note', path, content, heading)),
+    async ({ path, content, heading }) => run('append_to_note', path, () => writer.append('append_to_note', path, content, heading)),
   );
 
   server.registerTool(
@@ -314,7 +333,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       },
       annotations: writeHint('Replace a note', true),
     },
-    async ({ path, content, base_hash }) => run('update_note', () => writer.update('update_note', path, content, base_hash)),
+    async ({ path, content, base_hash }) => run('update_note', path, () => writer.update('update_note', path, content, base_hash)),
   );
 
   server.registerTool(
@@ -335,7 +354,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       annotations: writeHint('Add a database row', false),
     },
     async ({ database, title, values, body, template }) =>
-      run('add_database_row', () => {
+      run('add_database_row', database, () => {
         const folder = dbs.resolveFolder(database);
         const { rel, text } = dbs.buildRow(folder, title, values ?? {}, body ?? '', new Date(), template);
         return writer.createExact('add_database_row', rel, text);
@@ -354,10 +373,26 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       annotations: writeHint('Update database row values', false),
     },
     async ({ path, values }) =>
-      run('update_database_row', () => {
+      run('update_database_row', path, () => {
         const notePath = path.normalize('NFC').replace(/\\/g, '/').replace(/^\.?\//, '');
         return writer.modify('update_database_row', notePath, dbs.applyValues(notePath.endsWith('.md') ? notePath : `${notePath}.md`, values));
       }),
+  );
+
+  server.registerTool(
+    'edit_note',
+    {
+      title: 'Edit a note',
+      description: `Replace exactly ONE occurrence of old_text with new_text. old_text must occur exactly once in the current note on disk; 0 or 2+ occurrences are refused with the count and nothing changes. Requires the hash from a fresh read_note (a "partial:" hash is accepted because the full note on disk is checked for uniqueness). Handles CRLF/LF and NFC/NFD text consistently and keeps the note's line-ending/normalization style. The previous version is kept in the note history. Allowed folders: ${folders}.`,
+      inputSchema: {
+        path: z.string().min(1).describe('Existing note path'),
+        old_text: z.string().min(1).describe('The exact text to replace; it must occur exactly once in the note'),
+        new_text: z.string().describe('Replacement text (can be empty to delete old_text)'),
+        base_hash: z.string().min(8).describe('The "hash" returned by read_note'),
+      },
+      annotations: writeHint('Edit a note', true),
+    },
+    async ({ path, old_text, new_text, base_hash }) => run('edit_note', path, () => writer.edit('edit_note', path, old_text, new_text, base_hash)),
   );
 
   server.registerTool(
@@ -372,12 +407,13 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       },
       annotations: writeHint('Append to a daily note', false),
     },
-    async ({ content, date, heading }) =>
-      run('append_to_daily_note', () => {
-        const day = date ?? localDate(new Date());
-        const rel = `${dailyFolderOf(policy.root)}/${day}.md`;
-        return existsSync(path.join(policy.root, rel)) ? writer.append('append_to_daily_note', rel, content, heading) : writer.create('append_to_daily_note', rel, content, { title: day });
-      }),
+    async ({ content, date, heading }) => {
+      const day = date ?? localDate(new Date());
+      const rel = `${dailyFolderOf(policy.root)}/${day}.md`;
+      return run('append_to_daily_note', rel, () =>
+        existsSync(path.join(policy.root, rel)) ? writer.append('append_to_daily_note', rel, content, heading) : writer.create('append_to_daily_note', rel, content, { title: day }),
+      );
+    },
   );
 
   server.registerTool(
@@ -394,6 +430,8 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       annotations: writeHint('Comment on a note', false),
     },
     async ({ path, text, quote }) => {
+      const denied = guardWrite('add_comment', path);
+      if (denied) return denied;
       try {
         fresh();
         const n = findNote(scanner, path);
@@ -414,14 +452,19 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       inputSchema: {},
       annotations: { title: 'Write policy', ...readOnly },
     },
-    async () =>
-      ok({
-        write: true,
-        folders: policy.writeFolders.map((f) => f || '(whole vault)'),
-        maxWritesPerMinute: policy.maxWritesPerMinute,
-        maxBytes: policy.maxBytes,
-        canWriteExample: canWrite(policy, `${policy.writeFolders[0] ? `${policy.writeFolders[0]}/` : ''}Example.md`),
-      }),
+    async () => {
+      const effective = currentPolicy();
+      return ok({
+        write: effective.write,
+        folders: effective.writeFolders.map((f) => f || '(whole vault)'),
+        maxWritesPerMinute: effective.maxWritesPerMinute,
+        maxBytes: effective.maxBytes,
+        source: effective.source,
+        reason: effective.reason ?? null,
+        error: effective.message ?? null,
+        canWriteExample: effective.write && canWrite(effective, `${effective.writeFolders[0] ? `${effective.writeFolders[0]}/` : ''}Example.md`),
+      });
+    },
   );
 
   return { server, scanner };

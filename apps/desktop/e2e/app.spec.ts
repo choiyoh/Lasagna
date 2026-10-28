@@ -1926,7 +1926,7 @@ views:
     const exe = shown[2]!;
     const launchArgs = shown[3]!.split(' ');
     expect(existsSync(exe)).toBe(true);
-    await settings.getByLabel('에이전트가 노트 쓰기 허용').uncheck();
+    // 쓰기를 켠 채로 연결한다(앱 정책 파일도 write=true). 스위치를 끄는 동작은 아래 정책 테스트가 맡는다.
     await page.keyboard.press('Escape');
 
     // 앱이 안내한 실행 파일·인자를 그대로 실행해 MCP(stdio)로 붙는다(별도 Node.js 없이)
@@ -1934,7 +1934,7 @@ views:
     await client.connect(new StdioClientTransport({ command: exe, args: [...launchArgs, '--vault', vaultDir, '--write'], stderr: 'ignore' }));
     try {
       const tools = (await client.listTools()).tools.map((t) => t.name);
-      expect(tools).toEqual(expect.arrayContaining(['search_notes', 'create_note', 'append_to_note', 'list_databases', 'query_database', 'add_database_row', 'update_database_row', 'append_to_daily_note']));
+      expect(tools).toEqual(expect.arrayContaining(['search_notes', 'create_note', 'append_to_note', 'edit_note', 'list_databases', 'query_database', 'add_database_row', 'update_database_row', 'append_to_daily_note']));
       const text = (r: unknown) => (r as { content: { text: string }[] }).content[0]!.text;
       // 읽기: 앱에 있는 노트를 검색한다
       expect(text(await client.callTool({ name: 'search_notes', arguments: { query: 'Nopsidian' } }))).toContain('프로젝트/Nopsidian.md');
@@ -1983,6 +1983,53 @@ views:
     await expect.poll(() => existsSync(note), { timeout: 8000 }).toBe(false);
     await expect(audit.locator('li', { hasText: '되돌림' }).first()).toBeVisible();
     await page.keyboard.press('Escape');
+  });
+
+  test('AI 에이전트(MCP): 앱 스위치를 끄면 이미 연결된 세션의 다음 쓰기가 거부되고 다시 켜면 복구된다', async () => {
+    const page = await app.firstWindow();
+    await page.keyboard.press('ControlOrMeta+,');
+    const settings = page.getByRole('dialog', { name: '설정' });
+    const write = settings.getByLabel('에이전트가 노트 쓰기 허용');
+    const policyFile = path.join(vaultDir, '.nopsidian', 'mcp-policy.json');
+    const policyWrite = () => {
+      try {
+        return (JSON.parse(readFileSync(policyFile, 'utf8')) as { write?: boolean }).write ?? null;
+      } catch {
+        return null;
+      }
+    };
+    // 이전 테스트가 꺼 두었을 수 있으므로 한 번 껐다 켜서 정책 파일을 확실히 만든다.
+    if (await write.isChecked()) await write.uncheck();
+    await write.check();
+    await expect.poll(policyWrite).toBe(true);
+
+    const client = new Client({ name: 'policy-e2e', version: '1' });
+    await client.connect(
+      new StdioClientTransport({ command: executable, args: ['--mcp-stdio', '--vault', vaultDir, '--write', '--write-folder', 'AI'], stderr: 'ignore' }),
+    );
+    const callText = async (name: string, args: Record<string, unknown>) => {
+      const r = (await client.callTool({ name, arguments: args })) as { isError?: boolean; content: { text: string }[] };
+      return { isError: !!r.isError, text: r.content[0]!.text };
+    };
+    try {
+      expect((await callText('create_note', { path: 'AI/policy-live', content: '켜짐' })).isError).toBe(false);
+      await write.uncheck();
+      await expect.poll(policyWrite).toBe(false);
+      const denied = await callText('create_note', { path: 'AI/policy-blocked', content: 'x' });
+      expect(denied.isError).toBe(true);
+      expect(denied.text).toContain('policy-disabled');
+      expect(existsSync(path.join(vaultDir, 'AI/policy-blocked.md'))).toBe(false);
+      await write.check();
+      await expect.poll(policyWrite).toBe(true);
+      expect((await callText('create_note', { path: 'AI/policy-recovered', content: '다시 켜짐' })).isError).toBe(false);
+    } finally {
+      await client.close();
+      await write.uncheck();
+      await expect.poll(policyWrite).toBe(false);
+      await page.keyboard.press('Escape');
+    }
+    const audit = readFileSync(path.join(vaultDir, '.nopsidian', 'mcp-audit.jsonl'), 'utf8');
+    expect(audit).toContain('policy-disabled');
   });
 
   test('노트 커버: 그라디언트·업로드한 이미지를 고르고, 바꾸고, 제거한다', async () => {

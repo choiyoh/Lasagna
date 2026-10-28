@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { defaultServerName, folderContains, folderError, isValidServerName, mcpSnippet, type McpInfo } from './mcp-snippet';
-import { loadMcpSettings, saveMcpSettings, serverNameConflict, type McpSettingsConfig } from './mcp-settings';
+import { configFromPolicy, loadMcpSettings, policyFolders, saveMcpSettings, serverNameConflict, type McpSettingsConfig } from './mcp-settings';
 
 interface AuditRow {
   t: string;
@@ -22,6 +22,8 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   /** 되돌리기 확인 중인 기록과 결과 문구 */
   const [confirming, setConfirming] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  /** 앱 정책 파일을 읽거나 쓰지 못한 이유. 있으면 쓰기는 서버에서 차단된다. */
+  const [policyError, setPolicyError] = useState('');
   const revert = async (a: AuditRow) => {
     try {
       const r = await window.nops.mcp.revert({ t: a.t, path: a.path });
@@ -38,26 +40,74 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   useEffect(() => {
     void window.nops.mcp.info().then((next) => {
       setInfo(next);
-      setCfg(loadMcpSettings(next.vaultId, next.vaultName));
+      const loaded = loadMcpSettings(next.vaultId, next.vaultName);
+      // 예전 UI 는 빈 폴더를 볼트 전체로 봤다. 정책 파일의 표기(.)로 옮겨 입력 중 빈 값과 구분한다.
+      const local = loaded.folder.trim() === '' ? { ...loaded, folder: '.' } : loaded;
+      void window.nops.mcp.policyGet()
+        .then((read) => {
+          if (read.policy) {
+            const merged = { ...local, ...configFromPolicy(read.policy, next.dailyFolder) };
+            setCfg(merged);
+            saveMcpSettings(next.vaultId, merged);
+            setPolicyError(read.error ?? '');
+            return;
+          }
+          // 파일이 깨졌으면 서버가 쓰기를 막으므로 화면도 안전한 쪽(꺼짐)으로 보여 준다.
+          setCfg(read.error ? { ...local, write: false } : local);
+          setPolicyError(read.error ?? '');
+        })
+        .catch((e) => {
+          setCfg({ ...local, write: false });
+          setPolicyError(e instanceof Error ? e.message : String(e));
+        });
     });
     refresh();
   }, [refresh]);
 
   if (!info) return null;
   /** 설정은 볼트마다 따로 저장한다. 바뀔 때마다 이 볼트에만 쓴다. */
-  const initial: McpSettingsConfig = { write: false, folder: 'AI', allowDailyFolder: false, name: defaultServerName(info), client: 'claude-code' };
+  const initial: McpSettingsConfig = { write: false, folder: 'AI', allowDailyFolder: false, maxWritesPerMinute: 30, name: defaultServerName(info), client: 'claude-code' };
   const current = cfg ?? initial;
+  /** 빈 폴더는 입력 중일 수 있으므로 정책 파일에 쓰지 않는다(볼트 전체는 `.`). */
+  const folderProblem = (folder: string) => (folder.trim() === '' ? '쓸 폴더를 입력하세요. 볼트 전체는 .(점)으로 적어요.' : folderError(folder));
+  /** 바뀐 정책 값을 파일(정본)에 쓴다. 파일이 없으면 서버는 기존 인자 동작을 유지한다. */
+  const savePolicy = (next: McpSettingsConfig) => {
+    const folderIssue = folderProblem(next.folder);
+    const dailyIssue = next.allowDailyFolder ? folderProblem(info.dailyFolder) : null;
+    let folders: string[];
+    if (folderIssue || dailyIssue) {
+      if (next.write) {
+        setPolicyError(`${folderIssue ?? dailyIssue} 폴더를 고친 뒤 다시 켜 주세요.`);
+        return; // 켠 상태의 잘못된 폴더는 저장하지 않는다
+      }
+      folders = ['AI']; // 끈 상태는 폴더와 무관하므로 정책 파일을 유효하게 남긴다
+    } else {
+      try {
+        folders = policyFolders(next.folder, next.allowDailyFolder, info.dailyFolder);
+      } catch {
+        return;
+      }
+    }
+    void window.nops.mcp.policySet({ write: next.write, writeFolders: folders, maxWritesPerMinute: next.maxWritesPerMinute })
+      .then((saved) => {
+        setPolicyError('');
+        // 응답이 늦게 와도 그 사이 친 폴더·이름을 되돌리지 않는다.
+        setCfg((prev) => (prev ? { ...prev, maxWritesPerMinute: saved.maxWritesPerMinute } : prev));
+      })
+      .catch((e) => setPolicyError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)));
+  };
   const update = (patch: Partial<McpSettingsConfig>) => {
     const next = { ...current, ...patch };
     setCfg(next);
     saveMcpSettings(info.vaultId, next);
+    if ('write' in patch || 'folder' in patch || 'allowDailyFolder' in patch || 'maxWritesPerMinute' in patch) savePolicy(next);
   };
   /** 이미 되돌린 기록(`revert:<t>` 메모가 붙은 되돌림 기록이 가리키는 것) */
   const reverted = new Set(audit.filter((a) => a.action === 'revert' && a.note?.startsWith('revert:')).map((a) => `${a.note!.slice(7)}|${a.path}`));
   const nameOk = !current.name.trim() || isValidServerName(current.name);
   const conflict = nameOk && current.name.trim() !== '' && serverNameConflict(current.name, info.vaultId);
-  const folderIssue = current.write ? folderError(current.folder) : null;
-  const dailyIssue = current.write && current.allowDailyFolder ? folderError(info.dailyFolder) : null;
+  const folderIssue = current.write ? folderProblem(current.folder) : null;
+  const dailyIssue = current.write && current.allowDailyFolder ? folderProblem(info.dailyFolder) : null;
   const invalidFolder = folderIssue ?? dailyIssue;
   /** 데일리 폴더가 이미 허용 범위(볼트 전체 또는 상위 폴더)에 들어 있는가 — 정책의 canWrite 와 같은 판정 */
   const dailyCovered = !folderIssue && folderContains(current.folder, info.dailyFolder);
@@ -84,6 +134,14 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
         </span>
         <input type="checkbox" checked={current.write} onChange={(e) => update({ write: e.target.checked })} aria-label="에이전트가 노트 쓰기 허용" />
       </label>
+      <p className="muted small" data-testid="mcp-policy-note">
+        이 설정을 바꾸면 볼트의 <code>.nopsidian/mcp-policy.json</code> 에 저장돼 이미 연결된 에이전트에도 다음 쓰기부터 바로 적용돼요. 쓰기 도구 없이 연결한 에이전트는 다시 연결해야 해요.
+      </p>
+      {policyError && (
+        <p className="warn small" data-testid="mcp-policy-warning">
+          {policyError} 설정을 바꾸면 새 정책으로 저장을 다시 시도해요.
+        </p>
+      )}
       {current.write && (
         <>
           <label className="settings__row">

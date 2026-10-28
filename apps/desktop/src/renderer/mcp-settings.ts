@@ -1,11 +1,20 @@
-import { defaultServerName, type McpClientId } from './mcp-snippet';
+import { defaultServerName, folderContains, snippetWriteFolders, type McpClientId } from './mcp-snippet';
 
 export interface McpSettingsConfig {
   write: boolean;
   folder: string;
   allowDailyFolder: boolean;
+  /** 볼트 정책 파일의 분당 쓰기 한도(화면에는 노출하지 않고 보존한다) */
+  maxWritesPerMinute: number;
   name: string;
   client: McpClientId;
+}
+
+/** .nopsidian/mcp-policy.json 에서 앱 화면이 쓰는 값(정본) */
+export interface McpPolicyValues {
+  write: boolean;
+  writeFolders: string[];
+  maxWritesPerMinute: number;
 }
 
 /** 예전 전역 키. 볼트 id 가 없던 시절 설정은 처음 연 볼트 하나에만 옮긴다. */
@@ -36,6 +45,10 @@ const normalize = (v: Partial<McpSettingsConfig> | null, vaultName: string, vaul
   write: !!v?.write,
   folder: typeof v?.folder === 'string' ? v.folder : 'AI',
   allowDailyFolder: !!v?.allowDailyFolder,
+  maxWritesPerMinute:
+    typeof v?.maxWritesPerMinute === 'number' && Number.isInteger(v.maxWritesPerMinute) && v.maxWritesPerMinute >= 1 && v.maxWritesPerMinute <= 1000
+      ? v.maxWritesPerMinute
+      : 30,
   name: typeof v?.name === 'string' && v.name.trim() ? v.name.trim() : defaultServerName({ vaultName, vaultId }),
   client: CLIENT_IDS.includes(v?.client as McpClientId) ? (v!.client as McpClientId) : 'claude-code',
 });
@@ -85,6 +98,19 @@ export function saveMcpSettings(vaultId: string, cfg: McpSettingsConfig, storage
   } catch {
     /* 저장 못 해도 이번 실행에는 적용된다 */
   }
+}
+
+/** 정책 파일의 폴더 목록을 앱 화면의 단일 폴더 + 오늘의 노트 체크로 되돌린다. */
+export function configFromPolicy(policy: McpPolicyValues, dailyFolder: string): Pick<McpSettingsConfig, 'write' | 'folder' | 'allowDailyFolder' | 'maxWritesPerMinute'> {
+  const whole = policy.writeFolders.includes('');
+  const folder = whole ? '.' : (policy.writeFolders[0] ?? 'AI');
+  const allowDailyFolder = policy.writeFolders.some((f) => folderContains(f, dailyFolder));
+  return { write: policy.write, folder, allowDailyFolder, maxWritesPerMinute: policy.maxWritesPerMinute };
+}
+
+/** 앱 화면의 폴더·오늘의 노트 체크를 정책 파일의 writeFolders 로 바꾼다(잘못된 폴더면 예외). */
+export function policyFolders(folder: string, allowDailyFolder: boolean, dailyFolder: string): string[] {
+  return snippetWriteFolders({ write: true, folder, allowDailyFolder, dailyFolder });
 }
 
 /** 다른 볼트의 설정이 같은 서버 이름을 쓰고 있는가. 이름을 바꾸기 전에 경고하는 데 쓴다. */

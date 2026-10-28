@@ -469,6 +469,12 @@ nopsidian/
 - **댓글**: 노트마다 `.nopsidian/comments/<경로 해시>.json`(`packages/core/src/comments.ts`, 드라이브 동기화 대상). 오른쪽 패널 "댓글" 탭(안 푼 댓글 수 배지) — 남기기(⌘Enter)·선택한 글 인용·해결/다시 열기·삭제. 노트·폴더 이름 변경/되돌리기에 따라 댓글 파일이 따라간다(`relocateComments`). 노트 본문은 건드리지 않는다. **MCP**: `list_comments`(읽기), `add_comment`(쓰기를 켰을 때, 허용 폴더 밖 노트에도 가능 — 노트를 바꾸지 않는 검토 의견 통로, 횟수 한도·감사 기록 동일).
 - **`@` 날짜**: `@오늘 @내일 @금 @다음 주 월 @+3 @10-20 @2026-10-20` → 그 날짜의 노트 링크(`[[2026-10-20]]`)를 넣는다(데일리 노트 이름이 날짜). 후보 계산은 순수 함수 `dateSuggestions`(`date-mention.ts`), 키 입력은 링크 자동완성처럼 기본 키맵보다 먼저(priority) 받는다.
 
+### MCP 쓰기 정책·`edit_note` (v0.7.2)
+- **Track A — 연결 1회 완주**: Claude Code·Claude Desktop·Codex·Cursor·VS Code·Gemini CLI 6종 스니펫, `-s user`, 볼트별 설정, 기본 이름 `nopsidian-<슬러그>-<해시>`, 오늘의 노트 허용, `docs/mcp.md` 갱신.
+- **Track B — 첫 호출 지연**: `.nopsidian/mcp-cache.json` 사이드카(mtime·size·ctime, 본문 사본 포함, 0600, 동기화 제외). 1만 노트 패키징 앱에서 첫 호출 p95 415ms(캐시 없음 5.8초), 두 번째 55ms. 손상·구버전·읽기 전용은 전체 스캔으로 폴백.
+- **Track C — 쓰기 권한 정본화 + `edit_note`**: 앱이 `.nopsidian/mcp-policy.json`(version 1, write, writeFolders, maxWritesPerMinute)을 정본으로 쓰고, MCP 서버는 인자와 파일의 교집합을 매 쓰기마다 적용한다. 파일이 없으면 기존 동작, 깨졌으면 `policy-invalid`로 안전하게 거부. 이미 연결된 세션도 앱 스위치가 다음 쓰기부터 적용된다. `add_comment`도 파일이 쓰기를 끄면 거부. `edit_note`는 `old_text`가 정확히 한 곳일 때만 바꾸고 0/2곳·낡은 해시·허용 폴더 밖·횟수·크기 한도를 지키며 감사·버전 기록·되돌리기를 그대로 쓴다. CRLF/LF·NFC/NFD 표기 유지. 정책 파일은 동기화하지 않는다(기기별 연결 설정).
+- 검증: typecheck 7/7·lint 0·전체 테스트·MCP e2e. 앱 스위치를 끄고 이미 연결된 MCP 세션의 다음 쓰기가 `policy-disabled`로 거부되는 것을 패키징 앱에서 확인.
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

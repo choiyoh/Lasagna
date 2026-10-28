@@ -1,4 +1,4 @@
-import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync, type Stats } from 'node:fs';
+import { accessSync, closeSync, constants, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, type Stats } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import {
@@ -72,13 +72,15 @@ const SNIPPET_RADIUS = 60;
 /** 백링크 문맥 줄 길이 상한. */
 const CONTEXT_MAX_CHARS = 200;
 /** 캐시 형식이 바뀌면 올린다. 다르면 캐시를 버리고 전체를 다시 읽는다. */
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 /** 볼트의 `.nopsidian/` 아래에 두는 보조 캐시. 동기화 대상이 아니고, 점 폴더라 스캔에서도 빠진다. */
 const CACHE_FILE = 'mcp-cache.json';
 
 /** 캐시에 담는 노트 하나: 파싱 결과 + 검색·스니펫에 쓰는 본문 사본 */
 interface CachedNote {
   note: ScannedNote;
+  /** 내용 변경 시각. mtime 을 보존하는 백업·복사에서도 내용 변경을 잡는다. */
+  ctimeMs: number;
   /** 본문(프런트매터 제외) 사본. 상한까지만 보관한다. */
   body: string;
   bodyLower: string;
@@ -92,6 +94,7 @@ interface CachedNote {
 interface FoundFile {
   abs: string;
   mtimeMs: number;
+  ctimeMs: number;
   size: number;
 }
 
@@ -108,6 +111,7 @@ type CacheLink = Omit<ScannedLink, 'resolved'>;
 interface CacheEntry {
   path: string;
   mtimeMs: number;
+  ctimeMs: number;
   size: number;
   title: string;
   aliases: string[];
@@ -134,6 +138,27 @@ export interface VaultScannerOptions {
   cache?: boolean;
   /** 캐시 파일 경로. 기본 `<볼트>/.nopsidian/mcp-cache.json` */
   cachePath?: string;
+  /** 변경 뒤 캐시 저장까지 기다리는 시간(ms). 도구 응답 경로에서 저장을 빼기 위한 것. 기본 2000 */
+  cacheSaveDelayMs?: number;
+  /** 이보다 큰 캐시 파일은 읽지 않고 전체 스캔한다(기본 256MB). */
+  cacheMaxBytes?: number;
+}
+
+/** 아직 저장하지 못한 스캐너. 프로세스가 정상 종료할 때 마지막으로 한 번 저장한다. */
+const pendingCacheSaves = new Set<VaultScanner>();
+let cacheExitFlushInstalled = false;
+
+function trackPendingCacheSave(scanner: VaultScanner): void {
+  pendingCacheSaves.add(scanner);
+  if (cacheExitFlushInstalled) return;
+  cacheExitFlushInstalled = true;
+  const flush = () => {
+    // 성공한 스캐너는 saveCache 가 스스로 뺀다. 실패한 것은 exit 에서 한 번 더 시도한다.
+    for (const s of [...pendingCacheSaves]) s.flushCache();
+  };
+  // beforeExit 는 이벤트 루프가 빌 때, exit 는 process.exit·정상 종료 때 불린다.
+  process.once('beforeExit', flush);
+  process.once('exit', flush);
 }
 
 export class VaultScanner {
@@ -146,17 +171,47 @@ export class VaultScanner {
   /** 경로·제목·별칭 구성 지문 — 바뀌었을 때만 리졸버를 다시 만든다 */
   private resolutionKey = '';
   private readonly cachePath: string | null;
+  private readonly cacheSaveDelayMs: number;
+  private readonly cacheMaxBytes: number;
   /** 이번에 새로 파싱했거나 노트 집합이 바뀌어 캐시를 다시 써야 하는가 */
   private cacheDirty = false;
-  /** 캐시를 한 번 쓰지 못했으면 이 프로세스에서는 더 시도하지 않는다(읽기 전용 볼트) */
-  private cacheWriteBlocked = false;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
   /** 마지막 refresh() 결과(테스트·진단용) */
   readonly scanStats = { parsed: 0, reused: 0, cacheLoaded: 0, cacheSaved: false };
 
   constructor(root: string, opts: VaultScannerOptions = {}) {
     this.root = path.resolve(root);
     this.cachePath = opts.cache === false ? null : path.resolve(opts.cachePath ?? path.join(this.root, '.nopsidian', CACHE_FILE));
+    this.cacheSaveDelayMs = opts.cacheSaveDelayMs ?? 2000;
+    this.cacheMaxBytes = opts.cacheMaxBytes ?? 256 * 1024 * 1024;
     if (this.cachePath) this.loadCache();
+  }
+
+  /** 대기 중인 캐시 저장을 지금 실행한다(프로세스 종료·테스트용). */
+  flushCache(): void {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    if (this.cacheDirty) this.saveCache();
+  }
+
+  /** 캐시 저장을 도구 응답 경로 밖으로 미룬다. 삭제는 본문을 빨리 지우려고 바로 저장한다. */
+  private scheduleCacheSave(immediate: boolean): void {
+    if (!this.cachePath || !this.cacheDirty) return;
+    if (immediate) {
+      trackPendingCacheSave(this);
+      this.flushCache();
+      return;
+    }
+    if (this.saveTimer) return;
+    trackPendingCacheSave(this);
+    const timer = setTimeout(() => {
+      this.saveTimer = null;
+      this.saveCache();
+    }, this.cacheSaveDelayMs);
+    (timer as { unref?: () => void }).unref?.();
+    this.saveTimer = timer;
   }
 
   /** 캐시가 있으면 메모리에 올린다. 없거나 깨졌으면 조용히 전체 스캔으로 돌아간다. */
@@ -164,6 +219,10 @@ export class VaultScanner {
     if (!this.cachePath) return;
     let raw: string;
     try {
+      if (statSync(this.cachePath).size > this.cacheMaxBytes) {
+        this.cacheDirty = true; // 너무 큰 캐시는 읽지 않고 전체 스캔한다
+        return;
+      }
       raw = readFileSync(this.cachePath, 'utf8');
     } catch {
       return; // 캐시 없음
@@ -179,12 +238,21 @@ export class VaultScanner {
 
   /** 이번 스캔 결과를 원자적으로 캐시에 쓴다. `.nopsidian/`에 쓸 수 없으면 조용히 넘어간다. */
   private saveCache(): void {
-    if (!this.cachePath || this.cacheWriteBlocked) return;
+    if (!this.cachePath || !this.cacheDirty) return;
+    // `.nopsidian` 이 없거나 읽기 전용이면 여기서 빨리 실패하고, 캐시 없이 지금처럼 동작한다.
+    // cacheDirty 를 남겨 두어 다음 refresh(또는 종료 flush)에서 다시 시도한다.
     if (!existsSync(this.root)) return; // 없는 볼트 폴더를 캐시가 만들지 않게 한다
     try {
+      const dir = path.dirname(this.cachePath);
+      mkdirSync(dir, { recursive: true });
+      accessSync(dir, constants.W_OK); // 읽기 전용이면 큰 JSON 을 만들기 전에 실패한다
       const entries = [...this.notes.values()].sort((a, b) => compareStrings(a.note.path, b.note.path)).map(toCacheEntry);
       const data = JSON.stringify({ version: CACHE_VERSION, bodyLimit: MAX_BODY_CHARS, entries } satisfies CacheFile);
-      mkdirSync(path.dirname(this.cachePath), { recursive: true });
+      if (Buffer.byteLength(data, 'utf8') > this.cacheMaxBytes) {
+        this.cacheDirty = false; // 상한을 넘는 캐시는 쓰지 않는다(다음 실행도 전체 스캔)
+        pendingCacheSaves.delete(this);
+        return;
+      }
       // 같은 파일을 쓰는 서버가 둘 이상이어도 각자 다른 임시 파일을 쓴 뒤 rename 하므로 반쯤 쓴 JSON 이 보이지 않는다.
       const tmp = `${this.cachePath}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
       try {
@@ -206,14 +274,14 @@ export class VaultScanner {
       }
       this.cacheDirty = false;
       this.scanStats.cacheSaved = true;
+      pendingCacheSaves.delete(this);
     } catch {
-      // `.nopsidian` 이 없거나 읽기 전용이면 캐시 없이 지금처럼 동작한다. 다음 프로세스에서 다시 시도한다.
-      this.cacheWriteBlocked = true;
+      // 일시 오류(Windows rename EPERM/EBUSY 등)는 다음 refresh 에서 다시 시도한다.
     }
   }
 
   /**
-   * 디스크를 훑어 캐시를 맞춘다. mtime+size 가 같은 파일은 다시 읽지 않고, 사라진 파일은 캐시에서 뺀다.
+   * 디스크를 훑어 캐시를 맞춘다. mtime+size+ctime 이 같은 파일은 다시 읽지 않고, 사라진 파일은 캐시에서 뺀다.
    * 노트 집합(경로·제목·별칭)이 바뀌면 링크 리졸버를 다시 만들고 모든 링크를 다시 해석한다.
    */
   refresh(): void {
@@ -222,17 +290,19 @@ export class VaultScanner {
     this.scanStats.cacheSaved = false;
     const found = walkMarkdownFiles(this.root);
     let changed = false;
+    let removed = false;
     for (const rel of [...this.notes.keys()]) {
       if (!found.has(rel)) {
         this.notes.delete(rel);
         changed = true;
+        removed = true;
       }
     }
 
     const reparsed: string[] = [];
     for (const [rel, file] of found) {
       const cached = this.notes.get(rel);
-      if (cached && cached.note.mtimeMs === file.mtimeMs && cached.note.size === file.size) {
+      if (cached && cached.note.mtimeMs === file.mtimeMs && cached.ctimeMs === file.ctimeMs && cached.note.size === file.size) {
         this.scanStats.reused++;
         continue;
       }
@@ -244,7 +314,10 @@ export class VaultScanner {
         changed = true;
       } else {
         // 읽을 수 없는 파일은 조용히 캐시에서 뺀다
-        if (this.notes.delete(rel)) changed = true;
+        if (this.notes.delete(rel)) {
+          changed = true;
+          removed = true;
+        }
       }
     }
 
@@ -261,17 +334,15 @@ export class VaultScanner {
       this.resolver = createLinkResolver(pages, aliases);
       this.resolutionKey = key;
       for (const cached of this.notes.values()) resolveLinks(this.resolver, this.pages, cached);
-      if (changed) this.cacheDirty = true;
-      if (this.cacheDirty) this.saveCache();
-      return;
-    }
-    // 해석 입력이 그대로면 이번에 새로 파싱한 노트의 링크만 계산하면 된다.
-    for (const rel of reparsed) {
-      const cached = this.notes.get(rel);
-      if (cached) resolveLinks(this.resolver, this.pages, cached);
+    } else {
+      // 해석 입력이 그대로면 이번에 새로 파싱한 노트의 링크만 계산하면 된다.
+      for (const rel of reparsed) {
+        const cached = this.notes.get(rel);
+        if (cached) resolveLinks(this.resolver, this.pages, cached);
+      }
     }
     if (changed) this.cacheDirty = true;
-    if (this.cacheDirty) this.saveCache();
+    if (this.cacheDirty) this.scheduleCacheSave(removed);
   }
 
   /** 경로 정렬된 노트 목록. folder(하위 포함)·tag 로 거르기 */
@@ -396,7 +467,7 @@ function walkMarkdownFiles(root: string): Map<string, FoundFile> {
         continue;
       }
       if (!stat.isFile() || !isMarkdown(name)) continue;
-      out.set(rel, { abs, mtimeMs: stat.mtimeMs, size: stat.size });
+      out.set(rel, { abs, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, size: stat.size });
     }
   };
   visit(root, '');
@@ -429,7 +500,7 @@ function readNote(rel: string, file: FoundFile): CachedNote | null {
   const frontmatterEnd = parsed.frontmatter?.end ?? 0;
   const frontmatter = content.slice(0, frontmatterEnd);
   const body = content.slice(frontmatterEnd, frontmatterEnd + MAX_BODY_CHARS);
-  return { note, body, bodyLower: body.toLowerCase(), frontmatter, lineBase: countNewlines(frontmatter) };
+  return { note, ctimeMs: file.ctimeMs, body, bodyLower: body.toLowerCase(), frontmatter, lineBase: countNewlines(frontmatter) };
 }
 
 function buildNote(rel: string, file: { mtimeMs: number; size: number }, content: string, parsed: ParsedNote): ScannedNote {
@@ -489,6 +560,7 @@ function toCacheEntry(cached: CachedNote): CacheEntry {
   return {
     path: note.path,
     mtimeMs: note.mtimeMs,
+    ctimeMs: cached.ctimeMs,
     size: note.size,
     title: note.title,
     aliases: note.aliases,
@@ -530,8 +602,9 @@ function parseCacheEntry(raw: unknown): CachedNote | null {
   if (!isRecord(raw)) return null;
   const rel = raw.path;
   if (typeof rel !== 'string' || !isVaultNotePath(rel)) return null;
-  const { mtimeMs, size, title, hash, body, frontmatter } = raw;
+  const { mtimeMs, ctimeMs, size, title, hash, body, frontmatter } = raw;
   if (typeof mtimeMs !== 'number' || !Number.isFinite(mtimeMs) || mtimeMs < 0) return null;
+  if (typeof ctimeMs !== 'number' || !Number.isFinite(ctimeMs) || ctimeMs < 0) return null;
   if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) return null;
   if (typeof title !== 'string' || typeof hash !== 'string' || typeof body !== 'string' || typeof frontmatter !== 'string') return null;
   const aliases = raw.aliases;
@@ -546,6 +619,7 @@ function parseCacheEntry(raw: unknown): CachedNote | null {
   const keptBody = body.slice(0, MAX_BODY_CHARS);
   return {
     note: { path: rel, title, aliases, tags, headings, links, mtimeMs, size, hash, properties: raw.properties },
+    ctimeMs,
     body: keptBody,
     bodyLower: keptBody.toLowerCase(),
     frontmatter,

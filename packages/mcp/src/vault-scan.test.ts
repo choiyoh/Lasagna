@@ -205,7 +205,7 @@ describe('refresh 증분', () => {
     expect(scanner.get('gone.md')).toBeUndefined();
   });
 
-  it('mtime·size 가 같으면 내용이 달라도 다시 읽지 않는다', () => {
+  it('mtime·size 가 같아도 ctime 이 바뀌면 다시 읽는다', () => {
     const root = makeVault({});
     const file = path.join(root, 'note.md');
     const before = '# 가나\n';
@@ -219,12 +219,14 @@ describe('refresh 증분', () => {
 
     expect(Buffer.byteLength(before, 'utf8')).toBe(Buffer.byteLength(after, 'utf8'));
     writeVaultFile(root, 'note.md', after);
-    setMtime(file, FIXED_MTIME); // mtime 을 같게 되돌린다
+    setMtime(file, FIXED_MTIME); // mtime 을 같게 되돌려도 ctime 은 바뀐다
     expect(readFileSync(file, 'utf8')).toBe(after);
 
     scanner.refresh();
-    expect(scanner.get('note.md')?.title).toBe('가나'); // mtime+size 가 같으니 캐시를 그대로 쓴다
-    expect(scanner.read('note.md')?.content).toBe(after); // read 는 항상 디스크를 읽는다
+    expect(scanner.get('note.md')?.title).toBe('가다');
+    expect(scanner.search('가다').map((h) => h.path)).toEqual(['note.md']);
+    expect(scanner.search('가나')).toEqual([]);
+    expect(scanner.read('note.md')?.content).toBe(after);
   });
 });
 
@@ -431,6 +433,7 @@ describe('캐시', () => {
     });
     const first = new VaultScanner(root);
     first.refresh();
+    first.flushCache();
     expect(first.scanStats.parsed).toBe(2);
     expect(first.scanStats.cacheSaved).toBe(true);
     expect(existsSync(cachePath(root))).toBe(true);
@@ -458,6 +461,7 @@ describe('캐시', () => {
     expect(first.get('a.md')?.title).toBe('나');
     expect(first.search('새 내용').map((h) => h.path)).toEqual(['a.md']);
     expect(first.scanStats.parsed).toBe(1);
+    first.flushCache();
 
     const second = new VaultScanner(root);
     second.refresh();
@@ -469,32 +473,113 @@ describe('캐시', () => {
     const root = makeVault({ 'a.md': '# 하나\n본문\n', 'b.md': '# 둘\n본문\n' });
     const first = new VaultScanner(root);
     first.refresh();
+    first.flushCache();
     const expected = first.list();
 
     rmSync(cachePath(root));
     const missing = new VaultScanner(root);
     missing.refresh();
+    missing.flushCache();
     expect(missing.scanStats.parsed).toBe(2);
     expect(missing.list()).toEqual(expected);
 
     writeFileSync(cachePath(root), '{깨진 JSON');
     const broken = new VaultScanner(root);
     broken.refresh();
+    broken.flushCache();
     expect(broken.scanStats.parsed).toBe(2);
     expect(broken.list()).toEqual(expected);
     expect(() => JSON.parse(readFileSync(cachePath(root), 'utf8'))).not.toThrow();
 
-    writeFileSync(cachePath(root), JSON.stringify({ version: 999, bodyLimit: 1, entries: [] }));
+    writeFileSync(cachePath(root), JSON.stringify({ version: 1, bodyLimit: 1, entries: [] }));
     const version = new VaultScanner(root);
     version.refresh();
+    version.flushCache();
     expect(version.scanStats.parsed).toBe(2);
     expect(version.list()).toEqual(expected);
 
-    writeFileSync(cachePath(root), JSON.stringify({ version: 1, bodyLimit: 200 * 1024, entries: [{ path: 'a.md' }] }));
+    writeFileSync(cachePath(root), JSON.stringify({ version: 2, bodyLimit: 200 * 1024, entries: [{ path: 'a.md' }] }));
     const entry = new VaultScanner(root);
     entry.refresh();
+    entry.flushCache();
     expect(entry.scanStats.parsed).toBe(2);
     expect(entry.list()).toEqual(expected);
+  });
+
+  it('캐시 파일이 상한보다 크면 읽지 않고 전체 스캔한다', () => {
+    const root = makeVault({ 'a.md': '# 하나\n본문\n' });
+    const first = new VaultScanner(root);
+    first.refresh();
+    first.flushCache();
+    const capped = new VaultScanner(root, { cacheMaxBytes: 10 });
+    capped.refresh();
+    expect(capped.scanStats.cacheLoaded).toBe(0);
+    expect(capped.scanStats.parsed).toBe(1);
+    expect(capped.list().map((n) => n.path)).toEqual(['a.md']);
+    capped.flushCache();
+    expect(capped.scanStats.cacheSaved).toBe(false); // 상한을 넘는 캐시는 쓰지 않는다
+  });
+
+  it('캐시에 저장된 ctime 과 달라지면 새 스캐너도 다시 읽는다', () => {
+    const root = makeVault({ 'a.md': '# 알파\n100원\n' });
+    const first = new VaultScanner(root);
+    first.refresh();
+    first.flushCache();
+
+    const before = readFileSync(path.join(root, 'a.md'), 'utf8');
+    const after = before.replace('알파', '베타').replace('100원', '900원');
+    expect(after.length).toBe(before.length);
+    writeVaultFile(root, 'a.md', after);
+    setMtime(path.join(root, 'a.md'), FIXED_MTIME); // mtime 이 보존된 백업·복사 상황
+
+    const second = new VaultScanner(root);
+    second.refresh();
+    expect(second.scanStats.parsed).toBe(1);
+    expect(second.get('a.md')?.title).toBe('베타');
+    expect(second.search('900원').map((h) => h.path)).toEqual(['a.md']);
+    expect(second.search('100원')).toEqual([]);
+  });
+
+  it('변경 뒤 저장을 미루고 flushCache 로 즉시 저장한다', async () => {
+    const root = makeVault({ 'a.md': '# 하나\n본문\n' });
+    const scanner = new VaultScanner(root, { cacheSaveDelayMs: 50 });
+    scanner.refresh();
+    expect(existsSync(cachePath(root))).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(existsSync(cachePath(root))).toBe(true);
+    expect(scanner.scanStats.cacheSaved).toBe(true);
+  });
+
+  it('삭제된 노트 본문은 다음 refresh 에서 바로 캐시에서 빠진다', () => {
+    const root = makeVault({ 'a.md': '# 하나\n비밀 본문\n', 'b.md': '# 둘\n남는 본문\n' });
+    const scanner = new VaultScanner(root, { cacheSaveDelayMs: 60_000 });
+    scanner.refresh();
+    scanner.flushCache();
+    expect(readFileSync(cachePath(root), 'utf8')).toContain('비밀 본문');
+
+    rmSync(path.join(root, 'a.md'));
+    scanner.refresh(); // 삭제는 지연하지 않고 바로 저장한다
+    const cache = readFileSync(cachePath(root), 'utf8');
+    expect(cache).not.toContain('비밀 본문');
+    expect((JSON.parse(cache) as { entries: { path: string }[] }).entries.map((e) => e.path)).toEqual(['b.md']);
+  });
+
+  it('캐시 저장이 일시적으로 실패해도 다음 저장에서 다시 시도한다', () => {
+    if (process.getuid?.() === 0) return; // root 는 권한 검사를 우회한다
+    const root = makeVault({ 'a.md': '# 하나\n본문\n' });
+    const dir = path.join(root, '.nopsidian');
+    mkdirSync(dir);
+    chmodSync(dir, 0o555);
+    const scanner = new VaultScanner(root, { cacheSaveDelayMs: 60_000 });
+    try {
+      scanner.refresh();
+      scanner.flushCache(); // .nopsidian 이 읽기 전용이라 실패
+      expect(existsSync(cachePath(root))).toBe(false);
+    } finally {
+      chmodSync(dir, 0o755);
+    }
+    scanner.flushCache(); // 권한이 돌아오면 다시 시도
+    expect(existsSync(cachePath(root))).toBe(true);
   });
 
   it('캐시가 없어도 없는 볼트 폴더를 만들지 않는다', () => {

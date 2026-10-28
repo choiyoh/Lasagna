@@ -26,6 +26,7 @@ const CASES: [string, boolean, string][] = [
   ['.nopsidian/comments/a.md', true, '주석 파일'],
   ['.nopsidian/comments/2026/a.md', true, '주석 하위 파일'],
   ['.nopsidian/index.sqlite', false, '인덱스 DB'],
+  ['.nopsidian/mcp-cache.json', false, 'MCP 첫 호출 캐시'],
   ['.nopsidian/index.sqlite-wal', false, '인덱스 WAL'],
   ['.nopsidian/trash/note.md', false, '휴지통'],
   ['.nopsidian/history/2026-10-12/note.md', false, '히스토리'],

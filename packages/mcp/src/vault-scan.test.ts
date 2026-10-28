@@ -113,14 +113,12 @@ describe('VaultScanner 스캔·메타', () => {
     expect(scanner.get(`${'카페'.normalize('NFD')}.md`)?.title).toBe('카페');
   });
 
-  it('볼트 폴더가 없으면 조용히 빈 결과를 돌려주고 폴더를 만들지 않는다', () => {
-    const missing = path.join(tmpdir(), `nopsidian-없는-볼트-${process.pid}-${Math.random().toString(36).slice(2)}`);
-    const scanner = new VaultScanner(missing);
+  it('볼트 폴더가 없으면 조용히 빈 결과를 돌려준다', () => {
+    const scanner = new VaultScanner(path.join(tmpdir(), 'nopsidian-없는-볼트-폴더'));
     scanner.refresh();
     expect(scanner.list()).toEqual([]);
     expect(scanner.get('a.md')).toBeUndefined();
     expect(scanner.search('아무거나')).toEqual([]);
-    expect(existsSync(missing)).toBe(false);
   });
 });
 
@@ -497,6 +495,14 @@ describe('캐시', () => {
     entry.refresh();
     expect(entry.scanStats.parsed).toBe(2);
     expect(entry.list()).toEqual(expected);
+  });
+
+  it('캐시가 없어도 없는 볼트 폴더를 만들지 않는다', () => {
+    const missing = path.join(tmpdir(), `nopsidian-없는-볼트-${process.pid}-${Math.random().toString(36).slice(2)}`);
+    const scanner = new VaultScanner(missing);
+    scanner.refresh();
+    expect(scanner.list()).toEqual([]);
+    expect(existsSync(missing)).toBe(false);
   });
 
   it('.nopsidian 에 쓸 수 없으면 캐시 없이 정상 동작한다', () => {

@@ -124,7 +124,29 @@ describe('McpSettings', () => {
     expect(input('쓸 수 있는 폴더').value).toBe('메모');
     expect(input('오늘의 노트 폴더도 허용').checked).toBe(true);
     expect(container.querySelector('[data-testid="mcp-policy-note"]')?.textContent).toContain('이미 연결된 에이전트');
+    expect(container.querySelector('[data-testid="mcp-policy-missing"]')).toBeNull();
+    expect(container.querySelector('[data-testid="mcp-policy-device-note"]')?.textContent).toContain('다른 기기');
     expect(container.querySelector('[data-testid="mcp-cli"]')?.textContent).toContain('--write-folder "메모" --write-folder "일기"');
+  });
+
+  it('정책 파일이 없으면 인자 기반 동작을 안내하고 현재 값으로 파일을 만들 수 있다', async () => {
+    await render();
+    const missing = container.querySelector('[data-testid="mcp-policy-missing"]');
+    expect(missing?.textContent).toContain('에이전트 연결 인자');
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="mcp-policy-create"]')!.click());
+    await flush();
+    expect(policySet).toHaveBeenCalledWith({ write: false, writeFolders: ['AI'], maxWritesPerMinute: 30 });
+    expect(container.querySelector('[data-testid="mcp-policy-missing"]')).toBeNull();
+  });
+
+  it('정책 파일이 없어도 쓰기를 끄면 곧바로 write=false 파일을 만든다', async () => {
+    localStorage.setItem(storageKey('vault-a'), JSON.stringify({ write: true, folder: 'AI', allowDailyFolder: false, name: 'nopsidian-a', client: 'claude-code' }));
+    await render();
+    expect(input('에이전트가 노트 쓰기 허용').checked).toBe(true);
+    await act(async () => input('에이전트가 노트 쓰기 허용').click());
+    await flush();
+    expect(policySet).toHaveBeenCalledWith({ write: false, writeFolders: ['AI'], maxWritesPerMinute: 30 });
+    expect(container.querySelector('[data-testid="mcp-policy-missing"]')).toBeNull();
   });
 
   it('스위치를 켜면 정책 파일을 쓰기 허용과 폴더로 저장한다', async () => {

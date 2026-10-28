@@ -556,6 +556,18 @@ describe('MCP 서버 — edit_note', () => {
     expect(text).not.toMatch(/[^\r]\n/);
   });
 
+  it('NFD 글자가 다른 곳에 있어도 매치 구간이 ASCII 면 새 한글은 NFC 로 넣는다', async () => {
+    const { call, root } = await connect(write);
+    mkdirSync(path.join(root, 'AI'), { recursive: true });
+    writeFileSync(path.join(root, 'AI/mixed.md'), `# ${'가'.normalize('NFD')}\n\nfoo\n`);
+    const r = await call('read_note', { path: 'AI/mixed.md' });
+    const e = await call('edit_note', { path: 'AI/mixed.md', old_text: 'foo', new_text: '한글', base_hash: r.json.hash });
+    expect(e.isError).toBe(false);
+    const text = readFileSync(path.join(root, 'AI/mixed.md'), 'utf8');
+    expect(text).toContain('한글'); // NFC
+    expect(text).not.toContain('한글'.normalize('NFD'));
+  });
+
   it('NFD 노트는 NFC 로 준 old_text 도 찾고 표기를 유지한다', async () => {
     const { call, root } = await connect(write);
     mkdirSync(path.join(root, 'AI'), { recursive: true });

@@ -24,6 +24,8 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   const [message, setMessage] = useState('');
   /** 앱 정책 파일을 읽거나 쓰지 못한 이유. 있으면 쓰기는 서버에서 차단된다. */
   const [policyError, setPolicyError] = useState('');
+  /** 정책 파일이 실제로 있는가. false 면 지금은 에이전트 인자만 적용된다. */
+  const [policyExists, setPolicyExists] = useState<boolean | null>(null);
   const revert = async (a: AuditRow) => {
     try {
       const r = await window.nops.mcp.revert({ t: a.t, path: a.path });
@@ -41,22 +43,25 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
     void window.nops.mcp.info().then((next) => {
       setInfo(next);
       const loaded = loadMcpSettings(next.vaultId, next.vaultName);
-      // 예전 UI 는 빈 폴더를 볼트 전체로 봤다. 정책 파일의 표기(.)로 옮겨 입력 중 빈 값과 구분한다.
+      // 예전 UI 의 빈 폴더는 볼트 전체(.)였다. 로드할 때만 '.'로 옮기고, 입력 중 빈 값은 저장하지 않는다.
       const local = loaded.folder.trim() === '' ? { ...loaded, folder: '.' } : loaded;
       void window.nops.mcp.policyGet()
         .then((read) => {
           if (read.policy) {
             const merged = { ...local, ...configFromPolicy(read.policy, next.dailyFolder) };
             setCfg(merged);
+            setPolicyExists(true);
             saveMcpSettings(next.vaultId, merged);
             setPolicyError(read.error ?? '');
             return;
           }
+          setPolicyExists(read.exists);
           // 파일이 깨졌으면 서버가 쓰기를 막으므로 화면도 안전한 쪽(꺼짐)으로 보여 준다.
           setCfg(read.error ? { ...local, write: false } : local);
           setPolicyError(read.error ?? '');
         })
         .catch((e) => {
+          setPolicyExists(null);
           setCfg({ ...local, write: false });
           setPolicyError(e instanceof Error ? e.message : String(e));
         });
@@ -91,6 +96,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
     void window.nops.mcp.policySet({ write: next.write, writeFolders: folders, maxWritesPerMinute: next.maxWritesPerMinute })
       .then((saved) => {
         setPolicyError('');
+        setPolicyExists(true);
         // 응답이 늦게 와도 그 사이 친 폴더·이름을 되돌리지 않는다.
         setCfg((prev) => (prev ? { ...prev, maxWritesPerMinute: saved.maxWritesPerMinute } : prev));
       })
@@ -137,10 +143,24 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
       <p className="muted small" data-testid="mcp-policy-note">
         이 설정을 바꾸면 볼트의 <code>.nopsidian/mcp-policy.json</code> 에 저장돼 이미 연결된 에이전트에도 다음 쓰기부터 바로 적용돼요. 쓰기 도구 없이 연결한 에이전트는 다시 연결해야 해요.
       </p>
+      <p className="muted small" data-testid="mcp-policy-device-note">
+        이 파일은 기기별이라 같은 볼트를 다른 기기에서 열어도 자동으로 적용되지 않아요. 다른 기기에서도 막으려면 그 기기의 앱에서 쓰기를 끄거나, 그 기기의 에이전트 설정을 읽기 전용으로 바꾸세요.
+      </p>
       {policyError && (
         <p className="warn small" data-testid="mcp-policy-warning">
           {policyError} 설정을 바꾸면 새 정책으로 저장을 다시 시도해요.
         </p>
+      )}
+      {policyExists === false && (
+        <div className="settings__row" data-testid="mcp-policy-missing">
+          <span>
+            앱 정책 파일이 아직 없어요. 지금은 에이전트 연결 인자(<code>--write</code>, <code>--write-folder</code>)대로 동작해요.
+            <small className="muted">아래 버튼을 누르면 현재 화면 값으로 정책을 만들어 앱 설정이 정본이 돼요.</small>
+          </span>
+          <button type="button" data-testid="mcp-policy-create" onClick={() => savePolicy(current)}>
+            현재 값으로 정책 저장
+          </button>
+        </div>
       )}
       {current.write && (
         <>

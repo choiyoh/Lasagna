@@ -472,7 +472,7 @@ nopsidian/
 ### MCP 쓰기 정책·`edit_note` (v0.7.2)
 - **Track A — 연결 1회 완주**: Claude Code·Claude Desktop·Codex·Cursor·VS Code·Gemini CLI 6종 스니펫, `-s user`, 볼트별 설정, 기본 이름 `nopsidian-<슬러그>-<해시>`, 오늘의 노트 허용, `docs/mcp.md` 갱신.
 - **Track B — 첫 호출 지연**: `.nopsidian/mcp-cache.json` 사이드카(mtime·size·ctime, 본문 사본 포함, 0600, 동기화 제외). 1만 노트 패키징 앱에서 첫 호출 p95 415ms(캐시 없음 5.8초), 두 번째 55ms. 손상·구버전·읽기 전용은 전체 스캔으로 폴백.
-- **Track C — 쓰기 권한 정본화 + `edit_note`**: 앱이 `.nopsidian/mcp-policy.json`(version 1, write, writeFolders, maxWritesPerMinute)을 정본으로 쓰고, MCP 서버는 인자와 파일의 교집합을 매 쓰기마다 적용한다. 파일이 없으면 기존 동작, 깨졌으면 `policy-invalid`로 안전하게 거부. 이미 연결된 세션도 앱 스위치가 다음 쓰기부터 적용된다. `add_comment`도 파일이 쓰기를 끄면 거부. `edit_note`는 `old_text`가 정확히 한 곳일 때만 바꾸고 0/2곳·낡은 해시·허용 폴더 밖·횟수·크기 한도를 지키며 감사·버전 기록·되돌리기를 그대로 쓴다. CRLF/LF·NFC/NFD 표기 유지. 정책 파일은 동기화하지 않는다(기기별 연결 설정).
+- **Track C — 쓰기 권한 정본화 + `edit_note`**: 앱이 `.nopsidian/mcp-policy.json`(version 1, write, writeFolders, maxWritesPerMinute)을 정본으로 쓰고, MCP 서버는 인자와 파일의 교집합을 매 쓰기마다 적용한다. 파일이 없으면 기존 동작, 깨졌으면 `policy-invalid`로 안전하게 거부. 이미 연결된 세션도 앱 스위치가 다음 쓰기부터 적용된다. `add_comment`도 파일이 쓰기를 끄면 거부. `edit_note`는 `old_text`가 정확히 한 곳일 때만 바꾸고 0/2곳·낡은 해시·허용 폴더 밖·횟수·크기 한도를 지키며 감사·버전 기록·되돌리기를 그대로 쓴다. CRLF/LF·NFC/NFD 표기 유지. 정책 파일은 동기화하지 않는다(기기별 연결 설정). 기기 A에서 끈 설정은 기기 B에 적용되지 않으므로, 다른 기기에서도 막으려면 그 기기의 앱에서 끄거나 에이전트 설정을 읽기 전용으로 바꾼다.
 - 검증: typecheck 7/7·lint 0·전체 테스트·MCP e2e. 앱 스위치를 끄고 이미 연결된 MCP 세션의 다음 쓰기가 `policy-disabled`로 거부되는 것을 패키징 앱에서 확인.
 
 ### 개발 명령

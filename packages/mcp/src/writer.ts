@@ -73,9 +73,11 @@ function findTextMatches(content: string, oldText: string): TextMatch[] {
   return [...found.values()].sort((a, b) => a.start - b.start);
 }
 
-/** 노트가 쓰는 줄바꿈·유니코드 표기를 새 텍스트에도 맞춘다. */
-function adaptReplacement(text: string, content: string): string {
-  const nfd = content !== content.normalize('NFC');
+/** 새 텍스트의 표기를 매치된 구간에 맞춘다. 구간에 NFD 한글이 없으면 NFC 를 기본으로 쓴다. */
+function adaptReplacement(text: string, content: string, match: TextMatch): string {
+  const matched = content.slice(match.start, match.end);
+  // 매치 구간에 한글이 없으면 NFC 를 기본으로 쓴다(다른 곳의 NFD 글자에 끌려가지 않게).
+  const nfd = /[\u1100-\u11FF\u3131-\u318E\uA960-\uA97F\uAC00-\uD7A3\uD7B0-\uD7FF]/.test(matched) && matched !== matched.normalize('NFC');
   let out = text.normalize(nfd ? 'NFD' : 'NFC');
   out = content.includes('\r\n') ? out.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n') : out.replace(/\r\n/g, '\n');
   return out;
@@ -192,7 +194,7 @@ export class NoteWriter {
       this.deny(tool, rel, matches.length === 0 ? 'no-match' : 'ambiguous-match', message);
     }
     const match = matches[0]!;
-    const replacement = adaptReplacement(newText, disk);
+    const replacement = adaptReplacement(newText, disk, match);
     const next = `${disk.slice(0, match.start)}${replacement}${disk.slice(match.end)}`;
     return this.commit(tool, 'update', rel, next, disk);
   }

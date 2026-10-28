@@ -623,6 +623,7 @@ test.describe('링크 코어', () => {
     await open(page, 'Mermaid호환');
     const svg = page.locator('.nops-mermaid__render svg');
     await expect(svg).toBeVisible({ timeout: 20000 });
+    expect(await svg.locator('text').count()).toBeGreaterThan(0); // 정화 후에도 라벨이 남는다
     expect(readFileSync(file, 'utf8')).toBe(src);
     expect(requests.some((u) => u.startsWith('http://') || u.startsWith('https://'))).toBe(false);
     // 테마가 바뀌면 Mermaid SVG도 다시 그린다.
@@ -635,6 +636,21 @@ test.describe('링크 코어', () => {
     await open(page, 'Mermaid오류');
     await expect(page.locator('.nops-mermaid.is-error')).toBeVisible({ timeout: 20000 });
     await expect(page.locator('.nops-mermaid pre')).toContainText('flowchart TD');
+
+    // 악성 라벨·htmlLabels/securityLevel 우회·javascript: 클릭도 DOM 에 위험 요소를 남기지 않는다.
+    note(
+      'Mermaid악성',
+      '# Mermaid악성\n\n```mermaid\nflowchart TD\n  A["<script>alert(1)</script>"] --> B\n  click A "javascript:alert(1)"\n```\n\n```mermaid\n%%{init: {"securityLevel": "loose", "htmlLabels": true}}%%\nflowchart TD\n  A["<img src=x onerror=alert(1)>"] --> B\n```\n',
+    );
+    await open(page, 'Mermaid악성');
+    await expect(page.locator('.nops-mermaid').nth(1)).toBeVisible({ timeout: 20000 });
+    const danger = await page.evaluate(() => ({
+      scripts: document.querySelectorAll('.nops-mermaid__render script').length,
+      handlers: document.querySelectorAll('.nops-mermaid__render [onerror], .nops-mermaid__render [onclick]').length,
+      jsLinks: [...document.querySelectorAll<HTMLAnchorElement>('.nops-mermaid__render a')].filter((a) => a.getAttribute('href')?.startsWith('javascript:')).length,
+      foreign: document.querySelectorAll('.nops-mermaid__render foreignObject').length,
+    }));
+    expect(danger).toEqual({ scripts: 0, handlers: 0, jsLinks: 0, foreign: 0 });
   });
 
   test('각주: 위첨자·아래 각주 영역·정의 편집이 원문 위치를 유지한다', async () => {

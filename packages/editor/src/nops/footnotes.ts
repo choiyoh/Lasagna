@@ -9,15 +9,33 @@ interface RefInfo {
   number: number;
 }
 
+interface RefCache {
+  refs: RefInfo[];
+  byId: Map<string, number>;
+  byPos: Map<number, RefInfo>;
+}
+
 interface DefInfo {
   pos: number;
   node: PMNode;
 }
 
+interface DefCache {
+  defs: DefInfo[];
+  byKey: Map<string, DefInfo>;
+  byId: Map<string, DefInfo[]>;
+}
+
+const refCache = new WeakMap<PMNode, RefCache>();
+const defCache = new WeakMap<PMNode, DefCache>();
+
 /** 각주 참조 번호: 같은 이름은 같은 번호, 인라인 각주는 등장 순서대로 번호를 준다. */
-function references(doc: PMNode): { refs: RefInfo[]; byId: Map<string, number> } {
+function references(doc: PMNode): RefCache {
+  const cached = refCache.get(doc);
+  if (cached) return cached;
   const refs: RefInfo[] = [];
   const byId = new Map<string, number>();
+  const byPos = new Map<number, RefInfo>();
   let next = 1;
   doc.descendants((node, pos) => {
     if (node.type.name !== 'footnote_ref') return;
@@ -27,17 +45,35 @@ function references(doc: PMNode): { refs: RefInfo[]; byId: Map<string, number> }
       number = next++;
       if (id) byId.set(id, number);
     }
-    refs.push({ pos, node, number });
+    const info = { pos, node, number };
+    refs.push(info);
+    byPos.set(pos, info);
   });
-  return { refs, byId };
+  const result = { refs, byId, byPos };
+  refCache.set(doc, result);
+  return result;
 }
 
-function definitions(doc: PMNode): DefInfo[] {
-  const out: DefInfo[] = [];
+function definitions(doc: PMNode): DefCache {
+  const cached = defCache.get(doc);
+  if (cached) return cached;
+  const defs: DefInfo[] = [];
+  const byKey = new Map<string, DefInfo>();
+  const byId = new Map<string, DefInfo[]>();
   doc.descendants((node, pos) => {
-    if (node.type.name === 'footnote_def') out.push({ pos, node });
+    if (node.type.name !== 'footnote_def') return;
+    const info = { pos, node };
+    defs.push(info);
+    const key = node.attrs.key as string | null;
+    if (key) byKey.set(key, info);
+    const id = String(node.attrs.identifier ?? '');
+    const list = byId.get(id);
+    if (list) list.push(info);
+    else byId.set(id, [info]);
   });
-  return out;
+  const result = { defs, byKey, byId };
+  defCache.set(doc, result);
+  return result;
 }
 
 /** `[^id]: 본문` 에서 `[^id]: ` 접두사와 편집할 본문을 나눈다. */
@@ -53,16 +89,30 @@ function shortTitle(text: string): string {
 }
 
 function refNumberAt(doc: PMNode, pos: number | undefined, node: PMNode): number {
-  const { refs, byId } = references(doc);
-  const exact = pos === undefined ? undefined : refs.find((r) => r.pos === pos);
+  const cache = references(doc);
+  const exact = pos === undefined ? undefined : cache.byPos.get(pos);
   if (exact) return exact.number;
   const id = node.attrs.identifier as string | null;
-  return id ? (byId.get(id) ?? 0) : 0;
+  return id ? (cache.byId.get(id) ?? 0) : 0;
 }
 
 function definitionFor(doc: PMNode, id: string | null): DefInfo | undefined {
   if (!id) return undefined;
-  return definitions(doc).find((d) => d.node.attrs.identifier === id);
+  return definitions(doc).byId.get(id)?.[0];
+}
+
+/**
+ * 편집 중 문서가 바뀌어도 올바른 정의를 고른다.
+ * key 는 파싱 때 붙는 안정적인 내부 키이고, 중복 정의는 key 없이는 고르지 않는다.
+ */
+function definitionByKey(doc: PMNode, key: string | null, id: string): DefInfo | undefined {
+  const cache = definitions(doc);
+  if (key) {
+    const exact = cache.byKey.get(key);
+    if (exact && exact.node.attrs.identifier === id) return exact;
+  }
+  const same = cache.byId.get(id) ?? [];
+  return same.length === 1 ? same[0] : undefined;
 }
 
 /** 본문 각주 참조 `<sup>`: 번호·툴팁을 그리고, 클릭하면 아래 각주 영역으로 이동한다. */
@@ -123,6 +173,7 @@ export function footnoteDefView(node: PMNode): NodeView {
   const sync = (n: PMNode) => {
     dom.dataset.footnoteDef = String(n.attrs.identifier ?? '');
     dom.dataset.footnoteLabel = String(n.attrs.label ?? '');
+    if (n.attrs.key) dom.dataset.footnoteKey = String(n.attrs.key);
   };
   sync(node);
   return {
@@ -137,71 +188,178 @@ export function footnoteDefView(node: PMNode): NodeView {
   };
 }
 
+interface PanelItem {
+  key: string;
+  identifier: string;
+  item: HTMLDivElement;
+  number: HTMLElement;
+  label: HTMLElement;
+  back: HTMLButtonElement;
+  textarea: HTMLTextAreaElement;
+  lastId: string;
+  lastSource: string;
+  lastNumber: number | undefined;
+  lastLabel: string;
+  lastDisabled: boolean;
+  lastBackHidden: boolean;
+}
+
+function createPanelItem(panel: HTMLElement, view: EditorView, key: string, id: string): PanelItem {
+  const item = document.createElement('div');
+  item.className = 'nops-footnotes__item';
+  item.dataset.footnoteDef = id;
+  item.dataset.footnoteKey = key;
+
+  const head = document.createElement('div');
+  head.className = 'nops-footnotes__head';
+  const number = document.createElement('sup');
+  number.className = 'nops-footnotes__number';
+  const labelEl = document.createElement('span');
+  labelEl.className = 'nops-footnotes__label';
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'nops-footnotes__back';
+  back.textContent = '본문으로';
+  back.addEventListener('click', (e) => {
+    e.preventDefault();
+    const def = item.dataset.footnoteKey ? definitionByKey(view.state.doc, item.dataset.footnoteKey, item.dataset.footnoteDef ?? '') : undefined;
+    if (!def) return;
+    const ref = references(view.state.doc).refs.find((r) => r.node.attrs.identifier === def.node.attrs.identifier);
+    const refDom = ref ? view.nodeDOM(ref.pos) : null;
+    if (refDom instanceof HTMLElement) refDom.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
+  head.append(number, labelEl, back);
+
+  const area = document.createElement('textarea');
+  area.className = 'nops-footnotes__text';
+  area.spellcheck = false;
+  area.addEventListener('change', () => {
+    const currentKey = item.dataset.footnoteKey ?? null;
+    const currentId = item.dataset.footnoteDef ?? '';
+    const def = definitionByKey(view.state.doc, currentKey, currentId);
+    // 문서에서 사라졌거나 중복 정의라 대상을 확정할 수 없으면 다른 노드를 덮어쓰지 않는다.
+    if (!def) {
+      area.setAttribute('aria-invalid', 'true');
+      return;
+    }
+    area.removeAttribute('aria-invalid');
+    const prefix = definitionParts(String(def.node.attrs.source ?? '')).prefix;
+    const nextSource = `${prefix}${area.value}`;
+    if (nextSource === def.node.attrs.source) return;
+    view.dispatch(view.state.tr.setNodeMarkup(def.pos, undefined, { ...def.node.attrs, source: nextSource }));
+  });
+  item.append(head, area);
+  panel.append(item);
+  return {
+    key,
+    identifier: id,
+    item,
+    number,
+    label: labelEl,
+    back,
+    textarea: area,
+    lastId: '',
+    lastSource: '',
+    lastNumber: undefined,
+    lastLabel: '',
+    lastDisabled: false,
+    lastBackHidden: false,
+  };
+}
+
 /** 노트 아래 각주 영역. 정의의 위치는 문서에 그대로 두고 여기서 내용을 편집한다. */
-function renderPanel(panel: HTMLElement, view: EditorView): void {
-  panel.replaceChildren();
-  const defs = definitions(view.state.doc);
+function renderPanel(panel: HTMLElement, title: HTMLElement, items: Map<string, PanelItem>, view: EditorView): void {
+  const defs = definitions(view.state.doc).defs;
   panel.hidden = defs.length === 0;
-  if (defs.length === 0) return;
+  if (defs.length === 0) {
+    for (const entry of items.values()) entry.item.remove();
+    items.clear();
+    return;
+  }
 
-  const { refs, byId } = references(view.state.doc);
-  const title = document.createElement('div');
-  title.className = 'nops-footnotes__title';
-  title.textContent = '각주';
-  panel.append(title);
+  const { byId } = references(view.state.doc);
+  const seen = new Set<string>();
+  const ordered: PanelItem[] = [];
 
-  for (const def of defs) {
+  defs.forEach((def, index) => {
     const id = String(def.node.attrs.identifier ?? '');
     const label = String(def.node.attrs.label ?? id);
-    const number = byId.get(id);
-    const item = document.createElement('div');
-    item.className = 'nops-footnotes__item';
-    item.dataset.footnoteDef = id;
-
-    const head = document.createElement('div');
-    head.className = 'nops-footnotes__head';
-    const num = document.createElement('sup');
-    num.className = 'nops-footnotes__number';
-    num.textContent = number ? String(number) : '·';
-    const labelEl = document.createElement('span');
-    labelEl.className = 'nops-footnotes__label';
-    labelEl.textContent = `[^${label}]`;
-    head.append(num, labelEl);
-
-    const firstRef = refs.find((r) => r.node.attrs.identifier === id);
-    if (firstRef) {
-      const back = document.createElement('button');
-      back.type = 'button';
-      back.className = 'nops-footnotes__back';
-      back.textContent = '본문으로';
-      back.addEventListener('click', (e) => {
-        e.preventDefault();
-        const refDom = view.nodeDOM(firstRef.pos);
-        if (refDom instanceof HTMLElement) refDom.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      });
-      head.append(back);
+    const key = String(def.node.attrs.key ?? `id:${id}:${index}`);
+    seen.add(key);
+    let entry = items.get(key);
+    if (entry && entry.identifier !== id) {
+      // 같은 키가 다른 정의를 가리키게 바뀌면(외부 문서 교체 등) 예전 입력을 재사용하지 않는다.
+      entry.item.remove();
+      items.delete(key);
+      entry = undefined;
+    }
+    if (!entry) {
+      entry = createPanelItem(panel, view, key, id);
+      items.set(key, entry);
+    }
+    const { item, number, label: labelEl, back, textarea } = entry;
+    const n = byId.get(id);
+    const disabled = !view.editable;
+    const backHidden = !byId.has(id);
+    const source = String(def.node.attrs.source ?? '');
+    const unchanged =
+      entry.lastId === id &&
+      entry.lastSource === source &&
+      entry.lastNumber === n &&
+      entry.lastLabel === label &&
+      entry.lastDisabled === disabled &&
+      entry.lastBackHidden === backHidden;
+    if (unchanged) {
+      ordered.push(entry);
+      return;
     }
 
-    const { prefix, text } = definitionParts(String(def.node.attrs.source ?? ''));
-    const area = document.createElement('textarea');
-    area.className = 'nops-footnotes__text';
-    area.value = text;
-    area.rows = Math.min(8, Math.max(2, text.split('\n').length));
-    area.disabled = !view.editable;
-    area.setAttribute('aria-label', `각주 ${label} 내용`);
-    area.spellcheck = false;
-    area.addEventListener('change', () => {
-      const nextSource = `${prefix}${area.value}`;
-      if (nextSource === def.node.attrs.source) return;
-      view.dispatch(view.state.tr.setNodeMarkup(def.pos, undefined, { ...def.node.attrs, source: nextSource }));
-    });
+    item.dataset.footnoteDef = id;
+    item.dataset.footnoteKey = key;
+    entry.identifier = id;
+    number.textContent = n ? String(n) : '·';
+    labelEl.textContent = `[^${label}]`;
+    back.hidden = backHidden;
+    textarea.disabled = disabled;
+    textarea.setAttribute('aria-label', `각주 ${label} 내용`);
 
-    item.append(head, area);
-    panel.append(item);
+    const { text } = definitionParts(source);
+    // 포커스가 있는 입력창은 사용자가 치던 값을 덮어쓰지 않는다.
+    if (document.activeElement !== textarea && textarea.value !== text) {
+      textarea.value = text;
+      textarea.rows = Math.min(8, Math.max(2, text.split('\n').length));
+    }
+    entry.lastId = id;
+    entry.lastSource = source;
+    entry.lastNumber = n;
+    entry.lastLabel = label;
+    entry.lastDisabled = disabled;
+    entry.lastBackHidden = backHidden;
+    ordered.push(entry);
+  });
+
+  for (const [key, entry] of items) {
+    if (seen.has(key)) continue;
+    entry.item.remove();
+    items.delete(key);
+  }
+
+  const active = document.activeElement;
+  const editing = active instanceof HTMLTextAreaElement && panel.contains(active);
+  if (!editing) {
+    const desired = ordered.map((e) => e.item);
+    const current = [...panel.children].filter((el) => el !== title);
+    // 순서가 그대로면 DOM 을 건드리지 않는다(증분 갱신).
+    if (current.length !== desired.length || current.some((el, i) => el !== desired[i])) {
+      panel.replaceChildren(title, ...desired);
+    }
+  } else {
+    // 편집 중에는 기존 textarea 를 옮기지 않는다(포커스·미커밋 입력 보존).
+    for (const entry of ordered) if (!panel.contains(entry.item)) panel.append(entry.item);
   }
 }
 
-/** 편집기 호스트 아래에 각주 영역을 두고, 문서가 바뀔 때마다 다시 그린다. */
+/** 편집기 호스트 아래에 각주 영역을 두고, 문서가 바뀔 때마다 증분 갱신한다. */
 export function createFootnotePlugin(host: HTMLElement): Plugin {
   let panel: HTMLDivElement | null = null;
   return new Plugin({
@@ -210,17 +368,23 @@ export function createFootnotePlugin(host: HTMLElement): Plugin {
       panel.className = 'nops-footnotes';
       panel.setAttribute('data-testid', 'footnotes');
       panel.contentEditable = 'false';
+      const title = document.createElement('div');
+      title.className = 'nops-footnotes__title';
+      title.textContent = '각주';
+      panel.append(title);
       host.append(panel);
-      renderPanel(panel, view);
+      const items = new Map<string, PanelItem>();
+      renderPanel(panel, title, items, view);
       let lastEditable = view.editable;
       return {
         update(next, prev) {
           if (next.state.doc !== prev.doc || next.editable !== lastEditable) {
             lastEditable = next.editable;
-            renderPanel(panel!, next);
+            renderPanel(panel!, title, items, next);
           }
         },
         destroy() {
+          items.clear();
           panel?.remove();
           panel = null;
         },
@@ -228,6 +392,8 @@ export function createFootnotePlugin(host: HTMLElement): Plugin {
     },
   });
 }
+
+let newFootnoteKey = 1;
 
 /** 각주 참조와 정의를 한 번에 넣는다. 정의는 문서 끝(원래 위치)에 추가한다. */
 export const insertFootnote: Command = (state, dispatch) => {
@@ -241,7 +407,7 @@ export const insertFootnote: Command = (state, dispatch) => {
   while (used.has(String(number))) number++;
   const label = String(number);
   const ref = refType.create({ identifier: label, label, inline: false, text: null });
-  const def = defType.create({ identifier: label, label, source: `[^${label}]: ` });
+  const def = defType.create({ identifier: label, label, source: `[^${label}]: `, key: `fn-new-${newFootnoteKey++}` });
   if (dispatch) {
     const tr = state.tr;
     const from = state.selection.from;

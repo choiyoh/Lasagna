@@ -23,6 +23,8 @@ interface Ctx {
   /** 프런트매터를 뺀 본문 — mdast 위치(offset)가 이 문자열 기준이다 */
   body: string;
   tokens: InlineToken[];
+  /** 각주 정의 노드의 안정적인 편집 키(직렬화하지 않는다) */
+  nextFootnoteKey: number;
 }
 
 const CALLOUT_HEAD = /^\[!([A-Za-z][\w-]*)\]([+-])?[ \t]*/;
@@ -320,7 +322,7 @@ export function blockToPm(ctx: Ctx, node: RootContent): PMNode {
     case 'math':
       return schema.nodes.math_block!.create(null, node.value ? schema.text(lf(node.value)) : null);
     case 'footnoteDefinition':
-      return schema.nodes.footnote_def!.create({ identifier: node.identifier, label: node.label ?? node.identifier, source: slice(ctx, node) });
+      return schema.nodes.footnote_def!.create({ identifier: node.identifier, label: node.label ?? node.identifier, source: slice(ctx, node), key: `fn-${ctx.nextFootnoteKey++}` });
     default:
       return raw(ctx, node);
   }
@@ -386,7 +388,7 @@ export interface ConvertedDocument {
 }
 
 export function convertParsed(schema: Schema, ep: EditorParse): ConvertedDocument {
-  const ctx: Ctx = { schema, body: ep.body, tokens: ep.tokens };
+  const ctx: Ctx = { schema, body: ep.body, tokens: ep.tokens, nextFootnoteKey: 0 };
   const segments = convertRange(ctx, ep, 0, ep.note.blocks.length);
   const children = segments.map((s) => s.node);
   const doc = schema.topNodeType.create(null, children.length ? children : [schema.nodes.paragraph!.create()]);

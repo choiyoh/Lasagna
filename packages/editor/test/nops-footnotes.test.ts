@@ -42,6 +42,37 @@ describe('각주 편집기', () => {
     expect(serializeDocument(view.state.doc, parsed.baseline)).toBe('앞 문단\n\n본문[^1]\n\n[^1]: 고친 내용\n    계속\n\n뒤 문단\n');
   });
 
+  it('문서가 바뀌어도 편집 중 textarea와 미커밋 입력을 유지하고 올바른 정의를 고친다', () => {
+    const src = '앞\n\n본문[^1] [^2]\n\n[^1]: 하나\n\n[^2]: 둘\n';
+    const { view, host, parsed } = setup(src);
+    const first = host.querySelector<HTMLTextAreaElement>('.nops-footnotes__text')!;
+    first.focus();
+    first.value = '입력 중';
+    first.dispatchEvent(new Event('input', { bubbles: true }));
+
+    // 다른 위치에 글자를 넣어 모든 정의 위치를 한 칸씩 민다.
+    view.dispatch(view.state.tr.insertText('X', 1));
+    expect(host.querySelector<HTMLTextAreaElement>('.nops-footnotes__text')).toBe(first);
+    expect(first.value).toBe('입력 중');
+    expect(document.activeElement).toBe(first);
+
+    first.dispatchEvent(new Event('change', { bubbles: true }));
+    const text = serializeDocument(view.state.doc, parsed.baseline);
+    expect(text).toContain('[^1]: 입력 중');
+    expect(text).toContain('[^2]: 둘');
+  });
+
+  it('중복 정의는 내부 key로 구분해 올바른 정의만 고친다', () => {
+    const src = '본문[^1]\n\n[^1]: 하나\n\n[^1]: 둘\n';
+    const { view, host, parsed } = setup(src);
+    const areas = [...host.querySelectorAll<HTMLTextAreaElement>('.nops-footnotes__text')];
+    areas[1]!.value = '둘 고침';
+    areas[1]!.dispatchEvent(new Event('change', { bubbles: true }));
+    const text = serializeDocument(view.state.doc, parsed.baseline);
+    expect(text).toContain('[^1]: 하나');
+    expect(text).toContain('[^1]: 둘 고침');
+  });
+
   it('읽기 전용이면 각주 내용 입력창이 비활성화된다', () => {
     const { host } = setup('본문[^1]\n\n[^1]: 읽기만\n', true);
     expect(host.querySelector<HTMLTextAreaElement>('.nops-footnotes__text')!.disabled).toBe(true);

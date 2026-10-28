@@ -213,7 +213,7 @@ const footnoteDef: NodeSpec = {
   atom: true,
   selectable: false,
   draggable: false,
-  attrs: { identifier: { default: '' }, label: { default: '' }, source: { default: '' } },
+  attrs: { identifier: { default: '' }, label: { default: '' }, source: { default: '' }, key: { default: null } },
   parseDOM: [
     {
       tag: 'div[data-footnote-def]',

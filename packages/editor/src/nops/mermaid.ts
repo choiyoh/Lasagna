@@ -2,6 +2,7 @@ import { Plugin } from 'prosemirror-state';
 import { Decoration, DecorationSet, type EditorView, type NodeView } from 'prosemirror-view';
 import type { Node as PMNode } from 'prosemirror-model';
 import type { SlashItemSpec } from '@oh-new-editor/core';
+import DOMPurify from 'dompurify';
 import { insertMarkdown } from './commands';
 
 interface MermaidApi {
@@ -12,6 +13,23 @@ interface MermaidApi {
 /** mermaid 는 큰 라이브러리라, 다이어그램 블록이 처음 그려질 때만 동적으로 불러온다. */
 let mermaidPromise: Promise<MermaidApi> | null = null;
 let renderSeq = 0;
+/** 마지막으로 초기화한 Mermaid 테마. 테마가 바뀔 때만 initialize 한다. */
+let initializedTheme: 'default' | 'dark' | null = null;
+
+type Purifier = { sanitize(dirty: string, config?: Record<string, unknown>): string };
+const purify: Purifier = (DOMPurify as unknown as { sanitize?: unknown }).sanitize
+  ? (DOMPurify as unknown as Purifier)
+  : (DOMPurify as unknown as (w: Window) => Purifier)(window);
+
+/** Mermaid 가 만든 SVG 를 SVG 프로필로 한 번 더 정화한다(심층 방어). */
+export function sanitizeSvg(svg: string): string {
+  return purify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    ADD_TAGS: ['style'],
+    ADD_ATTR: ['style'],
+    FORBID_TAGS: ['foreignObject'],
+  });
+}
 
 const theme = (): 'default' | 'dark' => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'default');
 
@@ -33,17 +51,21 @@ async function loadMermaid(): Promise<MermaidApi> {
 
 async function renderMermaid(target: HTMLElement, source: string): Promise<void> {
   const api = await loadMermaid();
-  api.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    theme: theme(),
-    // HTML 라벨·클릭 핸들러·외부 링크를 쓰지 않는다(strict 와 함께 이중 방어).
-    htmlLabels: false,
-    flowchart: { htmlLabels: false },
-    suppressErrorRendering: true,
-  });
+  const currentTheme = theme();
+  if (initializedTheme !== currentTheme) {
+    api.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: currentTheme,
+      // HTML 라벨·클릭 핸들러·외부 링크를 쓰지 않는다(strict 와 함께 이중 방어).
+      htmlLabels: false,
+      flowchart: { htmlLabels: false },
+      suppressErrorRendering: true,
+    });
+    initializedTheme = currentTheme;
+  }
   const { svg } = await api.render(`nops-mermaid-${++renderSeq}`, source);
-  target.innerHTML = svg;
+  target.innerHTML = sanitizeSvg(svg);
 }
 
 /** ```mermaid 코드 블록: 평소에는 SVG, 커서가 들어오면 원문 코드도 보인다(수식 블록과 같은 방식). */
@@ -61,16 +83,13 @@ export function mermaidBlockView(node: PMNode, view: EditorView): NodeView {
 
   let current = node;
   let token = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let lastSource = '';
+  const DEBOUNCE_MS = 300;
 
-  const draw = (n: PMNode) => {
-    const src = n.textContent.trim();
-    const mine = ++token;
-    dom.classList.toggle('is-empty', !src);
-    if (!src) {
-      shown.textContent = 'Mermaid 다이어그램을 입력하세요';
-      shown.classList.remove('is-error');
-      return;
-    }
+  const renderNow = (src: string) => {
+    lastSource = src;
+    const mine = token;
     shown.textContent = '그리는 중…';
     void renderMermaid(shown, src)
       .then(() => {
@@ -83,10 +102,39 @@ export function mermaidBlockView(node: PMNode, view: EditorView): NodeView {
         shown.textContent = e instanceof Error ? e.message.replace(/^Error: /, '') : '다이어그램을 그리지 못했어요';
       });
   };
-  draw(node);
 
-  // 테마가 바뀌면 SVG 도 다시 그린다.
-  const observer = new MutationObserver(() => draw(current));
+  const draw = (n: PMNode, immediate = false) => {
+    current = n;
+    const src = n.textContent.trim();
+    dom.classList.toggle('is-empty', !src);
+    if (!src) {
+      token++;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      lastSource = '';
+      shown.textContent = 'Mermaid 다이어그램을 입력하세요';
+      shown.classList.remove('is-error');
+      return;
+    }
+    // 선택만 바뀌는 등 원문이 그대로면 진행 중인 렌더를 취소하지 않는다.
+    if (!immediate && src === lastSource) return;
+    token++;
+    if (timer) clearTimeout(timer);
+    if (immediate) {
+      timer = null;
+      renderNow(src);
+      return;
+    }
+    // 입력 중에는 매 글자마다 그리지 않고, 300ms 조용해진 뒤 한 번만 그린다.
+    timer = setTimeout(() => {
+      timer = null;
+      if (!view.isDestroyed) renderNow(src);
+    }, DEBOUNCE_MS);
+  };
+  draw(node, true);
+
+  // 테마가 바뀌면 SVG 도 즉시 다시 그린다.
+  const observer = new MutationObserver(() => draw(current, true));
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
   return {
@@ -94,12 +142,12 @@ export function mermaidBlockView(node: PMNode, view: EditorView): NodeView {
     contentDOM: code,
     update(n) {
       if (n.type !== node.type) return false;
-      current = n;
       draw(n);
       return true;
     },
     destroy() {
       token++;
+      if (timer) clearTimeout(timer);
       observer.disconnect();
     },
     // SVG/상태 DOM 변경은 문서 변경이 아니다. 원문 코드 영역의 입력은 그대로 받는다.

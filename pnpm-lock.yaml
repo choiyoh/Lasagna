@@ -275,6 +275,9 @@ importers:
       '@oh-new-editor/core':
         specifier: ^0.2.2
         version: 0.2.2
+      dompurify:
+        specifier: ^3.4.17
+        version: 3.4.17
       katex:
         specifier: ^0.19.0
         version: 0.19.0

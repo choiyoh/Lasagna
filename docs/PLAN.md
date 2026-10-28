@@ -475,6 +475,11 @@ nopsidian/
 - **Track C — 쓰기 권한 정본화 + `edit_note`**: 앱이 `.nopsidian/mcp-policy.json`(version 1, write, writeFolders, maxWritesPerMinute)을 정본으로 쓰고, MCP 서버는 인자와 파일의 교집합을 매 쓰기마다 적용한다. 파일이 없으면 기존 동작, 깨졌으면 `policy-invalid`로 안전하게 거부. 이미 연결된 세션도 앱 스위치가 다음 쓰기부터 적용된다. `add_comment`도 파일이 쓰기를 끄면 거부. `edit_note`는 `old_text`가 정확히 한 곳일 때만 바꾸고 0/2곳·낡은 해시·허용 폴더 밖·횟수·크기 한도를 지키며 감사·버전 기록·되돌리기를 그대로 쓴다. CRLF/LF·NFC/NFD 표기 유지. 정책 파일은 동기화하지 않는다(기기별 연결 설정). 기기 A에서 끈 설정은 기기 B에 적용되지 않으므로, 다른 기기에서도 막으려면 그 기기의 앱에서 끄거나 에이전트 설정을 읽기 전용으로 바꾼다.
 - 검증: typecheck 7/7·lint 0·전체 테스트·MCP e2e. 앱 스위치를 끄고 이미 연결된 MCP 세션의 다음 쓰기가 `policy-disabled`로 거부되는 것을 패키징 앱에서 확인.
 
+### Mermaid 다이어그램·각주 (v0.7.3)
+- **Mermaid**: ` ```mermaid ` 펜스를 전용 NodeView로 SVG 렌더링. `import('mermaid')` 지연 로드로 초기 entry 번들은 +1.3%만 늘고, 블록이 있을 때만 약 3.1MB(비압축) 청크를 읽는다. `securityLevel:'strict'`·`htmlLabels:false`·DOMPurify SVG 프로필 정화, CSP 변경 없음. 커서가 들어오면 원문 펜스를 보여 주고, 문법 오류는 원문과 함께 표시. 테마 변경 시 재렌더, 슬래시 메뉴 "다이어그램 (Mermaid)", HTML 내보내기는 원문 코드 블록 fallback.
+- **각주**: `[^1]`/`[^이름]`/`^[인라인]`, 여러 줄 정의를 편집기 노드로 지원. 정의는 원문 위치에 보존하고 아래 각주 영역에서 편집(번호·툴팁·클릭 이동·본문으로). 정의 위치·순서·라벨 원형 유지, 정의 안 제목은 개요에서 제외, HTML 내보내기 지원.
+- 검증: core/editor/mcp 단위 테스트와 전체 e2e 74개. 200/500개 각주 패널 증분 갱신 전후 17.3/32.7ms → 2.8/11.7ms. `pnpm audit`의 Mermaid 경로 취약점 0.
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

@@ -479,7 +479,7 @@ export class SyncController {
   private diagnosticsBase(client: EffectiveClient | null): SyncDiagnostics {
     return {
       clientIdSuffix: client === null ? null : credentialSuffix(client.clientId),
-      clientSecretSuffix: client?.clientSecret === undefined ? null : credentialSuffix(client.clientSecret),
+      hasClientSecret: client?.clientSecret !== undefined && client.clientSecret !== '',
       accountEmail: this.device.lastAccountEmail,
       tokenExpiresAt: client?.tokens?.expiresAt ?? null,
       tokenValid: client?.tokens !== undefined && client.tokens.expiresAt > Date.now(),

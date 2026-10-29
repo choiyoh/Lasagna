@@ -23,7 +23,7 @@ export function formatSyncDiagnostics(status: SyncStatus, d: SyncDiagnostics): s
     `충돌: ${status.conflicts.length}건`,
     '',
     `클라이언트: ${d.clientIdSuffix === null ? '없음' : `${source} (…${d.clientIdSuffix})`}`,
-    `클라이언트 보안 비밀: ${d.clientSecretSuffix === null ? '등록 안 됨' : '등록됨'}`,
+    `클라이언트 보안 비밀: ${d.hasClientSecret ? '등록됨' : '등록 안 됨'}`,
     `계정: ${status.connected ? '계정 연결됨' : '계정 연결 안 됨'}`,
     `토큰 만료: ${iso(d.tokenExpiresAt)} (${d.tokenValid ? '유효' : '만료/없음'})`,
     `마지막 토큰 갱신 실패: ${d.lastRefreshFailure === null ? '없음' : `${d.lastRefreshFailure.title} [${d.lastRefreshFailure.code}] @ ${iso(d.lastRefreshFailure.at)}`}`,

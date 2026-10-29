@@ -10,15 +10,16 @@ Nopsidian은 **본인의 Google Cloud 프로젝트**로 Drive에 접근합니다
 ## 1. Google Cloud 설정 (한 번만)
 1. <https://console.cloud.google.com/> 에서 새 프로젝트를 만든다.
 2. **API 및 서비스 → 라이브러리** 에서 *Google Drive API* 를 사용 설정한다.
-3. **API 및 서비스 → OAuth 동의 화면**:
-   - 사용자 유형 *외부*, 앱 이름은 아무거나, 지원 이메일은 본인 주소.
-   - 범위(scope)에 `https://www.googleapis.com/auth/drive.file` 을 추가한다.
-   - **게시 상태를 "프로덕션"으로 바꾼다.** "테스트" 상태에서는 refresh token이 7일 뒤 만료되어 계속 다시 로그인해야 한다.
-   - `drive.file`은 민감하지 않은 범위라 앱 검증은 필요 없다. 본인 계정으로 쓰는 전용 앱이면 검증되지 않은 앱 경고에서 *고급 → 계속* 으로 진행한다.
-4. **사용자 인증 정보 → 사용자 인증 정보 만들기 → OAuth 클라이언트 ID**, 애플리케이션 유형 **데스크톱 앱**을 만든다.
-5. 만들어진 **클라이언트 ID**와 **클라이언트 보안 비밀**을 복사한다.
+3. 왼쪽 메뉴의 **Google Auth Platform** (예전 이름: OAuth 동의 화면)을 연다. 처음이면 **Get Started**를 누른다.
+   - **브랜딩(Branding)** (예전 이름: OAuth 동의 화면의 앱 정보): 앱 이름, 사용자 지원 이메일, 개발자 연락처를 입력하고 Google API Services 사용자 데이터 정책에 동의한 뒤 만든다.
+   - **대상(Audience)** (예전 이름: OAuth 동의 화면의 사용자 유형·게시 상태): 사용자 유형을 **외부(External)** 로 둔다. 테스트 상태에서는 refresh token이 7일 뒤 만료되므로, **프로덕션으로 게시(Publish app)** 를 눌러 **프로덕션(In production)** 으로 바꾼다. 테스트 상태로 두는 동안에는 본인 계정을 테스트 사용자로 추가한다.
+   - **데이터 액세스(Data Access)** (예전 이름: OAuth 동의 화면의 범위): **Add or Remove Scopes** 에서 `https://www.googleapis.com/auth/drive.file` 을 추가하고 저장한다. `drive.file`은 민감하지 않은 범위라 앱 검증은 필요 없다.
+4. **클라이언트(Clients)** (예전 이름: 사용자 인증 정보의 OAuth 클라이언트 ID): **Create Client** → 애플리케이션 유형 **데스크톱 앱(Desktop app)** 을 만든다.
+5. 만들어진 **클라이언트 ID**와 **클라이언트 보안 비밀**을 복사한다. 보안 비밀은 생성 직후 한 번만 전체가 보이고 이후에는 콘솔에 끝 4자리만 보이므로, 바로 안전한 곳에 보관한다.
 
-> 데스크톱 앱의 client secret은 설치형 앱에서 완전한 비밀은 아니지만, 저장소에 올리거나 빌드 결과물을 공개하면 안 됩니다.
+> 위 메뉴 이름은 Google 공식 문서의 [OAuth 동의 화면 구성](https://developers.google.com/workspace/guides/configure-oauth-consent), [Audience 설정](https://support.google.com/cloud/answer/15549945), [Clients 관리](https://support.google.com/cloud/answer/15549257)에서 확인했다. 콘솔에 처음 접속해 **Google Auth Platform not configured yet** 이 보이면 공식 문서의 [Get started with Google Auth platform](https://support.google.com/cloud/answer/15544987) **Get Started** 흐름을 따른다.
+
+> 데스크톱 앱의 client secret은 설치형 앱에서 완전한 비밀은 아니지만, 저장소에 올리거나 빌드 결과물을 공개하면 안 된다.
 
 ## 2. 앱에서 연결
 

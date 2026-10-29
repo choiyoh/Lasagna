@@ -126,7 +126,7 @@ export type SyncFolder = z.infer<typeof syncFolder>;
 /** '지금 확인'·대화상자 진단에 쓰는 값. 비밀·전체 이메일·노트 경로는 절대 담지 않는다. */
 export const syncDiagnostics = z.object({
   clientIdSuffix: z.string().nullable(),
-  clientSecretSuffix: z.string().nullable(),
+  hasClientSecret: z.boolean(),
   /** 마스킹된 계정 이메일(예: ab***@gmail.com) */
   accountEmail: z.string().nullable(),
   tokenExpiresAt: z.number().nullable(),

@@ -7,13 +7,13 @@
   "main": ".vite/build/main.cjs",
   "scripts": {
     "start": "electron-forge start",
-    "package": "electron-forge package",
+    "package": "electron-forge package && node scripts/check-builtin-secrets.mjs",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p .",
-    "e2e": "NOPS_E2E=1 electron-forge package && playwright test",
+    "e2e": "NOPS_E2E=1 electron-forge package && node scripts/check-builtin-secrets.mjs && playwright test",
     "check:builtin": "node scripts/check-builtin-secrets.mjs",
     "e2e:run": "playwright test",
-    "make": "electron-forge make"
+    "make": "electron-forge make && node scripts/check-builtin-secrets.mjs"
   },
   "devDependencies": {
     "@electron-forge/cli": "^8.0.1",

@@ -18,7 +18,7 @@ const status: SyncStatus = {
 
 const diagnostics: SyncDiagnostics = {
   clientIdSuffix: 'hijk',
-  clientSecretSuffix: 'cret',
+  hasClientSecret: true,
   accountEmail: 'so***@example.com',
   tokenExpiresAt: 1_700_000_200_000,
   tokenValid: true,
@@ -41,6 +41,7 @@ describe('formatSyncDiagnostics', () => {
     expect(text).not.toContain('MyVault');
     expect(text).not.toContain('folder-secret-id');
     expect(text).not.toContain('…cret');
+    expect(text).not.toContain('cret');
     expect(text).toContain('NETWORK');
   });
 

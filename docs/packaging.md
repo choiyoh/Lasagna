@@ -40,5 +40,6 @@
 - 개인용 빌드에는 `apps/desktop/.env.gdrive.local` 또는 `NOPS_GDRIVE_CLIENT_ID`·`NOPS_GDRIVE_CLIENT_SECRET` 환경 변수로 Google OAuth 클라이언트를 넣을 수 있다. 값은 `vite.main.config.ts`가 main 번들에만 define하고 renderer·preload에는 넣지 않는다. 자세한 설정은 `docs/sync-setup.md`를 본다.
 - `.env.gdrive.local`은 git에 커밋하지 않는다. `.env.gdrive.local.example`만 저장소에 둔다.
 - 값이 없으면 수동 입력 빌드로 만들어진다. 값이 있으면 설정 화면에서 클라이언트 입력을 건너뛰고 Google 로그인만 한다.
-- 빌드 후 `NOPS_GDRIVE_CLIENT_ID=... NOPS_GDRIVE_CLIENT_SECRET=... pnpm --filter @nopsidian/desktop check:builtin` 으로 secret이 main 번들에만 있는지 확인한다. 이 검사는 sourcemap도 함께 검사한다.
+- 빌드 후 `package`·`make`·`e2e` 스크립트가 자동으로 `check:builtin`을 실행한다. 값은 빌드와 같은 로더(`환경 변수 > .env.gdrive.local`)로 읽고, 값이 없으면 검사를 건너뛴다.
+- 수동으로도 실행할 수 있다: `pnpm --filter @nopsidian/desktop check:builtin`. 이 검사는 main·renderer·preload·sourcemap과 패키징된 `app.asar` 사본까지 확인하고, `.env.gdrive.local`이 결과물에 들어가지 않았는지도 본다.
 - **키가 들어간 dmg·zip·설치 exe는 공유하지 않는다.** 공유할 빌드는 키 없이 만들고 각 사용자가 자기 클라이언트를 입력하게 한다.

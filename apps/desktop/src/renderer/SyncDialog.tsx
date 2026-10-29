@@ -221,7 +221,7 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
             {s?.clientSource === 'builtin' ? '앱에 내장됨' : s?.clientSource === 'custom' ? '직접 입력' : '등록 안 됨'}
             {diag?.clientIdSuffix ? ` (…${diag.clientIdSuffix})` : ''}
             {' · '}보안 비밀:{' '}
-            {diag?.clientSecretSuffix ? '등록됨' : '등록 안 됨'}
+            {diag?.hasClientSecret ? '등록됨' : '등록 안 됨'}
           </p>
           <p className="small" data-testid="sync-account">
             계정:{' '}

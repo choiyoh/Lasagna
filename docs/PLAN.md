@@ -487,6 +487,14 @@ nopsidian/
 - 오류는 워커 경계를 넘는 안정적인 키(`auth`, `apiDisabled`, `quota`, `rateLimit`, `network`, `server`, `notFound` 등)로 분류한다. 5xx는 "Google 쪽 일시 오류", 404는 파일/폴더 없음, `dailyLimitExceeded`는 요청 제한으로 안내한다. `BUSY`는 화면에만 알리고 마지막 실패를 덮지 않는다.
 - 검증: typecheck·lint·전체 테스트·e2e 74개. 실제 Google 계정/Drive를 쓰는 진단 E2E는 미검증.
 
+### 동기화 설정 간소화: 사용자 전용 클라이언트 내장 (v0.7.5)
+- 사용자가 Google Cloud 에서 한 번 만든 데스크톱 OAuth 클라이언트를 **사용자 전용 빌드**에 넣는다. 값은 `NOPS_GDRIVE_CLIENT_ID/SECRET` 환경 변수 또는 git 제외 파일 `apps/desktop/.env.gdrive.local`(`scripts/gdrive-env.mjs` 로더, 환경 변수 우선)에서 읽어 **main 번들에만** define 한다. 값이 없으면 예전처럼 직접 입력 방식이다. 저장소·CI 에는 값을 두지 않는다.
+- 직접 입력한 클라이언트가 내장보다 우선한다. 토큰은 발급한 클라이언트(`tokenClientId`)에 묶어, 클라이언트가 바뀌면 다른 클라이언트의 refresh token 을 보내지 않고 다시 로그인하게 한다. 예전 저장값(`tokenClientId` 없음)은 그대로 유지한다.
+- 내장 빌드의 동기화 대화상자는 "Google로 로그인" 한 단계로 시작하고(고급: 다른 클라이언트 쓰기), 로그인 직후 첫 동기화 미리보기를 보여 준다(실행은 확인 뒤). 렌더러에는 출처(내장/직접 입력)·client ID 끝 4자리·secret 존재 여부만 간다.
+- `check:builtin`(`package`·`make`·`e2e` 뒤 자동): 내장 값이 main 번들에만 있고 renderer·preload·소스맵·`out/` 의 asar 사본과 `.env.gdrive.local` 사본에 없는지 검사한다. 값이 없으면 건너뛴다.
+- `docs/sync-setup.md` 를 Google Auth Platform(브랜딩 → 대상(프로덕션 게시) → 데이터 액세스(`drive.file`) → 클라이언트(데스크톱 앱)) 순서로 다시 썼다. 키가 든 dmg/zip 은 공유하지 않는다.
+- 검증: typecheck·lint·전체 테스트 1,586개·e2e 74개 + 내장 가짜 키 빌드 UI e2e. 실제 Google 로그인은 미검증.
+
 ### 개발 명령
 - `pnpm test` / `pnpm typecheck` / `pnpm lint`
 - `pnpm --filter @nopsidian/desktop start` — 개발 실행

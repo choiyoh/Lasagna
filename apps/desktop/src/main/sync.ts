@@ -4,6 +4,7 @@ import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { buildAuthUrl, createPkce, exchangeCode, randomState, startLoopback } from '@nopsidian/sync-gdrive';
 import type { SyncDiagnostics, SyncFailure, SyncStatus } from '@nopsidian/ipc-contract';
+import { BUILTIN_CLIENT, type BuiltinClient } from './builtin-client';
 import type { DiagnosticsSummary, PlanSummary, RunSummary, SyncResponse, SyncWorkerData } from '../workers/sync/protocol';
 
 type Tokens = SyncWorkerData['tokens'];
@@ -16,8 +17,18 @@ export interface SecretBox {
 }
 
 interface Credentials {
+  /** 사용자가 직접 입력한 클라이언트. 없으면 앱 내장 클라이언트를 쓴다. */
+  clientId?: string;
+  clientSecret?: string;
+  tokens?: Tokens;
+  /** 토큰이 어느 클라이언트에 발급됐는지. 없으면 예전 파일로 보고 clientId 소유로 본다. */
+  tokenClientId?: string;
+}
+
+interface EffectiveClient {
   clientId: string;
   clientSecret?: string;
+  source: 'builtin' | 'custom';
   tokens?: Tokens;
 }
 
@@ -140,13 +151,19 @@ export class CredentialStore {
     }
   }
 
+  /** 직접 입력한 클라이언트 설정은 남기고 토큰만 지운다. 내장 클라이언트만 쓰던 파일은 통째로 지운다. */
   clearTokens(): void {
     const c = this.load();
-    if (c) {
-      this.save({ clientId: c.clientId, clientSecret: c.clientSecret });
+    if (c?.clientId) {
+      const keep: Credentials = { clientId: c.clientId };
+      if (c.clientSecret !== undefined) keep.clientSecret = c.clientSecret;
+      this.save(keep);
       return;
     }
-    // 키체인을 못 쓰거나 복호화에 실패해 load() 가 null 이어도, 암호화된 토큰이 파일에 남아 있으면 지운다.
+    this.clear();
+  }
+
+  clear(): void {
     try {
       if (existsSync(this.file)) rmSync(this.file, { force: true });
     } catch {
@@ -190,6 +207,8 @@ export interface SyncControllerOptions {
   workerFile: string;
   openExternal: (url: string) => void;
   broadcast: (status: SyncStatus) => void;
+  /** 테스트에서 빌드 상수를 대체한다. 기본은 이 빌드에 주입된 값. */
+  builtinClient?: BuiltinClient | null;
   /** 주기·디바운스(테스트에서 줄인다) */
   intervalMs?: number;
   debounceMs?: number;
@@ -212,16 +231,40 @@ export class SyncController {
 
   constructor(private readonly o: SyncControllerOptions) {}
 
+  private get builtinClient(): BuiltinClient | null {
+    return this.o.builtinClient === undefined ? BUILTIN_CLIENT : this.o.builtinClient;
+  }
+
+  /** 토큰 소유자가 현재 클라이언트와 같을 때만 돌려준다(다른 클라이언트의 refresh token 재사용 금지). */
+  private tokensFor(c: Credentials | null, clientId: string): Tokens | undefined {
+    if (c?.tokens === undefined) return undefined;
+    return (c.tokenClientId ?? c.clientId) === clientId ? c.tokens : undefined;
+  }
+
+  /** 직접 입력이 있으면 우선하고, 없으면 빌드에 내장된 클라이언트를 쓴다. */
+  private effectiveClient(c = this.o.credentials.load()): EffectiveClient | null {
+    if (c?.clientId) {
+      const tokens = this.tokensFor(c, c.clientId);
+      return { clientId: c.clientId, clientSecret: c.clientSecret, source: 'custom', ...(tokens === undefined ? {} : { tokens }) };
+    }
+    const builtin = this.builtinClient;
+    if (builtin === null) return null;
+    const tokens = this.tokensFor(c, builtin.clientId);
+    return { ...builtin, source: 'builtin', ...(tokens === undefined ? {} : { tokens }) };
+  }
+
   private get deviceFile() {
     return path.join(this.root!, '.nopsidian', 'sync', 'device.json');
   }
 
   status(): SyncStatus {
-    const c = this.o.credentials.load();
-    const connected = !!c?.tokens;
+    const client = this.effectiveClient();
+    const connected = client?.tokens !== undefined;
     const enabled = !!this.root && this.device.enabled;
     return {
-      configured: !!c?.clientId,
+      configured: client !== null,
+      clientSource: client?.source ?? 'none',
+      builtinClientAvailable: this.builtinClient !== null,
       connected,
       enabled,
       confirmedFirst: this.device.confirmedFirst,
@@ -273,7 +316,12 @@ export class SyncController {
   setClient(clientId: string, clientSecret?: string) {
     const prev = this.o.credentials.load();
     const same = prev?.clientId === clientId;
-    this.o.credentials.save({ clientId, clientSecret: clientSecret || undefined, tokens: same ? prev.tokens : undefined });
+    const tokens = same ? this.tokensFor(prev, clientId) : undefined;
+    this.o.credentials.save({
+      clientId,
+      clientSecret: clientSecret || undefined,
+      ...(tokens === undefined ? {} : { tokens, tokenClientId: clientId }),
+    });
     if (!same) {
       this.device.lastRefreshFailure = null;
       this.device.lastAccountEmail = null;
@@ -283,27 +331,43 @@ export class SyncController {
     this.emit();
   }
 
+  /** 직접 입력한 클라이언트를 지우고 빌드에 내장된 클라이언트로 돌아간다. 토큰은 다시 로그인해야 한다. */
+  useBuiltinClient(): SyncStatus {
+    const builtin = this.builtinClient;
+    if (builtin === null) throw new Error('이 빌드에는 Google 클라이언트가 내장되어 있지 않아요');
+    const prev = this.o.credentials.load();
+    const keep = this.tokensFor(prev, builtin.clientId);
+    if (keep === undefined) this.o.credentials.clear();
+    else this.o.credentials.save({ tokens: keep, tokenClientId: builtin.clientId });
+    this.device.lastRefreshFailure = null;
+    this.device.lastAccountEmail = null;
+    this.saveDevice();
+    void this.stopWorker();
+    this.emit();
+    return this.status();
+  }
+
   async connect(): Promise<SyncStatus> {
-    const c = this.o.credentials.load();
-    if (!c?.clientId) throw new Error('먼저 Google 클라이언트 ID를 입력해 주세요');
+    const client = this.effectiveClient();
+    if (client === null) throw new Error('Google 클라이언트가 설정되지 않았어요');
     this.cancelConnect?.();
     const pkce = createPkce();
     const state = randomState();
     const loop = await startLoopback({ state });
     this.cancelConnect = loop.close;
     try {
-      this.o.openExternal(buildAuthUrl({ clientId: c.clientId, redirectUri: loop.redirectUri, challenge: pkce.challenge, state }));
+      this.o.openExternal(buildAuthUrl({ clientId: client.clientId, redirectUri: loop.redirectUri, challenge: pkce.challenge, state }));
       const { code } = await loop.result;
       const tokens = await exchangeCode({
-        clientId: c.clientId,
-        clientSecret: c.clientSecret,
+        clientId: client.clientId,
+        clientSecret: client.clientSecret,
         fetch: this.o.fetch ?? fetch,
         code,
         verifier: pkce.verifier,
         redirectUri: loop.redirectUri,
       });
       if (!tokens.refreshToken) throw new Error('Google이 refresh token을 주지 않았어요. 클라이언트 유형이 "데스크톱 앱"인지 확인해 주세요');
-      this.o.credentials.save({ ...c, tokens });
+      this.o.credentials.save({ ...(this.o.credentials.load() ?? {}), tokens, tokenClientId: client.clientId });
       await this.stopWorker();
       this.device.lastRefreshFailure = null;
       this.device.lastAccountEmail = null;
@@ -412,13 +476,13 @@ export class SyncController {
     return { name: this.name, path: this.name === '' ? 'Nopsidian' : `Nopsidian/${this.name}`, id: null, exists: false, checkedAt: null };
   }
 
-  private diagnosticsBase(c: Credentials | null): SyncDiagnostics {
+  private diagnosticsBase(client: EffectiveClient | null): SyncDiagnostics {
     return {
-      clientIdSuffix: c?.clientId === undefined ? null : credentialSuffix(c.clientId),
-      clientSecretSuffix: c?.clientSecret === undefined ? null : credentialSuffix(c.clientSecret),
+      clientIdSuffix: client === null ? null : credentialSuffix(client.clientId),
+      hasClientSecret: client?.clientSecret !== undefined && client.clientSecret !== '',
       accountEmail: this.device.lastAccountEmail,
-      tokenExpiresAt: c?.tokens?.expiresAt ?? null,
-      tokenValid: c?.tokens !== undefined && c.tokens.expiresAt > Date.now(),
+      tokenExpiresAt: client?.tokens?.expiresAt ?? null,
+      tokenValid: client?.tokens !== undefined && client.tokens.expiresAt > Date.now(),
       lastRefreshFailure: this.device.lastRefreshFailure,
       pendingChanges: null,
       folder: this.device.lastFolder ?? this.emptyFolder(),
@@ -428,9 +492,9 @@ export class SyncController {
 
   /** 네트워크 없이 저장된 값 + 로컬 스캔만. 연결 전이거나 스캔이 실패해도 화면은 열린다. */
   async diagnostics(): Promise<SyncDiagnostics> {
-    const c = this.o.credentials.load();
-    const base = this.diagnosticsBase(c);
-    if (!this.root || c?.tokens === undefined) return base;
+    const client = this.effectiveClient();
+    const base = this.diagnosticsBase(client);
+    if (!this.root || client?.tokens === undefined) return base;
     try {
       const r = await this.call<DiagnosticsSummary>({ method: 'diagnose', params: { remote: false } });
       return { ...base, pendingChanges: r.pendingChanges, tokenExpiresAt: r.tokenExpiresAt };
@@ -444,9 +508,9 @@ export class SyncController {
    * 업로드·다운로드·삭제·폴더 생성은 하지 않으며, 실패해도 예외 대신 마지막 실패를 담아 돌려준다.
    */
   async check(): Promise<SyncDiagnostics> {
-    const c = this.o.credentials.load();
-    let base = this.diagnosticsBase(c);
-    if (!this.root || c?.tokens === undefined) {
+    const client = this.effectiveClient();
+    let base = this.diagnosticsBase(client);
+    if (!this.root || client?.tokens === undefined) {
       const failure = syncFailureFor({ code: 'notConnected' });
       this.device.lastFailure = failure;
       this.saveDevice();
@@ -476,7 +540,7 @@ export class SyncController {
         if (cleared.has(code) || /^HTTP 5\d\d$/.test(code)) this.device.lastFailure = null;
       }
       this.saveDevice();
-      base = this.diagnosticsBase(c);
+      base = this.diagnosticsBase(client);
       return {
         ...base,
         pendingChanges: r.pendingChanges,
@@ -500,7 +564,7 @@ export class SyncController {
       this.saveDevice();
       if (revoked) {
         this.emit();
-        base = this.diagnosticsBase(this.o.credentials.load());
+        base = this.diagnosticsBase(this.effectiveClient());
       }
       return {
         ...base,
@@ -513,16 +577,17 @@ export class SyncController {
   // ── 워커 ──────────────────────────────────────────────────────
   private ensureWorker(): Worker {
     if (this.worker) return this.worker;
-    const c = this.o.credentials.load();
-    if (!this.root || !c?.tokens) throw Object.assign(new Error('Google 계정이 연결되지 않았어요'), { kind: 'auth' });
+    const client = this.effectiveClient();
+    if (!this.root || client?.tokens === undefined) throw Object.assign(new Error('Google 계정이 연결되지 않았어요'), { kind: 'auth' });
     const data: SyncWorkerData = {
       root: this.root,
       vaultKey: vaultKeyFor(this.name),
       vaultName: this.name,
-      clientId: c.clientId,
-      clientSecret: c.clientSecret,
-      tokens: c.tokens,
+      clientId: client.clientId,
+      clientSecret: client.clientSecret,
+      tokens: client.tokens,
     };
+    const tokenClientId = client.clientId;
     const w = new Worker(this.o.workerFile, { workerData: data });
     w.on('message', (m: SyncResponse) => {
       if (m.type === 'response') {
@@ -538,7 +603,7 @@ export class SyncController {
         this.device.lastRefreshFailure = null;
         this.saveDevice();
         const cur = this.o.credentials.load();
-        if (cur) this.o.credentials.save({ ...cur, tokens: m.tokens });
+        this.o.credentials.save({ ...(cur ?? {}), tokens: m.tokens, tokenClientId });
       } else if (m.type === 'fatal') {
         this.failAll(new Error(m.error));
       }

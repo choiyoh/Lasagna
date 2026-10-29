@@ -30,6 +30,14 @@ describe('CredentialStore', () => {
   it('파일이 없거나 깨졌거나 키체인이 없으면 null', () => {
     expect(new CredentialStore(tmpFile(), box()).load()).toBeNull();
   });
+  it('내장 클라이언트만 쓰던 파일은 clearTokens 로 통째로 지운다', () => {
+    const file = tmpFile();
+    const store = new CredentialStore(file, box());
+    store.save({ tokens: { accessToken: 'a', refreshToken: 'r', expiresAt: 1 }, tokenClientId: 'b'.repeat(12) });
+    store.clearTokens();
+    expect(store.load()).toBeNull();
+    expect(existsSync(file)).toBe(false);
+  });
   it('clearTokens 는 클라이언트 설정만 남긴다', () => {
     const store = new CredentialStore(tmpFile(), box());
     store.save({ clientId: 'c'.repeat(12), tokens: { accessToken: 'a', refreshToken: 'r', expiresAt: 1 } });
@@ -57,6 +65,57 @@ describe('CredentialStore', () => {
     store.save({ clientId: 'c'.repeat(12) });
     expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(store.load()).toMatchObject({ clientId: 'c'.repeat(12) });
+  });
+});
+
+describe('내장 클라이언트 우선순위', () => {
+  const builtin = { clientId: 'builtin-1234.apps.googleusercontent.com', clientSecret: 'builtin-secret' };
+  const controller = (store: CredentialStore) =>
+    new SyncController({
+      credentials: store,
+      workerFile: '/unused/worker.cjs',
+      openExternal: () => undefined,
+      broadcast: () => undefined,
+      builtinClient: builtin,
+    });
+
+  it('직접 입력이 없으면 내장 클라이언트를 쓰고, 토큰이 없으면 로그인 전 상태다', () => {
+    const c = controller(new CredentialStore(tmpFile(), box()));
+    expect(c.status()).toMatchObject({
+      configured: true,
+      clientSource: 'builtin',
+      builtinClientAvailable: true,
+      connected: false,
+    });
+  });
+
+  it('직접 입력 클라이언트가 있으면 내장보다 우선하고 예전 토큰도 유지한다', () => {
+    const store = new CredentialStore(tmpFile(), box());
+    store.save({ clientId: 'custom-client', tokens: { accessToken: 'a', refreshToken: 'r', expiresAt: 1 } });
+    const c = controller(store);
+    expect(c.status()).toMatchObject({
+      configured: true,
+      clientSource: 'custom',
+      connected: true,
+    });
+    // 같은 클라이언트를 다시 저장해도 기존 토큰을 유지한다.
+    c.setClient('custom-client', 'custom-secret');
+    expect(c.status()).toMatchObject({ clientSource: 'custom', connected: true });
+    expect(store.load()?.tokenClientId).toBe('custom-client');
+  });
+
+  it('내장 토큰은 다른 클라이언트로 바꿀 때 재사용하지 않는다', () => {
+    const store = new CredentialStore(tmpFile(), box());
+    store.save({ tokens: { accessToken: 'a', refreshToken: 'r', expiresAt: 1 }, tokenClientId: builtin.clientId });
+    const c = controller(store);
+    expect(c.status()).toMatchObject({ clientSource: 'builtin', connected: true });
+
+    c.setClient('custom-client');
+    expect(c.status()).toMatchObject({ clientSource: 'custom', connected: false });
+    expect(store.load()?.tokens).toBeUndefined();
+
+    expect(c.useBuiltinClient()).toMatchObject({ clientSource: 'builtin', connected: false });
+    expect(store.load()).toBeNull();
   });
 });
 

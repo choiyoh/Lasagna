@@ -903,9 +903,35 @@ test.describe('링크 코어', () => {
     await page.getByTestId('sync-bar').click();
     const dialog = page.getByRole('dialog', { name: 'Google Drive 동기화' });
     await expect(dialog).toBeVisible();
+    const diagnostics = dialog.getByTestId('sync-diagnostics');
+    const syncStatus = await page.evaluate(() => window.nops.sync.status());
+    if (syncStatus.clientSource === 'builtin') {
+      // 사용자 전용 빌드: 클라이언트 입력 없이 로그인부터 시작한다.
+      await expect(dialog).toContainText('앱에 내장된 Google 클라이언트');
+      await expect(dialog.getByRole('button', { name: 'Google로 로그인' })).toBeEnabled();
+      await expect(dialog.getByLabel('클라이언트 ID')).toBeHidden();
+      await expect(dialog.getByRole('checkbox')).toBeDisabled();
+      await expect(diagnostics).toContainText('앱에 내장됨 (…ltin)', { timeout: 8000 });
+      await expect(dialog.getByTestId('sync-check')).toBeDisabled();
+      await dialog.getByTestId('sync-copy-diagnostics').click();
+      await expect(dialog).toContainText('복사했어요');
+      // 내장 → 직접 입력 → 내장 전환. 어느 쪽도 다른 클라이언트 토큰을 재사용하지 않는다.
+      await dialog.getByText('고급: 다른 클라이언트 쓰기').click();
+      await dialog.getByLabel('클라이언트 ID').fill('1234567890-customclient.apps.googleusercontent.com');
+      await dialog.getByRole('button', { name: '저장' }).click();
+      await expect(dialog).toContainText('직접 입력한 클라이언트를 사용하고 있어요', { timeout: 8000 });
+      await dialog.getByRole('button', { name: '앱 내장 클라이언트로' }).click();
+      await expect(dialog).toContainText('앱에 내장된 Google 클라이언트', { timeout: 8000 });
+      expect(syncStatus).toMatchObject({ configured: true, connected: false, enabled: false, state: 'off' });
+      await expect(page.evaluate(() => window.nops.sync.plan())).rejects.toThrow(/연결되지 않았어요/);
+      expect(existsSync(path.join(vaultDir, '.nopsidian', 'sync-auth.json'))).toBe(false);
+      await page.keyboard.press('Escape');
+      await expect(dialog).toHaveCount(0);
+      return;
+    }
+
     await expect(dialog.getByRole('button', { name: 'Google 계정 연결' })).toBeDisabled();
     await expect(dialog.getByRole('checkbox')).toBeDisabled();
-    const diagnostics = dialog.getByTestId('sync-diagnostics');
     await expect(diagnostics).toContainText('등록 안 됨');
     await expect(diagnostics).toContainText('연결 안 됨');
     await expect(dialog.getByTestId('sync-check')).toBeDisabled();

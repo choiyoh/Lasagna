@@ -9,3 +9,5 @@ out/
 test-results/
 playwright-report/
 .scratch/
+
+!apps/desktop/.env.gdrive.local.example

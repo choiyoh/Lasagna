@@ -78,8 +78,12 @@ export type GraphLayout = z.infer<typeof graphLayout>;
 
 
 export const syncStatus = z.object({
-  /** Google 클라이언트 ID 가 저장돼 있다 */
+  /** 사용할 Google 클라이언트가 있다(직접 입력 또는 앱 내장) */
   configured: z.boolean(),
+  /** 현재 우선 적용되는 클라이언트 출처 */
+  clientSource: z.enum(['builtin', 'custom', 'none']),
+  /** 이 빌드에 사용자 전용 클라이언트가 내장돼 있다 */
+  builtinClientAvailable: z.boolean(),
   /** 계정이 연결돼 있다(토큰 보유) */
   connected: z.boolean(),
   /** 이 볼트에서 동기화를 켰다 */
@@ -122,7 +126,7 @@ export type SyncFolder = z.infer<typeof syncFolder>;
 /** '지금 확인'·대화상자 진단에 쓰는 값. 비밀·전체 이메일·노트 경로는 절대 담지 않는다. */
 export const syncDiagnostics = z.object({
   clientIdSuffix: z.string().nullable(),
-  clientSecretSuffix: z.string().nullable(),
+  hasClientSecret: z.boolean(),
   /** 마스킹된 계정 이메일(예: ab***@gmail.com) */
   accountEmail: z.string().nullable(),
   tokenExpiresAt: z.number().nullable(),
@@ -435,6 +439,8 @@ export const contract = {
   /** 시스템 브라우저로 Google 로그인(PKCE + loopback)을 열고, 끝나면 연결 상태를 돌려준다. */
   'sync.connect': { input: z.undefined(), output: syncStatus },
   'sync.disconnect': { input: z.undefined(), output: syncStatus },
+  /** 직접 입력한 클라이언트를 지우고 앱 내장 클라이언트로 되돌린다. */
+  'sync.useBuiltin': { input: z.undefined(), output: syncStatus },
   /** 이 볼트의 동기화를 켜고 끈다. */
   'sync.enable': { input: z.object({ enabled: z.boolean() }), output: syncStatus },
   /** 아무것도 바꾸지 않고 무엇을 할지 계산만 한다(첫 동기화 확인용). */

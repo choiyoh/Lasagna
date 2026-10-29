@@ -35,3 +35,10 @@
 - Windows 러너에서 `pnpm install`(hoisted) 후 `wrappy`·`once` 가 루트에 안 깔려 Squirrel 메이커가 `inflight` 를 읽다가 실패했다(macOS 전용 선택 의존성 `appdmg` 경로가 건너뛰어지며 생기는 pnpm 쪽 문제로 보인다). 그래서 `apps/desktop` 의 devDependencies 에 `wrappy`·`once` 를 직접 넣어 두었다. 비슷한 `Cannot find module` 이 또 나오면 같은 방식으로 직접 의존성에 추가한다.
 - forge 설정에서 메이커 클래스를 import 하면 설정을 읽을 때 다른 OS 메이커의 의존성 트리까지 불러온다 → `makers` 는 `{ name: '@electron-forge/maker-…' }` 문자열로 지정한다.
 - 느린 러너에서 퍼즈 테스트가 5초 제한을 넘어 모든 패키지 `testTimeout` 을 30초로 두었다. 윈도우(CRLF) 줄바꿈에서 줄 끝 `^블록ID` 를 못 찾던 실제 버그도 CI 로 잡았다.
+
+## 사용자 전용 Google 클라이언트 내장 빌드
+- 개인용 빌드에는 `apps/desktop/.env.gdrive.local` 또는 `NOPS_GDRIVE_CLIENT_ID`·`NOPS_GDRIVE_CLIENT_SECRET` 환경 변수로 Google OAuth 클라이언트를 넣을 수 있다. 값은 `vite.main.config.ts`가 main 번들에만 define하고 renderer·preload에는 넣지 않는다. 자세한 설정은 `docs/sync-setup.md`를 본다.
+- `.env.gdrive.local`은 git에 커밋하지 않는다. `.env.gdrive.local.example`만 저장소에 둔다.
+- 값이 없으면 수동 입력 빌드로 만들어진다. 값이 있으면 설정 화면에서 클라이언트 입력을 건너뛰고 Google 로그인만 한다.
+- 빌드 후 `NOPS_GDRIVE_CLIENT_ID=... NOPS_GDRIVE_CLIENT_SECRET=... pnpm --filter @nopsidian/desktop check:builtin` 으로 secret이 main 번들에만 있는지 확인한다. 이 검사는 sourcemap도 함께 검사한다.
+- **키가 들어간 dmg·zip·설치 exe는 공유하지 않는다.** 공유할 빌드는 키 없이 만들고 각 사용자가 자기 클라이언트를 입력하게 한다.

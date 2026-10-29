@@ -543,6 +543,7 @@ function registerHandlers() {
     await syncController.disconnect();
     return syncController.status();
   });
+  handle('sync.useBuiltin', () => syncController.useBuiltinClient());
   handle('sync.enable', ({ enabled }) => syncController.setEnabled(enabled));
   handle('sync.plan', () => syncController.plan());
   handle('sync.run', ({ force }) => syncController.run(force ?? false));

@@ -4,6 +4,8 @@ import { formatSyncDiagnostics } from './sync-diagnostics';
 
 const status: SyncStatus = {
   configured: true,
+  clientSource: 'custom',
+  builtinClientAvailable: false,
   connected: true,
   enabled: true,
   confirmedFirst: true,
@@ -30,6 +32,7 @@ describe('formatSyncDiagnostics', () => {
   it('상태·토큰·폴더·오류 코드를 복사용 텍스트로 만든다', () => {
     const text = formatSyncDiagnostics(status, diagnostics);
     expect(text).toContain('상태: idle');
+    expect(text).toContain('클라이언트: 직접 입력 (…hijk)');
     expect(text).toContain('마지막 시도: 2023-11-14T22:15:00.000Z');
     expect(text).toContain('이 기기에서 바뀐 파일: 3개');
     expect(text).toContain('계정 연결됨');
@@ -39,6 +42,12 @@ describe('formatSyncDiagnostics', () => {
     expect(text).not.toContain('folder-secret-id');
     expect(text).not.toContain('…cret');
     expect(text).toContain('NETWORK');
+  });
+
+  it('내장 클라이언트도 출처와 끝 4자리만 복사한다', () => {
+    const text = formatSyncDiagnostics({ ...status, clientSource: 'builtin', builtinClientAvailable: true }, diagnostics);
+    expect(text).toContain('클라이언트: 내장 (…hijk)');
+    expect(text).not.toContain('builtin-secret');
   });
 
   it('토큰·전체 이메일·노트 이름/경로는 넣지 않는다', () => {

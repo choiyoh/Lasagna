@@ -58,7 +58,7 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
-    if (status?.state === 'syncing') return;
+    if (busy !== null || status?.state === 'syncing') return;
     let live = true;
     setDiagLoading(true);
     void window.nops.sync
@@ -71,7 +71,7 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
     return () => {
       live = false;
     };
-  }, [status?.configured, status?.connected, status?.state]);
+  }, [busy, status?.configured, status?.connected, status?.state]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -103,6 +103,32 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
   }, [status, diag]);
 
   const s = status;
+  const isBuiltin = s?.clientSource === 'builtin';
+  const builtinAvailable = s?.builtinClientAvailable === true;
+  const clientForm = (
+    <>
+      <input placeholder="클라이언트 ID (….apps.googleusercontent.com)" value={clientId} onChange={(e) => setClientId(e.target.value)} aria-label="클라이언트 ID" />
+      <input placeholder="클라이언트 보안 비밀(있으면)" value={secret} onChange={(e) => setSecret(e.target.value)} aria-label="클라이언트 보안 비밀" type="password" />
+      <div className="dialog__actions left">
+        <button disabled={!clientId.trim() || !!busy} onClick={() => void act('client', () => window.nops.sync.setClient({ clientId: clientId.trim(), clientSecret: secret.trim() || undefined }).then(() => { setClientId(''); setSecret(''); }))}>
+          저장
+        </button>
+        {builtinAvailable && s?.clientSource === 'custom' && (
+          <button disabled={!!busy} onClick={() => void act('builtin', () => window.nops.sync.useBuiltin())}>
+            앱 내장 클라이언트로
+          </button>
+        )}
+      </div>
+    </>
+  );
+  const connectAction = () =>
+    act('connect', async () => {
+      const next = await window.nops.sync.connect();
+      if (!next.confirmedFirst) {
+        setResult(null);
+        setPlan(await window.nops.sync.plan());
+      }
+    });
   const tokenText = !s?.connected
     ? '없음'
     : diag === null
@@ -123,36 +149,56 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
         <h2>Google Drive 동기화</h2>
         <p className="muted small">켜지 않으면 앱은 계속 완전한 오프라인으로 동작해요. 앱이 만든 파일에만 접근하는 <code>drive.file</code> 권한만 요청해요.</p>
 
-        <section>
-          <h3>1. Google 클라이언트</h3>
-          {s?.configured ? (
-            <p className="small">클라이언트 ID가 저장돼 있어요(OS 키체인에 암호화).</p>
-          ) : (
-            <p className="muted small">본인의 Google Cloud 프로젝트에서 “데스크톱 앱” OAuth 클라이언트를 만들어 ID를 붙여 넣어 주세요. (docs/sync-setup.md)</p>
-          )}
-          <input placeholder="클라이언트 ID (….apps.googleusercontent.com)" value={clientId} onChange={(e) => setClientId(e.target.value)} aria-label="클라이언트 ID" />
-          <input placeholder="클라이언트 보안 비밀(있으면)" value={secret} onChange={(e) => setSecret(e.target.value)} aria-label="클라이언트 보안 비밀" type="password" />
-          <button disabled={!clientId.trim() || !!busy} onClick={() => void act('client', () => window.nops.sync.setClient({ clientId: clientId.trim(), clientSecret: secret.trim() || undefined }).then(() => { setClientId(''); setSecret(''); }))}>
-            저장
-          </button>
-        </section>
+        {isBuiltin ? (
+          <section>
+            <h3>1. Google 계정</h3>
+            <p className="small">앱에 내장된 Google 클라이언트로 연결해요. Google Cloud 설정은 이미 끝났어요.</p>
+            {s?.connected ? (
+              <>
+                <p className="small">Google 계정이 연결돼 있어요.</p>
+                <button disabled={!!busy} onClick={() => void act('disconnect', () => window.nops.sync.disconnect())}>연결 해제</button>
+              </>
+            ) : (
+              <button disabled={!s?.configured || !!busy} onClick={() => void connectAction()}>
+                {busy === 'connect' ? '브라우저에서 로그인해 주세요…' : 'Google로 로그인'}
+              </button>
+            )}
+            <details className="syncdialog__advanced">
+              <summary className="muted small">고급: 다른 클라이언트 쓰기</summary>
+              <p className="muted small">직접 입력한 클라이언트가 있으면 내장 클라이언트보다 우선해요. 바꾸면 기존 토큰은 다시 로그인해야 해요.</p>
+              {clientForm}
+            </details>
+          </section>
+        ) : (
+          <>
+            <section>
+              <h3>1. Google 클라이언트</h3>
+              {s?.clientSource === 'custom' ? (
+                <p className="small">클라이언트 ID가 저장돼 있어요. 직접 입력한 클라이언트를 사용하고 있어요(OS 키체인에 암호화).</p>
+              ) : (
+                <p className="muted small">이 빌드에는 내장 클라이언트가 없어요. 본인의 Google Cloud 프로젝트에서 “데스크톱 앱” OAuth 클라이언트를 만들어 ID를 붙여 넣어 주세요. (docs/sync-setup.md)</p>
+              )}
+              {clientForm}
+            </section>
+
+            <section>
+              <h3>2. 계정</h3>
+              {s?.connected ? (
+                <>
+                  <p className="small">Google 계정이 연결돼 있어요.</p>
+                  <button disabled={!!busy} onClick={() => void act('disconnect', () => window.nops.sync.disconnect())}>연결 해제</button>
+                </>
+              ) : (
+                <button disabled={!s?.configured || !!busy} onClick={() => void connectAction()}>
+                  {busy === 'connect' ? '브라우저에서 로그인해 주세요…' : 'Google 계정 연결'}
+                </button>
+              )}
+            </section>
+          </>
+        )}
 
         <section>
-          <h3>2. 계정</h3>
-          {s?.connected ? (
-            <>
-              <p className="small">Google 계정이 연결돼 있어요.</p>
-              <button disabled={!!busy} onClick={() => void act('disconnect', () => window.nops.sync.disconnect())}>연결 해제</button>
-            </>
-          ) : (
-            <button disabled={!s?.configured || !!busy} onClick={() => void act('connect', () => window.nops.sync.connect())}>
-              {busy === 'connect' ? '브라우저에서 로그인해 주세요…' : 'Google 계정 연결'}
-            </button>
-          )}
-        </section>
-
-        <section>
-          <h3>3. 이 볼트</h3>
+          <h3>{isBuiltin ? '2' : '3'}. 이 볼트</h3>
           <label className="small">
             <input type="checkbox" checked={!!s?.enabled} disabled={!s?.connected || !!busy} onChange={(e) => void act('enable', () => window.nops.sync.enable({ enabled: e.target.checked }))} /> 이 볼트를 Drive와 동기화
           </label>
@@ -169,16 +215,13 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
         </section>
 
         <section data-testid="sync-diagnostics">
-          <h3>4. 진단</h3>
+          <h3>{isBuiltin ? '3' : '4'}. 진단</h3>
           <p className="small">
             Google 클라이언트:{' '}
-            {diag?.clientIdSuffix
-              ? `등록됨 (…${diag.clientIdSuffix})`
-              : s?.configured
-                ? '등록됨'
-                : '등록 안 됨'}
+            {s?.clientSource === 'builtin' ? '앱에 내장됨' : s?.clientSource === 'custom' ? '직접 입력' : '등록 안 됨'}
+            {diag?.clientIdSuffix ? ` (…${diag.clientIdSuffix})` : ''}
             {' · '}보안 비밀:{' '}
-            {diag?.clientSecretSuffix ? `등록됨 (…${diag.clientSecretSuffix})` : '등록 안 됨'}
+            {diag?.clientSecretSuffix ? '등록됨' : '등록 안 됨'}
           </p>
           <p className="small" data-testid="sync-account">
             계정:{' '}
@@ -281,12 +324,13 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
               <button onClick={() => setPlan(null)}>닫기</button>
               <button
                 className="primary"
-                disabled={!!busy}
+                disabled={!!busy || !s?.enabled}
                 onClick={() => void act('run', async () => { const force = !!plan.blocked; setResult(await window.nops.sync.run({ force })); setPlan(null); })}
               >
                 {plan.blocked ? '그래도 실행' : '실행'}
               </button>
             </div>
+            {s && !s.enabled && <p className="muted small">먼저 위에서 ‘이 볼트를 Drive와 동기화’를 켜 주세요.</p>}
           </section>
         )}
 

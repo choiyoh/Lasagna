@@ -11,7 +11,7 @@ const yes = (v: boolean): string => (v ? '예' : '아니오');
 export function formatSyncDiagnostics(status: SyncStatus, d: SyncDiagnostics): string {
   const source = status.clientSource === 'builtin' ? '내장' : status.clientSource === 'custom' ? '직접 입력' : '없음';
   const lines = [
-    'Nopsidian 동기화 진단',
+    'Lasagna 동기화 진단',
     `생성: ${new Date().toISOString()}`,
     '',
     `상태: ${status.state}`,

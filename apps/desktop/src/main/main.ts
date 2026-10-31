@@ -73,6 +73,13 @@ const devServerUrl =
 /** 기본 앱으로 열어도 안전한 문서·미디어 형식 */
 const OPENABLE = /\.(pdf|txt|csv|png|jpe?g|gif|webp|svg|avif|bmp|mp3|m4a|wav|ogg|flac|mp4|webm|mov|m4v|docx?|xlsx?|pptx?|hwp|hwpx|rtf)$/i;
 
+// 앱 이름을 Nopsidian → Lasagna 로 바꾸면서 userData 기본 경로(<appData>/<앱 이름>)도 달라진다.
+// 기존 사용자의 최근 볼트·동기화 인증이 사라지지 않게, 예전 폴더가 있고 새 폴더가 없으면 예전 폴더를 계속 쓴다.
+{
+  const legacyUserData = path.join(app.getPath('appData'), 'Nopsidian');
+  if (existsSync(legacyUserData) && !existsSync(app.getPath('userData'))) app.setPath('userData', legacyUserData);
+}
+
 // Windows 설치·업데이트·제거 중에 Squirrel 이 앱을 잠깐 띄운다. 바로가기를 만들고 종료한다.
 if (process.platform === 'win32' && squirrelStartup) app.quit();
 

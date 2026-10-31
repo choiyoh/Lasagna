@@ -30,7 +30,7 @@ const MAX_READ_CHARS = 40_000;
 /** 에이전트에게 처음 보여 주는 안내문 */
 export function instructionsFor(policy: McpPolicy): string {
   const lines = [
-    'Nopsidian is a local Markdown vault (Obsidian-style [[wikilinks]], #tags, YAML frontmatter). Notes are plain .md files; paths are relative to the vault root, e.g. "Projects/Plan.md".',
+    'Lasagna is a local Markdown vault (Obsidian-style [[wikilinks]], #tags, YAML frontmatter). Notes are plain .md files; paths are relative to the vault root, e.g. "Projects/Plan.md".',
     'Use search_notes / list_notes to find notes, read_note to read them, get_backlinks to see what links to a note.',
     'A folder containing _db.yaml is a database (like a Notion database): its notes are rows and their frontmatter holds the property values. Use list_databases to see them and query_database to filter/sort rows.',
   ];
@@ -38,7 +38,7 @@ export function instructionsFor(policy: McpPolicy): string {
     const where = policy.writeFolders.map((f) => (f ? `"${f}/"` : 'anywhere in the vault')).join(', ');
     lines.push(
       `Writing is enabled, but only inside: ${where}. Other folders are read-only.`,
-      'The Nopsidian app can also disable or narrow writing at any time. Call get_write_policy for the effective policy before writing.',
+      'The Lasagna app can also disable or narrow writing at any time. Call get_write_policy for the effective policy before writing.',
       'For databases use add_database_row / update_database_row (values are validated against the property types and select options) instead of hand-writing frontmatter.',
       'Workflow: search first to avoid duplicates; create_note for new notes; append_to_note to add to an existing note (optionally under a heading); edit_note for a small change when old_text occurs exactly once (0 or 2+ occurrences are refused); update_note replaces a whole note. Both edit_note and update_note need the hash from a fresh read_note and fail if the note changed since.',
       'Write notes in the language the user uses. Link related notes with [[wikilinks]] to existing note titles. Never invent facts; every write is recorded in an audit log the user can review.',

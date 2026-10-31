@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Nopsidian 볼트를 AI 에이전트(MCP 클라이언트)에 열어 주는 stdio MCP 서버",
+  "description": "Lasagna 볼트를 AI 에이전트(MCP 클라이언트)에 열어 주는 stdio MCP 서버",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "bin": {

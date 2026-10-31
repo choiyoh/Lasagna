@@ -11,9 +11,9 @@ import path from 'node:path';
 function packagedExecutable(): string {
   const override = process.env.NOPS_E2E_EXECUTABLE;
   if (override) return override;
-  const dir = path.join(__dirname, `../out/Nopsidian-${process.platform}-${process.arch}`);
-  if (process.platform === 'darwin') return path.join(dir, 'Nopsidian.app/Contents/MacOS/Nopsidian');
-  return path.join(dir, process.platform === 'win32' ? 'nopsidian.exe' : 'nopsidian');
+  const dir = path.join(__dirname, `../out/Lasagna-${process.platform}-${process.arch}`);
+  if (process.platform === 'darwin') return path.join(dir, 'Lasagna.app/Contents/MacOS/Lasagna');
+  return path.join(dir, process.platform === 'win32' ? 'lasagna.exe' : 'lasagna');
 }
 
 /** 패키징한 앱의 resources 폴더(MCP 서버 번들이 들어 있다). 실행 파일 위치에서 찾아 플랫폼마다 달라도 같은 코드로 동작한다. */
@@ -2289,7 +2289,7 @@ views:
     const inner = path.join(vaultDir, '빈폴더/폴더안노트.md');
     await expect.poll(() => existsSync(inner), { timeout: 8000 }).toBe(true);
     await expect(page.locator('.ProseMirror h1')).toHaveText('폴더안노트', { timeout: 8000 });
-    await expect.poll(() => page.title(), { timeout: 5000 }).toBe('폴더안노트 — Nopsidian');
+    await expect.poll(() => page.title(), { timeout: 5000 }).toBe('폴더안노트 — Lasagna');
 
     // 삭제 → 휴지통에서 복원
     await page.getByRole('button', { name: '폴더안노트', exact: true }).first().click({ button: 'right' });

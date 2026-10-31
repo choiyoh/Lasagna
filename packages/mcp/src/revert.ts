@@ -45,5 +45,5 @@ export function applyRestore(root: string, entry: AuditEntry, content: string, n
 
 /** 되돌림 기록(감사 기록에 한 줄 추가) */
 export function logRevert(root: string, entry: AuditEntry, hashAfter: string | undefined, now = new Date()): void {
-  appendAudit(root, { t: now.toISOString(), client: 'Nopsidian 앱', action: 'revert', tool: 'app', path: entry.path, hashBefore: entry.hashAfter ?? null, hashAfter, note: `revert:${entry.t}` });
+  appendAudit(root, { t: now.toISOString(), client: 'Lasagna 앱', action: 'revert', tool: 'app', path: entry.path, hashBefore: entry.hashAfter ?? null, hashAfter, note: `revert:${entry.t}` });
 }

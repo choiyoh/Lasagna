@@ -37,7 +37,7 @@ export function VaultPicker({ onOpen }: { onOpen: (v: VaultInfo) => void }) {
       </button>
       <div className="start__card">
         <Logo size={88} />
-        <h1>Nopsidian</h1>
+        <h1>Lasagna</h1>
         <p className="start__tagline">내 컴퓨터의 Markdown 폴더가 곧 노트가 됩니다.</p>
         <button className="primary start__cta" onClick={() => run(() => window.nops.vault.pick())}>
           폴더 열기 / 만들기

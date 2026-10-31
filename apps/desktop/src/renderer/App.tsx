@@ -322,7 +322,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   // 창 제목: 작업 표시줄·창 전환에서 구분되도록 현재 노트 이름을 넣는다
   useEffect(() => {
     const n = selected ? notes.find((x) => x.path === selected) : undefined;
-    document.title = n ? `${n.icon ? `${n.icon} ` : ''}${n.title} — Nopsidian` : `${vault.name} — Nopsidian`;
+    document.title = n ? `${n.icon ? `${n.icon} ` : ''}${n.title} — Lasagna` : `${vault.name} — Lasagna`;
   }, [selected, notes, vault.name]);
   /** 노트 안의 ```dbview 가 앱으로 돌아올 때 쓰는 기능 */
   const dbHost = useMemo(

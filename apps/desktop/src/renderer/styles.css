@@ -1,38 +1,38 @@
 :root {
   color-scheme: light dark;
-  --bg: #ffffff;
-  --bg-side: #f5f5fc;
-  --fg: #24243a;
-  --muted: #6c6c88;
-  --accent: #5b5bd6;
-  --border: #e6e6f3;
-  --hover: rgba(91, 91, 214, 0.09);
+  --bg: #fffdf8;
+  --bg-side: #f7f0e3;
+  --fg: #2b241d;
+  --muted: #72655a;
+  --accent: #9a3a22;
+  --border: #e8ddcb;
+  --hover: rgba(154, 58, 34, 0.08);
   --radius: 6px;
-  --on-accent: #ffffff;
+  --on-accent: #fffdf8;
 }
 /* 어두운 색: OS 설정을 따르되(테마 = 시스템), 사용자가 라이트/다크를 고르면 data-theme 이 우선한다 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #14141d;
-    --bg-side: #1a1a27;
-    --fg: #ececf7;
-    --muted: #9c9cb8;
-    --accent: #9696ff;
-    --border: #2b2b3e;
-    --hover: rgba(150, 150, 255, 0.13);
-    --on-accent: #14141f;
+    --bg: #171310;
+    --bg-side: #211b16;
+    --fg: #f2e9dd;
+    --muted: #b3a293;
+    --accent: #f0a07e;
+    --border: #39302a;
+    --hover: rgba(240, 160, 126, 0.14);
+    --on-accent: #1f110a;
   }
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #14141d;
-  --bg-side: #1a1a27;
-  --fg: #ececf7;
-  --muted: #9c9cb8;
-  --accent: #9696ff;
-  --border: #2b2b3e;
-  --hover: rgba(150, 150, 255, 0.13);
-  --on-accent: #14141f;
+  --bg: #171310;
+  --bg-side: #211b16;
+  --fg: #f2e9dd;
+  --muted: #b3a293;
+  --accent: #f0a07e;
+  --border: #39302a;
+  --hover: rgba(240, 160, 126, 0.14);
+  --on-accent: #1f110a;
 }
 :root[data-theme='light'] { color-scheme: light; }
 * { box-sizing: border-box; }
@@ -54,7 +54,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .pad { padding: 16px; }
-.error { color: #d1453b; }
+.error { color: #c0392b; }
 
 
 .workspace { display: flex; height: 100%; }
@@ -108,7 +108,7 @@ button.link { color: var(--muted); }
 .note-editor__mode[aria-pressed='true'] { color: var(--accent); background: var(--hover); }
 .note-editor__source { min-height: 60vh; }
 .note-editor__source[hidden], .note-editor__host[hidden] { display: none; }
-.note-editor__status[data-state='error'] { color: #d1453b; }
+.note-editor__status[data-state='error'] { color: #c0392b; }
 .note-editor__notice { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding: 8px 12px; border-radius: 6px; background: color-mix(in srgb, #d99a1b 14%, transparent); font-size: 13px; }
 .note-editor__notice button { color: var(--muted); }
 .note-editor__host { --oh-editor-content-padding: 0; }
@@ -236,7 +236,7 @@ button.link { color: var(--muted); }
 .syncdialog h3 { margin: 0; font-size: 13px; }
 .syncdialog input:not([type='checkbox']) { width: 100%; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
 .syncdialog button { padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); }
-.syncdialog button.primary { background: var(--accent); border-color: transparent; color: #fff; }
+.syncdialog button.primary { background: var(--accent); border-color: transparent; color: var(--on-accent); }
 .syncdialog button.link { border: 0; padding: 0; color: var(--accent); }
 .syncdialog button:disabled { opacity: 0.5; }
 .syncdialog .warn { color: #d99a1b; margin: 0; }
@@ -268,16 +268,16 @@ button.link { color: var(--muted); }
 .dbscreen__head button, .dbtoolbar button, .dbpop button, .dbadd button { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border); }
 /* 헤더 공통 버튼 규칙보다 메뉴 항목이 우선한다 */
 .dbscreen__head .dbscreen__menu button { padding: 6px 10px; border: 0; text-align: left; }
-.dbscreen button.primary, .dbpop button.primary, .dbadd button.primary { background: var(--accent); border-color: transparent; color: #fff; }
+.dbscreen button.primary, .dbpop button.primary, .dbadd button.primary { background: var(--accent); border-color: transparent; color: var(--on-accent); }
 .dbscreen button:disabled { opacity: 0.5; }
-.dbscreen button.danger { color: #d44; }
+.dbscreen button.danger { color: #c0392b; }
 .dbtabs { display: flex; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--border); }
 .dbtabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 5px 10px; color: var(--muted); }
 .dbtabs button.active { color: var(--fg); border-bottom-color: var(--accent); }
 /* 보기 삭제는 실수하기 쉬워 탭 줄에 마우스를 올렸을 때만 보인다 */
 .dbtabs__del { margin-left: 2px; color: var(--muted); opacity: 0; pointer-events: none; }
 .dbtabs:hover .dbtabs__del, .dbtabs__del:focus-visible { opacity: 1; pointer-events: auto; }
-.dbtabs__del:hover { color: #d1453b; background: var(--hover); }
+.dbtabs__del:hover { color: #c0392b; background: var(--hover); }
 .dbtoolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 16px; position: relative; font-size: 13px; }
 .dbtoolbar button.on { background: var(--hover); }
 .dbtoolbar select, .dbpop select, .dbpop input, .dbadd input, .dbprops input { padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
@@ -334,7 +334,7 @@ button.link { color: var(--muted); }
 .dbtable__title { color: var(--accent); font-weight: 600; text-align: left; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .dbtable__calc { display: flex; border-top: 1px solid var(--border); background: var(--bg-side); }
 .chip { display: inline-block; padding: 0 8px; margin-right: 4px; border-radius: 10px; background: var(--hover); font-size: 12px; line-height: 20px; }
-.chip.on { background: var(--accent); color: #fff; }
+.chip.on { background: var(--accent); color: var(--on-accent); }
 .chip input { display: none; }
 .cell__stars button { border: 0; color: var(--muted); padding: 0 1px; }
 .cell__stars button.on { color: #e5a50a; }
@@ -379,7 +379,7 @@ button.link { color: var(--muted); }
 .dbcal__dow { background: var(--bg-side); padding: 3px 6px; font-size: 12px; color: var(--muted); grid-row: 1; min-height: 0; height: 24px; }
 .dbcal__day { background: var(--bg); padding: 3px 4px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .dbcal__day.dim { opacity: 0.5; }
-.dbcal__day.today .dbcal__num { background: var(--accent); color: #fff; border-radius: 10px; }
+.dbcal__day.today .dbcal__num { background: var(--accent); color: var(--on-accent); border-radius: 10px; }
 .dbcal__head { display: flex; justify-content: space-between; align-items: center; }
 .dbcal__num { border: 0; padding: 0 6px; font-size: 12px; }
 .dbcal__add { border: 0; opacity: 0; color: var(--muted); }
@@ -546,11 +546,11 @@ button.link { color: var(--muted); }
   --oh-editor-primary: var(--accent);
   --oh-editor-primary-strong: var(--accent);
   --oh-editor-primary-soft: color-mix(in srgb, var(--accent) 16%, transparent);
-  --oh-editor-primary-text: #fff;
+  --oh-editor-primary-text: var(--on-accent);
   --oh-editor-color-scheme: light dark;
 }
-:root[data-theme='dark'] { --oh-editor-color-scheme: dark; --oh-editor-primary-text: #14141f; }
-@media (prefers-color-scheme: dark) { :root[data-theme='system'] { --oh-editor-color-scheme: dark; --oh-editor-primary-text: #14141f; } }
+:root[data-theme='dark'] { --oh-editor-color-scheme: dark; --oh-editor-primary-text: var(--on-accent); }
+@media (prefers-color-scheme: dark) { :root[data-theme='system'] { --oh-editor-color-scheme: dark; --oh-editor-primary-text: var(--on-accent); } }
 :root[data-theme='light'] { --oh-editor-color-scheme: light; }
 
 .sidebar__headbtns { display: flex; gap: 2px; }
@@ -611,7 +611,7 @@ button.primary { background: var(--accent); color: var(--on-accent); padding: 8p
 .ctxmenu { position: fixed; min-width: 170px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22); display: flex; flex-direction: column; }
 .ctxmenu button { padding: 6px 10px; border-radius: var(--radius); font-size: 13px; }
 .ctxmenu button:hover { background: var(--hover); }
-.ctxmenu button.danger { color: #d1453b; }
+.ctxmenu button.danger { color: #c0392b; }
 
 input[type='range'], input[type='checkbox'], input[type='radio'], input[type='color'] { accent-color: var(--accent); }
 
@@ -628,7 +628,7 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .emojipicker__bar input { flex: 1; min-width: 0; }
 .emojipicker__bar button { padding: 3px 8px; border-radius: var(--radius); border: 1px solid var(--border); }
 .emojipicker__bar button:hover { background: var(--hover); }
-.emojipicker__remove { color: #d1453b; }
+.emojipicker__remove { color: #c0392b; }
 .emojipicker__tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
 .emojipicker__tabs button { padding: 2px 6px; border-radius: var(--radius); font-size: 16px; }
 .emojipicker__tabs button.active { background: color-mix(in srgb, var(--accent) 16%, transparent); }
@@ -648,7 +648,7 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .trashdialog__list li:hover { background: var(--hover); }
 .trashdialog__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
 .trashdialog__list button { padding: 2px 8px; border-radius: var(--radius); border: 1px solid var(--border); font-size: 12px; }
-.trashdialog .danger, .dialog__actions .danger { color: #d1453b; }
+.trashdialog .danger, .dialog__actions .danger { color: #c0392b; }
 .shortcuts { width: min(720px, 94vw); }
 .shortcuts__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .shortcuts h3 { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
@@ -680,7 +680,7 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .dbtable__selbar { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18); font-size: 13px; }
 .dbtable__selbar button { padding: 2px 10px; border-radius: var(--radius); }
 .dbtable__selbar button:hover { background: var(--hover); }
-.dbtable__selbar .danger { color: #d1453b; }
+.dbtable__selbar .danger { color: #c0392b; }
 .dbundo button { margin-left: 6px; padding: 1px 8px; border-radius: var(--radius); border: 1px solid var(--border); }
 
 /* 설정(⌘,) */
@@ -758,7 +758,7 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 
 /* 사이드바: 여러 개 선택·키보드 이동 */
 .tree .row.picked, .tree summary.picked { background: color-mix(in srgb, var(--accent) 17%, transparent); }
-.tree .row.picked.active { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.tree .row.picked.active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .list:focus-within .row.cursor, .list:focus-within .tree summary.cursor { outline: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: -1.5px; }
 .tree .row:focus-visible, .tree summary:focus-visible { outline: 1.5px solid var(--accent); outline-offset: -1.5px; }
 .dragbadge { position: fixed; top: -100px; left: -100px; padding: 4px 12px; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 600; }
@@ -786,7 +786,7 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .mcp__undo:hover { background: var(--hover); }
 .mcp__confirm { margin-left: auto; display: flex; gap: 4px; }
 .mcp__confirm button { padding: 1px 8px; border-radius: var(--radius); border: 1px solid var(--border); font-size: 11.5px; }
-.mcp__confirm .danger { color: #d1453b; }
+.mcp__confirm .danger { color: #c0392b; }
 
 .tree__more button { padding: 4px 8px; font-size: 12px; color: var(--accent); border-radius: var(--radius); }
 .tree__more button:hover { background: var(--hover); }
@@ -818,7 +818,7 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .coverpicker__foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .coverpicker__foot button, .coverpicker > button { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 12.5px; }
 .coverpicker__foot button:hover:not(:disabled) { background: var(--hover); }
-.coverpicker__error { color: #d1453b; font-size: 12px; }
+.coverpicker__error { color: #c0392b; font-size: 12px; }
 
 /* 댓글 패널 */
 .comments { display: flex; flex-direction: column; gap: 6px; padding: 8px; font-size: 13px; }
@@ -835,7 +835,7 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .comment:hover .comment__actions, .comment__actions:focus-within { opacity: 1; }
 .comment__actions button { padding: 0 6px; font-size: 11.5px; border-radius: 4px; color: var(--muted); }
 .comment__actions button:hover { background: var(--hover); color: var(--fg); }
-.comment__actions .danger:hover { color: #d1453b; }
+.comment__actions .danger:hover { color: #c0392b; }
 .comment__quote { margin: 4px 0; padding: 2px 8px; border-left: 3px solid var(--accent); color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; gap: 6px; }
 .comment__quote button { color: var(--muted); }
 .comment__text { margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; }
@@ -854,3 +854,31 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .graphview__fallback { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; }
 .graphview__fallback p { max-width: 420px; margin: 0; }
 .graphview__error { max-width: min(520px, 100%); margin: 0; padding: 6px 10px; overflow: auto; white-space: pre-wrap; word-break: break-word; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-side); color: var(--muted); }
+
+/* error/danger 의미색: 어두운 배경에서는 밝은 빨강으로 올려 4.5:1 을 유지한다(accent 와 섞지 않는다) */
+:root[data-theme='dark'] .error,
+:root[data-theme='dark'] .note-editor__status[data-state='error'],
+:root[data-theme='dark'] .dbtabs__del:hover,
+:root[data-theme='dark'] .dbscreen button.danger,
+:root[data-theme='dark'] .ctxmenu button.danger,
+:root[data-theme='dark'] .emojipicker__remove,
+:root[data-theme='dark'] .trashdialog .danger,
+:root[data-theme='dark'] .dialog__actions .danger,
+:root[data-theme='dark'] .dbtable__selbar .danger,
+:root[data-theme='dark'] .coverpicker__error,
+:root[data-theme='dark'] .comment__actions .danger:hover,
+:root[data-theme='dark'] .mcp__confirm .danger { color: #ff7a6e; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .error,
+  :root:not([data-theme='light']) .note-editor__status[data-state='error'],
+  :root:not([data-theme='light']) .dbtabs__del:hover,
+  :root:not([data-theme='light']) .dbscreen button.danger,
+  :root:not([data-theme='light']) .ctxmenu button.danger,
+  :root:not([data-theme='light']) .emojipicker__remove,
+  :root:not([data-theme='light']) .trashdialog .danger,
+  :root:not([data-theme='light']) .dialog__actions .danger,
+  :root:not([data-theme='light']) .dbtable__selbar .danger,
+  :root:not([data-theme='light']) .coverpicker__error,
+  :root:not([data-theme='light']) .comment__actions .danger:hover,
+  :root:not([data-theme='light']) .mcp__confirm .danger { color: #ff7a6e; }
+}

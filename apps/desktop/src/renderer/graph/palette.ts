@@ -1,4 +1,13 @@
 /** 그래프 색: 앱 테마(라이트/다크/시스템)를 따라 CSS 변수에서 읽는다. */
+
+/** 노드 의미색은 palette 한 곳에서만 정의한다(settings.ts 와 중복 정의 금지). */
+export const NOTE_COLOR_LIGHT = '#666dbe';
+export const NOTE_COLOR_DARK = '#a3a9d9';
+export const TAG_COLOR_LIGHT = '#a06a12';
+export const TAG_COLOR_DARK = '#e0b45a';
+export const UNRESOLVED_COLOR_LIGHT = '#a4a4b2';
+export const UNRESOLVED_COLOR_DARK = '#6c6c7a';
+
 export interface GraphPalette {
   dark: boolean;
   accent: string;
@@ -42,15 +51,15 @@ export function readPalette(): GraphPalette {
   const accent = v('--accent', '#5b5bd6');
   const fg = v('--fg', dark ? '#ebebeb' : '#37352f');
   const bg = v('--bg', dark ? '#191919' : '#ffffff');
-  const note = dark ? '#a3a9d9' : '#6f76c2';
+  const note = dark ? NOTE_COLOR_DARK : NOTE_COLOR_LIGHT;
   return {
     dark,
     accent,
     fg,
     bg,
     note,
-    tag: dark ? '#e0b45a' : '#c58a1b',
-    unresolved: dark ? '#6c6c7a' : '#a4a4b2',
+    tag: dark ? TAG_COLOR_DARK : TAG_COLOR_LIGHT,
+    unresolved: dark ? UNRESOLVED_COLOR_DARK : UNRESOLVED_COLOR_LIGHT,
     edge: mix(bg, note, dark ? 0.4 : 0.27),
     edgeFaded: mix(bg, note, 0.1),
     edgeHot: accent,

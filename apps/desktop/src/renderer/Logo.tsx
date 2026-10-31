@@ -1,7 +1,7 @@
 /** 앱 아이콘(`assets/icon.svg`)과 같은 그림. 둥근 사각형 안의 N + 노드 점. */
 export function Logo({ size = 72 }: { size?: number }) {
   return (
-    <svg className="logo" width={size} height={size} viewBox="100 100 824 824" role="img" aria-label="Nopsidian">
+    <svg className="logo" width={size} height={size} viewBox="100 100 824 824" role="img" aria-label="Lasagna">
       <defs>
         <linearGradient id="logo-bg" x1="140" y1="100" x2="880" y2="930" gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor="#7c7cf0" />

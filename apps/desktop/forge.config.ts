@@ -10,8 +10,8 @@ const config: ForgeConfig = {
   packagerConfig: {
     // .node 바이너리는 asar 밖으로 풀어야 로드할 수 있다.
     asar: { unpack: '**/*.node' },
-    name: 'Nopsidian',
-    executableName: 'nopsidian',
+    name: 'Lasagna',
+    executableName: 'lasagna',
     // 확장자는 플랫폼에 맞게 붙는다(.icns / .ico)
     icon: path.join(process.cwd(), 'assets', 'icon'),
     // AI 에이전트용 MCP 서버(의존성까지 한 파일). 앱의 resources/ 에 들어가고, 설정 화면이 그 경로를 안내한다.
@@ -33,7 +33,7 @@ const config: ForgeConfig = {
     postPackage: async (_config, result) => {
       if (process.platform !== 'darwin') return;
       for (const out of result.outputPaths) {
-        execFileSync('codesign', ['--force', '--deep', '--sign', '-', path.join(out, 'Nopsidian.app')]);
+        execFileSync('codesign', ['--force', '--deep', '--sign', '-', path.join(out, 'Lasagna.app')]);
       }
     },
   },
@@ -41,11 +41,11 @@ const config: ForgeConfig = {
   // 각 OS 에서 빌드해야 한다(.github/workflows/build.yml 이 두 OS 에서 돌린다).
   makers: [
     // 문자열로 지정한다: 클래스를 import 하면 forge 설정을 읽을 때 다른 OS 용 메이커의 의존성 트리까지 불러온다.
-    { name: '@electron-forge/maker-dmg', platforms: ['darwin'], config: { name: 'Nopsidian', format: 'ULFO', icon: path.join(process.cwd(), 'assets', 'icon.icns') } },
+    { name: '@electron-forge/maker-dmg', platforms: ['darwin'], config: { name: 'Lasagna', format: 'ULFO', icon: path.join(process.cwd(), 'assets', 'icon.icns') } },
     {
       name: '@electron-forge/maker-squirrel',
       platforms: ['win32'],
-      config: { name: 'Nopsidian', setupExe: 'Nopsidian-Setup.exe', noMsi: true, setupIcon: path.join(process.cwd(), 'assets', 'icon.ico'), description: 'Nopsidian — 로컬 Markdown 블록 편집기' },
+      config: { name: 'Lasagna', setupExe: 'Lasagna-Setup.exe', noMsi: true, setupIcon: path.join(process.cwd(), 'assets', 'icon.ico'), description: 'Lasagna — 로컬 Markdown 블록 편집기' },
     },
     { name: '@electron-forge/maker-zip', platforms: ['darwin', 'win32'], config: {} },
   ],

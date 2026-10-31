@@ -22,7 +22,7 @@ export const DEFAULT_WRITE_FOLDER = 'AI';
 export const DEFAULT_MAX_WRITES_PER_MINUTE = 30;
 export const DEFAULT_MAX_BYTES = 1_000_000;
 
-export const USAGE = `nopsidian-mcp — Nopsidian 볼트를 MCP(stdio)로 열어 줍니다.
+export const USAGE = `nopsidian-mcp — Lasagna 볼트를 MCP(stdio)로 열어 줍니다.
 
 사용법: node nopsidian-mcp.mjs --vault <볼트 폴더> [옵션]
 

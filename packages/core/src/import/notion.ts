@@ -101,7 +101,7 @@ function relativeTo(fromDir: string, to: string): string {
 }
 
 /**
- * Notion 내보내기(Markdown & CSV)를 Nopsidian 볼트 파일들로 바꾼다. 순수 함수 — 파일은 쓰지 않는다.
+ * Notion 내보내기(Markdown & CSV)를 Lasagna 볼트 파일들로 바꾼다. 순수 함수 — 파일은 쓰지 않는다.
  *  - 이름의 32자리 ID 제거(겹치면 ` (2)`)
  *  - 페이지 링크 → 위키링크, 첨부 링크 → 새 상대 경로
  *  - 데이터베이스 CSV + 행 노트 → `_db.yaml` + 속성이 프런트매터로 간 행 노트

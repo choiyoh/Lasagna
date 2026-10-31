@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Nopsidian 에디터 확장: @oh-new-editor/core(ProseMirror 블록 에디터) 위에 얹는 콜아웃·토글·열·위키링크·임베드·수식·DB 뷰 노드, 블록 핸들, 마크다운 바이트 보존 직렬화, 소스 모드.",
+  "description": "Lasagna 에디터 확장: @oh-new-editor/core(ProseMirror 블록 에디터) 위에 얹는 콜아웃·토글·열·위키링크·임베드·수식·DB 뷰 노드, 블록 핸들, 마크다운 바이트 보존 직렬화, 소스 모드.",
   "license": "MIT",
   "exports": {
     "./nops": "./src/nops/index.ts",

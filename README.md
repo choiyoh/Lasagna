@@ -1,4 +1,7 @@
-# Nopsidian
+# Lasagna
+
+> 예전 이름은 Nopsidian 이에요. 기존 호환을 위해 볼트 안의 `.nopsidian/` 폴더, `@nopsidian/*` 패키지 이름,
+> Drive 동기화 폴더(`Nopsidian/<볼트>`), `nopsidian-mcp` 번들 이름, 앱 설정 폴더(userData)는 그대로 둬요.
 
 Notion 의 블록 편집·데이터베이스와 Obsidian 의 위키링크·백링크·그래프를 합친 **개인용 로컬 Markdown 편집 앱**이에요.
 노트는 내 컴퓨터의 `.md` 파일로 그대로 남고, 앱 자체 계정도 서버도 없어요. Google Drive 동기화는 켤 때만

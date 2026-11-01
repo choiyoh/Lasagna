@@ -94,9 +94,9 @@ function vaultHash(id: string): string {
   return (h >>> 0).toString(36).padStart(7, '0');
 }
 
-/** 기본 서버 이름: `nopsidian-<볼트 슬러그>-<볼트 해시>` */
+/** 기본 서버 이름: `lasagna-<볼트 슬러그>-<볼트 해시>` */
 export function defaultServerName(info: Pick<McpInfo, 'vaultName' | 'vaultId'>): string {
-  return `nopsidian-${vaultSlug(info.vaultName)}-${vaultHash(info.vaultId)}`;
+  return `lasagna-${vaultSlug(info.vaultName)}-${vaultHash(info.vaultId)}`;
 }
 
 /** 클라이언트 설정 파일 키로 쓸 수 있는 이름인가(공백 없이 글자·숫자·`._-`) */

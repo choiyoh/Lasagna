@@ -11,6 +11,10 @@ export function Logo({ size = 72 }: { size?: number }) {
           <stop offset="0" stopColor="#fff" stopOpacity="0.16" />
           <stop offset="1" stopColor="#fff" stopOpacity="0" />
         </linearGradient>
+        <linearGradient id="logo-crust" x1="112" y1="112" x2="912" y2="912" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#6b2816" />
+          <stop offset="1" stopColor="#5a2214" />
+        </linearGradient>
         <clipPath id="logo-tile">
           <rect x="100" y="100" width="824" height="824" rx="188" />
         </clipPath>
@@ -28,6 +32,7 @@ export function Logo({ size = 72 }: { size?: number }) {
           <rect x="112" y="746" width="800" height="150" rx="40" fill="#4d1a11" opacity="0.55" />
           <rect x="112" y="730" width="800" height="150" rx="40" fill="#fff2da" />
         </g>
+        <rect x="136" y="136" width="752" height="752" rx="150" fill="none" stroke="url(#logo-crust)" strokeWidth="48" />
       </g>
       <rect x="104" y="104" width="816" height="816" rx="184" fill="none" stroke="#fff" strokeOpacity="0.10" strokeWidth="6" />
     </svg>

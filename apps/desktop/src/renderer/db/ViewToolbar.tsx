@@ -36,6 +36,17 @@ export function ViewToolbar({ data, view, saveState, onChange, onUndo, openFilte
   useEffect(() => {
     if (openFilterRequest) setOpen('filter');
   }, [openFilterRequest]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
   const filesProps = Object.entries(data.schema.properties).filter(([, p]) => p.type === 'files').map(([n]) => n);
   const props = [TITLE, ...Object.keys(data.schema.properties)];
   const toggle = (k: NonNullable<typeof open>) => setOpen(open === k ? null : k);

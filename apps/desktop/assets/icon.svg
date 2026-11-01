@@ -6,6 +6,9 @@
     <linearGradient id="lasagna-gloss" x1="0" y1="100" x2="0" y2="620" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
+    <linearGradient id="lasagna-crust" x1="112" y1="112" x2="912" y2="912" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6b2816"/><stop offset="1" stop-color="#5a2214"/>
+    </linearGradient>
     <clipPath id="lasagna-tile"><rect x="100" y="100" width="824" height="824" rx="188"/></clipPath>
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="188" fill="url(#lasagna-bg)"/>
@@ -21,6 +24,7 @@
       <rect x="112" y="746" width="800" height="150" rx="40" fill="#4d1a11" opacity="0.55"/>
       <rect x="112" y="730" width="800" height="150" rx="40" fill="#fff2da"/>
     </g>
+    <rect x="136" y="136" width="752" height="752" rx="150" fill="none" stroke="url(#lasagna-crust)" stroke-width="48"/>
   </g>
   <rect x="104" y="104" width="816" height="816" rx="184" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="6"/>
 </svg>

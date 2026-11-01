@@ -41,6 +41,7 @@ import { TagPanel } from './TagPanel';
 import { dockAvailable, loadDockMode, nextDockMode, resolveDockOpen, saveDockMode, type DockMode } from './dock';
 import { cleanSearchSnippet } from './link-snippet';
 import { matchParts } from './search-highlight';
+import { GraphIcon, NewFolderIcon, PlusIcon, SearchIcon, SunIcon, TrashIcon } from './icons';
 
 /** 검색 결과에서 일치한 글자만 강조한다(원문은 그대로) */
 function Marked({ text, query }: { text: string; query: string }) {
@@ -374,35 +375,35 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         </header>
         <nav className="sidebar__nav" aria-label="빠른 메뉴">
           <button className="navitem" onClick={() => setSwitcher(true)} title={keys('빠른 이동 — 제목·경로 (⌘O)')} aria-label="노트 찾기">
-            <span className="navitem__icon" aria-hidden>⌕</span>
+            <span className="navitem__icon" aria-hidden><SearchIcon /></span>
             <span className="navitem__label">
               빠른 이동<span className="navitem__sub">제목·경로</span>
             </span>
             <kbd>{keys('⌘O')}</kbd>
           </button>
           <button className="navitem" onClick={() => void quickNote('')} title={keys('새 노트 (⌘N)')} aria-label="새 노트">
-            <span className="navitem__icon" aria-hidden>＋</span>
+            <span className="navitem__icon" aria-hidden><PlusIcon /></span>
             <span className="navitem__label">새 노트</span>
           </button>
           <button className="navitem" onClick={() => void newFolder('')} aria-label="새 폴더">
-            <span className="navitem__icon" aria-hidden>▤</span>
+            <span className="navitem__icon" aria-hidden><NewFolderIcon /></span>
             <span className="navitem__label">새 폴더</span>
           </button>
           <button className="navitem" onClick={() => void openDaily()} title={keys('오늘의 노트 (⌘⌥D)')} aria-label="오늘">
-            <span className="navitem__icon" aria-hidden>☀</span>
+            <span className="navitem__icon" aria-hidden><SunIcon /></span>
             <span className="navitem__label">오늘의 노트</span>
           </button>
           <button className="navitem" onClick={() => { setDbOpen(null); setGraphOpen((o) => !o); }} title={keys('그래프 (⌘⇧G)')} aria-label="그래프">
-            <span className="navitem__icon" aria-hidden>◎</span>
+            <span className="navitem__icon" aria-hidden><GraphIcon /></span>
             <span className="navitem__label">그래프</span>
           </button>
           <button className="navitem" onClick={() => setTrashOpen(true)} aria-label="휴지통">
-            <span className="navitem__icon" aria-hidden>🗑</span>
+            <span className="navitem__icon" aria-hidden><TrashIcon /></span>
             <span className="navitem__label">휴지통</span>
           </button>
         </nav>
         <label className="searchbox">
-          <span className="searchbox__icon" aria-hidden>⌕</span>
+          <span className="searchbox__icon" aria-hidden><SearchIcon size={14} /></span>
           <input ref={searchRef} className="search" type="search" placeholder="본문 검색" aria-label="본문 검색" value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
         <div className="sidebar__tabs" role="tablist">

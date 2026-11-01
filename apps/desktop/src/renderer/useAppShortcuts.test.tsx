@@ -103,6 +103,33 @@ describe('useAppShortcuts', () => {
     expect(second.closeOverlay).toHaveBeenCalledTimes(1);
   });
 
+  it('하위 레이어가 열려 있으면 상위 DB/그래프를 닫지 않는다', () => {
+    const a = actions({ overlayOpen: true });
+    render(<Host tick={0} make={() => a} />);
+
+    const layer = document.createElement('div');
+    layer.className = 'dbpop';
+    document.body.appendChild(layer);
+    keydown({ key: 'Escape' });
+    expect(a.closeOverlay).not.toHaveBeenCalled();
+
+    layer.remove();
+    keydown({ key: 'Escape' });
+    expect(a.closeOverlay).toHaveBeenCalledTimes(1);
+  });
+
+  it('하위 핸들러가 preventDefault 한 Escape 는 상위를 닫지 않는다', () => {
+    const a = actions({ overlayOpen: true });
+    render(<Host tick={0} make={() => a} />);
+
+    const e = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+    e.preventDefault();
+    act(() => {
+      window.dispatchEvent(e);
+    });
+    expect(a.closeOverlay).not.toHaveBeenCalled();
+  });
+
   it('⌘⇧\\ 로 도크를, ⌘⇧F 로 본문 검색을 연다', () => {
     const a = actions();
     render(<Host tick={0} make={() => a} />);

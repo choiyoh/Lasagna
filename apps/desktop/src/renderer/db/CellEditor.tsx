@@ -4,6 +4,7 @@ import { DatePicker } from './DatePicker';
 import { linkNameFor } from '@nopsidian/core/links';
 import { cellText, optionsOf } from '@nopsidian/core/db/values';
 import type { CellValue, Property } from './types';
+import { chipStyle } from './chip-color';
 
 interface Props {
   prop: Property;
@@ -107,7 +108,7 @@ const optionColor = (prop: Property, name: string) => optionsOf(prop).find((o) =
 export function CellView({ prop, value }: { prop: Property | undefined; value: CellValue }) {
   if (value === null || (Array.isArray(value) && !value.length)) return <span className="cell__empty" />;
   if (prop && (prop.type === 'select' || prop.type === 'status')) {
-    return <span className="chip" style={{ background: optionColor(prop, String(value)) }}>{String(value)}</span>;
+    return <span className="chip" style={chipStyle(optionColor(prop, String(value)))}>{String(value)}</span>;
   }
   if (prop?.type === 'relation' && Array.isArray(value)) {
     return (
@@ -122,7 +123,7 @@ export function CellView({ prop, value }: { prop: Property | undefined; value: C
     return (
       <>
         {value.map((v) => (
-          <span key={v} className="chip" style={{ background: optionColor(prop, v) }}>{v}</span>
+          <span key={v} className="chip" style={chipStyle(optionColor(prop, v))}>{v}</span>
         ))}
       </>
     );
@@ -183,7 +184,7 @@ export function CellEditor({ prop, value, onCommit, autoFocus, notes, onDone }: 
       return (
         <span className="cell__multi">
           {opts.map((o) => (
-            <label key={o} className={cur.includes(o) ? 'chip on' : 'chip'}>
+            <label key={o} className={cur.includes(o) ? 'chip on' : 'chip'} style={cur.includes(o) ? undefined : chipStyle(optionColor(prop, o))}>
               <input type="checkbox" checked={cur.includes(o)} onChange={(e) => onCommit((e.target.checked ? [...cur, o] : cur.filter((x) => x !== o)).length ? (e.target.checked ? [...cur, o] : cur.filter((x) => x !== o)) : null)} />
               {o}
             </label>

@@ -24,6 +24,8 @@ export interface ShortcutActions {
   dbOpen: boolean;
 }
 
+const OPEN_LAYERS = '.dialog-backdrop, .dbpop, .dbscreen__menu, .ctxmenu, .datepicker, .nops-prompt, .switcher-backdrop';
+
 /** 앱 전체 단축키: ⌘O 전환기 · ⌘P 팔레트 · ⌘N 새 노트 · ⌘, 설정 · F1 단축키 · F2 이름 · ⌘W 탭 닫기 · ⌘⇧G 그래프 · ⌘⇧B 북마크 · ⌘⌥D 오늘 · ⌘⇧\ 도크 · ⌘⇧F 본문 검색 */
 export function useAppShortcuts(actions: ShortcutActions) {
   // 매 렌더 새로 만들어지는 콜백을 그때그때 ref 에 담아 두고, 리스너는 처음 한 번만 단다
@@ -40,8 +42,12 @@ export function useAppShortcuts(actions: ShortcutActions) {
       } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyG') {
         e.preventDefault();
         a.toggleGraph();
-      } else if (e.key === 'Escape' && (a.overlayOpen || (a.dbOpen && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)))) {
-        a.closeOverlay();
+      } else if (e.key === 'Escape') {
+        // 하위 팝오버·모달이 자체 Escape 를 처리했거나, 아직 DOM 에 열려 있으면 상위 화면은 닫지 않는다.
+        if (e.defaultPrevented || document.querySelector(OPEN_LAYERS)) return;
+        if (a.overlayOpen || (a.dbOpen && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement))) {
+          a.closeOverlay();
+        }
       } else if (plain && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         a.newNote();

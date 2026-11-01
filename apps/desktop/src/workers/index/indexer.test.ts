@@ -77,6 +77,14 @@ describe('Indexer', () => {
     expect(ix.search('_x')).toEqual([]);
   });
 
+  it('FTS snippet 은 본문에 없는 센티넬로 매치를 표시한다', () => {
+    put('a.md', '# A\n디자인 원칙');
+    ix.scan();
+    const hit = ix.search('디자인')[0]!;
+    expect(hit.snippet).toContain('\uE000디자인\uE001');
+    expect(hit.snippet).not.toContain('[');
+  });
+
   it('indexFile은 삭제된 파일을 제거한다', () => {
     put('a.md', '# A');
     ix.scan();

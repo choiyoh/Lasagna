@@ -1,12 +1,12 @@
 # AI 에이전트 연결 (MCP)
 
-Claude 같은 AI 에이전트가 Nopsidian 볼트의 노트를 **찾아 읽고**, 허용하면 **새 노트를 쓰게** 하는 MCP(Model Context Protocol) 서버입니다. 앱이 꺼져 있어도 동작하는 독립 프로세스(stdio)이고, 앱이 켜져 있으면 에이전트가 쓴 노트가 사이드바·열린 편집기에 바로 나타납니다.
+Claude 같은 AI 에이전트가 Lasagna 볼트의 노트를 **찾아 읽고**, 허용하면 **새 노트를 쓰게** 하는 MCP(Model Context Protocol) 서버입니다. 앱이 꺼져 있어도 동작하는 독립 프로세스(stdio)이고, 앱이 켜져 있으면 에이전트가 쓴 노트가 사이드바·열린 편집기에 바로 나타납니다.
 
 ## 연결하기
 1. 앱의 **설정(⌘,) → AI 에이전트 연결(MCP)** 을 엽니다.
 2. 필요하면 "에이전트가 노트 쓰기 허용"을 켜고 쓸 폴더(기본 `AI`)를 정합니다. 끄면 읽기 전용입니다. 오늘의 노트에도 쓰려면 **"오늘의 노트 폴더도 허용"** 을 켭니다. 이걸 끄면 `append_to_daily_note` 는 데일리 폴더(기본 `일기/`)가 허용 폴더에 없어 `forbidden-folder` 로 거부되고, 설정 화면에도 그 이유가 표시됩니다.
 3. 클라이언트 탭(Claude Code / Claude Desktop / Codex / Cursor / VS Code / Gemini CLI)을 고르고, 보이는 명령이나 설정을 **복사**해 해당 위치에 붙여 넣습니다.
-4. 서버 이름은 기본 **`nopsidian-<볼트 슬러그>-<볼트 id 해시>`** 입니다. 이름이 같은 볼트 두 개를 등록해도 해시가 달라 서로 덮지 않고, 직접 바꿀 수 있습니다. 이름을 바꾸면 이미 등록한 항목은 새 이름으로 다시 추가해야 합니다.
+4. 서버 이름은 기본 **`lasagna-<볼트 슬러그>-<볼트 id 해시>`** 입니다. 이름이 같은 볼트 두 개를 등록해도 해시가 달라 서로 덮지 않고, 직접 바꿀 수 있습니다. 이름을 바꾸면 이미 등록한 항목은 새 이름으로 다시 추가해야 합니다.
 
 ### 클라이언트별 설정 위치
 
@@ -21,17 +21,17 @@ Claude 같은 AI 에이전트가 Nopsidian 볼트의 노트를 **찾아 읽고**
 
 설정을 저장한 뒤 클라이언트를 다시 시작해야 목록에 나타나는 경우가 있습니다. Claude Code 는 `claude mcp list`, Codex 는 `codex mcp list` 로 확인합니다.
 
-**볼트 두 개**: 설정 화면의 값(이름·쓰기 폴더·오늘의 노트 허용·선택한 클라이언트)은 **볼트별로 저장**됩니다. 볼트 A 와 B 를 각각 열어 스니펫을 만들면 이름은 `nopsidian-a-<해시>`, `nopsidian-b-<해시>` 처럼 다르고, 각 스니펫의 `--vault` 도 그 볼트를 가리킵니다. 같은 이름을 쓰는 다른 볼트 설정이 있으면 저장 전에 경고합니다. 예전 전역 설정(`nops.mcp`)은 **처음 연 볼트 하나에만** 옮겨지고, 그 뒤 새 볼트는 읽기 전용 기본값으로 시작합니다.
+**볼트 두 개**: 설정 화면의 값(이름·쓰기 폴더·오늘의 노트 허용·선택한 클라이언트)은 **볼트별로 저장**됩니다. 볼트 A 와 B 를 각각 열어 스니펫을 만들면 이름은 `lasagna-a-<해시>`, `lasagna-b-<해시>` 처럼 다르고, 각 스니펫의 `--vault` 도 그 볼트를 가리킵니다. 같은 이름을 쓰는 다른 볼트 설정이 있으면 저장 전에 경고합니다. 예전 전역 설정(`nops.mcp`)은 **처음 연 볼트 하나에만** 옮겨지고, 그 뒤 새 볼트는 읽기 전용 기본값으로 시작합니다.
 
 예전 안내대로 서버 이름을 `nopsidian` 으로 등록했다면 **처음 등록한 폴더에서** `claude mcp remove nopsidian` 을 실행해 지운 뒤 새 이름으로 다시 등록하세요. 예전 스니펫은 범위를 지정하지 않아 local 범위에 등록됐으므로, `-s user` 를 붙이면 그 등록은 지워지지 않습니다. 다른 클라이언트는 설정 파일에서 그 항목을 지우면 됩니다.
 
-패키징된 앱이 안내하는 설정은 **앱 실행 파일 자체를 `--mcp-stdio` 모드로 띄우는** 것입니다(예: `"/Applications/Nopsidian.app/Contents/MacOS/nopsidian" --mcp-stdio --vault <볼트 폴더>`). 앱에 들어 있는 서버 번들(`resources/nopsidian-mcp.mjs`)을 실행하므로 **Node.js 를 따로 설치하지 않아도 됩니다**. 개발 빌드(`pnpm start`)에서는 저장소의 `packages/mcp/dist/nopsidian-mcp.mjs` 를 `node` 로 실행하는 설정을 안내합니다(이때는 Node.js 22 이상 필요).
+패키징된 앱이 안내하는 설정은 **앱 실행 파일 자체를 `--mcp-stdio` 모드로 띄우는** 것입니다(예: `"/Applications/Lasagna.app/Contents/MacOS/lasagna" --mcp-stdio --vault <볼트 폴더>`). 앱에 들어 있는 서버 번들(`resources/nopsidian-mcp.mjs`)을 실행하므로 **Node.js 를 따로 설치하지 않아도 됩니다**. 개발 빌드(`pnpm start`)에서는 저장소의 `packages/mcp/dist/nopsidian-mcp.mjs` 를 `node` 로 실행하는 설정을 안내합니다(이때는 Node.js 22 이상 필요).
 
 직접 실행: `<앱 실행 파일> --mcp-stdio --vault <볼트 폴더> [--write] [--write-folder <폴더>]…` (`--mcp-stdio --help` 참고). 개발 중에는 지금처럼 `node nopsidian-mcp.mjs --vault <볼트 폴더> …` 로도 됩니다(`pnpm --filter @nopsidian/mcp build` 로 `packages/mcp/dist/` 생성, 앱의 `resources/nopsidian-mcp.mjs` 와 같은 파일).
 
 **Linux**: 화면(X/Wayland)이 없는 곳(SSH·서버·에이전트 샌드박스)에서는 Chromium 이 `Missing X server` 로 바로 끝나므로, 설정 화면은 리눅스에서 `--ozone-platform=headless --mcp-stdio …` 처럼 headless 스위치를 앞에 붙여 안내합니다(이 스위치는 앱 코드보다 먼저 정해져 앱이 스스로 붙일 수 없습니다).
 
-**Windows**: 앱 실행 파일은 창이 없는 GUI 프로그램이라 탐색기에서 직접 실행하면 콘솔이 없어 아무것도 보이지 않습니다. 하지만 에이전트가 파이프(stdin/stdout)를 붙여 띄우면 그 파이프를 그대로 쓰므로 설정 화면이 안내하는 JSON/명령을 붙여 넣으면 됩니다. 손으로 시험할 때는 `cmd` 에서 `nopsidian.exe --mcp-stdio --vault …` 처럼 파이프와 함께 실행하세요.
+**Windows**: 앱 실행 파일은 창이 없는 GUI 프로그램이라 탐색기에서 직접 실행하면 콘솔이 없어 아무것도 보이지 않습니다. 하지만 에이전트가 파이프(stdin/stdout)를 붙여 띄우면 그 파이프를 그대로 쓰므로 설정 화면이 안내하는 JSON/명령을 붙여 넣으면 됩니다. 손으로 시험할 때는 `cmd` 에서 `lasagna.exe --mcp-stdio --vault …` 처럼 파이프와 함께 실행하세요.
 
 ## 앱이 정하는 쓰기 권한
 

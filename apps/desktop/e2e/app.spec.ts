@@ -1119,7 +1119,9 @@ test.describe('링크 코어', () => {
     expect(readFileSync(path.join(dbDir, '_db.yaml'), 'utf8')).not.toContain('점수');
     expect(readFileSync(path.join(dbDir, '_db.yaml'), 'utf8')).toContain('우선순위');
 
-    // Esc 로 닫힌다(속성 창이 열려 있어도)
+    // Esc 는 하위 속성 창만 먼저 닫고, 한 번 더 누르면 DB 화면이 닫힌다
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: '속성 관리' })).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(screen).toHaveCount(0);
     await page.getByRole('tab', { name: '파일', exact: true }).click();
@@ -2009,7 +2011,7 @@ views:
     await expect(cli).toContainText('--write');
     await expect(cli).toContainText('--write-folder "AI"');
     const shown = (await cli.innerText()).match(/^claude mcp add -s user ([^ ]+) -- "([^"]+)" (.*?--mcp-stdio)/)!;
-    expect(shown[1]).toMatch(/^nopsidian-/);
+    expect(shown[1]).toMatch(/^lasagna-/);
     const exe = shown[2]!;
     const launchArgs = shown[3]!.split(' ');
     expect(existsSync(exe)).toBe(true);

@@ -149,6 +149,16 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename, onClo
   const [detail, setDetail] = useState<string | null>(null);
   const [dbs, setDbs] = useState<{ folder: string; title: string }[]>([]);
   useEffect(() => void window.nops.db.list().then((l) => setDbs(l.map((d) => ({ folder: d.folder, title: d.title })))).catch(() => undefined), []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const names = Object.keys(data.schema.properties);
   const taken = (n: string) => n === 'title' || names.includes(n);
 

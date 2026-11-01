@@ -79,6 +79,17 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   const [confirmDeleteView, setConfirmDeleteView] = useState<View | null>(null);
   /** 좁은 창에서 접힌 헤더 메뉴 */
   const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      setMoreOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [moreOpen]);
   const seq = useRef(0);
   const narrow = useNarrow(1100);
   // 폭이 바뀌면 접힌 메뉴는 닫는다
@@ -561,6 +572,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           title="보기 삭제"
           lines={[`‘${confirmDeleteView.name}’ 보기를 삭제할까요?`, '필터·정렬·그룹·열 폭 설정이 함께 사라지며 되돌릴 수 없어요.']}
           confirmLabel="삭제"
+          tone="danger"
           onCancel={() => setConfirmDeleteView(null)}
           onConfirm={() => {
             const id = confirmDeleteView.id;

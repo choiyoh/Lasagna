@@ -87,6 +87,8 @@ function expectTokens(name: string, tokens: Tokens) {
   expect(contrast(need('muted'), need('bg-side')), `${name} muted/bg-side`).toBeGreaterThanOrEqual(4.5);
   expect(contrast(need('accent'), need('bg')), `${name} accent/bg`).toBeGreaterThanOrEqual(4.5);
   expect(contrast(need('on-accent'), need('accent')), `${name} on-accent/accent`).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(need('danger'), need('bg')), `${name} danger/bg`).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(need('warn'), need('bg')), `${name} warn/bg`).toBeGreaterThanOrEqual(4.5);
   // 사이드바 선택 행: accent 18% 를 bg-side 위에 얹고 accent 글자를 읽는다.
   const selected = mixOver(need('bg-side'), need('accent'), 0.18);
   expect(contrast(need('accent'), selected), `${name} accent/선택 배경`).toBeGreaterThanOrEqual(4.5);
@@ -106,17 +108,24 @@ describe('테마 토큰 대비', () => {
     expect(darkMedia).toEqual(darkExplicit);
   });
 
-  it('error 색이 새 배경에서 4.5:1 을 넘는다', () => {
-    expect(contrast('#c0392b', light.bg!)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast('#c0392b', light['bg-side']!)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast('#ff7a6e', darkExplicit.bg!)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast('#ff7a6e', darkExplicit['bg-side']!)).toBeGreaterThanOrEqual(4.5);
+  it('error/warn 토큰이 새 배경에서 4.5:1 을 넘는다', () => {
+    expect(contrast(light.danger!, light.bg!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(light.danger!, light['bg-side']!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(light.warn!, light.bg!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(light.warn!, light['bg-side']!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkExplicit.danger!, darkExplicit.bg!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkExplicit.danger!, darkExplicit['bg-side']!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkExplicit.warn!, darkExplicit.bg!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkExplicit.warn!, darkExplicit['bg-side']!)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('그래프 note/tag 의미색이 각 테마 배경에서 4.5:1 을 넘는다', () => {
-    expect(contrast(NOTE_COLOR_LIGHT, light.bg!)).toBeGreaterThanOrEqual(4.5);
+  it('그래프 note/tag 의미색이 배경에서 구분되고 라벨은 본문색으로 읽힌다', () => {
+    // note/unresolved 는 노드 채움(그래픽)이고, 라벨 글자는 fg 로 그린다.
+    expect(contrast(NOTE_COLOR_LIGHT, light.bg!)).toBeGreaterThanOrEqual(3);
     expect(contrast(TAG_COLOR_LIGHT, light.bg!)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(NOTE_COLOR_DARK, darkExplicit.bg!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(NOTE_COLOR_DARK, darkExplicit.bg!)).toBeGreaterThanOrEqual(3);
     expect(contrast(TAG_COLOR_DARK, darkExplicit.bg!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(light.fg!, light.bg!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(darkExplicit.fg!, darkExplicit.bg!)).toBeGreaterThanOrEqual(4.5);
   });
 });

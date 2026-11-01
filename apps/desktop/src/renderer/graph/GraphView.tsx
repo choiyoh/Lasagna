@@ -6,7 +6,7 @@ import type { GraphData, GraphSettings } from '@nopsidian/ipc-contract';
 import { colorForNode, filterNodes, matchesQuery, parseGraphQuery } from './filter';
 import type { LayoutIn, LayoutOut } from './layout-worker';
 import { WARM_KNOWN_SAVED, adjacency, planLayout, type Point } from './layout-plan';
-import { mix, readPalette, type GraphPalette } from './palette';
+import { alpha, mix, readPalette, type GraphPalette } from './palette';
 import { NodeGlowProgram } from './node-glow';
 import { LEGACY_GLOBAL_KEY, loadLayout, saveLayout } from './layout-cache';
 import { SETTLE_WINDOW_MS, SPINNER_DELAY_MS, isSettled, statsText } from './settle';
@@ -168,7 +168,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
           // 배경색 테두리(후광)로 선·점 위에서도 글자가 또렷하게 보인다
           ctx.lineWidth = 3;
           ctx.lineJoin = 'round';
-          ctx.strokeStyle = p.dark ? 'rgba(25, 25, 25, 0.85)' : 'rgba(255, 255, 255, 0.9)';
+          ctx.strokeStyle = alpha(p.bg, p.dark ? 0.9 : 0.95);
           ctx.strokeText(data.label, x, y);
           ctx.fillStyle = p.fg;
           ctx.fillText(data.label, x, y);
@@ -177,7 +177,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
           const p = pal.current;
           ctx.beginPath();
           ctx.arc(data.x, data.y, data.size + 5, 0, Math.PI * 2);
-          ctx.fillStyle = p.dark ? 'rgba(143, 143, 245, 0.22)' : 'rgba(91, 91, 214, 0.16)';
+          ctx.fillStyle = alpha(p.accent, p.dark ? 0.22 : 0.16);
           ctx.fill();
           if (data.label) {
             const size = settings.labelSize + 1;
@@ -186,7 +186,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
             const y = data.y + size / 3;
             ctx.lineWidth = 4;
             ctx.lineJoin = 'round';
-            ctx.strokeStyle = p.dark ? 'rgba(25, 25, 25, 0.9)' : 'rgba(255, 255, 255, 0.95)';
+            ctx.strokeStyle = alpha(p.bg, p.dark ? 0.92 : 0.96);
             ctx.strokeText(data.label, x, y);
             ctx.fillStyle = p.fg;
             ctx.fillText(data.label, x, y);

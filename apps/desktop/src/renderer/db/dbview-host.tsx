@@ -83,7 +83,7 @@ export function createDbViewHost(host: DbEmbedHost): NopsDbViewHost {
       await window.nops.db.create({ folder, title: folder });
       const edit = (op: Parameters<typeof window.nops.db.editSchema>[0]['op']) => window.nops.db.editSchema({ folder, op });
       // 노션처럼 바로 쓸 수 있게 기본 속성과 보기를 둔다
-      await edit({ kind: 'setProperty', name: '상태', def: { type: 'select', options: [{ name: '할 일', color: '#e3e2e0' }, { name: '진행 중', color: '#d3e5ef' }, { name: '완료', color: '#dbeddb' }] } });
+      await edit({ kind: 'setProperty', name: '상태', def: { type: 'select', options: [{ name: '할 일', color: 'gray' }, { name: '진행 중', color: 'blue' }, { name: '완료', color: 'green' }] } });
       await edit({ kind: 'setProperty', name: '날짜', def: { type: 'date' } });
       await edit({ kind: 'setProperty', name: '태그', def: { type: 'multi_select', options: [] } });
       await edit({ kind: 'upsertView', view: { id: 'v1', name: '표', type: 'table', sort: [] } });

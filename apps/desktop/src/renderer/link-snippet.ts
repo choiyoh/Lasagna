@@ -24,7 +24,7 @@ export function cleanSnippet(raw: string): string {
   let s = raw.replace(/\\\[/g, ESC_OPEN).replace(/\\\]/g, ESC_CLOSE);
   // 링크를 지울 때 앞뒤 글자와 붙으면 한 단어가 된다(예: [[노트 000]][[노트 290]] → "노트 000노트 290").
   // 경계에 공백을 보장해 읽을 수 있게 한다.
-  s = s.replace(/!?\[\[([^\]]*)\]\]/gu, (match: string, inner: string, offset: number, whole: string) => {
+  s = s.replace(/!?\[\[((?:[^\]]|\](?!\]))*)\]\]/gu, (match: string, inner: string, offset: number, whole: string) => {
     const label = linkText(inner);
     if (!label) return '';
     const prev = offset > 0 ? whole[offset - 1]! : '';
@@ -50,8 +50,11 @@ export function cleanSnippet(raw: string): string {
  * 백링크 스니펫(cleanSnippet)은 온전한 블록이라 그대로 두고, 검색 표면에서만 얇게 덧씌운다.
  */
 export function cleanSearchSnippet(raw: string): string {
+  // FTS snippet() 의 매치 표시자는 본문에 없는 센티넬이다. 하이라이트는 <Marked> 가 하므로 먼저 지운다.
+  let s = raw.replace(/[\uE000\uE001]/g, '');
   // 닫는 ]] 없이 끝나는 링크 조각을 먼저 지운다(닫힌 링크는 cleanSnippet 이 처리한다)
-  let s = raw.replace(/!?\[\[[^\]]*$/u, '');
+  s = s.replace(/!?\[\[[^\]]*$/u, '');
+  s = s.replace(/(^|\n)[ \t]*[-*+][ \t]+/g, '$1 ');
   s = cleanSnippet(s);
   // 선행 헤딩 마커만 노이즈다(본문 중간의 # 은 건드리지 않는다)
   s = s.replace(/^#{1,6}\s+/, '');

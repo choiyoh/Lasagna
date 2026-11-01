@@ -78,4 +78,22 @@ describe('cleanSearchSnippet', () => {
   it('잘린 조각을 지운 뒤 남는 구분자는 유지한다(FTS 대괄호 포함)', () => {
     expect(cleanSearchSnippet('# [노트 100] - [[노트 172')).toBe('[노트 100] -');
   });
+
+  it('FTS 센티넬을 남기지 않는다', () => {
+    expect(cleanSearchSnippet('\uE000디자인\uE001 원칙')).toBe('디자인 원칙');
+    expect(cleanSearchSnippet('[[\uE000디자인\uE001 원칙]]')).toBe('디자인 원칙');
+  });
+
+  it('제목 안의 대괄호를 보존한다', () => {
+    expect(cleanSearchSnippet('[[[디자인] 원칙]]')).toBe('[디자인] 원칙');
+    expect(cleanSearchSnippet('# [디자인] 데모')).toBe('[디자인] 데모');
+  });
+
+  it('끝에서 잘린 링크는 지우고 앞 글자는 남긴다', () => {
+    expect(cleanSearchSnippet('본문 [[디자인 원칙')).toBe('본문');
+  });
+
+  it('목록 경계에서 앞 항목과 링크 사이에 공백을 둔다', () => {
+    expect(cleanSearchSnippet('- 디자인 리뷰 받기\n- [[프로젝트/로드맵]]')).toBe('디자인 리뷰 받기 프로젝트/로드맵');
+  });
 });

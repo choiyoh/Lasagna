@@ -721,7 +721,7 @@ export class Indexer {
       return this.db
         .prepare(
           `SELECT p.path AS path, p.title AS title,
-                  snippet(fts, 1, '[', ']', '…', 12) AS snippet
+                  snippet(fts, 1, char(57344), char(57345), '…', 12) AS snippet
            FROM fts JOIN pages p ON p.id = fts.rowid
            WHERE fts MATCH ? ORDER BY rank LIMIT ?`,
         )

@@ -4,6 +4,7 @@ import type { Node as PMNode } from 'prosemirror-model';
 import type { SlashItemSpec } from '@oh-new-editor/core';
 import DOMPurify from 'dompurify';
 import { insertMarkdown } from './commands';
+import { isEffectiveDark } from './theme';
 
 interface MermaidApi {
   initialize(config: Record<string, unknown>): void;
@@ -31,7 +32,7 @@ export function sanitizeSvg(svg: string): string {
   });
 }
 
-const theme = (): 'default' | 'dark' => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'default');
+const theme = (): 'default' | 'dark' => (isEffectiveDark() ? 'dark' : 'default');
 
 async function loadMermaid(): Promise<MermaidApi> {
   if (!mermaidPromise) {
@@ -136,6 +137,10 @@ export function mermaidBlockView(node: PMNode, view: EditorView): NodeView {
   // 테마가 바뀌면 SVG 도 즉시 다시 그린다.
   const observer = new MutationObserver(() => draw(current, true));
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  // 앱 테마가 '시스템'일 때 OS 다크/라이트 전환은 data-theme 속성이 바뀌지 않는다.
+  const media = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+  const onScheme = () => draw(current, true);
+  media?.addEventListener('change', onScheme);
 
   return {
     dom,
@@ -149,6 +154,7 @@ export function mermaidBlockView(node: PMNode, view: EditorView): NodeView {
       token++;
       if (timer) clearTimeout(timer);
       observer.disconnect();
+      media?.removeEventListener('change', onScheme);
     },
     // SVG/상태 DOM 변경은 문서 변경이 아니다. 원문 코드 영역의 입력은 그대로 받는다.
     ignoreMutation: (m) => shown.contains(m.target) || m.type === 'attributes',

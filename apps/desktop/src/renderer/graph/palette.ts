@@ -1,12 +1,12 @@
 /** 그래프 색: 앱 테마(라이트/다크/시스템)를 따라 CSS 변수에서 읽는다. */
 
 /** 노드 의미색은 palette 한 곳에서만 정의한다(settings.ts 와 중복 정의 금지). */
-export const NOTE_COLOR_LIGHT = '#666dbe';
-export const NOTE_COLOR_DARK = '#a3a9d9';
+export const NOTE_COLOR_LIGHT = '#8c7765';
+export const NOTE_COLOR_DARK = '#b9a390';
 export const TAG_COLOR_LIGHT = '#a06a12';
 export const TAG_COLOR_DARK = '#e0b45a';
-export const UNRESOLVED_COLOR_LIGHT = '#a4a4b2';
-export const UNRESOLVED_COLOR_DARK = '#6c6c7a';
+export const UNRESOLVED_COLOR_LIGHT = '#b8aa9b';
+export const UNRESOLVED_COLOR_DARK = '#6e6055';
 
 export interface GraphPalette {
   dark: boolean;
@@ -32,6 +32,12 @@ const rgb = (hex: string): [number, number, number] | null => {
   if (!m) return null;
   const n = parseInt(m[1]!, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
+/** `#rrggbb` 를 캔버스용 rgba 문자열로. 색이 아니면 투명 검정으로 떨어진다. */
+export const alpha = (hexColor: string, a: number): string => {
+  const c = rgb(hexColor);
+  return c ? `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})` : `rgba(0, 0, 0, ${a})`;
 };
 
 /** `from`(배경)과 `to` 를 t 비율로 섞은 불투명 색. sigma 의 선 프로그램은 알파를 쓰지 않으므로 배경과 미리 섞어 투명한 것처럼 보이게 한다. */

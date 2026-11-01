@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CsvImportDialog } from './CsvImportDialog';
+import { DatabaseIcon } from '../icons';
 
 interface Props {
   onOpen: (folder: string) => void;
@@ -48,7 +49,7 @@ export function DbList({ onOpen }: Props) {
         {dbs.map((d) => (
           <li key={d.folder}>
             <button className="tag" onClick={() => onOpen(d.folder)} title={d.folder || '(볼트 루트)'}>
-              <span>🗂 {d.title}</span>
+              <span className="tag__name"><DatabaseIcon size={15} />{d.title}</span>
               <span className="count">{d.rowCount}</span>
             </button>
           </li>

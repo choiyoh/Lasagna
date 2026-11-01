@@ -10,6 +10,7 @@ import { searchKeymap } from '@codemirror/search';
 import { Annotation, Compartment, EditorState } from '@codemirror/state';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView, drawSelection, highlightActiveLine, keymap } from '@codemirror/view';
+import { isEffectiveDark, onEffectiveThemeChange } from './theme';
 
 /**
  * 소스 모드: 파일 전체(프런트매터 포함)의 마크다운 원문을 그대로 편집한다.
@@ -54,18 +55,23 @@ const baseTheme = EditorView.theme({
 const text_eol = (text: string) => (text.includes('\r\n') ? 'crlf' : 'lf');
 
 export function createSourceEditor(host: HTMLElement, options: SourceEditorOptions): SourceEditor {
-  const media = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
-  const isDark = () => options.dark ?? media?.matches ?? false;
+  const isDark = () => options.dark ?? isEffectiveDark();
   const themeSlot = new Compartment();
   const eolSlot = new Compartment();
   const eolFor = (text: string) => (text.includes('\r\n') ? EditorState.lineSeparator.of('\r\n') : []);
   let eol = text_eol(options.text);
-  const themeFor = (dark: boolean) => (dark ? oneDark : syntaxHighlighting(defaultHighlightStyle, { fallback: true }));
+  // oneDark 는 .cm-editor 배경을 #282c34 로 덮는다. 앱의 --oh-editor-bg 를 따르도록 투명하게 되돌린다.
+  const transparentDarkBackground = EditorView.theme({
+    '&.cm-editor': { backgroundColor: 'transparent !important' },
+    '.cm-gutters': { backgroundColor: 'transparent !important', borderRight: 'none' },
+    '.cm-activeLineGutter': { backgroundColor: 'transparent !important' },
+  });
+  const themeFor = (dark: boolean) =>
+    dark ? [oneDark, transparentDarkBackground] : syntaxHighlighting(defaultHighlightStyle, { fallback: true });
 
   const view = new EditorView({
     parent: host,
-    state: EditorState.create({
-      doc: options.text,
+    state: EditorState.create({      doc: options.text,
       extensions: [
         history(),
         drawSelection(),
@@ -85,8 +91,11 @@ export function createSourceEditor(host: HTMLElement, options: SourceEditorOptio
     }),
   });
 
+  // oneDark 의 배경(#282c34)이 테마 클래스로 남아도 인라인 배경이 이긴다. 실제 배경은 앱의 --oh-editor-bg.
+  view.dom.style.backgroundColor = 'transparent';
+
   const onScheme = () => view.dispatch({ effects: themeSlot.reconfigure(themeFor(isDark())) });
-  if (options.dark === undefined) media?.addEventListener('change', onScheme);
+  const offTheme = options.dark === undefined ? onEffectiveThemeChange(onScheme) : () => {};
 
   return {
     view,
@@ -106,7 +115,7 @@ export function createSourceEditor(host: HTMLElement, options: SourceEditorOptio
     },
     focus: () => view.focus(),
     destroy() {
-      media?.removeEventListener('change', onScheme);
+      offTheme();
       view.destroy();
     },
   };

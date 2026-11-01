@@ -300,10 +300,11 @@ export function useEntryActions(deps: EntryActionDeps) {
       setConfirm({
         title: isFolder ? `폴더를 삭제할까요? “${name}”` : `노트를 삭제할까요? “${name}”`,
         lines: [
-          isFolder ? '폴더 안의 모든 노트와 첨부가 함께 휴지통(.nopsidian/trash)으로 옮겨져요.' : '휴지통(.nopsidian/trash)으로 옮겨져요. 바로 되돌릴 수 있어요.',
+          isFolder ? '폴더 안의 모든 노트와 첨부가 함께 휴지통으로 옮겨져요. 사이드바 하단 휴지통에서 복원할 수 있어요.' : '휴지통으로 옮겨져요. 사이드바 하단 휴지통에서 복원할 수 있어요.',
           '이 노트를 가리키던 [[링크]]는 그대로 남고 ‘없는 노트’로 표시돼요.',
         ],
         confirmLabel: '삭제',
+        tone: 'danger',
         onConfirm: () => {
           setConfirm(null);
           void (async () => {
@@ -348,9 +349,10 @@ export function useEntryActions(deps: EntryActionDeps) {
         lines: [
           ...items.slice(0, 6).map((it) => `· ${it.isFolder ? '📁 ' : ''}${nameOf(it.path)}`),
           ...(items.length > 6 ? [`… 외 ${items.length - 6}개`] : []),
-          '휴지통(.nopsidian/trash)으로 옮겨져요. 바로 되돌릴 수 있어요.',
+          '휴지통으로 옮겨져요. 사이드바 하단 휴지통에서 복원할 수 있어요.',
         ],
         confirmLabel: '삭제',
+        tone: 'danger',
         onConfirm: () => {
           setConfirm(null);
           void (async () => {

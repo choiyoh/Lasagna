@@ -12,6 +12,8 @@ const config: ForgeConfig = {
     asar: { unpack: '**/*.node' },
     name: 'Lasagna',
     executableName: 'lasagna',
+    appBundleId: 'app.lasagna.desktop',
+    extendInfo: { CFBundleDisplayName: 'Lasagna' },
     // 확장자는 플랫폼에 맞게 붙는다(.icns / .ico)
     icon: path.join(process.cwd(), 'assets', 'icon'),
     // AI 에이전트용 MCP 서버(의존성까지 한 파일). 앱의 resources/ 에 들어가고, 설정 화면이 그 경로를 안내한다.
@@ -33,6 +35,10 @@ const config: ForgeConfig = {
     postPackage: async (_config, result) => {
       if (process.platform !== 'darwin') return;
       for (const out of result.outputPaths) {
+        // @electron/packager 는 extendInfo 보다 executableName 을 우선해 CFBundleDisplayName 을 덮는다.
+        // Finder·권한 팝업에 대문자 Lasagna 가 보이도록 서명 전에 다시 고친다.
+        const plist = path.join(out, 'Lasagna.app', 'Contents', 'Info.plist');
+        execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Set :CFBundleDisplayName Lasagna', plist]);
         execFileSync('codesign', ['--force', '--deep', '--sign', '-', path.join(out, 'Lasagna.app')]);
       }
     },

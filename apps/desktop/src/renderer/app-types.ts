@@ -8,5 +8,6 @@ export interface ConfirmState {
   title: string;
   lines: string[];
   confirmLabel: string;
+  tone?: 'primary' | 'danger';
   onConfirm: () => void;
 }

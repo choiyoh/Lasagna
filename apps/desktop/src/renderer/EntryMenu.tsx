@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 export interface EntryMenuState {
   /** 항목 경로('' = 사이드바의 빈 곳) */
   path: string;
@@ -26,6 +28,16 @@ interface Props {
 /** 사이드바 항목(또는 빈 곳)을 우클릭했을 때의 메뉴 */
 export function EntryMenu(p: Props) {
   const { menu } = p;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      p.onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [p.onClose]);
   /** 메뉴를 닫고 동작을 실행한다 */
   const run = (fn: () => void) => () => {
     p.onClose();

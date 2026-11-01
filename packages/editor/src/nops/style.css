@@ -17,9 +17,9 @@
 }
 .nops-raw { padding: 8px 10px; margin: 8px 0; white-space: pre-wrap; border-left: 3px solid color-mix(in srgb, currentColor 25%, transparent); }
 .nops-raw-inline { padding: 0 3px; }
-mark { background: #fff3a3; color: inherit; border-radius: 2px; padding: 0 1px; }
-@media (prefers-color-scheme: dark) { mark { background: #6b5d00; } }
-[data-theme='dark'] mark { background: #6b5d00; }
+mark { background: #fae39c; color: inherit; border-radius: 2px; padding: 0 1px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) mark { background: rgba(240, 180, 76, 0.28); } }
+[data-theme='dark'] mark { background: rgba(240, 180, 76, 0.28); }
 
 /* 콜아웃·토글 */
 .nops-callout, .nops-toggle {
@@ -27,18 +27,25 @@ mark { background: #fff3a3; color: inherit; border-radius: 2px; padding: 0 1px; 
   margin: 10px 0;
   padding: 10px 12px 10px 38px;
   border-radius: 8px;
-  border-left: 4px solid var(--nops-callout-color, #5b8def);
-  background: color-mix(in srgb, var(--nops-callout-color, #5b8def) 9%, transparent);
+  border-left: 4px solid var(--nops-callout-color, #4c76a8);
+  background: color-mix(in srgb, var(--nops-callout-color, #4c76a8) 9%, transparent);
 }
 .nops-toggle { --nops-callout-color: #8a8a99; border-left-width: 2px; }
+.nops-callout[data-callout='note'], .nops-callout[data-callout='info'] { --nops-callout-color: #4c76a8; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .nops-callout[data-callout='note'],
+  :root:not([data-theme='light']) .nops-callout[data-callout='info'] { --nops-callout-color: #7ea4cf; }
+}
+[data-theme='dark'] .nops-callout[data-callout='note'],
+[data-theme='dark'] .nops-callout[data-callout='info'] { --nops-callout-color: #7ea4cf; }
 .nops-callout[data-callout='tip'], .nops-callout[data-callout='hint'], .nops-callout[data-callout='success'], .nops-callout[data-callout='check'], .nops-callout[data-callout='done'] { --nops-callout-color: #2fa37a; }
-.nops-callout[data-callout='warning'], .nops-callout[data-callout='caution'], .nops-callout[data-callout='attention'], .nops-callout[data-callout='question'], .nops-callout[data-callout='help'] { --nops-callout-color: #d99a1b; }
-.nops-callout[data-callout='danger'], .nops-callout[data-callout='error'], .nops-callout[data-callout='failure'], .nops-callout[data-callout='fail'], .nops-callout[data-callout='bug'] { --nops-callout-color: #d1453b; }
+.nops-callout[data-callout='warning'], .nops-callout[data-callout='caution'], .nops-callout[data-callout='attention'], .nops-callout[data-callout='question'], .nops-callout[data-callout='help'] { --nops-callout-color: var(--warn, #945800); }
+.nops-callout[data-callout='danger'], .nops-callout[data-callout='error'], .nops-callout[data-callout='failure'], .nops-callout[data-callout='fail'], .nops-callout[data-callout='bug'] { --nops-callout-color: var(--danger, #c0392b); }
 .nops-callout[data-callout='quote'], .nops-callout[data-callout='cite'], .nops-callout[data-callout='example'], .nops-callout[data-callout='abstract'] { --nops-callout-color: #8a8a99; }
 
 .nops-callout__handle, .nops-toggle__handle {
   position: absolute; left: 8px; top: 9px; width: 22px; height: 22px; padding: 0;
-  border: 0; background: none; color: var(--nops-callout-color, #5b8def); font-size: 15px; line-height: 22px; text-align: center; cursor: default;
+  border: 0; background: none; color: var(--nops-callout-color, #4c76a8); font-size: 15px; line-height: 22px; text-align: center; cursor: default;
 }
 .nops-callout.is-foldable .nops-callout__handle, .nops-toggle__handle { cursor: pointer; border-radius: 4px; }
 .nops-callout.is-foldable .nops-callout__handle:hover, .nops-toggle__handle:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
@@ -60,7 +67,7 @@ li[data-checked]::before {
   border: 1.5px solid currentColor; border-radius: 3px; opacity: 0.7; cursor: pointer;
 }
 li[data-checked='true']::before { background: var(--oh-editor-primary, #5b5bd6); border-color: var(--oh-editor-primary, #5b5bd6); opacity: 1; }
-li[data-checked='true']::after { content: '✓'; position: absolute; left: -1.5em; top: 0.18em; color: #fff; font-size: 0.85em; pointer-events: none; }
+li[data-checked='true']::after { content: '✓'; position: absolute; left: -1.5em; top: 0.18em; color: var(--oh-editor-primary-text, #fff); font-size: 0.85em; pointer-events: none; }
 li[data-checked='true'] > p:first-child { opacity: 0.6; text-decoration: line-through; }
 
 /* 수식 블록 */
@@ -84,12 +91,11 @@ pre[data-math-block]::before { content: '$$'; opacity: 0.4; display: block; }
   background: var(--oh-editor-bg, #fff); color: var(--oh-editor-text, #0f172a);
   border: 1px solid var(--oh-editor-border, #cbd5e1); box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18); font-size: 13px;
 }
-@media (prefers-color-scheme: dark) { .nops-block-menu { background: #232328; color: #e6e6ea; border-color: #34343b; } }
 .nops-block-menu__title { padding: 4px 8px; font-size: 11px; opacity: 0.6; }
 .nops-block-menu__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
 .nops-block-menu__item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 8px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .nops-block-menu__item:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
-.nops-block-menu__item.is-danger { color: #d1453b; }
+.nops-block-menu__item.is-danger { color: var(--danger, #c0392b); }
 .nops-block-menu__item kbd { font: inherit; font-size: 11px; opacity: 0.55; }
 .nops-block-menu__sep { height: 1px; margin: 6px 4px; background: color-mix(in srgb, currentColor 14%, transparent); }
 
@@ -106,21 +112,20 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 .nops-embed.is-selected .nops-embed__img { outline: 2px solid var(--oh-editor-primary, #5b5bd6); outline-offset: 1px; }
 .nops-embed__resize { position: absolute; right: -4px; bottom: -4px; width: 12px; height: 12px; border-radius: 3px; background: var(--oh-editor-primary, #5b5bd6); border: 2px solid var(--oh-editor-bg, #fff); cursor: nwse-resize; }
 .nops-embed__chip { display: inline-block; padding: 0 6px; border-radius: 4px; cursor: pointer; font-family: inherit; background: color-mix(in srgb, var(--oh-editor-primary, #5b5bd6) 12%, transparent); color: var(--oh-editor-primary, #5b5bd6); }
-.nops-embed__chip.is-missing { cursor: default; background: color-mix(in srgb, #d1453b 14%, transparent); color: #d1453b; }
+.nops-embed__chip.is-missing { cursor: default; background: color-mix(in srgb, var(--danger, #c0392b) 14%, transparent); color: var(--danger, #c0392b); }
 
 /* 입력 대화상자 */
 .nops-prompt { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.25); }
 .nops-prompt__box { width: min(420px, 90vw); padding: 16px; border-radius: 10px; background: var(--oh-editor-bg, #fff); color: var(--oh-editor-text, #0f172a); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3); font-size: 13px; }
-@media (prefers-color-scheme: dark) { .nops-prompt__box { background: #232328; color: #e6e6ea; } }
 .nops-prompt__box label { display: block; }
 .nops-prompt__box input { display: block; width: 100%; margin-top: 8px; padding: 7px 9px; border-radius: 6px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); background: transparent; color: inherit; font: inherit; }
 .nops-prompt__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .nops-prompt__actions button { padding: 5px 12px; border-radius: 6px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); background: none; color: inherit; font: inherit; cursor: pointer; }
-.nops-prompt__actions button[type='submit'] { background: var(--oh-editor-primary, #5b5bd6); border-color: transparent; color: #fff; }
+.nops-prompt__actions button[type='submit'] { background: var(--oh-editor-primary, #5b5bd6); border-color: transparent; color: var(--oh-editor-primary-text, #fff); }
 
 /* 코드 블록 구문 강조 (Shiki 이중 테마 변수) */
 .nops-tok { color: var(--shiki-light); }
-@media (prefers-color-scheme: dark) { .nops-tok { color: var(--shiki-dark); } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .nops-tok { color: var(--shiki-dark); } }
 [data-theme='light'] .nops-tok { color: var(--shiki-light); }
 [data-theme='dark'] .nops-tok { color: var(--shiki-dark); }
 
@@ -130,7 +135,6 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
   background: var(--oh-editor-bg, #fff); color: var(--oh-editor-text, #0f172a);
   border: 1px solid var(--oh-editor-border, #cbd5e1); box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18); font-size: 13px;
 }
-@media (prefers-color-scheme: dark) { .nops-link-suggest, .nops-date-suggest { background: #232328; color: #e6e6ea; border-color: #34343b; } }
 .nops-link-suggest__item, .nops-date-suggest__item { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
 .nops-link-suggest__item.is-active, .nops-link-suggest__item:hover, .nops-date-suggest__item.is-active, .nops-date-suggest__item:hover { background: color-mix(in srgb, var(--oh-editor-primary, #5b5bd6) 16%, transparent); }
 .nops-link-suggest__icon, .nops-date-suggest__icon { width: 18px; text-align: center; opacity: 0.8; }
@@ -184,11 +188,11 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 /* 수식(KaTeX → MathML) */
 .nops-math { font-family: inherit; padding: 0 2px; cursor: pointer; background: none; }
 .nops-math:hover { background: color-mix(in srgb, currentColor 8%, transparent); border-radius: 3px; }
-.nops-math.is-error { color: #d1453b; font-size: 0.85em; font-family: ui-monospace, monospace; }
+.nops-math.is-error { color: var(--danger, #c0392b); font-size: 0.85em; font-family: ui-monospace, monospace; }
 .nops-mathblock { margin: 0.6em 0; border-radius: 6px; }
 .nops-mathblock__render { padding: 8px 12px; text-align: center; overflow-x: auto; }
 .nops-mathblock__render.is-empty { color: var(--oh-editor-text-muted, #888); font-style: italic; }
-.nops-mathblock__render.is-error { color: #d1453b; font-family: ui-monospace, monospace; font-size: 0.85em; text-align: left; }
+.nops-mathblock__render.is-error { color: var(--danger, #c0392b); font-family: ui-monospace, monospace; font-size: 0.85em; text-align: left; }
 .nops-mathblock pre[data-math-block] { display: none; margin: 0; }
 .nops-mathblock.is-active pre[data-math-block] { display: block; }
 .nops-mathblock.is-active { background: color-mix(in srgb, currentColor 4%, transparent); }
@@ -220,7 +224,7 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 .ProseMirror .ProseMirror-active-search-match { background: rgba(255, 140, 0, 0.75); border-radius: 2px; box-shadow: 0 0 0 1px rgba(255, 140, 0, 0.9); }
 
 /* 비어 있는 노트 제목 안내 */
-.ProseMirror h1.nops-empty-title::before { content: attr(data-placeholder); color: var(--oh-editor-muted, #9b9a97); opacity: 0.6; float: left; height: 0; pointer-events: none; }
+.ProseMirror h1.nops-empty-title::before { content: attr(data-placeholder); color: var(--oh-editor-text-muted, #9b9a97); opacity: 0.6; float: left; height: 0; pointer-events: none; }
 
 
 /* 각주 */
@@ -242,7 +246,7 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 .nops-mermaid { margin: 0.8em 0; border-radius: 8px; background: color-mix(in srgb, currentColor 3%, transparent); }
 .nops-mermaid__render { padding: 10px 12px; text-align: center; overflow-x: auto; }
 .nops-mermaid__render svg { max-width: 100%; height: auto; }
-.nops-mermaid.is-error .nops-mermaid__render { color: #d1453b; text-align: left; font-family: ui-monospace, monospace; font-size: 0.85em; }
+.nops-mermaid.is-error .nops-mermaid__render { color: var(--danger, #c0392b); text-align: left; font-family: ui-monospace, monospace; font-size: 0.85em; }
 .nops-mermaid pre[data-mermaid-source] { display: none; margin: 0; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, currentColor 6%, transparent); overflow-x: auto; }
 .nops-mermaid.is-active pre[data-mermaid-source], .nops-mermaid.is-error pre[data-mermaid-source], .nops-mermaid.is-empty pre[data-mermaid-source] { display: block; }
 .nops-mermaid.is-active { outline: 1px solid color-mix(in srgb, currentColor 18%, transparent); }

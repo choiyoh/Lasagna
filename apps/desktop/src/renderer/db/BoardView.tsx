@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { optionsOf } from '@nopsidian/core/db/values';
-import { coverOf } from './ListGalleryViews';
-import { CellView } from './CellEditor';
+import { coverOf } from './ListGalleryViews';import { CellView } from './CellEditor';
+import { chipBorderColor } from './chip-color';
 import { cellOf, TITLE, visibleColumns, type CellValue, type DbData, type DbRowDto } from './types';
 
 interface Props {
@@ -46,7 +46,7 @@ export function BoardView({ data, onOpen, onMove, onAdd, onReorder, vaultId }: P
             setDragging(null);
           }}
         >
-          <h4 style={{ borderTopColor: colorOf(g.key) }}>
+          <h4 style={{ borderTopColor: chipBorderColor(colorOf(g.key)) }}>
             {g.label} <span className="count">{g.count}</span>
           </h4>
           <div className="dbboard__cards">

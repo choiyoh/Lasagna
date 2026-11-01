@@ -134,8 +134,8 @@ describe('mcpSnippet', () => {
 
   it('볼트 이름이 ASCII 가 아니면 볼트 id 로 기본 이름을 만든다', () => {
     expect(defaultServerName({ vaultName: 'Work Notes', vaultId: 'abc123def456' })).toBe(NAME);
-    expect(defaultServerName({ vaultName: '내 볼트', vaultId: 'abc123def456' })).toMatch(/^nopsidian-vault-[a-z0-9]+$/);
-    expect(defaultServerName({ vaultName: '  ', vaultId: 'ZZZ' })).toMatch(/^nopsidian-vault-[a-z0-9]+$/);
+    expect(defaultServerName({ vaultName: '내 볼트', vaultId: 'abc123def456' })).toMatch(/^lasagna-vault-[a-z0-9]+$/);
+    expect(defaultServerName({ vaultName: '  ', vaultId: 'ZZZ' })).toMatch(/^lasagna-vault-[a-z0-9]+$/);
   });
 
   it('같은 이름의 볼트도 기본 서버 이름이 다르다', () => {
@@ -145,7 +145,7 @@ describe('mcpSnippet', () => {
     // 슬러그가 32자에서 잘린 뒤 같아져도 해시 접미사로 구분된다
     const x = defaultServerName({ vaultName: `${'a'.repeat(40)}one`, vaultId: 'id-one' });
     const y = defaultServerName({ vaultName: `${'a'.repeat(40)}two`, vaultId: 'id-two' });
-    expect(x.slice(0, 'nopsidian-'.length + 32)).toBe(y.slice(0, 'nopsidian-'.length + 32));
+    expect(x.slice(0, 'lasagna-'.length + 32)).toBe(y.slice(0, 'lasagna-'.length + 32));
     expect(x).not.toBe(y);
   });
 

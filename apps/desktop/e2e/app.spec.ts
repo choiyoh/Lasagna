@@ -899,8 +899,10 @@ test.describe('링크 코어', () => {
 
   test('동기화: 설정 대화상자에서 클라이언트를 저장하고, 연결 전에는 켤 수 없다', async () => {
     const page = await app.firstWindow();
-    await expect(page.getByTestId('sync-bar')).toContainText('동기화 꺼짐');
-    await page.getByTestId('sync-bar').click();
+    // 꺼짐 + idle 에서는 사이드바 하단 버튼을 렌더하지 않는다. 진입점은 설정이다.
+    await expect(page.getByTestId('sync-bar')).toHaveCount(0);
+    await page.keyboard.press('Meta+,');
+    await page.getByRole('dialog', { name: '설정' }).getByRole('button', { name: /Google Drive 동기화/ }).click();
     const dialog = page.getByRole('dialog', { name: 'Google Drive 동기화' });
     await expect(dialog).toBeVisible();
     const diagnostics = dialog.getByTestId('sync-diagnostics');

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { View } from '@nopsidian/core/db';
+import type { DbRow, View } from '@nopsidian/core/db';
 import type { DbQueryResult } from '@nopsidian/ipc-contract';
 import { BoardView } from './BoardView';
 import { CalendarView } from './CalendarView';
@@ -13,8 +13,10 @@ import { TemplateSettings } from './TemplateSettings';
 import { ViewToolbar } from './ViewToolbar';
 import { type CellValue, type DbData, type DbRowDto } from './types';
 import { hiddenColumnView, sortedView } from './view-edit';
-import { addConditionTo, normalizeRoot, simplify } from './filter-tree';
+import { addConditionTo, childrenOf, groupKind, isCondition, normalizeRoot, simplify } from './filter-tree';
 import { defaultOp } from './filter-ops';
+import { suggestFilterRemovals } from './filter-suggestions';
+import { EmptyState } from '../components/EmptyState';
 
 interface Props {
   folder: string;
@@ -61,6 +63,7 @@ function useNarrow(max: number): boolean {
 /** 데이터베이스 한 개의 화면: 보기 탭 · 필터/정렬/그룹 · 표/보드/목록/갤러리 · 속성 관리 · 새 행. */
 export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, onRenameNote, renderNote }: Props) {
   const [data, setData] = useState<DbData | null>(null);
+  const [allRows, setAllRows] = useState<DbRow[] | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
   const [draft, setDraft] = useState<View | null>(null);
   /** 열 머리 메뉴에서 "필터 추가"를 누르면 올라가 필터 창을 연다 */
@@ -132,6 +135,46 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
 
   const saved = data?.schema.views.find((v) => v.id === data.view.id);
   const view = draft ?? data?.view ?? null;
+  const filterRoot = view?.filter ? normalizeRoot(view.filter) : null;
+  const suggestable =
+    !!data &&
+    data.matched === 0 &&
+    data.total <= 5000 &&
+    !!filterRoot &&
+    groupKind(filterRoot) === 'and' &&
+    childrenOf(filterRoot).some(isCondition);
+
+  // "빼면 N개"는 필터 전 행이 필요하다. 0행일 때만 필터를 뺀 보기로 한 번 더 읽는다.
+  useEffect(() => {
+    if (!suggestable || !view) {
+      setAllRows(null);
+      return;
+    }
+    let live = true;
+    const allView = {
+      ...view,
+      filter: undefined,
+      sort: [],
+      groupBy: undefined,
+      subGroupBy: undefined,
+      calc: undefined,
+      manualOrder: undefined,
+    };
+    void window.nops.db.query({ folder, view: allView, limit: 5000 }).then(
+      (r) => live && setAllRows(r.rows as unknown as DbRow[]),
+      () => live && setAllRows(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [folder, suggestable, view]);
+
+  const suggestions = useMemo(() => {
+    if (!suggestable || !allRows || !view || !data) return [];
+    const started = performance.now();
+    const out = suggestFilterRemovals(data.schema, view.filter, allRows);
+    return performance.now() - started > 200 ? [] : out;
+  }, [allRows, data, suggestable, view]);
 
   // 보기 설정(필터·정렬·열 등)은 바꾸면 잠시 뒤 `_db.yaml` 에 자동 저장한다.
   // "되돌리기"는 아직 저장 전이면 바꾼 것을 버리고, 저장 뒤면 바로 앞의 보기로 돌려놓는다.
@@ -494,7 +537,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
       )}
       <div className={peek && peekMode === 'side' ? 'dbscreen__split' : 'dbscreen__splitoff'}>
       <div className="dbscreen__body">
-        {view.type === 'table' && (
+        {data.matched > 0 && view.type === 'table' && (
           <TableView
             data={current}
             rows={data.groups ? flat : rows}
@@ -516,7 +559,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             notes={notes}
           />
         )}
-        {view.type === 'board' && (
+        {data.matched > 0 && view.type === 'board' && (
           <BoardView
             vaultId={vaultId}
             data={current}
@@ -526,9 +569,9 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             onAdd={(key) => setAdding({ title: '', values: view.groupBy && key ? { [view.groupBy]: key } : {} })}
           />
         )}
-        {view.type === 'list' && <ListView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={openRow} />}
-        {view.type === 'gallery' && <GalleryView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={openRow} />}
-        {view.type === 'calendar' && (
+        {data.matched > 0 && view.type === 'list' && <ListView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={openRow} />}
+        {data.matched > 0 && view.type === 'gallery' && <GalleryView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={openRow} />}
+        {data.matched > 0 && view.type === 'calendar' && (
           <CalendarView
             data={current}
             rows={data.groups ? flat : rows}
@@ -541,8 +584,31 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             onOpenDaily={(date) => void window.nops.daily.open({ date }).then((r) => onOpenNote(r.path))}
           />
         )}
-        {view.type === 'timeline' && <TimelineView data={current} rows={data.groups ? flat : rows} onOpen={openRow} onChange={(r, p, v) => void updateCell(r, p, v)} />}
-        {data.matched === 0 && <p className="muted pad">조건에 맞는 행이 없어요.</p>}
+        {data.matched > 0 && view.type === 'timeline' && <TimelineView data={current} rows={data.groups ? flat : rows} onOpen={openRow} onChange={(r, p, v) => void updateCell(r, p, v)} />}
+        {data.matched === 0 && (
+          <EmptyState
+            title={view.filter ? '조건에 맞는 결과가 없어요' : '행이 없어요'}
+            description={view.filter ? '조건을 하나만 빼도 결과가 나와요.' : '새 행을 만들어 시작해 보세요.'}
+            suggestions={suggestions.map((s) => ({
+              ...s,
+              onApply: () => {
+                const next = { ...view, filter: s.filter };
+                setDraft(next);
+                void load(next);
+              },
+            }))}
+            onReset={
+              view.filter
+                ? () => {
+                    const next = { ...view, filter: undefined };
+                    setDraft(next);
+                    void load(next);
+                  }
+                : undefined
+            }
+            resetLabel={view.filter ? '필터 모두 지우기' : undefined}
+          />
+        )}
       </div>
       {peek && renderNote && peekMode === 'side' && (
         <aside className="dbpeek" aria-label="행 미리보기" data-testid="db-peek">

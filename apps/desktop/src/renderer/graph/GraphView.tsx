@@ -11,6 +11,7 @@ import { NodeGlowProgram } from './node-glow';
 import { LEGACY_GLOBAL_KEY, loadLayout, saveLayout } from './layout-cache';
 import { SETTLE_WINDOW_MS, SPINNER_DELAY_MS, isSettled, statsText } from './settle';
 import { webglAvailable } from './webgl';
+import { EmptyState } from '../components/EmptyState';
 
 interface Props {
   data: GraphData;
@@ -516,12 +517,13 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
         <>
           <div ref={host} className={ready ? 'graphview__canvas ready' : 'graphview__canvas'} />
           {filteredOut && (
-            <div className="graphview__empty" role="status">
-              <div className="graphview__emptycard">
-                <strong>일치하는 노드가 없어요</strong>
-                <p className="muted small">필터: {settings.filter}</p>
-                {onClearFilter && <button onClick={onClearFilter}>필터 지우기</button>}
-              </div>
+            <div className="graphview__empty">
+              <EmptyState
+                title="조건에 맞는 노드가 없어요"
+                description="필터를 지우거나 조건을 바꿔 보세요."
+                onReset={onClearFilter}
+                resetLabel="필터 지우기"
+              />
             </div>
           )}
           <span className="graphview__stats muted small" data-testid={`${testId}-stats`}>

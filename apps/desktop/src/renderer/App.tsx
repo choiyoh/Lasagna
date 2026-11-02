@@ -32,7 +32,9 @@ import { applyTheme, loadTheme, nextTheme, THEME_ICON, THEME_LABEL, type ThemeCh
 import { initialTabs, parseTabs, selectedOf, tabsReducer } from './tabs';
 import { DatabaseScreen } from './db/DatabaseScreen';
 import { DbList } from './db/DbList';
-import { SyncDialog, syncStateText } from './SyncDialog';
+import { SyncDialog } from './SyncDialog';
+import { EmptyState } from './components/EmptyState';
+import { SyncBar } from './components/SyncBar';
 import { GraphScreen, LocalGraph } from './graph/GraphScreen';
 import { linkNameFor } from './link-host';
 import { QuickSwitcher } from './QuickSwitcher';
@@ -444,7 +446,12 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         >
           {hits ? (
             hits.length === 0 ? (
-              <p className="muted small pad">결과 없음</p>
+              <EmptyState
+                title="검색 결과가 없어요"
+                description="다른 검색어로 시도해 보세요."
+                onReset={() => setQuery('')}
+                resetLabel="검색어 지우기"
+              />
             ) : (
               <>
                 <p className="searchcount muted small" role="status">
@@ -495,9 +502,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           )}
         </nav>
         <div className="sidebar__foot">
-          <button className="syncbar" onClick={() => setSyncOpen(true)} title="Google Drive 동기화" data-testid="sync-bar">
-          ☁ {sync?.enabled ? syncStateText(sync) : '동기화 꺼짐'}
-        </button>
+          <SyncBar status={sync} onOpen={() => setSyncOpen(true)} />
           <button className="themebtn" onClick={() => setSettingsOpen(true)} title={keys('설정 (⌘,)')} aria-label="설정" data-testid="settings-btn">
             <span aria-hidden>⚙</span>
           </button>

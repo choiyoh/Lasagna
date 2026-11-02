@@ -33,7 +33,7 @@ interface EffectiveClient {
 }
 
 /** 오류 코드 → 사람이 읽는 제목·다음 행동·문서 단계. 원문 오류는 화면에 그대로 쓰지 않는다. */
-const DOCS_BASE = 'https://github.com/choiyoh/Nopsidian/blob/main/docs/sync-setup.md';
+const DOCS_BASE = 'https://github.com/choiyoh/Lasagna/blob/main/docs/sync-setup.md';
 const FAILURES: Record<string, { code: string; title: string; action: string; anchor: string }> = {
   auth: { code: 'HTTP 401', title: 'Google 로그인이 만료됐어요', action: 'Google 계정을 다시 연결해 주세요', anchor: '2-앱에서-연결' },
   authCheck: { code: 'HTTP 401', title: 'Google 로그인을 확인하지 못했어요', action: '잠시 뒤 ‘지금 확인’을 다시 시도해 주세요', anchor: '문제-해결' },

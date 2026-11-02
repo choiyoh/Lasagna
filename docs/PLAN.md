@@ -2,7 +2,7 @@
 
 ## Context
 - **목표**: 설계 문서 「Nopsidian — 설계 문서 v0.1」(Google Docs `1idIt9x9…`)을 토대로, Notion의 블록 편집·DB와 Obsidian의 위키링크·백링크·그래프를 합친 **개인용 로컬 Markdown 편집 앱**을 만든다.
-- **현재 상태**: `/Users/yohan/Documents/workspace/nopsidian`은 빈 폴더(`.claude/`만 있음)이고, `git init`과 `origin = github.com/choiyoh/Nopsidian.git` 설정까지 끝났다. 재사용할 기존 코드는 없다.
+- **현재 상태**: `/Users/yohan/Documents/workspace/nopsidian`은 빈 폴더(`.claude/`만 있음)이고, `git init`과 `origin = github.com/choiyoh/Lasagna.git` 설정까지 끝났다. 재사용할 기존 코드는 없다.
 - **설계 문서에서 바꾸는 점**: 사용자가 **앱에 내장된 Google Drive API 동기화**를 고르셨어. 그래서 설계 문서의 N1(로그인 없음), N4(자체 동기화 없음), G2(100% 오프라인), G3(계정 없음)을 아래처럼 고친다.
   - 동기화는 **옵트인 모듈**이다. 켜지 않으면 앱은 설계 문서 그대로 완전 오프라인·무계정으로 동작한다.
   - 계정은 사용자 본인의 Google 계정 하나뿐이고 OAuth로 연결한다. 앱 자체 계정·서버·결제는 여전히 없다.

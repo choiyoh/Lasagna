@@ -1251,6 +1251,145 @@ views:
     await page.getByRole('tab', { name: '파일', exact: true }).click();
   });
 
+  test('데이터베이스: 0행에서도 보드·캘린더·목록 크롬이 남는다', async () => {
+    const page = await app.firstWindow();
+    const put = (rel: string, body: string) => {
+      mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
+      writeFileSync(path.join(vaultDir, rel), body);
+    };
+    const zero = `    filter:
+      and:
+        - { prop: 점수, op: '>=', value: 999 }
+`;
+    put(
+      '빈뷰/_db.yaml',
+      `title: 빈뷰
+properties:
+  상태: { type: status, options: [ { name: 진행, group: doing }, { name: 완료, group: done } ] }
+  마감: { type: date }
+  점수: { type: number, format: number }
+views:
+  - id: t
+    name: 표
+    type: table
+${zero}  - id: b
+    name: 보드
+    type: board
+    groupBy: 상태
+${zero}  - id: c
+    name: 캘린더
+    type: calendar
+    dateProp: 마감
+${zero}  - id: l
+    name: 목록
+    type: list
+${zero}`,
+    );
+    put('빈뷰/하나.md', '---\n상태: 진행\n마감: 2026-11-10\n점수: 1\n---\n');
+    put('빈뷰/둘.md', '---\n상태: 완료\n마감: 2026-11-20\n점수: 2\n---\n');
+
+    await page.getByRole('tab', { name: 'DB', exact: true }).click();
+    const dbEntry = page.getByTestId('db-panel').getByRole('button', { name: /빈뷰/ });
+    await expect(dbEntry).toBeVisible({ timeout: 10_000 });
+    await dbEntry.click();
+    const screen = page.getByTestId('db-screen');
+    const emptyBox = async () => {
+      const box = await page.locator('.emptystate').boundingBox();
+      if (!box) throw new Error('EmptyState가 없어요');
+      return box.y;
+    };
+    const near = (y: number, base: number) => expect(Math.abs(y - base)).toBeLessThanOrEqual(8);
+
+    // 표 기준선
+    await expect(page.getByTestId('db-table').locator('.dbtable__head')).toHaveCount(1);
+    const tableY = await emptyBox();
+
+    // 보드: 열 머리·+ 새 행·EmptyState
+    await screen.getByRole('tab', { name: '보드', exact: true }).click();
+    const board = page.getByTestId('db-board');
+    await expect(board.locator('.dbboard__col')).toHaveCount(2);
+    await expect(board.locator('.dbboard__col h4').first()).toContainText('진행');
+    await expect(board.getByRole('button', { name: '+ 새 행' })).toHaveCount(2);
+    // 0행에서도 열의 + 새 행이 실제로 새 행 입력을 연다
+    await board.getByRole('button', { name: '+ 새 행' }).first().click();
+    await expect(screen.getByRole('form', { name: '새 행' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(screen.getByRole('form', { name: '새 행' })).toHaveCount(0);
+    // 보드는 96px 열 + 16px gap을 지키면 표보다 EmptyState가 아래로 내려간다(시각 요구 우선)
+    const boardY = await emptyBox();
+    const boardChrome = await page.evaluate(() => {
+      const cols = [...document.querySelectorAll('.dbboard__col')];
+      const empty = document.querySelector('.emptystate');
+      return {
+        heights: cols.map((c) => c.getBoundingClientRect().height),
+        gap: empty && cols.length ? empty.getBoundingClientRect().top - Math.max(...cols.map((c) => c.getBoundingClientRect().bottom)) : null,
+      };
+    });
+    expect(Math.min(...boardChrome.heights)).toBeGreaterThanOrEqual(96);
+    expect(boardChrome.gap).toBeGreaterThanOrEqual(16);
+    expect(boardY).toBeGreaterThan(tableY);
+
+    // 캘린더: 월 이동 바·요일 줄 유지, 실제 마우스 클릭으로 월 이동
+    await screen.getByRole('tab', { name: '캘린더', exact: true }).click();
+    const cal = page.getByTestId('db-calendar');
+    await expect(cal.locator('.dbcal__bar')).toBeVisible();
+    await expect(cal.locator('.dbcal__dow')).toHaveCount(7);
+    near(await emptyBox(), tableY);
+    const month = cal.locator('.dbcal__bar strong');
+    const beforeMonth = await month.innerText();
+    const prev = await cal.getByRole('button', { name: '이전' }).boundingBox();
+    if (!prev) throw new Error('이전 버튼이 없어요');
+    await page.mouse.click(prev.x + prev.width / 2, prev.y + prev.height / 2);
+    await expect(month).not.toHaveText(beforeMonth);
+
+    // 목록: EmptyState 위치가 표와 같고, 가로 스크롤이 없다
+    await screen.getByRole('tab', { name: '목록', exact: true }).click();
+    await expect(page.getByTestId('db-list')).toBeVisible();
+    near(await emptyBox(), tableY);
+
+    // 920에서 세 뷰 모두 가로 스크롤이 생기지 않는다
+    await page.setViewportSize({ width: 920, height: 760 });
+    for (const tab of ['보드', '캘린더', '목록']) {
+      await screen.getByRole('tab', { name: tab, exact: true }).click();
+      await expect(page.getByTestId(tab === '보드' ? 'db-board' : tab === '캘린더' ? 'db-calendar' : 'db-list')).toBeVisible();
+      const widths = await page.evaluate((name) => {
+        const body = document.querySelector<HTMLElement>('.dbscreen__body');
+        const view = name === '보드' ? document.querySelector<HTMLElement>('.dbboard') : name === '캘린더' ? document.querySelector<HTMLElement>('.dbcal__grid') : document.querySelector<HTMLElement>('.dblist');
+        return {
+          doc: [document.documentElement.clientWidth, document.documentElement.scrollWidth],
+          body: body ? [body.clientWidth, body.scrollWidth] : null,
+          view: view ? [view.clientWidth, view.scrollWidth] : null,
+        };
+      }, tab);
+      expect(widths.doc[1]).toBe(widths.doc[0]);
+      expect(widths.body?.[1]).toBeLessThanOrEqual(widths.body?.[0] ?? Infinity);
+      expect(widths.view?.[1]).toBeLessThanOrEqual(widths.view?.[0] ?? Infinity);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    // 필터를 풀면 각 뷰의 크롬은 그대로이고 내용만 돌아온다
+    await screen.getByRole('tab', { name: '목록', exact: true }).click();
+    await screen.getByRole('button', { name: '필터 모두 지우기' }).click();
+    await expect(page.getByTestId('db-list').locator('.dblist__row')).toHaveCount(2);
+    await expect(page.locator('.emptystate')).toHaveCount(0);
+
+    await screen.getByRole('tab', { name: '보드', exact: true }).click();
+    await expect(board.locator('.dbboard__col')).toHaveCount(2);
+    await screen.getByRole('button', { name: '필터 모두 지우기' }).click();
+    await expect(board.locator('.dbcard')).toHaveCount(2);
+    await expect(page.locator('.emptystate')).toHaveCount(0);
+    await expect(page.locator('.dbboard--empty')).toHaveCount(0);
+
+    await screen.getByRole('tab', { name: '캘린더', exact: true }).click();
+    await expect(cal.locator('.dbcal__bar')).toBeVisible();
+    await screen.getByRole('button', { name: '필터 모두 지우기' }).click();
+    await expect(cal.locator('.dbcal__chip')).toHaveCount(2);
+    await expect(page.locator('.emptystate')).toHaveCount(0);
+
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
+  });
+
   test('데이터베이스: CSV 가져오기(열 형식 추정)와 내보내기', async () => {
     const page = await app.firstWindow();
     const tmp = mkdtempSync(path.join(tmpdir(), 'nops-csv-'));

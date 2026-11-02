@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CellView } from './CellEditor';
 import { cellOf, TITLE, visibleColumns, type DbData, type DbRowDto } from './types';
@@ -8,6 +8,8 @@ interface Props {
   rows: DbRowDto[];
   vaultId: string;
   onOpen: (path: string) => void;
+  /** 필터 결과가 0행일 때 목록 본문에 그릴 내용 */
+  empty?: ReactNode;
 }
 
 const IMG = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
@@ -55,29 +57,31 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
 }
 
 /** 목록 뷰: 제목과 보조 속성을 한 줄씩. 보이는 만큼만 그린다(표 뷰와 같은 방식). */
-export function ListView({ data, rows, onOpen }: Props) {
+export function ListView({ data, rows, onOpen, empty }: Props) {
   const cols = visibleColumns(data).filter((c) => c !== TITLE).slice(0, 4);
   const scroller = useRef<HTMLDivElement>(null);
   const v = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => LIST_ROW_H, overscan: 12 });
   return (
-    <div className="dblist" data-testid="db-list" role="list" ref={scroller}>
-      <div style={{ height: v.getTotalSize(), position: 'relative' }}>
-        {v.getVirtualItems().map((vi) => {
-          const r = rows[vi.index]!;
-          return (
-            <div key={r.path} className="dblist__row" role="listitem" style={{ transform: `translateY(${vi.start}px)`, height: LIST_ROW_H }}>
-              <button className="dblist__title" onClick={() => onOpen(r.path)}>
-                {r.title}
-              </button>
-              {cols.map((c) => (
-                <span key={c} className="dblist__prop">
-                  <CellView prop={data.schema.properties[c]} value={cellOf(r, c)} />
-                </span>
-              ))}
-            </div>
-          );
-        })}
-      </div>
+    <div className={empty ? 'dblist dblist--empty' : 'dblist'} data-testid="db-list" role={empty ? undefined : 'list'} ref={scroller}>
+      {empty ?? (
+        <div style={{ height: v.getTotalSize(), position: 'relative' }}>
+          {v.getVirtualItems().map((vi) => {
+            const r = rows[vi.index]!;
+            return (
+              <div key={r.path} className="dblist__row" role="listitem" style={{ transform: `translateY(${vi.start}px)`, height: LIST_ROW_H }}>
+                <button className="dblist__title" onClick={() => onOpen(r.path)}>
+                  {r.title}
+                </button>
+                {cols.map((c) => (
+                  <span key={c} className="dblist__prop">
+                    <CellView prop={data.schema.properties[c]} value={cellOf(r, c)} />
+                  </span>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -584,22 +584,24 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             notes={notes}
           />
         )}
-        {data.matched > 0 && view.type === 'board' && (
+        {view.type === 'board' && (
           <BoardView
             vaultId={vaultId}
             data={current}
+            empty={emptyState}
             onOpen={openRow}
             onMove={(r, p, v) => void updateCell(r, p, v)}
             onReorder={(order) => setDraft({ ...view, sort: [], manualOrder: order })}
             onAdd={(key) => setAdding({ title: '', values: view.groupBy && key ? { [view.groupBy]: key } : {} })}
           />
         )}
-        {data.matched > 0 && view.type === 'list' && <ListView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={openRow} />}
+        {view.type === 'list' && <ListView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} empty={emptyState} onOpen={openRow} />}
         {data.matched > 0 && view.type === 'gallery' && <GalleryView data={current} rows={data.groups ? flat : rows} vaultId={vaultId} onOpen={openRow} />}
-        {data.matched > 0 && view.type === 'calendar' && (
+        {view.type === 'calendar' && (
           <CalendarView
             data={current}
             rows={data.groups ? flat : rows}
+            empty={emptyState}
             onOpen={openRow}
             onMove={(r, p, v) => void updateCell(r, p, v)}
             onAdd={(date) => {
@@ -610,7 +612,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           />
         )}
         {data.matched > 0 && view.type === 'timeline' && <TimelineView data={current} rows={data.groups ? flat : rows} onOpen={openRow} onChange={(r, p, v) => void updateCell(r, p, v)} />}
-        {data.matched === 0 && view.type !== 'table' && emptyState}
+        {data.matched === 0 && view.type !== 'table' && view.type !== 'board' && view.type !== 'list' && view.type !== 'calendar' && <div className="dbscreen__empty">{emptyState}</div>}
       </div>
       {peek && renderNote && peekMode === 'side' && (
         <aside className="dbpeek" aria-label="행 미리보기" data-testid="db-peek">

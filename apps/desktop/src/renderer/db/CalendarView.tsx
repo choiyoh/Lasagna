@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { addDays, daysBetween, parseYmd, rowSpan, shiftValue, startOfWeek, ymd } from './date-util';
 import { spanToValue } from './timeline-math';
 import type { CellValue, DbData, DbRowDto } from './types';
@@ -10,12 +10,14 @@ interface Props {
   onMove: (row: DbRowDto, prop: string, value: CellValue) => void;
   onAdd: (date: string) => void;
   onOpenDaily: (date: string) => void;
+  /** 필터 결과가 0행일 때 월 이동 바 아래에 그릴 내용 */
+  empty?: ReactNode;
 }
 
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
 /** 캘린더 뷰(월/주): 날짜 속성 기준으로 행을 날짜 칸에 놓는다. 칩을 다른 날로 끌면 날짜(기간이면 둘 다)가 옮겨진다. */
-export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily }: Props) {
+export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily, empty }: Props) {
   const prop = data.view.dateProp ?? Object.entries(data.schema.properties).find(([, p]) => p.type === 'date')?.[0];
   const [anchor, setAnchor] = useState(() => new Date());
   const [mode, setMode] = useState<'month' | 'week'>('month');
@@ -46,7 +48,15 @@ export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily }:
     return m;
   }, [rows, prop, days]);
 
-  if (!prop) return <p className="muted pad">캘린더 보기에는 날짜 속성이 필요해요. 속성 관리에서 “날짜” 속성을 추가해 주세요.</p>;
+  if (!prop) {
+    return empty ? (
+      <div className="dbcal dbcal--empty" data-testid="db-calendar">
+        <div className="dbcal__empty">{empty}</div>
+      </div>
+    ) : (
+      <p className="muted pad">캘린더 보기에는 날짜 속성이 필요해요. 속성 관리에서 “날짜” 속성을 추가해 주세요.</p>
+    );
+  }
   const move = (dir: number) => setAnchor((a) => (mode === 'month' ? new Date(a.getFullYear(), a.getMonth() + dir, 1) : addDays(a, dir * 7)));
   const title = mode === 'month' ? `${anchor.getFullYear()}년 ${anchor.getMonth() + 1}월` : `${ymd(days[0]!)} ~ ${ymd(days[6]!)}`;
 
@@ -63,6 +73,7 @@ export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily }:
         </select>
         <span className="muted small">날짜 속성: {prop}</span>
       </div>
+      {empty && <div className="dbcal__empty">{empty}</div>}
       <div className={mode === 'month' ? 'dbcal__grid' : 'dbcal__grid week'}>
         {WEEKDAYS.map((w) => (
           <div key={w} className="dbcal__dow">{w}</div>

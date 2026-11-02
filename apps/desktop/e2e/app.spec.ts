@@ -1337,6 +1337,162 @@ views:
     await page.getByRole('tab', { name: '파일', exact: true }).click();
   });
 
+  test('데이터베이스: 필터에 가린 새 행 안내와 필터 지우기', async () => {
+    const page = await app.firstWindow();
+    const put = (rel: string, body: string) => {
+      mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
+      writeFileSync(path.join(vaultDir, rel), body);
+    };
+    put(
+      '필터알림/_db.yaml',
+      `title: 필터알림
+properties:
+  점수: { type: number, format: number }
+views:
+  - id: t
+    name: 표
+    type: table
+    filter:
+      and:
+        - { prop: 점수, op: '>=', value: 999 }
+`,
+    );
+    put('필터알림/기존.md', '---\n점수: 1\n---\n');
+
+    await page.getByRole('tab', { name: 'DB', exact: true }).click();
+    const dbEntry = page.getByTestId('db-panel').getByRole('button', { name: /필터알림/ });
+    await expect(dbEntry).toBeVisible({ timeout: 10_000 });
+    await dbEntry.click();
+    const screen = page.getByTestId('db-screen');
+    const table = page.getByTestId('db-table');
+    await expect(table.locator('.emptystate')).toBeVisible();
+
+    // 필터에 걸리는 새 행 → 토스트 안내
+    await screen.getByRole('button', { name: '+ 새 행' }).click();
+    await page.getByLabel('새 행 제목').fill('가려진행');
+    await page.getByLabel('새 행 제목').press('Enter');
+    const toast = page.locator('.toast');
+    await expect(toast).toContainText('새 행을 만들었어요. 지금 필터 때문에 보이지 않아요.', { timeout: 5000 });
+    await expect(toast).toHaveAttribute('role', 'status');
+    await expect(toast).toHaveAttribute('aria-live', 'polite');
+    const overlap = await page.evaluate(() => {
+      const t = document.querySelector('.toast')?.getBoundingClientRect();
+      const overlapArea = (a: DOMRect, b: DOMRect) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+      const foot = document.querySelector('.sidebar__foot')?.getBoundingClientRect();
+      const theme = document.querySelector('[data-testid="theme-toggle"]')?.getBoundingClientRect();
+      const settings = document.querySelector('[data-testid="settings-btn"]')?.getBoundingClientRect();
+      return {
+        foot: t && foot ? overlapArea(t, foot) : 0,
+        theme: t && theme ? overlapArea(t, theme) : 0,
+        settings: t && settings ? overlapArea(t, settings) : 0,
+      };
+    });
+    expect(overlap.foot).toBe(0);
+    expect(overlap.theme).toBe(0);
+    expect(overlap.settings).toBe(0);
+    const clear = toast.getByRole('button', { name: '필터 지우기' });
+    const box = await clear.boundingBox();
+    if (!box) throw new Error('필터 지우기 버튼이 없어요');
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+
+    // 필터를 지우면 새 행이 보이고 토스트는 닫힌다
+    await expect(table).toContainText('가려진행');
+    await expect(toast).toHaveCount(0);
+
+    // 필터를 통과하는 새 행 → 안내 없음
+    await screen.getByRole('button', { name: '+ 새 행' }).click();
+    await page.getByLabel('새 행 제목').fill('보이는행');
+    await page.getByLabel('새 행 제목').press('Enter');
+    await expect(table).toContainText('보이는행');
+    await expect(page.locator('.toast')).toHaveCount(0);
+
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
+  });
+
+  test('데이터베이스: 타임라인 0행에서도 축·스케일 컨트롤이 남는다', async () => {
+    const page = await app.firstWindow();
+    const put = (rel: string, body: string) => {
+      mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
+      writeFileSync(path.join(vaultDir, rel), body);
+    };
+    put(
+      '빈타임/_db.yaml',
+      `title: 빈타임
+properties:
+  마감: { type: date }
+  점수: { type: number, format: number }
+views:
+  - id: t
+    name: 표
+    type: table
+    filter:
+      and:
+        - { prop: 점수, op: '>=', value: 999 }
+  - id: tl
+    name: 타임라인
+    type: timeline
+    dateProp: 마감
+    filter:
+      and:
+        - { prop: 점수, op: '>=', value: 999 }
+`,
+    );
+    put('빈타임/하나.md', '---\n마감: 2026-11-10\n점수: 1\n---\n');
+
+    await page.getByRole('tab', { name: 'DB', exact: true }).click();
+    const dbEntry = page.getByTestId('db-panel').getByRole('button', { name: /빈타임/ });
+    await expect(dbEntry).toBeVisible({ timeout: 10_000 });
+    await dbEntry.click();
+    const screen = page.getByTestId('db-screen');
+    const emptyY = async () => {
+      const box = await page.locator('.emptystate').boundingBox();
+      if (!box) throw new Error('EmptyState가 없어요');
+      return box.y;
+    };
+    await expect(page.getByTestId('db-table').locator('.dbtable__head')).toHaveCount(1);
+    const tableY = await emptyY();
+
+    await screen.getByRole('tab', { name: '타임라인', exact: true }).click();
+    const tl = page.getByTestId('db-timeline');
+    const bar = tl.locator('.dbtl__bar');
+    const axis = tl.locator('.dbtl__axis');
+    await expect(bar).toBeVisible();
+    await expect(bar.getByLabel('축 단위')).toBeVisible();
+    await expect(axis).toBeVisible();
+    await expect(tl.locator('.emptystate')).toBeVisible();
+    expect(Math.abs((await emptyY()) - tableY)).toBeLessThanOrEqual(8);
+
+    // 스케일 컨트롤을 바꾸면 축 눈금과 오늘 선 위치가 달라진다
+    const inner = tl.locator('.dbtl__inner');
+    const scrollBox = tl.locator('.dbtl__scroll');
+    const weekWidth = await inner.evaluate((el) => el.getBoundingClientRect().width);
+    const boxWidth = await scrollBox.evaluate((el) => el.clientWidth);
+    expect(Math.abs(weekWidth - boxWidth)).toBeLessThanOrEqual(1);
+    const axisTicks = axis.locator('span');
+    const weekTicks = await axisTicks.count();
+    const today = axis.locator('.dbtl__today');
+    const beforeToday = parseFloat(await today.evaluate((el) => (el as HTMLElement).style.left));
+    const select = bar.getByLabel('축 단위');
+    const sb = await select.boundingBox();
+    expect(sb?.height ?? 0).toBeGreaterThanOrEqual(20);
+    await select.selectOption('day');
+    await expect(select).toHaveValue('day');
+    await expect.poll(() => axisTicks.count()).toBeGreaterThan(weekTicks);
+    const afterToday = parseFloat(await today.evaluate((el) => (el as HTMLElement).style.left));
+    expect(afterToday).toBeGreaterThan(beforeToday);
+
+    // 필터를 풀어도 축은 그대로, 행만 나타난다
+    await screen.getByRole('button', { name: '필터 모두 지우기' }).click();
+    await expect(tl.locator('.dbtl__bar')).toBeVisible();
+    await expect(tl.locator('.dbtl__axis')).toBeVisible();
+    await expect(tl.locator('.emptystate')).toHaveCount(0);
+    await expect(tl.locator('.dbtl__row')).toHaveCount(1);
+
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
+  });
+
   test('데이터베이스: 0행에서도 보드·캘린더·목록 크롬이 남는다', async () => {
     const page = await app.firstWindow();
     const put = (rel: string, body: string) => {

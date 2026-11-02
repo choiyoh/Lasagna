@@ -308,7 +308,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), toast.undo ? 10000 : 4000);
+    const t = setTimeout(() => setToast(null), toast.duration ?? (toast.undo ? 10000 : 4000));
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -525,6 +525,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               onClose={() => setDbOpen(null)}
               notes={notes.map((n) => ({ path: n.path, title: n.title }))}
               onRenameNote={renameNoteTitle}
+              onToast={setToast}
               renderNote={(p) => (
                 <ErrorBoundary label="노트" resetKeys={[p]}>
                   <NoteEditor

@@ -11,6 +11,7 @@
   --on-accent: #fffdf8;
   --warn: #945800;
   --danger: #c0392b;
+  --sidebar-w: 260px;
 }
 /* 어두운 색: OS 설정을 따르되(테마 = 시스템), 사용자가 라이트/다크를 고르면 data-theme 이 우선한다 */
 @media (prefers-color-scheme: dark) {
@@ -64,7 +65,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 
 
 .workspace { display: flex; height: 100%; }
-.sidebar { width: 260px; border-right: 1px solid var(--border); background: var(--bg-side); display: flex; flex-direction: column; min-height: 0; }
+.sidebar { width: var(--sidebar-w); border-right: 1px solid var(--border); background: var(--bg-side); display: flex; flex-direction: column; min-height: 0; }
 .sidebar header { display: flex; justify-content: space-between; align-items: center; padding: 14px 10px 6px 14px; font-size: 13.5px; }
 [data-platform='mac'] .sidebar header { padding-left: 78px; }
 .sidebar header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
@@ -189,7 +190,7 @@ button.link { color: var(--muted); }
 .switcher__search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; font-size: 16px; }
 .switcher__icon { color: var(--muted); font-size: 15px; line-height: 1; }
 .switcher__foot { display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); }
-.toast { position: fixed; left: 20px; bottom: 20px; z-index: 55; display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 8px; background: #2b221c; color: #f5ede2; border: 1px solid #47392f; font-size: 13px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
+.toast { position: fixed; left: calc(var(--sidebar-w) + 20px); bottom: 20px; max-width: calc(100vw - var(--sidebar-w) - 40px); z-index: 55; display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 8px; background: #2b221c; color: #f5ede2; border: 1px solid #47392f; font-size: 13px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
 .toast button { color: #f0a07e; font-weight: 600; }
 
 
@@ -411,6 +412,8 @@ button.link { color: var(--muted); }
 .dbcal__chip { text-align: left; border: 0; border-radius: 4px; padding: 1px 6px; background: var(--hover); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; }
 .dbtl { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .dbtl__bar { display: flex; gap: 8px; align-items: center; padding: 6px 16px; }
+.dbtl__empty .emptystate { margin-top: 9px; }
+.dbtl--empty .emptystate { margin-top: 62px; }
 .dbtl__scroll { flex: 1; overflow: auto; }
 .dbtl__inner { position: relative; }
 .dbtl__axis { position: relative; height: 22px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); }

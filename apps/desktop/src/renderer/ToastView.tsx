@@ -5,8 +5,19 @@ import type { Toast } from './app-types';
 export function ToastView({ toast, setToast }: { toast: Toast | null; setToast: Dispatch<SetStateAction<Toast | null>> }) {
   if (!toast) return null;
   return (
-    <div className="toast" role="status">
+    <div className="toast" role="status" aria-live="polite" aria-atomic="true">
       <span>{toast.message}</span>
+      {toast.action && (
+        <button
+          onClick={() => {
+            const action = toast.action!;
+            setToast(null);
+            action.onClick();
+          }}
+        >
+          {toast.action.label}
+        </button>
+      )}
       {toast.undo && (
         <button
           onClick={() => {

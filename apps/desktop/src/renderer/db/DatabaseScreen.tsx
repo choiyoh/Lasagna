@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { DbRow, View } from '@nopsidian/core/db';
 import type { DbQueryResult } from '@nopsidian/ipc-contract';
+import type { Toast } from '../app-types';
 import { BoardView } from './BoardView';
 import { CalendarView } from './CalendarView';
 import { TimelineView } from './TimelineView';
@@ -13,6 +14,7 @@ import { TemplateSettings } from './TemplateSettings';
 import { ViewToolbar } from './ViewToolbar';
 import { type CellValue, type DbData, type DbRowDto } from './types';
 import { hiddenColumnView, sortedView } from './view-edit';
+import { isHiddenByFilter } from './row-visibility';
 import { addConditionTo, childrenOf, groupKind, isCondition, normalizeRoot, simplify } from './filter-tree';
 import { defaultOp } from './filter-ops';
 import { suggestFilterRemovals } from './filter-suggestions';
@@ -29,6 +31,8 @@ interface Props {
   onRenameNote?: (path: string, title: string) => void;
   /** 행을 옆/가운데 창에서 열 때 노트 편집기를 그린다 */
   renderNote?: (path: string) => ReactNode;
+  /** 앱 공통 토스트(필터에 가린 새 행 안내 등) */
+  onToast?: (toast: Toast) => void;
 }
 
 type PeekMode = 'full' | 'side' | 'center';
@@ -61,7 +65,7 @@ function useNarrow(max: number): boolean {
 }
 
 /** 데이터베이스 한 개의 화면: 보기 탭 · 필터/정렬/그룹 · 표/보드/목록/갤러리 · 속성 관리 · 새 행. */
-export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, onRenameNote, renderNote }: Props) {
+export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, onRenameNote, renderNote, onToast }: Props) {
   const [data, setData] = useState<DbData | null>(null);
   const [allRows, setAllRows] = useState<DbRow[] | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
@@ -279,7 +283,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   const addRow = useCallback(async () => {
     if (!adding || !adding.title.trim()) return;
     try {
-      await window.nops.db.addRow({
+      const { path } = await window.nops.db.addRow({
         folder,
         title: adding.title.trim(),
         values: adding.values,
@@ -287,10 +291,31 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
       });
       setAdding(null);
       await load();
+      // 인덱스 반영은 조금 늦을 수 있다. 새 행이 보일 때까지 짧게 기다린 뒤 기존 evalFilter 로 판정한다.
+      let added: DbRowDto | null = null;
+      for (let i = 0; i < 15 && !added; i++) {
+        const info = await window.nops.db.row({ path }).catch(() => null);
+        if (info) added = info.row;
+        else await new Promise((r) => setTimeout(r, 120));
+      }
+      if (added && data && view && isHiddenByFilter(data.schema, view.filter, added)) {
+        onToast?.({
+          message: '새 행을 만들었어요. 지금 필터 때문에 보이지 않아요.',
+          action: {
+            label: '필터 지우기',
+            onClick: () => {
+              const next = { ...view, filter: undefined };
+              setDraft(next);
+              void load(next);
+            },
+          },
+          duration: 6000,
+        });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
     }
-  }, [adding, folder, load]);
+  }, [adding, data, folder, load, onToast, view]);
 
   /** 행 우클릭 메뉴·선택 막대: 열기·복제·삭제(휴지통, 되돌리기 가능) */
   const rowAction = useCallback(
@@ -611,8 +636,8 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             onOpenDaily={(date) => void window.nops.daily.open({ date }).then((r) => onOpenNote(r.path))}
           />
         )}
-        {data.matched > 0 && view.type === 'timeline' && <TimelineView data={current} rows={data.groups ? flat : rows} onOpen={openRow} onChange={(r, p, v) => void updateCell(r, p, v)} />}
-        {data.matched === 0 && view.type !== 'table' && view.type !== 'board' && view.type !== 'list' && view.type !== 'calendar' && <div className="dbscreen__empty">{emptyState}</div>}
+        {view.type === 'timeline' && <TimelineView data={current} rows={data.groups ? flat : rows} empty={emptyState} onOpen={openRow} onChange={(r, p, v) => void updateCell(r, p, v)} />}
+        {data.matched === 0 && view.type !== 'table' && view.type !== 'board' && view.type !== 'list' && view.type !== 'calendar' && view.type !== 'timeline' && <div className="dbscreen__empty">{emptyState}</div>}
       </div>
       {peek && renderNote && peekMode === 'side' && (
         <aside className="dbpeek" aria-label="행 미리보기" data-testid="db-peek">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { addDays, daysBetween, parseYmd, rowSpan, ymd } from './date-util';
 import { applyDrag, dxToDays, spanToValue, type DragMode } from './timeline-math';
 import type { CellValue, DbData, DbRowDto } from './types';
@@ -9,6 +9,8 @@ interface Props {
   onOpen: (path: string) => void;
   /** 끌기·늘이기 결과를 저장할 때 부른다. 없으면 끌기가 비활성이고 클릭(노트 열기)만 동작한다. */
   onChange?: (row: DbRowDto, prop: string, value: CellValue) => void;
+  /** 필터 결과가 0행일 때 축 아래에 그릴 내용 */
+  empty?: ReactNode;
 }
 
 const SCALES = { day: 36, week: 14, month: 4 } as const;
@@ -16,10 +18,24 @@ const ROW_H = 30;
 const LABEL_W = 220;
 
 /** 타임라인 뷰: 날짜 속성의 기간을 가로 막대로 보여 준다(축 단위 일/주/월). 막대를 끌어 옮기고 양 끝을 끌어 기간을 바꾼다. */
-export function TimelineView({ data, rows, onOpen, onChange }: Props) {
+export function TimelineView({ data, rows, onOpen, onChange, empty }: Props) {
   const prop = data.view.dateProp ?? Object.entries(data.schema.properties).find(([, p]) => p.type === 'date')?.[0];
   const [scale, setScale] = useState<keyof typeof SCALES>('week');
   const px = SCALES[scale];
+  const isEmpty = !!empty;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [avail, setAvail] = useState(0);
+  // 0행에서는 축을 가용 폭까지 늘려 눈금·오늘 선이 왼쪽 조각으로 보이지 않게 한다.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const sync = () => setAvail((cur) => (Math.abs(cur - el.clientWidth) < 1 ? cur : el.clientWidth));
+    sync();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const { items, undated, first, span } = useMemo(() => {
     const items: { row: DbRowDto; start: Date; end: Date }[] = [];
@@ -40,9 +56,19 @@ export function TimelineView({ data, rows, onOpen, onChange }: Props) {
     return { items, undated, first, span: daysBetween(first, last) + 1 };
   }, [rows, prop]);
 
-  const ticks = useTicks(first, span, scale);
-  if (!prop) return <p className="muted pad">타임라인 보기에는 날짜 속성이 필요해요. 속성 관리에서 “날짜” 속성을 추가해 주세요.</p>;
+  const ticks = useTicks(first, isEmpty ? Math.max(span, Math.floor(avail / px)) : span, scale);
+  if (!prop) {
+    return empty ? (
+      <div className="dbtl dbtl--empty" data-testid="db-timeline">
+        <div className="dbtl__empty">{empty}</div>
+      </div>
+    ) : (
+      <p className="muted pad">타임라인 보기에는 날짜 속성이 필요해요. 속성 관리에서 “날짜” 속성을 추가해 주세요.</p>
+    );
+  }
   const todayX = daysBetween(first, new Date()) * px;
+  const innerWidth = isEmpty ? '100%' : LABEL_W + span * px;
+  const axisMargin = isEmpty ? 0 : LABEL_W;
 
   return (
     <div className="dbtl" data-testid="db-timeline">
@@ -54,14 +80,15 @@ export function TimelineView({ data, rows, onOpen, onChange }: Props) {
         </select>
         <span className="muted small">날짜 속성: {prop}</span>
       </div>
-      <div className="dbtl__scroll">
-        <div className="dbtl__inner" style={{ width: LABEL_W + span * px }}>
-          <div className="dbtl__axis" style={{ marginLeft: LABEL_W }}>
+      <div className="dbtl__scroll" ref={scrollRef}>
+        <div className="dbtl__inner" style={{ width: innerWidth }}>
+          <div className="dbtl__axis" style={{ marginLeft: axisMargin }}>
             {ticks.map((t) => (
               <span key={t.label + t.x} style={{ left: t.x * px }}>{t.label}</span>
             ))}
+            {isEmpty && <div className="dbtl__today" style={{ left: todayX }} />}
           </div>
-          <div className="dbtl__today" style={{ left: LABEL_W + todayX }} />
+          {!isEmpty && <div className="dbtl__today" style={{ left: LABEL_W + todayX }} />}
           {items.map(({ row, start, end }) => (
             <div key={row.path} className="dbtl__row" style={{ height: ROW_H }}>
               <button className="dbtl__label" style={{ width: LABEL_W }} onClick={() => onOpen(row.path)} title={row.path}>{row.title}</button>
@@ -70,6 +97,7 @@ export function TimelineView({ data, rows, onOpen, onChange }: Props) {
           ))}
           {undated.length > 0 && <p className="muted small pad">날짜가 없는 행 {undated.length}개: {undated.slice(0, 8).map((r) => r.title).join(', ')}{undated.length > 8 ? ' …' : ''}</p>}
         </div>
+        {empty && <div className="dbtl__empty">{empty}</div>}
       </div>
     </div>
   );

@@ -979,6 +979,92 @@ test.describe('링크 코어', () => {
     await expect(dialog).toHaveCount(0);
   });
 
+  test('동기화 바: 상태별 문구·aria-live·클릭 타깃·포커스 링·레이아웃', async () => {
+    const page = await app.firstWindow();
+    const base = {
+      configured: true,
+      clientSource: 'builtin',
+      builtinClientAvailable: true,
+      connected: true,
+      enabled: true,
+      confirmedFirst: true,
+      lastSync: Date.now() - 60_000,
+      lastAttempt: Date.now() - 60_000,
+      message: null,
+      conflicts: [],
+    };
+    const inject = (patch: Record<string, unknown>) =>
+      app.evaluate(({ BrowserWindow }, s) => {
+        BrowserWindow.getAllWindows()[0]?.webContents.send('sync.changed', s);
+      }, { ...base, ...patch });
+    const bar = page.getByTestId('sync-bar');
+    const live = page.locator('.syncbar__live');
+
+    await inject({ state: 'error', message: '2개 파일을 올리지 못했어요.' });
+    await expect(bar).toHaveText('동기화 오류');
+    await expect(bar).toHaveAttribute('title', '일부 파일을 동기화하지 못했어요. 눌러서 확인하세요.');
+    await expect(live).toHaveAttribute('role', 'status');
+    await expect(live).toHaveAttribute('aria-live', 'polite');
+    await expect(live).toHaveAttribute('aria-atomic', 'true');
+    await expect(live).toHaveText('일부 파일을 동기화하지 못했습니다.');
+
+    const layout = await page.evaluate(() => {
+      const rect = (el: Element | null) => {
+        const b = el?.getBoundingClientRect();
+        return b ? { x: b.x, y: b.y, w: b.width, h: b.height } : null;
+      };
+      const barEl = document.querySelector<HTMLElement>('[data-testid="sync-bar"]');
+      const foot = document.querySelector<HTMLElement>('.sidebar__foot');
+      const side = document.querySelector<HTMLElement>('aside.sidebar');
+      const theme = document.querySelector<HTMLElement>('[data-testid="theme-toggle"]');
+      return { bar: rect(barEl), foot: rect(foot), side: rect(side), theme: rect(theme), vh: window.innerHeight };
+    });
+    expect(layout.bar!.h).toBeGreaterThanOrEqual(24);
+    expect(layout.bar!.w).toBeGreaterThanOrEqual(24);
+    expect(layout.foot!.h).toBe(36);
+    expect(layout.side!.h).toBe(layout.vh);
+
+    // 실제 키보드 Shift+Tab 으로 포커스를 옮겨 :focus-visible 의 링이 왼쪽 경계에서 잘리지 않는지 확인
+    await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid="settings-btn"]')?.focus());
+    await page.keyboard.press('Shift+Tab');
+    const reached = await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'sync-bar');
+    expect(reached).toBe(true);
+    const focus = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('[data-testid="sync-bar"]')!;
+      const cs = getComputedStyle(el);
+      return { offset: cs.outlineOffset, outline: cs.outline, x: el.getBoundingClientRect().x };
+    });
+    expect(focus.x).toBe(0);
+    expect(focus.outline).not.toBe('none');
+    expect(focus.offset).toBe('-2px');
+
+    // 클릭 → 대화상자, Esc 로 닫힘 (유지 조건)
+    await bar.click();
+    const dialog = page.getByRole('dialog', { name: 'Google Drive 동기화' });
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+
+    // idle 로 돌아가면 버튼만 사라지고 푸터·테마 위치는 그대로
+    await inject({ state: 'idle' });
+    await expect(bar).toHaveCount(0);
+    const after = await page.evaluate(() => {
+      const rect = (el: Element | null) => {
+        const b = el?.getBoundingClientRect();
+        return b ? { x: b.x, y: b.y, w: b.width, h: b.height } : null;
+      };
+      return {
+        foot: rect(document.querySelector('.sidebar__foot')),
+        side: rect(document.querySelector('aside.sidebar')),
+        theme: rect(document.querySelector('[data-testid="theme-toggle"]')),
+        vh: window.innerHeight,
+      };
+    });
+    expect(after.foot!.h).toBe(36);
+    expect(after.side!.h).toBe(after.vh);
+    expect(after.theme!.x).toBe(layout.theme!.x);
+  });
+
   test('데이터베이스: 만들기·속성·행·셀 편집·외부 편집·보드·필터·속성 이름 변경', async () => {
     const page = await app.firstWindow();
     const dbDir = path.join(vaultDir, '할일');

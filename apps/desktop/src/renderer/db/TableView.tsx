@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CellEditor, CellView, isEditable } from './CellEditor';
 import { COL_MIN, columnWidths } from './column-widths';
@@ -46,6 +47,8 @@ interface Props {
   onStartedRenaming?: () => void;
   /** 행 우클릭 메뉴·여러 행 선택 막대의 동작. 없으면 선택 기능이 없다 */
   onRowAction?: (action: RowAction, paths: string[]) => void;
+  /** 행이 없을 때 헤더 아래에 그릴 내용(0행 EmptyState). 있으면 행·계산 줄은 그리지 않는다 */
+  empty?: ReactNode;
 }
 
 export type RowAction = 'open' | 'duplicate' | 'delete';
@@ -58,7 +61,7 @@ const fmtCalc = (v: unknown) => (typeof v === 'number' ? String(Math.round(v * 1
 const ROW_H = 32;
 
 /** 표 뷰: 행을 가상화해(2만 행도 보이는 만큼만 그림) 셀을 눌러 바로 고친다. */
-export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide, onColumns, onFilter, onReorderRows, startRenaming, onStartedRenaming, onRowAction }: Props) {
+export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide, onColumns, onFilter, onReorderRows, startRenaming, onStartedRenaming, onRowAction, empty }: Props) {
   /** 선택한 행(경로). 체크 상자·⇧클릭으로 범위·우클릭 */
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const anchor = useRef<string | null>(null);
@@ -87,11 +90,111 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
   const [dragCol, setDragCol] = useState<string | null>(null);
   const [dragRow, setDragRow] = useState<string | null>(null);
   const rowsMovable = !!onReorderRows && !data.groups;
-  const [menu, setMenu] = useState<string | null>(null);
+  /** 열 머리 메뉴: 화면 좌표(뷰포트 기준)에 fixed 로 띄운다. 부모 overflow 에 잘리지 않게 포털을 쓴다 */
+  const [menu, setMenu] = useState<{ col: string; x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const toggleMenu = (col: string, el: HTMLButtonElement) => {
+    if (menu?.col === col) {
+      setMenu(null);
+      return;
+    }
+    menuButtonRef.current = el;
+    const anchor = el.closest('.dbtable__th') ?? el;
+    const r = anchor.getBoundingClientRect();
+    const width = 168;
+    const height = 176;
+    setMenu({
+      col,
+      x: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
+      y: r.bottom + height > window.innerHeight ? Math.max(8, window.innerHeight - height - 8) : r.bottom,
+    });
+  };
   const sortOf = (c: string) => data.view.sort.find((r) => r.prop === c)?.dir ?? null;
   const cols = visibleColumns(data);
   const widths = data.view.widths ?? {};
   const scroller = useRef<HTMLDivElement>(null);
+  /** 메뉴를 닫고(필요하면) 열 머리로 초점을 돌린다. 숨긴 열이면 남은 첫 머리로 */
+  const focusHeader = useCallback(() => {
+    const btn = menuButtonRef.current;
+    const target = btn?.isConnected ? btn : scroller.current?.querySelector<HTMLButtonElement>('.dbtable__thbtn');
+    target?.focus({ preventScroll: true });
+  }, []);
+  const closeMenu = useCallback(
+    (focus = false) => {
+      setMenu(null);
+      if (focus) focusHeader();
+    },
+    [focusHeader],
+  );
+  // 열리면 첫 항목으로 초점을 옮긴다(role=menu 와 실제 키보드 동작을 맞춘다)
+  useEffect(() => {
+    if (!menu) return;
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }, [menu]);
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMenu(true);
+        return;
+      }
+      if (e.key === 'Tab') {
+        // 포털 메뉴는 DOM 끝에 있어 Tab 이 엉뚱한 곳으로 간다. 닫고 열 머리로 돌린다.
+        e.preventDefault();
+        e.stopPropagation();
+        closeMenu(true);
+        return;
+      }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+      const items = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+      if (items.length === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const at = items.indexOf(document.activeElement as HTMLButtonElement);
+      const next =
+        e.key === 'Home'
+          ? 0
+          : e.key === 'End'
+            ? items.length - 1
+            : e.key === 'ArrowDown'
+              ? at < 0
+                ? 0
+                : (at + 1) % items.length
+              : at <= 0
+                ? items.length - 1
+                : at - 1;
+      items[next]?.focus();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [menu, closeMenu]);
+  // 바깥 pointerdown 으로 닫는다. 같은 열 머리를 누른 경우는 click 이 토글하게 둔다.
+  useEffect(() => {
+    if (!menu) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (menuRef.current?.contains(t)) return;
+      if (menuButtonRef.current && (menuButtonRef.current === t || menuButtonRef.current.contains(t))) return;
+      closeMenu();
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, [menu, closeMenu]);
+  // 표를 가로로 스크롤하거나 창 폭이 바뀌면 메뉴가 다른 열 위에 떠 있게 된다. 닫는다.
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => closeMenu(true);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [menu, closeMenu]);
   /** 표에 실제로 주어진 폭. 열 폭은 여기서 나눈다(고정 180px 이면 마지막 열이 화면 밖으로 밀린다) */
   const [avail, setAvail] = useState(0);
   // 첫 페인트 전에 재서 좁은 열이 한 프레임 보였다가 넓어지는 깜빡임을 막는다
@@ -172,31 +275,45 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
               role="columnheader"
               aria-sort={sortOf(c) === 'asc' ? 'ascending' : sortOf(c) === 'desc' ? 'descending' : 'none'}>
               {onSort || onHide ? (
-                <button className="dbtable__thbtn" onClick={() => setMenu(menu === c ? null : c)} aria-haspopup="menu" aria-expanded={menu === c} data-testid={`th-${c}`}>
+                <button className="dbtable__thbtn" onClick={(e) => toggleMenu(c, e.currentTarget)} aria-haspopup="menu" aria-expanded={menu?.col === c} data-testid={`th-${c}`}>
                   {c === TITLE ? '제목' : c}
                   {sortOf(c) && <span className="dbtable__sort" aria-hidden>{sortOf(c) === 'asc' ? ' ↑' : ' ↓'}</span>}
                 </button>
               ) : (
                 <span>{c === TITLE ? '제목' : c}</span>
               )}
-              {menu === c && (
-                <div className="dbtable__menu" role="menu" onMouseLeave={() => setMenu(null)}>
-                  {onSort && (
-                    <>
-                      <button role="menuitem" onClick={() => { onSort(c, 'asc'); setMenu(null); }}>↑ 오름차순 정렬</button>
-                      <button role="menuitem" onClick={() => { onSort(c, 'desc'); setMenu(null); }}>↓ 내림차순 정렬</button>
-                      {sortOf(c) && <button role="menuitem" onClick={() => { onSort(c, null); setMenu(null); }}>정렬 해제</button>}
-                    </>
-                  )}
-                  {onFilter && <button role="menuitem" onClick={() => { onFilter(c); setMenu(null); }}>이 열로 필터 추가</button>}
-                  {onHide && c !== TITLE && <button role="menuitem" onClick={() => { onHide(c); setMenu(null); }}>이 열 숨기기</button>}
-                </div>
-              )}
+              {menu?.col === c &&
+                createPortal(
+                  <div ref={menuRef} className="dbtable__menu" role="menu" style={{ left: menu.x, top: menu.y }}>
+                    {onSort && (
+                      <>
+                        <button role="menuitem" onClick={() => { onSort(c, 'asc'); closeMenu(true); }}>↑ 오름차순 정렬</button>
+                        <button role="menuitem" onClick={() => { onSort(c, 'desc'); closeMenu(true); }}>↓ 내림차순 정렬</button>
+                        {sortOf(c) && <button role="menuitem" onClick={() => { onSort(c, null); closeMenu(true); }}>정렬 해제</button>}
+                      </>
+                    )}
+                    {onFilter && <button role="menuitem" onClick={() => { onFilter(c); closeMenu(); }}>이 열로 필터 추가</button>}
+                    {onHide && c !== TITLE && (
+                      <button
+                        role="menuitem"
+                        onClick={() => {
+                          onHide(c);
+                          setMenu(null);
+                          // 숨긴 열의 머리는 사라지므로, 다시 그린 뒤 남은 첫 머리로 초점을 옮긴다
+                          setTimeout(() => scroller.current?.querySelector<HTMLButtonElement>('.dbtable__thbtn')?.focus({ preventScroll: true }), 0);
+                        }}
+                      >
+                        이 열 숨기기
+                      </button>
+                    )}
+                  </div>,
+                  document.body,
+                )}
               <i className="dbtable__grip" onPointerDown={(e) => drag(c, e)} />
             </div>
           ))}
         </div>
-        <div style={{ height: v.getTotalSize(), position: 'relative' }}>
+        {!empty && (<div style={{ height: v.getTotalSize(), position: 'relative' }}>
           {v.getVirtualItems().map((vi) => {
             const item = items[vi.index]!;
             if (item.kind === 'group') {
@@ -327,8 +444,8 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
               </div>
             );
           })}
-        </div>
-        {data.view.calc && (
+        </div>)}
+        {!empty && data.view.calc && (
           <div className="dbtable__calc" role="row">
             {cols.map((c) => (
               <div key={c} className="dbtable__td" style={{ width: w(c) }}>
@@ -338,6 +455,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
           </div>
         )}
       </div>
+      {empty && <div className="dbtable__empty">{empty}</div>}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import { _electron as electron, expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { strToU8, zipSync } from 'fflate';
@@ -41,6 +41,31 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await openVault.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 30_000 });
   }
+}
+
+/**
+ * 열 머리 메뉴를 실제 마우스 좌표로 연다.
+ * locator.click() 은 부모 overflow 에 잘린 요소에도 이벤트를 보내므로, 메뉴 항목이 화면에서 실제로
+ * 맞는지 elementFromPoint 로 확인한 뒤 그 좌표를 눌러야 잘림 회귀를 잡는다.
+ */
+async function clickColumnMenu(page: Page, table: Locator, col: string, item: string): Promise<void> {
+  const head = table.getByTestId(`th-${col}`);
+  await head.scrollIntoViewIfNeeded();
+  const headBox = await head.boundingBox();
+  if (!headBox) throw new Error(`열 머리가 없어요: ${col}`);
+  await page.mouse.click(headBox.x + headBox.width / 2, headBox.y + headBox.height / 2);
+
+  const menu = page.locator('.dbtable__menu');
+  await expect(menu).toBeVisible();
+  const target = menu.getByRole('menuitem', { name: item });
+  const box = await target.boundingBox();
+  if (!box) throw new Error(`메뉴 항목이 없어요: ${item}`);
+  const hit = await page.evaluate(
+    ([x, y]) => !!document.elementFromPoint(x!, y!)?.closest('.dbtable__menu'),
+    [box.x + box.width / 2, box.y + box.height / 2],
+  );
+  expect(hit, `메뉴 항목이 다른 요소에 가려졌어요: ${item}`).toBe(true);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
 
 let app: ElectronApplication;
@@ -1008,13 +1033,10 @@ test.describe('링크 코어', () => {
 
     // 5-2) 열 머리 메뉴: 점수로 오름차순 → 7(밖에서 만든)이 먼저, 해제하면 원래대로. 숨기기도 된다
     const table = page.getByTestId('db-table');
-    await table.getByTestId('th-점수').click();
-    await page.getByRole('menuitem', { name: '오름차순 정렬' }).click();
+    await clickColumnMenu(page, table, '점수', '오름차순 정렬');
     await expect(table.locator('.dbtable__row').first()).toContainText('밖에서 만든', { timeout: 5000 });
-    await table.getByTestId('th-점수').click();
-    await page.getByRole('menuitem', { name: '정렬 해제' }).click();
-    await table.getByTestId('th-상태').click();
-    await page.getByRole('menuitem', { name: '이 열 숨기기' }).click();
+    await clickColumnMenu(page, table, '점수', '정렬 해제');
+    await clickColumnMenu(page, table, '상태', '이 열 숨기기');
     await expect(table.getByTestId('th-상태')).toHaveCount(0);
     await page.getByRole('button', { name: '되돌리기' }).click();
     await expect(table.getByTestId('th-상태')).toHaveCount(1);
@@ -1042,8 +1064,7 @@ test.describe('링크 코어', () => {
     await drag('[data-testid="th-점수"]', '[data-testid="th-상태"]');
     await expect.poll(async () => (await heads()).map((t) => t.trim())).toEqual(['제목', '점수', '상태']);
     // 열 머리 메뉴로 필터 추가 → 필터 창이 열린다
-    await table.getByTestId('th-점수').click();
-    await page.getByRole('menuitem', { name: '이 열로 필터 추가' }).click();
+    await clickColumnMenu(page, table, '점수', '이 열로 필터 추가');
     await expect(page.getByRole('dialog', { name: '필터' })).toBeVisible();
     // 행 손잡이를 끌어 행 순서 바꾸기
     await page.getByRole('button', { name: '되돌리기' }).click();
@@ -1129,6 +1150,107 @@ test.describe('링크 코어', () => {
     await page.getByRole('tab', { name: '파일', exact: true }).click();
   });
 
+  test('데이터베이스: 0행 필터에서도 표 헤더와 열 메뉴가 남는다', async () => {
+    const page = await app.firstWindow();
+    const put = (rel: string, body: string) => {
+      mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
+      writeFileSync(path.join(vaultDir, rel), body);
+    };
+    put(
+      '빈표/_db.yaml',
+      `title: 빈표
+properties:
+  점수: { type: number }
+views:
+  - id: t
+    name: 표
+    type: table
+    filter:
+      and:
+        - { prop: 점수, op: '>=', value: 999 }
+`,
+    );
+    put('빈표/하나.md', '---\n점수: 1\n---\n');
+    put('빈표/둘.md', '---\n점수: 2\n---\n');
+
+    await page.getByRole('tab', { name: 'DB', exact: true }).click();
+    const dbEntry = page.getByTestId('db-panel').getByRole('button', { name: /빈표/ });
+    await expect(dbEntry).toBeVisible({ timeout: 10_000 });
+    await dbEntry.click();
+    const screen = page.getByTestId('db-screen');
+    const table = page.getByTestId('db-table');
+
+    // 0행이어도 헤더가 남고, EmptyState는 그 아래 본문에 있다
+    await expect(table).toBeVisible();
+    await expect(table.locator('.dbtable__head')).toHaveCount(1);
+    await expect(table.getByTestId('th-점수')).toBeVisible();
+    await expect(table.locator('.dbtable__row')).toHaveCount(0);
+    await expect(screen.getByText('조건에 맞는 결과가 없어요')).toBeVisible();
+    await expect(screen.getByRole('button', { name: /조건 빼기/ })).toContainText('2개');
+
+    // 헤더 메뉴·정렬도 0행에서 실제 좌표 클릭으로 동작한다
+    await clickColumnMenu(page, table, '점수', '오름차순 정렬');
+    await expect(table.getByTestId('th-점수')).toContainText('↑');
+    await expect(table.getByTestId('th-점수')).toBeFocused();
+
+    const menu = page.locator('.dbtable__menu');
+    const head = table.getByTestId('th-점수');
+
+    // 바깥 클릭으로 닫힌다(DB 화면 유지)
+    await head.click();
+    await expect(menu).toBeVisible();
+    await page.mouse.click(700, 700);
+    await expect(menu).toHaveCount(0);
+    await expect(screen).toBeVisible();
+
+    // Esc는 메뉴만 닫고 초점을 열 머리로 돌린다
+    await head.focus();
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('menuitem').first()).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(screen).toBeVisible();
+    await expect(head).toBeFocused();
+
+    // 키보드: 첫 항목 → ↓ 이동 → Enter 실행 → 머리 복귀
+    await page.keyboard.press('Enter');
+    await expect(menu.getByRole('menuitem').first()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(menu.getByRole('menuitem').nth(1)).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(menu).toHaveCount(0);
+    await expect(head).toContainText('↓');
+    await expect(head).toBeFocused();
+    await expect(screen).toBeVisible();
+
+    // Tab은 메뉴를 닫고 머리로 돌린다
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Tab');
+    await expect(menu).toHaveCount(0);
+    await expect(head).toBeFocused();
+
+    // 필터를 풀어도 헤더는 하나이고, 행이 같은 헤더 아래에 나타난다
+    await screen.getByRole('button', { name: '필터 모두 지우기' }).click();
+    await expect(table.locator('.dbtable__row')).toHaveCount(2);
+    await expect(table).toContainText('하나');
+    await expect(table.locator('.dbtable__head')).toHaveCount(1);
+    await expect(screen.getByText('조건에 맞는 결과가 없어요')).toHaveCount(0);
+
+    // 행이 있는 표에서도 Esc는 메뉴만 닫고 DB 화면을 유지한다
+    await head.focus();
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(screen).toBeVisible();
+    await expect(head).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: '파일', exact: true }).click();
+  });
+
   test('데이터베이스: CSV 가져오기(열 형식 추정)와 내보내기', async () => {
     const page = await app.firstWindow();
     const tmp = mkdtempSync(path.join(tmpdir(), 'nops-csv-'));
@@ -1204,7 +1326,9 @@ views:
     put('단계/검토.md', '---\n비용: 5\n---\n');
 
     await page.getByRole('tab', { name: 'DB' }).click();
-    await page.getByRole('button', { name: /과제/ }).first().click();
+    const dbEntry = page.getByTestId('db-panel').getByRole('button', { name: /과제/ });
+    await expect(dbEntry).toBeVisible({ timeout: 10_000 });
+    await dbEntry.click();
     const screen = page.getByTestId('db-screen');
     const table = page.getByTestId('db-table');
 
@@ -1327,7 +1451,9 @@ views:
 
     // 3) 데이터베이스 화면: 중첩 필터(상태=읽음 AND (쪽수<=100 OR 쪽수>=500))
     await page.getByRole('tab', { name: 'DB' }).click();
-    await page.getByRole('button', { name: /책장/ }).first().click();
+    const dbEntry = page.getByTestId('db-panel').getByRole('button', { name: /책장/ });
+    await expect(dbEntry).toBeVisible({ timeout: 10_000 });
+    await dbEntry.click();
     const screen = page.getByTestId('db-screen');
     await screen.getByRole('button', { name: /^필터/ }).click();
     const fd = page.getByRole('dialog', { name: '필터' });
@@ -1712,8 +1838,7 @@ views:
     await expect(embed.getByLabel('제목 바꾸기')).toBeVisible({ timeout: 8000 });
     await embed.getByLabel('제목 바꾸기').press('Escape');
     // 노트 안의 표도 열 머리 메뉴로 열을 숨길 수 있다(저장하지 않는 임시 보기)
-    await embed.getByTestId('th-날짜').click();
-    await page.getByRole('menuitem', { name: '이 열 숨기기' }).click();
+    await clickColumnMenu(page, embed, '날짜', '이 열 숨기기');
     await expect(embed.getByTestId('th-날짜')).toHaveCount(0, { timeout: 8000 });
     // 새 행은 첫 상태 옵션('할 일')으로 시작하고, 보드로 바꾸면 그 열에 보인다
     await embed.getByRole('tab', { name: '보드' }).click();
@@ -2399,14 +2524,15 @@ views:
     writeFileSync(path.join(dir, '_db.yaml'), 'title: 행관리\nproperties:\n  점수: { type: number }\n  마감: { type: date }\nviews:\n  - { id: t, name: 표, type: table }\n');
     for (const [n, v] of [['일', 1], ['이', 2], ['삼', 3]] as const) writeFileSync(path.join(dir, `${n}.md`), `---\n점수: ${v}\n---\n# ${n}\n`);
     await page.getByRole('tab', { name: 'DB' }).click();
-    await page.getByRole('button', { name: /행관리/ }).first().click();
+    const dbEntry = page.getByTestId('db-panel').getByRole('button', { name: /행관리/ });
+    await expect(dbEntry).toBeVisible({ timeout: 10_000 });
+    await dbEntry.click();
     const screen = page.getByTestId('db-screen');
     const table = screen.getByTestId('db-table');
     await expect(table.locator('.dbtable__row')).toHaveCount(3, { timeout: 8000 });
 
     // 보기 설정은 저장 버튼 없이 자동 저장되고, 되돌리기로 돌아간다
-    await table.getByTestId('th-점수').click();
-    await page.getByRole('menuitem', { name: '내림차순 정렬' }).click();
+    await clickColumnMenu(page, table, '점수', '내림차순 정렬');
     await expect(screen.getByTestId('view-save-state')).toContainText('보기 저장됨', { timeout: 5000 });
     await expect.poll(() => readFileSync(path.join(dir, '_db.yaml'), 'utf8')).toContain('desc');
     await screen.getByTestId('view-save-state').getByRole('button', { name: '되돌리기' }).click();

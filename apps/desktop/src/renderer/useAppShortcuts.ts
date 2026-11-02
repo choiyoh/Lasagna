@@ -24,7 +24,7 @@ export interface ShortcutActions {
   dbOpen: boolean;
 }
 
-const OPEN_LAYERS = '.dialog-backdrop, .dbpop, .dbscreen__menu, .ctxmenu, .datepicker, .nops-prompt, .switcher-backdrop';
+const OPEN_LAYERS = '.dialog-backdrop, .dbpop, .dbscreen__menu, .ctxmenu, .dbtable__menu, .datepicker, .nops-prompt, .switcher-backdrop';
 
 /** 앱 전체 단축키: ⌘O 전환기 · ⌘P 팔레트 · ⌘N 새 노트 · ⌘, 설정 · F1 단축키 · F2 이름 · ⌘W 탭 닫기 · ⌘⇧G 그래프 · ⌘⇧B 북마크 · ⌘⌥D 오늘 · ⌘⇧\ 도크 · ⌘⇧F 본문 검색 */
 export function useAppShortcuts(actions: ShortcutActions) {

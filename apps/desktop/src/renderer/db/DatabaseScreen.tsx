@@ -352,6 +352,30 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
     return <div className="dbscreen">{error ? <p className="warn pad" role="alert">{error}</p> : <p className="muted pad">불러오는 중…</p>}</div>;
   }
   const current: DbData = { ...data, view };
+  const emptyState = data.matched === 0 ? (
+    <EmptyState
+      title={view.filter ? '조건에 맞는 결과가 없어요' : '행이 없어요'}
+      description={view.filter ? '조건을 하나만 빼도 결과가 나와요.' : '새 행을 만들어 시작해 보세요.'}
+      suggestions={suggestions.map((s) => ({
+        ...s,
+        onApply: () => {
+          const next = { ...view, filter: s.filter };
+          setDraft(next);
+          void load(next);
+        },
+      }))}
+      onReset={
+        view.filter
+          ? () => {
+              const next = { ...view, filter: undefined };
+              setDraft(next);
+              void load(next);
+            }
+          : undefined
+      }
+      resetLabel={view.filter ? '필터 모두 지우기' : undefined}
+    />
+  ) : null;
   const propertyManager = showProps ? (
     <PropertyManager
       data={data}
@@ -537,10 +561,11 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
       )}
       <div className={peek && peekMode === 'side' ? 'dbscreen__split' : 'dbscreen__splitoff'}>
       <div className="dbscreen__body">
-        {data.matched > 0 && view.type === 'table' && (
+        {view.type === 'table' && (
           <TableView
             data={current}
             rows={data.groups ? flat : rows}
+            empty={emptyState}
             onOpen={openRow}
             onEdit={(r, p, v) => void updateCell(r, p, v)}
             onRenameTitle={onRenameNote ? (r, t) => onRenameNote(r.path, t) : undefined}
@@ -585,30 +610,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           />
         )}
         {data.matched > 0 && view.type === 'timeline' && <TimelineView data={current} rows={data.groups ? flat : rows} onOpen={openRow} onChange={(r, p, v) => void updateCell(r, p, v)} />}
-        {data.matched === 0 && (
-          <EmptyState
-            title={view.filter ? '조건에 맞는 결과가 없어요' : '행이 없어요'}
-            description={view.filter ? '조건을 하나만 빼도 결과가 나와요.' : '새 행을 만들어 시작해 보세요.'}
-            suggestions={suggestions.map((s) => ({
-              ...s,
-              onApply: () => {
-                const next = { ...view, filter: s.filter };
-                setDraft(next);
-                void load(next);
-              },
-            }))}
-            onReset={
-              view.filter
-                ? () => {
-                    const next = { ...view, filter: undefined };
-                    setDraft(next);
-                    void load(next);
-                  }
-                : undefined
-            }
-            resetLabel={view.filter ? '필터 모두 지우기' : undefined}
-          />
-        )}
+        {data.matched === 0 && view.type !== 'table' && emptyState}
       </div>
       {peek && renderNote && peekMode === 'side' && (
         <aside className="dbpeek" aria-label="행 미리보기" data-testid="db-peek">

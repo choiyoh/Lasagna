@@ -43,7 +43,7 @@ import { TagPanel } from './TagPanel';
 import { dockAvailable, loadDockMode, nextDockMode, resolveDockOpen, saveDockMode, type DockMode } from './dock';
 import { cleanSearchSnippet } from './link-snippet';
 import { matchParts } from './search-highlight';
-import { GraphIcon, NewFolderIcon, PlusIcon, SearchIcon, SunIcon, TrashIcon } from './icons';
+import { GraphIcon, NewFolderIcon, PlusIcon, SearchIcon, SettingsIcon, SunIcon, TrashIcon } from './icons';
 
 /** 검색 결과에서 일치한 글자만 강조한다(원문은 그대로) */
 function Marked({ text, query }: { text: string; query: string }) {
@@ -504,7 +504,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         <div className="sidebar__foot">
           <SyncBar status={sync} onOpen={() => setSyncOpen(true)} />
           <button className="themebtn" onClick={() => setSettingsOpen(true)} title={keys('설정 (⌘,)')} aria-label="설정" data-testid="settings-btn">
-            <span aria-hidden>⚙</span>
+            <SettingsIcon />
           </button>
           <button className="themebtn" onClick={cycleTheme} title="테마 바꾸기: 시스템 → 라이트 → 다크" aria-label={`테마 ${THEME_LABEL[theme]}`} data-testid="theme-toggle">
             <span aria-hidden>{THEME_ICON[theme]}</span> {THEME_LABEL[theme]}

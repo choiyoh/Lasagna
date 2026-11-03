@@ -1,0 +1,66 @@
+import { describe, expect, it, vi } from 'vitest';
+import { WATCH_QUIET_MS, closeWatcherThen, watchSettleMs } from './close-watcher';
+
+describe('closeWatcherThen', () => {
+  it('unsubscribe 가 끝난 뒤에만 정리하고 종료한다', async () => {
+    let release!: () => void;
+    const sub = { unsubscribe: () => new Promise<void>((resolve) => (release = resolve)) };
+    const order: string[] = [];
+    const done = closeWatcherThen(
+      sub,
+      () => order.push('cleanup'),
+      () => order.push('exit'),
+    );
+    await Promise.resolve();
+    expect(order).toEqual([]);
+
+    release();
+    await done;
+    expect(order).toEqual(['cleanup', 'exit']);
+  });
+
+  it('unsubscribe 가 거부돼도 정리와 종료는 이어서 한다', async () => {
+    const order: string[] = [];
+    await closeWatcherThen(
+      { unsubscribe: () => Promise.reject(new Error('native watcher')) },
+      () => order.push('cleanup'),
+      () => order.push('exit'),
+    );
+    expect(order).toEqual(['cleanup', 'exit']);
+  });
+
+  it('구독이 없으면 바로 정리하고 종료한다', async () => {
+    const cleanup = vi.fn();
+    const exit = vi.fn();
+    await closeWatcherThen(undefined, cleanup, exit);
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(exit).toHaveBeenCalledOnce();
+  });
+
+  it('settleMs 만큼 기다린 뒤에 정리하고 종료한다', async () => {
+    const order: string[] = [];
+    const done = closeWatcherThen(
+      { unsubscribe: () => Promise.resolve() },
+      () => order.push('cleanup'),
+      () => order.push('exit'),
+      { settleMs: 20 },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(order).toEqual([]);
+    await done;
+    expect(order).toEqual(['cleanup', 'exit']);
+  });
+});
+
+describe('watchSettleMs', () => {
+  it('이벤트가 없었으면 기다리지 않는다', () => {
+    expect(watchSettleMs(0, 1000)).toBe(0);
+  });
+
+  it('마지막 이벤트에서 조용해질 때까지만 기다린다', () => {
+    expect(watchSettleMs(1000, 1000)).toBe(WATCH_QUIET_MS);
+    expect(watchSettleMs(1000, 1500)).toBe(WATCH_QUIET_MS - 500);
+    expect(watchSettleMs(1000, 1000 + WATCH_QUIET_MS)).toBe(0);
+    expect(watchSettleMs(1000, 999_999)).toBe(0);
+  });
+});

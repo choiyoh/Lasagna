@@ -4,6 +4,7 @@ import { realpathSync } from 'node:fs';
 import { lstat, readdir } from 'node:fs/promises';
 import { Indexer } from './indexer';
 import { WatchRecovery } from './watch-recovery';
+import { closeWatcherThen, watchSettleMs } from './close-watcher';
 import { classifyWatchEvents, type PendingKind, type WatchEvent } from './watch-events';
 import type { WorkerRequest, WorkerResponse, WorkerEvent } from './protocol';
 
@@ -45,6 +46,8 @@ function flush() {
 }
 
 let sub: AsyncSubscription | undefined;
+/** 마지막 감시 이벤트를 받은 시각. 닫을 때 디바운스 스레드가 잠잠해질 시간을 계산한다 */
+let lastWatchEventAt = 0;
 /** 감시 이벤트 묶음을 받은 순서대로 처리하는 사슬 */
 let eventChain: Promise<void> = Promise.resolve();
 /** 증분 재스캔을 한 줄로 세우는 사슬(시작 직후 스캔과 복구 스캔이 겹치지 않게) */
@@ -77,6 +80,7 @@ async function startWatching() {
   sub = await subscribe(
     watchRoot,
     (err, events) => {
+      lastWatchEventAt = Date.now();
       if (err) {
         recovery.fail(err.message);
         return;
@@ -100,7 +104,7 @@ async function collectEvents(events: WatchEvent[]) {
   timer ??= setTimeout(flush, 300);
 }
 
-port.on('message', (req: WorkerRequest) => {
+port.on('message', async (req: WorkerRequest) => {
   try {
     switch (req.method) {
       case 'list':
@@ -118,10 +122,17 @@ port.on('message', (req: WorkerRequest) => {
         return post({ type: 'response', id: req.id, result: ix.search(req.params.q, req.params.limit) });
       case 'close':
         recovery.stop();
-        void sub?.unsubscribe();
-        ix.close();
-        post({ type: 'response', id: req.id, result: null });
-        return process.exit(0);
+        await closeWatcherThen(
+          sub,
+          () => {
+            sub = undefined;
+            ix.close();
+            post({ type: 'response', id: req.id, result: null });
+          },
+          () => process.exit(0),
+          { settleMs: watchSettleMs(lastWatchEventAt, Date.now()) },
+        );
+        return;
     }
   } catch (e) {
     post({ type: 'response', id: req.id, error: e instanceof Error ? e.message : String(e) });

@@ -48,6 +48,18 @@ function domOf(view: EditorView, ref: BlockRef): HTMLElement | null {
   return dom instanceof HTMLElement ? dom : null;
 }
 
+/**
+ * 목록·인용은 글머리표나 테두리가 왼쪽 바깥에 그려지므로, 가장 바깥 컨테이너의 왼쪽을 기준으로 삼는다.
+ * 안쪽 문단 기준으로 두면 핸들이 인용 테두리를 덮는다.
+ */
+function outerContainer(dom: HTMLElement): HTMLElement | null {
+  let outer: HTMLElement | null = null;
+  for (let el: HTMLElement | null = dom; el && !el.classList.contains('ProseMirror'); el = el.parentElement) {
+    if (el.matches('blockquote, ul, ol')) outer = el;
+  }
+  return outer;
+}
+
 const TURN_ORDER: TurnIntoKind[] = ['paragraph', 'h1', 'h2', 'h3', 'bullet', 'ordered', 'todo', 'quote', 'code', 'callout', 'toggle'];
 
 export const blockHandleKey = new PluginKey('nopsBlockHandle');
@@ -63,6 +75,11 @@ class BlockHandleView {
   private hideTimer: ReturnType<typeof setTimeout> | undefined;
   private frame = 0;
   private dragging = false;
+  /** 그립을 누른 위치. 작은 흔들림과 실제 드래그를 구분한다 */
+  private dragStart = { x: 0, y: 0 };
+  private dragMoved = false;
+  private lastDragEnd = 0;
+  private suppressClick = false;
 
   constructor(
     private readonly view: EditorView,
@@ -86,7 +103,9 @@ class BlockHandleView {
     this.root.append(this.add, this.grip);
     this.indicator.className = 'nops-drop-side';
     this.indicator.hidden = true;
-    document.body.append(this.root, this.indicator);
+    // 호스트 안에 두어 블록→핸들로 마우스가 이동할 때 host mouseleave(갭)로 숨지 않게 한다.
+    this.host.append(this.root);
+    document.body.append(this.indicator);
 
     this.host.addEventListener('mousemove', this.onMove);
     this.host.addEventListener('mouseleave', this.scheduleHide);
@@ -94,8 +113,11 @@ class BlockHandleView {
     this.root.addEventListener('mouseleave', this.scheduleHide);
     this.add.addEventListener('mousedown', (e) => e.preventDefault());
     this.add.addEventListener('click', this.onAdd);
+    this.grip.addEventListener('pointerdown', this.onGripPointerDown);
+    this.grip.addEventListener('pointerup', this.onGripPointerUp);
     this.grip.addEventListener('click', this.onGripClick);
     this.grip.addEventListener('dragstart', this.onDragStart);
+    this.grip.addEventListener('drag', this.onDragMove);
     this.grip.addEventListener('dragend', this.onDragEnd);
     document.addEventListener('mousedown', this.onDocMouseDown, true);
     document.addEventListener('keydown', this.onKeyDown, true);
@@ -124,11 +146,31 @@ class BlockHandleView {
   }
 
   // ── 핸들 위치 ──
+  /** 핸들로 다가가는 통로(핸들~블록 왼쪽, 핸들 높이)에 있으면 블록을 바꾸지 않는다. */
+  private inHandleCorridor(e: MouseEvent): boolean {
+    if (!this.current || this.root.hidden) return false;
+    const dom = domOf(this.view, this.current);
+    if (!dom) return false;
+    const root = this.root.getBoundingClientRect();
+    const block = dom.getBoundingClientRect();
+    return (
+      e.clientX >= root.left - 4 &&
+      e.clientX <= block.left + 4 &&
+      e.clientY >= root.top - 6 &&
+      e.clientY <= root.bottom + 6
+    );
+  }
+
   private readonly onMove = (e: MouseEvent) => {
     if (this.menu || this.dragging) return;
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(() => {
       if (!this.view.editable) return this.hide();
+      // 인용/목록 안쪽에서 핸들로 가로질러 갈 때 바깥 컨테이너로 갈아타며 핸들이 튀는 것을 막는다
+      if (this.inHandleCorridor(e)) {
+        clearTimeout(this.hideTimer);
+        return;
+      }
       const ref = blockAtCoords(this.view, e.clientX, e.clientY);
       if (!ref) return this.scheduleHide();
       clearTimeout(this.hideTimer);
@@ -141,13 +183,10 @@ class BlockHandleView {
     if (!dom) return this.hide();
     this.current = ref;
     const rect = dom.getBoundingClientRect();
-    // 목록 항목: 글머리표·체크박스는 항목 왼쪽 바깥에 그려지므로, 가장 바깥 목록의 왼쪽 가장자리를 기준으로 핸들을 둔다
-    let left = rect.left;
-    if (ref.node.type.name === 'list_item') {
-      let list: HTMLElement | null = dom.closest('ul, ol');
-      while (list?.parentElement?.closest('ul, ol')) list = list.parentElement.closest('ul, ol');
-      if (list) left = Math.min(left, list.getBoundingClientRect().left);
-    }
+    // 목록·인용: 글머리표·체크박스·테두리는 바깥에 그려지므로 가장 바깥 컨테이너의 왼쪽에 핸들을 둔다.
+    // (중첩 목록/인용, 인용 안 목록, 목록 안 인용 모두 같은 기준)
+    const outer = outerContainer(dom);
+    const left = outer ? outer.getBoundingClientRect().left : rect.left;
     this.root.hidden = false;
     this.root.style.left = `${Math.max(4, left - HANDLE_OFFSET_X)}px`;
     this.root.style.top = `${rect.top + 2}px`;
@@ -185,9 +224,25 @@ class BlockHandleView {
   };
 
   // ── 드래그 ──
+  private readonly onGripPointerDown = (e: PointerEvent) => {
+    this.dragStart = { x: e.clientX, y: e.clientY };
+    this.dragMoved = false;
+  };
+
+  /** 클릭은 pointerup 에서 연다. draggable 요소는 작은 흔들림에도 click 이 오지 않을 수 있다. */
+  private readonly onGripPointerUp = () => {
+    if (this.dragging || this.dragMoved || Date.now() - this.lastDragEnd < 300) return;
+    if (this.menu || !this.current) return;
+    this.suppressClick = true;
+    setTimeout(() => (this.suppressClick = false), 0);
+    this.openMenu(this.current);
+  };
+
   private readonly onDragStart = (e: DragEvent) => {
     const ref = this.current;
     if (!ref || !e.dataTransfer) return e.preventDefault();
+    this.dragStart = { x: e.clientX, y: e.clientY };
+    this.dragMoved = false;
     this.closeMenu();
     const sel = NodeSelection.create(this.view.state.doc, ref.pos);
     this.view.dispatch(this.view.state.tr.setSelection(sel));
@@ -201,13 +256,27 @@ class BlockHandleView {
     this.root.classList.add('is-dragging');
   };
 
+  private readonly onDragMove = (e: DragEvent) => {
+    if (this.dragMoved) return;
+    if (Math.hypot(e.clientX - this.dragStart.x, e.clientY - this.dragStart.y) > 6) this.dragMoved = true;
+  };
+
   private readonly onDragEnd = () => {
+    const ref = this.current;
+    const accidental = !this.dragMoved;
+    this.lastDragEnd = Date.now();
     this.dragging = false;
     this.view.dragging = null;
     this.setDragSource(null);
     this.root.classList.remove('is-dragging');
     this.showSideIndicator(null);
     this.hide();
+    // 3~5px 흔들림으로 dragstart 만 되고 click 이 오지 않은 경우: 메뉴를 연다
+    if (accidental && ref) {
+      this.suppressClick = true;
+      setTimeout(() => (this.suppressClick = false), 0);
+      this.openMenu(ref);
+    }
   };
 
   /** 좌우 드롭 표시선(세로) */
@@ -228,6 +297,7 @@ class BlockHandleView {
 
   // ── 블록 메뉴 ──
   private readonly onGripClick = () => {
+    if (this.suppressClick) return;
     if (this.menu) return this.closeMenu();
     const ref = this.current;
     if (!ref) return;

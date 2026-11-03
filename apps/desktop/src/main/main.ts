@@ -682,7 +682,16 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-app.on('before-quit', () => {
-  void syncController.detachVault();
-  void getCurrent()?.index.close();
+let quitting = false;
+app.on('before-quit', (event) => {
+  if (quitting) return;
+  quitting = true;
+  // 워커의 @parcel/watcher unsubscribe 가 끝나기 전에 프로세스가 내려가면 SIGABRT 가 난다.
+  // 종료를 잠시 붙잡고 색인 워커를 정상 종료시킨 뒤 다시 종료한다.
+  event.preventDefault();
+  void (async () => {
+    await syncController.detachVault().catch(() => undefined);
+    await getCurrent()?.index.close().catch(() => undefined);
+    app.quit();
+  })();
 });

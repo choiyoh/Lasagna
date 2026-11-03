@@ -388,6 +388,153 @@ test.describe('블록 핸들', () => {
       .toBe('# 드래그순서\n\n둘째\n\n셋째\n\n첫째\n');
   });
 
+  test('실제 마우스로 모든 블록 핸들 클릭과 추가가 동작한다', async () => {
+    const page = await app.firstWindow();
+    const content = `# 핸들실사용\n\n문단 블록입니다.\n\n- 목록 항목\n\n| 열1 | 열2 |\n| --- | --- |\n| 값1 | 값2 |\n\n> [!note] 콜아웃\n> 콜아웃 내용\n\n> [!toggle]+ 토글\n> 토글 내용\n\n\`\`\`js\nconst x = 1;\n\`\`\`\n`;
+    await open(page, '핸들실사용', content);
+    await page.waitForTimeout(300);
+    const blocks = [
+      ['제목', '.ProseMirror h1'],
+      ['문단', '.ProseMirror p'],
+      ['목록', '.ProseMirror li'],
+      ['표', '.ProseMirror table'],
+      ['콜아웃', '.ProseMirror [data-callout-title]'],
+      ['토글', '.ProseMirror [data-toggle-summary]'],
+      ['코드', '.ProseMirror pre'],
+    ];
+    const menu = page.locator('.nops-block-menu');
+    const grip = page.locator('.nops-handle__grip');
+    const closeMenu = async () => {
+      if (await menu.count()) await page.keyboard.press('Escape');
+      await page.mouse.move(700, 700);
+      await page.waitForTimeout(300);
+    };
+    for (const [name, selector] of blocks) {
+      const el = page.locator(selector).first();
+      const box = await el.boundingBox();
+      expect(box, `${name} 블록이 없어요`).not.toBeNull();
+      await page.mouse.move(box!.x + Math.min(80, box!.width / 2), box!.y + box!.height / 2, { steps: 3 });
+      await expect(page.locator('.nops-handle')).toBeVisible();
+      const gb = await grip.boundingBox();
+      expect(gb, `${name} 핸들이 없어요`).not.toBeNull();
+      const hit = await page.evaluate(
+        ([x, y]) => !!document.elementFromPoint(x, y)?.closest('.nops-handle__grip'),
+        [gb!.x + gb!.width / 2, gb!.y + gb!.height / 2],
+      );
+      expect(hit, `${name} 핸들이 다른 요소에 가려졌어요`).toBe(true);
+      // 블록 → 핸들로 천천히 이동해도 클릭된다
+      await page.mouse.move(gb!.x + gb!.width / 2, gb!.y + gb!.height / 2, { steps: 30 });
+      await page.mouse.down();
+      await page.mouse.up();
+      await expect(menu, `${name} 핸들 클릭으로 메뉴가 열려야 해요`).toBeVisible();
+      await closeMenu();
+    }
+
+    // 핸들이 숨겨진 뒤에는 보이지도, 클릭을 가로채지도 않는다
+    const first = page.locator('.ProseMirror h1').first();
+    const fb = await first.boundingBox();
+    await page.mouse.move(fb!.x + 40, fb!.y + fb!.height / 2, { steps: 3 });
+    const oldBox = await grip.boundingBox();
+    await page.mouse.move(10, 10, { steps: 20 });
+    await page.waitForTimeout(450);
+    await expect(page.locator('.nops-handle')).toBeHidden();
+    expect(await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('.nops-handle'), [oldBox!.x + oldBox!.width / 2, oldBox!.y + oldBox!.height / 2])).toBe(false);
+
+    // + 버튼도 실제 좌표로 눌러 슬래시 메뉴를 연다
+    const para = page.locator('.ProseMirror p').first();
+    const pb = await para.boundingBox();
+    await page.mouse.move(pb!.x + 40, pb!.y + pb!.height / 2, { steps: 3 });
+    const add = page.locator('.nops-handle__add');
+    await expect(add).toBeVisible();
+    const ab = await add.boundingBox();
+    await page.mouse.click(ab!.x + ab!.width / 2, ab!.y + ab!.height / 2);
+    await expect(page.locator('.oh-editor__slash-item').first()).toBeVisible();
+    await page.keyboard.press('Escape');
+  });
+
+  test('인용·중첩 인용·인용 안 목록의 핸들은 인용 바깥에 놓이고 대비 3:1 이상이다', async () => {
+    const page = await app.firstWindow();
+    const content = `# 인용핸들\n\n기준 문단입니다.\n\n> 인용문 한 줄\n\n> > 중첩 인용문\n\n> - 인용 안 목록 항목\n`;
+    await open(page, '인용핸들', content);
+    await page.waitForTimeout(300);
+    const handle = page.locator('.nops-handle');
+    const grip = page.locator('.nops-handle__grip');
+
+    const cases = [
+      ['인용', '인용문 한 줄', '.ProseMirror > blockquote'],
+      ['중첩 인용', '중첩 인용문', '.ProseMirror > blockquote'],
+      ['인용 안 목록', '인용 안 목록 항목', '.ProseMirror > blockquote'],
+    ] as const;
+    for (const [name, text, outerSelector] of cases) {
+      const block = page.locator('.ProseMirror p, .ProseMirror li', { hasText: text }).first();
+      const box = await block.boundingBox();
+      expect(box, `${name} 블록이 없어요`).not.toBeNull();
+      await page.mouse.move(box!.x + Math.min(60, box!.width / 2), box!.y + box!.height / 2, { steps: 4 });
+      await expect(handle).toBeVisible();
+      const hb = await handle.boundingBox();
+      const ob = await page.locator(outerSelector).filter({ hasText: text }).first().boundingBox();
+      expect(hb, `${name} 핸들이 없어요`).not.toBeNull();
+      expect(ob, `${name} 인용 상자가 없어요`).not.toBeNull();
+      // 인용 테두리를 덮지 않고, 인용 바깥(-54px)에 놓인다
+      expect(hb!.x + hb!.width, `${name} 핸들이 인용을 덮어요`).toBeLessThanOrEqual(ob!.x);
+      expect(hb!.x).toBeGreaterThanOrEqual(ob!.x - 55);
+      expect(hb!.x).toBeLessThanOrEqual(ob!.x - 53);
+      // 실제 좌표가 핸들에 닿고, 클릭하면 메뉴가 열린다
+      const gb = await grip.boundingBox();
+      expect(
+        await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('.nops-handle__grip'), [gb!.x + gb!.width / 2, gb!.y + gb!.height / 2]),
+        `${name} 핸들이 가려졌어요`,
+      ).toBe(true);
+      await page.mouse.move(gb!.x + gb!.width / 2, gb!.y + gb!.height / 2, { steps: 20 });
+      // 핸들에 올리면 또렷해진다(대비 측정은 기본 0.75 상태)
+      await expect.poll(() => handle.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
+      await page.mouse.down();
+      await page.mouse.up();
+      await expect(page.locator('.nops-block-menu'), `${name} 메뉴가 열려야 해요`).toBeVisible();
+      await expect.poll(() => handle.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
+      await page.keyboard.press('Escape');
+      await page.mouse.move(700, 700);
+      await page.waitForTimeout(300);
+    }
+
+    // 기본 블록의 위치는 그대로(-54px, +2px)다
+    const para = page.locator('.ProseMirror > p').first();
+    const pb = await para.boundingBox();
+    await page.mouse.move(pb!.x + 60, pb!.y + pb!.height / 2, { steps: 4 });
+    await expect(handle).toBeVisible();
+    const hb = await handle.boundingBox();
+    expect(Math.round(hb!.x - pb!.x)).toBe(-54);
+    expect(Math.round(hb!.y - pb!.y)).toBe(2);
+
+    // 기본 opacity 0.75 가 배경과 3:1 이상 대비를 낸다
+    const contrast = await page.evaluate(() => {
+      const root = document.querySelector<HTMLElement>('.nops-handle');
+      const grip = document.querySelector<HTMLElement>('.nops-handle__grip');
+      if (!root || !grip) return 0;
+      const opacity = Number(getComputedStyle(root).opacity);
+      const fg = getComputedStyle(grip).color.match(/[\d.]+/g)!.slice(0, 3).map(Number);
+      let el: HTMLElement | null = grip.parentElement;
+      let bg = [255, 255, 255];
+      while (el) {
+        const c = getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
+        if (c && c.length >= 3 && (c.length < 4 || Number(c[3]) > 0.99)) {
+          bg = c.slice(0, 3).map(Number);
+          break;
+        }
+        el = el.parentElement;
+      }
+      const blend = fg.map((v, i) => Math.round(opacity * v + (1 - opacity) * bg[i]));
+      const lin = (v: number) => {
+        const c = v / 255;
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      };
+      const lum = (rgb: number[]) => 0.2126 * lin(rgb[0]!) + 0.7152 * lin(rgb[1]!) + 0.0722 * lin(rgb[2]!);
+      const [hi, lo] = [lum(blend), lum(bg)].sort((a, b) => b - a);
+      return (hi! + 0.05) / (lo! + 0.05);
+    });
+    expect(contrast).toBeGreaterThanOrEqual(3);
+  });
+
   test('블록을 다른 블록의 오른쪽 가장자리에 놓으면 열 레이아웃이 된다', async () => {
     const page = await app.firstWindow();
     const file = await open(page, '드래그열', '# 드래그열\n\n왼쪽에 둘 글\n\n옮길 글\n');
@@ -2961,9 +3108,25 @@ views:
     note('접기/안쪽노트', '# 안쪽노트\n');
     await open(page, '개요노트');
 
+    // 설정 버튼: 글리프 대신 24 viewBox 톱니바퀴 SVG(16px)를 쓰고, 실제 좌표 클릭으로 열린다
+    const settings = page.getByRole('dialog', { name: '설정' });
+    const settingsBtn = page.getByTestId('settings-btn');
+    const sb = await settingsBtn.boundingBox();
+    expect(sb).not.toBeNull();
+    const gear = settingsBtn.locator('svg');
+    await expect(gear).toHaveAttribute('viewBox', '0 0 24 24');
+    const gb = await gear.boundingBox();
+    expect(gb!.width).toBeCloseTo(16, 1);
+    expect(Math.abs(sb!.x + sb!.width / 2 - (gb!.x + gb!.width / 2))).toBeLessThan(1);
+    expect(Math.abs(sb!.y + sb!.height / 2 - (gb!.y + gb!.height / 2))).toBeLessThan(1);
+    expect(Math.round((await page.locator('.sidebar__foot').boundingBox())!.height)).toBe(36);
+    await page.mouse.click(sb!.x + sb!.width / 2, sb!.y + sb!.height / 2);
+    await expect(settings).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(settings).toHaveCount(0);
+
     // 설정: 글자 크기·본문 너비·제목 동기화(이 기기에만 저장)
     await page.keyboard.press('ControlOrMeta+,');
-    const settings = page.getByRole('dialog', { name: '설정' });
     await expect(settings).toBeVisible();
     await settings.getByLabel('본문 글자 크기').selectOption('18');
     await expect.poll(() => page.locator('.oh-editor .ProseMirror').first().evaluate((el) => getComputedStyle(el).fontSize)).toBe('18px');

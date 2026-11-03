@@ -75,7 +75,8 @@ pre[data-math-block] { background: color-mix(in srgb, currentColor 6%, transpare
 pre[data-math-block]::before { content: '$$'; opacity: 0.4; display: block; }
 
 /* 블록 핸들 */
-.nops-handle { position: fixed; z-index: 30; display: flex; align-items: center; gap: 2px; height: 24px; user-select: none; opacity: 0.55; transition: opacity 0.1s; }
+.nops-handle { position: fixed; z-index: 30; display: flex; align-items: center; gap: 2px; height: 24px; user-select: none; opacity: 0.75; transition: opacity 0.1s; }
+.nops-handle[hidden] { display: none; }
 .nops-handle:hover, .nops-handle.is-menu-open, .nops-handle.is-dragging { opacity: 1; }
 .nops-handle__add, .nops-handle__grip {
   display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 24px; padding: 0; border: 0; border-radius: 5px;

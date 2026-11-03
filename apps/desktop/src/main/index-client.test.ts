@@ -164,6 +164,20 @@ describe('IndexClient', () => {
     expect(workers).toHaveLength(1); // exit 가 와도 재시작하지 않는다
   });
 
+  it('close() 는 응답 뒤 워커가 스스로 exit 할 때까지 기다린다', async () => {
+    const { client, workers } = makeClient();
+    workers[0].ready();
+    await client.ready;
+
+    const done = client.close();
+    workers[0].respond(workers[0].posted[0]!.id, null);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(workers[0].terminated).toBe(false);
+    workers[0].emit('exit', 0);
+    await done;
+    expect(workers[0].terminated).toBe(true);
+  });
+
   it('close() 는 대기 중인 호출을 거부한다', async () => {
     const { client, workers } = makeClient();
     workers[0].ready();

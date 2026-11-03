@@ -78,6 +78,17 @@ export function TrashIcon(props: IconProps) {
   );
 }
 
+export function SettingsIcon(props: IconProps) {
+  return (
+    // Lucide "settings" (ISC) — Copyright (c) 2026 Lucide Icons and Contributors.
+    // 전체 라이선스 고지는 docs/THIRD-PARTY.md 참고. https://lucide.dev/icons/settings
+    <Icon viewBox="0 0 24 24" strokeWidth={2} {...props}>
+      <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+      <circle cx="12" cy="12" r="3" />
+    </Icon>
+  );
+}
+
 export function DatabaseIcon(props: IconProps) {
   return (
     <Icon {...props}>

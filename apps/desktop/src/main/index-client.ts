@@ -47,6 +47,8 @@ export class IndexClient {
   private closed = false;
   /** 최근 재시작 시각 — `RESTART_WINDOW_MS` 안에 `MAX_RESTARTS` 를 넘으면 포기한다 */
   private restarts: number[] = [];
+  /** 현재 워커의 exit 약속 — close 가 terminate 전에 정상 종료를 기다린다 */
+  private workerExit: Promise<void> = Promise.resolve();
 
   constructor(
     root: string,
@@ -82,6 +84,7 @@ export class IndexClient {
     ready.catch(() => undefined); // 아무도 안 기다릴 때 처리되지 않은 거부가 되지 않게
     this.readyPromise = ready;
     this.rejectReady = rejectReady;
+    this.workerExit = new Promise<void>((resolve) => worker.on('exit', () => resolve()));
 
     worker.on('message', (m) => {
       if (worker !== this.worker) return; // 이미 갈아 끼운 워커가 늦게 보낸 메시지는 무시
@@ -220,11 +223,19 @@ export class IndexClient {
     if (!this.gaveUp) {
       // 워커가 이미 죽었으면 응답이 오지 않는다 — 잠깐만 기다리고 강제로 끝낸다
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let responded = false;
       await Promise.race([
-        this.call('close').catch(() => undefined),
+        this.call('close').then(() => {
+          responded = true;
+        }).catch(() => undefined),
         new Promise<void>((resolve) => (timer = setTimeout(resolve, CLOSE_TIMEOUT_MS))),
       ]);
       clearTimeout(timer);
+      // 워커가 close 응답(unsubscribe 완료)을 보낸 뒤 스스로 exit 할 시간을 준다.
+      // 응답 전에 바로 terminate 하면 네이티브 구독 정리와 teardown 이 겹칠 수 있다.
+      if (responded) {
+        await Promise.race([this.workerExit, new Promise<void>((resolve) => setTimeout(resolve, 200))]);
+      }
     }
     await this.worker.terminate();
   }

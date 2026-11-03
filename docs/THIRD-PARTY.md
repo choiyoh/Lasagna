@@ -1,6 +1,6 @@
 # 서드파티 고지
 
-- Lucide (ISC) – settings icon: `apps/desktop/src/renderer/icons.tsx` 의 `SettingsIcon` (https://lucide.dev/icons/settings)
+- Lucide (ISC) – settings, sun, moon, monitor icons: `apps/desktop/src/renderer/icons.tsx` (https://lucide.dev/icons)
 
 ## Lucide
 

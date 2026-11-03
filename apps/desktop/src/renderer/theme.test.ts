@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   NOTE_COLOR_DARK,
@@ -7,6 +9,8 @@ import {
   TAG_COLOR_DARK,
   TAG_COLOR_LIGHT,
 } from './graph/palette';
+import { ThemeMonitorIcon, ThemeMoonIcon, ThemeSunIcon } from './icons';
+import { THEME_ICON } from './theme';
 
 /**
  * 테마 토큰의 대비를 실제 styles.css에서 다시 계산한다.
@@ -127,5 +131,31 @@ describe('테마 토큰 대비', () => {
     expect(contrast(TAG_COLOR_DARK, darkExplicit.bg!)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(light.fg!, light.bg!)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(darkExplicit.fg!, darkExplicit.bg!)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('테마 아이콘', () => {
+  it('시스템/라이트/다크가 각각 monitor/sun/moon 아이콘을 가리킨다', () => {
+    expect(THEME_ICON.system).toBe(ThemeMonitorIcon);
+    expect(THEME_ICON.light).toBe(ThemeSunIcon);
+    expect(THEME_ICON.dark).toBe(ThemeMoonIcon);
+  });
+
+  it('세 아이콘 모두 16px·24 viewBox·currentColor 라인 SVG로 렌더된다', () => {
+    const render = (choice: keyof typeof THEME_ICON) => renderToStaticMarkup(createElement(THEME_ICON[choice], { size: 16 }));
+    for (const choice of ['system', 'light', 'dark'] as const) {
+      const html = render(choice);
+      expect(html).toContain('viewBox="0 0 24 24"');
+      expect(html).toContain('width="16"');
+      expect(html).toContain('height="16"');
+      expect(html).toContain('stroke="currentColor"');
+      expect(html).toContain('stroke-width="2"');
+      expect(html).toContain('aria-hidden="true"');
+    }
+    // 세 아이콘이 서로 다른 도형인지 확인한다
+    expect(render('system')).toContain('<rect');
+    expect(render('light')).toContain('<circle cx="12" cy="12" r="4"');
+    expect(render('dark')).not.toContain('<rect');
+    expect(render('dark').match(/<path/g)).toHaveLength(1);
   });
 });

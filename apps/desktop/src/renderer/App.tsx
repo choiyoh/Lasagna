@@ -104,6 +104,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   /** 사이드바 항목 우클릭 메뉴 */
   const [menu, setMenu] = useState<EntryMenuState | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(() => loadTheme());
+  const ThemeIcon = THEME_ICON[theme];
   const cycleTheme = useCallback(() => {
     setTheme((cur) => {
       const next = nextTheme(cur);
@@ -507,7 +508,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             <SettingsIcon />
           </button>
           <button className="themebtn" onClick={cycleTheme} title="테마 바꾸기: 시스템 → 라이트 → 다크" aria-label={`테마 ${THEME_LABEL[theme]}`} data-testid="theme-toggle">
-            <span aria-hidden>{THEME_ICON[theme]}</span> {THEME_LABEL[theme]}
+            <ThemeIcon />
+            <span>{THEME_LABEL[theme]}</span>
           </button>
         </div>
       </aside>

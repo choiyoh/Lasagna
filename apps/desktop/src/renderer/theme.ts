@@ -1,3 +1,6 @@
+import type { ComponentType } from 'react';
+import { ThemeMonitorIcon, ThemeMoonIcon, ThemeSunIcon } from './icons';
+
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
 const KEY = 'nops.theme';
@@ -24,4 +27,8 @@ export function applyTheme(choice: ThemeChoice): void {
 
 export const nextTheme = (c: ThemeChoice): ThemeChoice => (c === 'system' ? 'light' : c === 'light' ? 'dark' : 'system');
 export const THEME_LABEL: Record<ThemeChoice, string> = { system: '시스템', light: '라이트', dark: '다크' };
-export const THEME_ICON: Record<ThemeChoice, string> = { system: '◐', light: '☀', dark: '☾' };
+export const THEME_ICON: Record<ThemeChoice, ComponentType<{ size?: number }>> = {
+  system: ThemeMonitorIcon,
+  light: ThemeSunIcon,
+  dark: ThemeMoonIcon,
+};

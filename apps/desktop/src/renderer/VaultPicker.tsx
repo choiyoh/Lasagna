@@ -7,6 +7,7 @@ export function VaultPicker({ onOpen }: { onOpen: (v: VaultInfo) => void }) {
   const [recent, setRecent] = useState<VaultInfo[]>([]);
   const [error, setError] = useState('');
   const [theme, setTheme] = useState<ThemeChoice>(() => loadTheme());
+  const ThemeIcon = THEME_ICON[theme];
   useEffect(() => {
     void window.nops.vault.listRecent().then(setRecent);
   }, []);
@@ -33,7 +34,7 @@ export function VaultPicker({ onOpen }: { onOpen: (v: VaultInfo) => void }) {
           setTheme(next);
         }}
       >
-        {THEME_ICON[theme]}
+        <ThemeIcon />
       </button>
       <div className="start__card">
         <Logo size={88} />

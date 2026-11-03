@@ -3178,6 +3178,56 @@ views:
     await expect(page.getByTestId('graph-screen')).toHaveCount(0);
   });
 
+  test('테마 버튼: 실제 좌표 클릭으로 시스템→라이트→다크를 순환하고 아이콘이 바뀐다', async () => {
+    const page = await app.firstWindow();
+    const btn = page.getByTestId('theme-toggle');
+    const click = async () => {
+      const b = await btn.boundingBox();
+      await page.mouse.click(b!.x + b!.width / 2, b!.y + b!.height / 2);
+    };
+    // 앞선 테스트가 어떤 테마를 남겼어도 시스템으로 맞춘다
+    for (let i = 0; i < 3 && (await btn.getAttribute('aria-label')) !== '테마 시스템'; i++) {
+      const before = await btn.getAttribute('aria-label');
+      await click();
+      await expect.poll(() => btn.getAttribute('aria-label')).not.toBe(before);
+    }
+    await expect(btn).toHaveAttribute('aria-label', '테마 시스템');
+
+    const iconShape = () =>
+      btn.locator('svg').evaluate((el) => ({
+        viewBox: el.getAttribute('viewBox'),
+        monitor: !!el.querySelector('rect'),
+        sun: !!el.querySelector('circle[r="4"]'),
+        paths: el.querySelectorAll('path').length,
+        stroke: getComputedStyle(el).stroke,
+      }));
+
+    expect(await iconShape()).toMatchObject({ viewBox: '0 0 24 24', monitor: true, sun: false });
+    const foot = await page.locator('.sidebar__foot').boundingBox();
+    expect(foot!.height).toBe(36);
+    const button = await btn.boundingBox();
+    const icon = await btn.locator('svg').boundingBox();
+    const label = await btn.locator('span').boundingBox();
+    // 아이콘·라벨이 버튼 세로 중앙에 오고 간격이 균일하다
+    expect(Math.abs(icon!.y + icon!.height / 2 - (button!.y + button!.height / 2))).toBeLessThan(1);
+    expect(Math.abs(label!.y + label!.height / 2 - (button!.y + button!.height / 2))).toBeLessThan(1);
+    expect(label!.x - (icon!.x + icon!.width)).toBeGreaterThanOrEqual(5);
+    // currentColor 를 따른다
+    expect((await iconShape()).stroke).toBe(await btn.evaluate((el) => getComputedStyle(el).color));
+
+    await click();
+    await expect(btn).toHaveAttribute('aria-label', '테마 라이트');
+    expect(await iconShape()).toMatchObject({ sun: true, monitor: false, paths: 8 });
+
+    await click();
+    await expect(btn).toHaveAttribute('aria-label', '테마 다크');
+    expect(await iconShape()).toMatchObject({ sun: false, monitor: false, paths: 1 });
+
+    // 다른 테스트에 영향이 없도록 시스템으로 되돌린다
+    await click();
+    await expect(btn).toHaveAttribute('aria-label', '테마 시스템');
+  });
+
   // 노트가 300개를 넘으면 폴더가 접힌 채 시작하므로 이 테스트는 맨 끝에 둔다
   test('아주 많은 노트가 든 폴더는 처음 300개만 그리고 "더 보기"로 늘린다', async () => {
     const page = await app.firstWindow();

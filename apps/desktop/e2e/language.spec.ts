@@ -105,8 +105,25 @@ test('switches between Korean and English, keeps <html lang> in sync, and surviv
   await expect(sidebar.getByRole('button', { name: /새 노트/ })).toBeVisible();
   await expect(page.getByPlaceholder('본문 검색')).toBeVisible();
 
-  // 설정의 언어 라디오그룹은 표준 키보드 패턴: 선택된 항목만 Tab 으로 닿고 화살표·Home/End 로 이동한다.
   await openSettings(page);
+
+  // 테마 라디오도 같은 컴포넌트: 화살표·Home/End 로 이동하며 선택하고, 동작(테마 적용)은 그대로다.
+  const themeGroup = page.getByRole('radiogroup', { name: '테마' });
+  const systemTheme = themeGroup.getByRole('radio', { name: '시스템' });
+  await expect(systemTheme).toHaveAttribute('aria-checked', 'true');
+  await systemTheme.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(themeGroup.getByRole('radio', { name: '라이트' })).toHaveAttribute('aria-checked', 'true');
+  await expect(themeGroup.getByRole('radio', { name: '라이트' })).toBeFocused();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.keyboard.press('End');
+  await expect(themeGroup.getByRole('radio', { name: '다크' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.keyboard.press('Home');
+  await expect(systemTheme).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'system');
+
+  // 설정의 언어 라디오그룹은 표준 키보드 패턴: 선택된 항목만 Tab 으로 닿고 화살표·Home/End 로 이동한다.
   const languageGroup = page.getByRole('radiogroup', { name: '언어' });
   const systemRadio = languageGroup.getByRole('radio', { name: '시스템 따르기' });
   await expect(systemRadio).toHaveAttribute('aria-checked', 'true');
@@ -151,4 +168,39 @@ test('switches between Korean and English, keeps <html lang> in sync, and surviv
   await page.keyboard.press('Escape');
   await expect(page.locator('aside.sidebar').getByRole('button', { name: /새 노트/ })).toBeVisible();
   expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toMatchObject({ version: 1, language: 'system' });
+});
+
+test('a failed language save keeps the old language and shows an inline error', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+
+  // 쓰기를 실패시키려면 설정 파일 자리에 디렉터리를 둔다(원자적 rename 이 실패한다).
+  const dir = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'));
+  const settingsFile = path.join(dir, 'app-settings.json');
+  rmSync(settingsFile, { force: true });
+  mkdirSync(settingsFile);
+
+  await openSettings(page);
+  const languageGroup = page.getByRole('radiogroup', { name: '언어' });
+  const systemRadio = languageGroup.getByRole('radio', { name: '시스템 따르기' });
+  await expect(systemRadio).toHaveAttribute('aria-checked', 'true');
+  await languageGroup.getByRole('radio', { name: 'English' }).click();
+
+  // 실패: 인라인 오류, 언어·라디오는 그대로, 포커스는 선택된(시스템) 라디오로 돌아온다.
+  await expect(page.getByRole('alert')).toHaveText('언어를 저장하지 못했어요. 다시 시도해 주세요.');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+  await expect(systemRadio).toHaveAttribute('aria-checked', 'true');
+  await expect(systemRadio).toBeFocused();
+
+  // 실패 원인을 없애면 같은 조작이 성공한다.
+  rmSync(settingsFile, { recursive: true, force: true });
+  await languageGroup.getByRole('radio', { name: 'English' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toMatchObject({ version: 1, language: 'en' });
+
+  // 원래대로 시스템(ko)으로 되돌린다.
+  await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: 'Follow system' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
 });

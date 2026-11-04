@@ -38,3 +38,26 @@ export function readAppSettings(file: string): AppSettings {
 export function writeAppSettings(file: string, settings: AppSettings): void {
   atomicWrite(file, `${JSON.stringify(settings, null, 2)}\n`);
 }
+
+/** 언어를 바꿀 때 디스크와 메모리가 어긋나지 않게 한 곳에서 쓴다. 쓰기 실패는 던지고 이전 값을 지킨다. */
+export class AppSettingsStore {
+  private current: AppSettings;
+  constructor(
+    private readonly file: string,
+    initial: AppSettings = DEFAULT_APP_SETTINGS,
+  ) {
+    this.current = initial;
+  }
+
+  get value(): AppSettings {
+    return this.current;
+  }
+
+  setLanguage(language: LanguageSetting): AppSettings {
+    const next: AppSettings = { version: 1, language };
+    // 먼저 디스크에 쓴다. 실패하면 던지고 메모리 값은 그대로다(호출자가 오류를 화면에 보여 준다).
+    writeAppSettings(this.file, next);
+    this.current = next;
+    return next;
+  }
+}

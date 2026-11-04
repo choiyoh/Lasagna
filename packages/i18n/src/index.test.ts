@@ -40,6 +40,13 @@ describe('messages', () => {
     expect(Object.keys(ko).length).toBeGreaterThan(80)
   })
 
+  it('keeps the same {placeholders} in both languages for every key', () => {
+    const tokens = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
+    for (const key of Object.keys(ko) as (keyof typeof ko)[]) {
+      expect(tokens(en[key]), key).toEqual(tokens(ko[key]));
+    }
+  })
+
   it('fills placeholders and leaves unknown ones alone', () => {
     expect(interpolate('테마: {theme} ({when})', { theme: '다크' })).toBe('테마: 다크 ({when})')
     expect(interpolate('no placeholders')).toBe('no placeholders')

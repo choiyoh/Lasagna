@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global console, process */
 // 한글 리터럴 가드(래칫): 소스에 남은 한글 UI 문자열을 파일별로 세어 scripts/hangul-allowlist.json 과 비교한다.
 // 허용치보다 많거나, 목록에 없는 파일에 한글이 있거나, 반대로 허용치가 실제보다 크면 실패한다(줄일 때만 통과).
 // 기준선 갱신은 `node scripts/check-hangul-literals.mjs --write` — 늘리는 방향으로는 쓰지 않는다.
@@ -37,6 +38,14 @@ export function countHangulLines(source) {
       }
       if (quote) {
         if (ch === '\\') {
+          // '\uAC00'·'\u{AC00}' 처럼 이스케이프로 쓴 한글도 센다(사전으로 옮기라는 신호다).
+          const escape = /^\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))/.exec(line.slice(i));
+          if (escape) {
+            const code = Number.parseInt(escape[1] ?? escape[2], 16);
+            if (code <= 0x10ffff && HANGUL.test(String.fromCodePoint(code))) hit = true;
+            i += escape[0].length;
+            continue;
+          }
           i += 2;
           continue;
         }
@@ -125,6 +134,13 @@ export function checkAllowlist(current, allowlist) {
   return problems;
 }
 
+/** 기준선보다 늘어난 항목. `--write` 는 이게 비어 있거나 `--allow-increase` 일 때만 쓴다. */
+export function allowlistIncreases(previous, current) {
+  return [...current.entries()]
+    .filter(([file, lines]) => lines > (previous[file] ?? 0))
+    .map(([file, lines]) => ({ file, from: previous[file] ?? 0, to: lines }));
+}
+
 export function formatAllowlist(counts) {
   const sorted = [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
   return `${JSON.stringify(Object.fromEntries(sorted), null, 2)}\n`;
@@ -135,6 +151,13 @@ function main(argv) {
   const file = path.join(repoRoot, 'scripts', 'hangul-allowlist.json');
   const counts = scanRepo(repoRoot);
   if (argv.includes('--write')) {
+    const previous = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+    const raises = allowlistIncreases(previous, counts);
+    if (raises.length > 0 && !argv.includes('--allow-increase')) {
+      console.error('기준선을 올릴 수 없습니다(래칫). 사전으로 옮겨 줄이거나, 정말 필요하면 --allow-increase:');
+      console.error(raises.map((entry) => `  - ${entry.file}: ${entry.from} → ${entry.to}`).join('\n'));
+      return 1;
+    }
     writeFileSync(file, formatAllowlist(counts));
     console.log(`hangul allowlist: ${counts.size} files, ${[...counts.values()].reduce((a, b) => a + b, 0)} lines`);
     return 0;

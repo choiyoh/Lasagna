@@ -1,9 +1,8 @@
-/* global process */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { checkAllowlist, countHangulLines, formatAllowlist, scanRepo, scanTree } from './check-hangul-literals.mjs';
+import { allowlistIncreases, checkAllowlist, countHangulLines, formatAllowlist, scanRepo, scanTree } from './check-hangul-literals.mjs';
 
 const dirs = [];
 const tempRepo = () => {
@@ -27,6 +26,14 @@ describe('countHangulLines', () => {
     ].join('\n');
     expect(countHangulLines(source)).toBe(4);
   });
+
+  it('detects Hangul written as unicode escapes', () => {
+    expect(countHangulLines("const a = '\\uAC00';\n")).toBe(1);
+    expect(countHangulLines("const b = '\\u{AC00}';\n")).toBe(1);
+    expect(countHangulLines("const c = `\\uD55C`;\n")).toBe(1);
+    // 라틴 문자 이스케이프는 세지 않는다
+    expect(countHangulLines("const d = '\\u0041';\n")).toBe(0);
+  })
 
   it('skips line and block comments', () => {
     const source = [
@@ -87,6 +94,13 @@ describe('checkAllowlist', () => {
     expect(checkAllowlist(new Map([['c.ts', 1]]), {})).toEqual(['c.ts: 1줄 (목록에 없는 파일)']);
     expect(checkAllowlist(new Map([['a.ts', 1]]), { 'a.ts': 2 })).toEqual(['a.ts: 허용 2줄 > 실제 1줄 (허용치를 줄이세요)']);
   });
+
+  it('reports every entry a --write would raise', () => {
+    const previous = { 'a.ts': 2, 'b.ts': 1 };
+    expect(allowlistIncreases(previous, new Map([['a.ts', 2], ['b.ts', 1]]))).toEqual([]);
+    expect(allowlistIncreases(previous, new Map([['a.ts', 3], ['b.ts', 1]]))).toEqual([{ file: 'a.ts', from: 2, to: 3 }]);
+    expect(allowlistIncreases(previous, new Map([['c.ts', 1]]))).toEqual([{ file: 'c.ts', from: 0, to: 1 }]);
+  })
 
   it('writes a stable, sorted allowlist', () => {
     const text = formatAllowlist(new Map([['z.ts', 1], ['a.ts', 2]]));

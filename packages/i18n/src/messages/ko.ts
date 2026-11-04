@@ -30,6 +30,7 @@ export const ko = {
   'settings.language.system': '시스템 따르기',
   'settings.language.ko': '한국어',
   'settings.language.en': 'English',
+  'settings.language.error': '언어를 저장하지 못했어요. 다시 시도해 주세요.',
 
   'welcome.title': '무엇을 할까요?',
   'welcome.recent': '최근에 고친 노트',

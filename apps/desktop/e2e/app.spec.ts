@@ -3253,7 +3253,7 @@ views:
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'comment', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'mcp', 'note', 'on', 'order', 'pathForFile', 'search', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'comment', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'mcp', 'note', 'on', 'order', 'pathForFile', 'search', 'settings', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

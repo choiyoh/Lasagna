@@ -28,7 +28,17 @@ const LANGUAGE_KEY: Record<LanguageSetting, Parameters<typeof t>[0]> = {
 /** 설정(⌘,): 모양·편집·동기화·도움말. 값은 이 기기에만 저장된다. */
 export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShortcuts, onOpenTrash, onOpenNote, onReverted }: Props) {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const [languageError, setLanguageError] = useState(false);
   const language = useLanguage();
+  const chooseLanguage = async (option: LanguageSetting) => {
+    setLanguageError(false);
+    try {
+      await changeLanguage(option);
+    } catch {
+      // 저장 실패: useLanguage() 가 이전 설정을 그대로 보여 주고, 아래에 오류를 남긴다.
+      setLanguageError(true);
+    }
+  };
   const set = (patch: Partial<Prefs>) =>
     setPrefs((cur) => {
       const next = { ...cur, ...patch };
@@ -81,13 +91,14 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
                     role="radio"
                     aria-checked={language.setting === option}
                     className={language.setting === option ? 'on' : ''}
-                    onClick={() => void changeLanguage(option)}
+                    onClick={() => void chooseLanguage(option)}
                   >
                     {t(LANGUAGE_KEY[option])}
                   </button>
                 ))}
               </div>
             </div>
+            {languageError ? <p className="error" role="alert">{t('settings.language.error')}</p> : null}
             <label className="settings__row">
               <span>{t('settings.fontSize')}</span>
               <select value={prefs.fontSize} onChange={(e) => set({ fontSize: Number(e.target.value) })} aria-label={t('settings.fontSize')}>

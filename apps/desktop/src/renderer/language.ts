@@ -38,13 +38,12 @@ export async function initLanguage(): Promise<void> {
   }
 }
 
-/** 설정에서 언어를 바꾼다. main 이 저장·브로드캐스트하고, 돌아온 값으로 즉시 전환한다. */
+/**
+ * 설정에서 언어를 바꾼다. main 이 저장·브로드캐스트하고, 돌아온 값으로 즉시 전환한다.
+ * 저장에 실패하면 그대로 던져서 설정 화면이 오류를 보여 주고 라디오는 이전 값에 머문다.
+ */
 export async function changeLanguage(language: LanguageSetting): Promise<void> {
-  try {
-    apply(await window.nops.settings.setLanguage({ language }));
-  } catch {
-    // 저장에 실패하면 이전 언어를 그대로 둔다.
-  }
+  apply(await window.nops.settings.setLanguage({ language }));
 }
 
 /** 다른 창에서 바꾼 언어를 따라간다. 반환값은 구독 해제. */

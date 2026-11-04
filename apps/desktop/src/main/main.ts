@@ -32,7 +32,7 @@ import { RevertError, applyRestore, logRevert, planRevert } from '@nopsidian/mcp
 import { readPolicyFile, writePolicyFile } from '@nopsidian/mcp/policy-file';
 import { events, graphLayout, graphSettings, workspaceLayout, type AppLanguage, type EventName } from '@nopsidian/ipc-contract';
 import { resolveLocale } from '@nopsidian/i18n';
-import { DEFAULT_APP_SETTINGS, readAppSettings, writeAppSettings, type AppSettings } from './app-settings';
+import { AppSettingsStore, readAppSettings } from './app-settings';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
 import { runMcpStdio } from './mcp-stdio';
@@ -656,17 +656,22 @@ function registerHandlers() {
   });
   handle('settings.language', () => currentLanguage());
   handle('settings.setLanguage', ({ language }) => {
-    settings = { version: 1, language };
-    writeAppSettings(settingsFile(), settings);
+    settingsStore().setLanguage(language);
     const current = currentLanguage();
     broadcast('language.changed', current);
     return current;
   });
 }
 
-let settings: AppSettings = DEFAULT_APP_SETTINGS;
+let settings: AppSettingsStore | null = null;
 
 const settingsFile = () => path.join(app.getPath('userData'), 'app-settings.json');
+
+/** 첫 사용(창이 뜬 뒤)에 파일을 읽는다. 쓰기 실패는 던져서 IPC 오류로 렌더러에 전달된다. */
+function settingsStore(): AppSettingsStore {
+  settings ??= new AppSettingsStore(settingsFile(), readAppSettings(settingsFile()));
+  return settings;
+}
 
 /**
  * OS 언어. e2e 는 기존 한국어 셀렉터가 흔들리지 않도록 ko 로 고정하고,
@@ -678,7 +683,8 @@ function systemLanguages(): readonly string[] {
 }
 
 function currentLanguage(): AppLanguage {
-  return { setting: settings.language, locale: resolveLocale(settings.language, systemLanguages()) };
+  const { language } = settingsStore().value;
+  return { setting: language, locale: resolveLocale(language, systemLanguages()) };
 }
 
 app.whenReady().then(() => {
@@ -698,7 +704,6 @@ app.whenReady().then(() => {
   });
   configureIpc({ devServerUrl });
   setBroadcaster(broadcast);
-  settings = readAppSettings(settingsFile());
   registerHandlers();
   createWindow();
 

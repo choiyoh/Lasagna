@@ -37,6 +37,28 @@ async function launch(): Promise<ElectronApplication> {
   return candidate;
 }
 
+/**
+ * 앱을 닫고 프로세스가 완전히 끝날 때까지 기다린다. 같은 userData 로 곧바로 다시 띄우면 이전 프로세스가
+ * 쥐고 있던 단일 인스턴스 락·userData 잠금 때문에 새 창이 뜨지 않을 수 있다(전체 실행에서 드물게 재현).
+ */
+async function closeApp(): Promise<void> {
+  const current = app;
+  if (!current) return;
+  const child = current.process();
+  const exited = new Promise<void>((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+    child.once('exit', () => resolve());
+  });
+  await current.close();
+  await Promise.race([
+    exited,
+    new Promise<void>((_, reject) => setTimeout(() => reject(new Error('이전 앱 프로세스가 30초 안에 끝나지 않았어요')), 30_000)),
+  ]);
+}
+
 /** 시작 화면이면 볼트를 연다(언어에 따라 문구가 달라서 클래스로 찾는다). */
 async function openVaultIfNeeded(page: Page): Promise<void> {
   const cta = page.locator('.start__cta');
@@ -69,7 +91,7 @@ test.afterAll(async () => {
   } catch {
     // 앱이 이미 닫혔으면 임시 폴더째 지운다.
   }
-  await app?.close().catch(() => undefined);
+  await closeApp().catch(() => undefined);
   if (base) rmSync(base, { recursive: true, force: true });
 });
 
@@ -98,8 +120,8 @@ test('switches between Korean and English, keeps <html lang> in sync, and surviv
   const settingsFile = path.join(storedDir, 'app-settings.json');
   expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toMatchObject({ version: 1, language: 'en' });
 
-  // 앱을 다시 띄워도 영어가 유지된다.
-  await app.close();
+  // 앱을 다시 띄워도 영어가 유지된다. 이전 프로세스가 끝난 뒤에 띄워야 락 충돌이 없다.
+  await closeApp();
   app = await launch();
   page = await app.firstWindow();
   await openVaultIfNeeded(page);

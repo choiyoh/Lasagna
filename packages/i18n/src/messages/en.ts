@@ -29,6 +29,7 @@ export const en: Record<MessageKey, string> = {
   'settings.language.system': 'Follow system',
   'settings.language.ko': '한국어',
   'settings.language.en': 'English',
+  'settings.language.error': 'Could not save the language. Please try again.',
 
   'welcome.title': 'What would you like to do?',
   'welcome.recent': 'Recently edited',

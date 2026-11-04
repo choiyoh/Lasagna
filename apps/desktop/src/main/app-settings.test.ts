@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_APP_SETTINGS, parseAppSettings, readAppSettings, writeAppSettings } from './app-settings';
+import { AppSettingsStore, DEFAULT_APP_SETTINGS, parseAppSettings, readAppSettings, writeAppSettings } from './app-settings';
 
 const dirs: string[] = [];
 const tempDir = () => {
@@ -35,5 +35,22 @@ describe('readAppSettings / writeAppSettings', () => {
     expect(readAppSettings(file)).toEqual({ version: 1, language: 'en' });
     writeFileSync(file, '{ damaged');
     expect(readAppSettings(file)).toEqual(DEFAULT_APP_SETTINGS);
+  });
+});
+
+describe('AppSettingsStore', () => {
+  it('writes the new language and keeps the old one when the write fails', () => {
+    const dir = tempDir();
+    const file = path.join(dir, 'app-settings.json');
+    const store = new AppSettingsStore(file, { version: 1, language: 'en' });
+    expect(store.setLanguage('ko')).toEqual({ version: 1, language: 'ko' });
+    expect(store.value).toEqual({ version: 1, language: 'ko' });
+    expect(readAppSettings(file)).toEqual({ version: 1, language: 'ko' });
+
+    // 파일 자리에 디렉터리를 두면 원자적 rename 이 실패한다 → 오류를 던지고 메모리 값은 그대로.
+    rmSync(file);
+    mkdirSync(file);
+    expect(() => store.setLanguage('system')).toThrow();
+    expect(store.value).toEqual({ version: 1, language: 'ko' });
   });
 });

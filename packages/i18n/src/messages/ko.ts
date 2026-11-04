@@ -110,6 +110,7 @@ export const ko = {
   'nav.trash': '휴지통',
   'nav.search': '본문 검색',
   'nav.files': '파일',
+  'nav.tags': '태그',
   'nav.marks': '북마크',
   'nav.marksHint': '북마크 (⌘⇧B로 현재 노트 추가·해제)',
   'nav.settings': '설정',

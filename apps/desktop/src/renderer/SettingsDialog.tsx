@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { t } from '@nopsidian/i18n';
 import type { LanguageSetting } from '@nopsidian/ipc-contract';
 import { applyPrefs, FONT_SIZES, loadPrefs, type Prefs } from './prefs';
@@ -25,18 +25,99 @@ const LANGUAGE_KEY: Record<LanguageSetting, Parameters<typeof t>[0]> = {
   en: 'settings.language.en',
 };
 
+interface SegOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+/**
+ * 테마·언어 라디오그룹. 표준 라디오 패턴: 선택된 항목만 Tab 으로 닿고(로빙 tabindex),
+ * ←/→/↑/↓ 는 이동하며 선택, Home/End 는 처음/끝. Space·Enter 는 버튼 기본 동작.
+ * onSelect 가 false(저장 실패)를 돌려주면 선택된 항목으로 포커스를 되돌린다.
+ */
+function RadioSeg<T extends string>({
+  label,
+  value,
+  options,
+  onSelect,
+}: {
+  label: string;
+  value: T;
+  options: ReadonlyArray<SegOption<T>>;
+  onSelect: (value: T) => void | boolean | Promise<boolean>;
+}) {
+  const refs = useRef(new Map<T, HTMLButtonElement | null>());
+  const focusValue = (next: T) => refs.current.get(next)?.focus();
+  const pick = (option: SegOption<T>) => {
+    const result = onSelect(option.value);
+    if (result instanceof Promise) {
+      void result.then((ok) => {
+        if (ok === false) focusValue(value);
+      });
+      return;
+    }
+    if (result === false) focusValue(value);
+  };
+  const selectAt = (index: number) => {
+    const option = options[index];
+    if (!option) return;
+    pick(option);
+    focusValue(option.value);
+  };
+  const step = (from: number, delta: -1 | 1) => {
+    const next = (from + delta + options.length) % options.length;
+    selectAt(next);
+  };
+  return (
+    <div className="seg" role="radiogroup" aria-label={label}>
+      {options.map((option, index) => (
+        <button
+          key={option.value}
+          ref={(node) => {
+            refs.current.set(option.value, node);
+          }}
+          role="radio"
+          aria-checked={option.value === value}
+          tabIndex={option.value === value ? 0 : -1}
+          className={option.value === value ? 'on' : ''}
+          onClick={() => pick(option)}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+              event.preventDefault();
+              step(index, 1);
+            } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              step(index, -1);
+            } else if (event.key === 'Home') {
+              event.preventDefault();
+              selectAt(0);
+            } else if (event.key === 'End') {
+              event.preventDefault();
+              selectAt(options.length - 1);
+            }
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** 설정(⌘,): 모양·편집·동기화·도움말. 값은 이 기기에만 저장된다. */
 export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShortcuts, onOpenTrash, onOpenNote, onReverted }: Props) {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [languageError, setLanguageError] = useState(false);
   const language = useLanguage();
-  const chooseLanguage = async (option: LanguageSetting) => {
+  const chooseLanguage = async (option: LanguageSetting): Promise<boolean> => {
     setLanguageError(false);
     try {
       await changeLanguage(option);
+      return true;
     } catch {
-      // 저장 실패: useLanguage() 가 이전 설정을 그대로 보여 주고, 아래에 오류를 남긴다.
+      // 저장 실패: useLanguage() 가 이전 설정을 그대로 보여 주고, 라디오 포커스도 원래 값으로 돌아간다.
       setLanguageError(true);
+      return false;
     }
   };
   const set = (patch: Partial<Prefs>) =>
@@ -65,38 +146,24 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
             <h3>{t('settings.appearance')}</h3>
             <div className="settings__row">
               <span>{t('settings.theme')}</span>
-              <div className="seg" role="radiogroup" aria-label={t('settings.theme')}>
-                {(['system', 'light', 'dark'] as const).map((choice) => (
-                  <button
-                    key={choice}
-                    role="radio"
-                    aria-checked={theme === choice}
-                    className={theme === choice ? 'on' : ''}
-                    onClick={() => {
-                      applyTheme(choice);
-                      onTheme(choice);
-                    }}
-                  >
-                    {t(THEME_KEY[choice])}
-                  </button>
-                ))}
-              </div>
+              <RadioSeg
+                label={t('settings.theme')}
+                value={theme}
+                options={(['system', 'light', 'dark'] as const).map((choice) => ({ value: choice, label: t(THEME_KEY[choice]) }))}
+                onSelect={(choice) => {
+                  applyTheme(choice);
+                  onTheme(choice);
+                }}
+              />
             </div>
             <div className="settings__row">
               <span>{t('settings.language')}</span>
-              <div className="seg" role="radiogroup" aria-label={t('settings.language')}>
-                {(['system', 'ko', 'en'] as const).map((option) => (
-                  <button
-                    key={option}
-                    role="radio"
-                    aria-checked={language.setting === option}
-                    className={language.setting === option ? 'on' : ''}
-                    onClick={() => void chooseLanguage(option)}
-                  >
-                    {t(LANGUAGE_KEY[option])}
-                  </button>
-                ))}
-              </div>
+              <RadioSeg
+                label={t('settings.language')}
+                value={language.setting}
+                options={(['system', 'ko', 'en'] as const).map((option) => ({ value: option, label: t(LANGUAGE_KEY[option]) }))}
+                onSelect={(option) => chooseLanguage(option)}
+              />
             </div>
             {languageError ? <p className="error" role="alert">{t('settings.language.error')}</p> : null}
             <label className="settings__row">

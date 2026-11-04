@@ -12,7 +12,7 @@
   "apps/desktop/src/main/trash.ts": 5,
   "apps/desktop/src/main/vault.ts": 6,
   "apps/desktop/src/preload/preload.ts": 1,
-  "apps/desktop/src/renderer/App.tsx": 57,
+  "apps/desktop/src/renderer/App.tsx": 56,
   "apps/desktop/src/renderer/CommentsPanel.tsx": 12,
   "apps/desktop/src/renderer/components/EmptyState.tsx": 3,
   "apps/desktop/src/renderer/components/SyncBar.tsx": 14,

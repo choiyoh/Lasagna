@@ -105,14 +105,30 @@ test('switches between Korean and English, keeps <html lang> in sync, and surviv
   await expect(sidebar.getByRole('button', { name: /새 노트/ })).toBeVisible();
   await expect(page.getByPlaceholder('본문 검색')).toBeVisible();
 
-  // 설정 → English: 화면과 <html lang> 이 즉시 바뀐다.
+  // 설정의 언어 라디오그룹은 표준 키보드 패턴: 선택된 항목만 Tab 으로 닿고 화살표·Home/End 로 이동한다.
   await openSettings(page);
-  await page.getByRole('radiogroup', { name: '언어' }).getByRole('radio', { name: 'English' }).click();
+  const languageGroup = page.getByRole('radiogroup', { name: '언어' });
+  const systemRadio = languageGroup.getByRole('radio', { name: '시스템 따르기' });
+  await expect(systemRadio).toHaveAttribute('aria-checked', 'true');
+  await expect(systemRadio).toHaveAttribute('tabindex', '0');
+  await expect(languageGroup.getByRole('radio', { name: '한국어' })).toHaveAttribute('tabindex', '-1');
+  await systemRadio.focus();
+  await page.keyboard.press('ArrowRight');
+  const koreanRadio = languageGroup.getByRole('radio', { name: '한국어' });
+  await expect(koreanRadio).toHaveAttribute('aria-checked', 'true');
+  await expect(koreanRadio).toBeFocused();
+  // End = 마지막 항목(English)으로 이동·선택 → 화면과 <html lang> 이 즉시 바뀐다.
+  await page.keyboard.press('End');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.getByRole('radio', { name: 'English' })).toHaveAttribute('tabindex', '0');
   await expect(page.getByRole('dialog').getByRole('heading', { name: 'Settings' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(sidebar.getByRole('button', { name: /New note/ })).toBeVisible();
   await expect(page.getByPlaceholder('Search notes')).toBeVisible();
+  // 같은 줄의 탭 라벨도 한 언어로: Files · ★(Bookmarks) · DB · Tags
+  await expect(page.getByRole('tab', { name: 'Bookmarks', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Tags', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Files', exact: true })).toBeVisible();
 
   // 설정은 main 의 userData 파일에 저장된다.
   const storedDir = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'));

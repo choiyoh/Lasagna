@@ -417,14 +417,21 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           <button role="tab" aria-selected={sideTab === 'files'} className={sideTab === 'files' ? 'active' : ''} onClick={() => setSideTab('files')}>
             {t('nav.files')}
           </button>
-          <button role="tab" aria-selected={sideTab === 'marks'} className={sideTab === 'marks' ? 'active' : ''} onClick={() => setSideTab('marks')} title={keys(t('nav.marksHint'))}>
+          <button
+            role="tab"
+            aria-selected={sideTab === 'marks'}
+            className={sideTab === 'marks' ? 'active' : ''}
+            onClick={() => setSideTab('marks')}
+            title={keys(t('nav.marksHint'))}
+            aria-label={t('nav.marks')}
+          >
             ★
           </button>
           <button role="tab" aria-selected={sideTab === 'db'} className={sideTab === 'db' ? 'active' : ''} onClick={() => setSideTab('db')}>
             DB
           </button>
           <button role="tab" aria-selected={sideTab === 'tags'} className={sideTab === 'tags' ? 'active' : ''} onClick={() => setSideTab('tags')}>
-            태그
+            {t('nav.tags')}
           </button>
         </div>
         {progress && (

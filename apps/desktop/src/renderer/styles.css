@@ -203,7 +203,7 @@ button.link { color: var(--muted); }
 .dockbody__bar { display: flex; align-items: center; gap: 6px; padding: 10px 6px 0 14px; border-bottom: 1px solid var(--border); }
 .dockbody__tabs { flex: 1; min-width: 0; display: flex; gap: 14px; overflow-x: auto; scrollbar-width: none; }
 .dockbody__tabs::-webkit-scrollbar { display: none; }
-.dockbody__tabs button { padding: 5px 0 6px; font-size: 12.5px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.dockbody__tabs button { white-space: nowrap; padding: 5px 0 6px; font-size: 12.5px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .dockbody__tabs button.active { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
 .dockbody .linkpanel__tabs { padding-top: 6px; }
 .localgraph { flex: 1; display: flex; flex-direction: column; min-height: 0; }

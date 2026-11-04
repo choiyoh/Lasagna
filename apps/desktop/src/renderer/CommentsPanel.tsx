@@ -1,13 +1,10 @@
+import { formatShortDateTime, t } from '@nopsidian/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CommentItem } from '@nopsidian/ipc-contract';
 import { keys } from './keys';
 import { SELECTION_REPLY, SELECTION_REQUEST } from './outline';
 
-const when = (iso: string) => {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
-};
+const when = (iso: string) => formatShortDateTime(iso);
 
 /** 오른쪽 패널의 댓글: 노트에 메모·리뷰를 남긴다(에이전트가 남긴 댓글도 여기에 보인다). 노트 본문은 건드리지 않는다. */
 export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: () => void }) {
@@ -29,7 +26,7 @@ export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: (
       const d = (e as CustomEvent<{ path: string; text: string }>).detail;
       if (d.path !== path) return;
       if (d.text.trim()) setQuote(d.text.trim().replace(/\s+/g, ' ').slice(0, 300));
-      else setError('먼저 노트에서 인용할 글을 선택해 주세요');
+      else setError(t('comments.quoteHint'));
     };
     window.addEventListener(SELECTION_REPLY, onReply);
     return () => {
@@ -65,9 +62,9 @@ export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: (
         <strong>{c.author}</strong>
         <span className="muted small">{when(c.createdAt)}</span>
         <span className="comment__actions">
-          <button onClick={() => void mutate(() => window.nops.comment.resolve({ path, id: c.id, resolved: !c.resolved }))}>{c.resolved ? '다시 열기' : '해결'}</button>
-          <button className="danger" onClick={() => void mutate(() => window.nops.comment.remove({ path, id: c.id }))} aria-label="댓글 삭제">
-            삭제
+          <button onClick={() => void mutate(() => window.nops.comment.resolve({ path, id: c.id, resolved: !c.resolved }))}>{c.resolved ? t('comments.reopen') : t('comments.resolve')}</button>
+          <button className="danger" onClick={() => void mutate(() => window.nops.comment.remove({ path, id: c.id }))} aria-label={t('comments.deleteAria')}>
+            {t('comments.delete')}
           </button>
         </span>
       </div>
@@ -82,7 +79,7 @@ export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: (
         {quote && (
           <blockquote className="comment__quote">
             {quote}
-            <button onClick={() => setQuote('')} aria-label="인용 빼기">
+            <button onClick={() => setQuote('')} aria-label={t('comments.dropQuote')}>
               ×
             </button>
           </blockquote>
@@ -91,8 +88,8 @@ export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: (
           ref={box}
           value={text}
           rows={3}
-          placeholder="댓글 남기기…"
-          aria-label="댓글 내용"
+          placeholder={t('comments.placeholder')}
+          aria-label={t('comments.body')}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
@@ -102,11 +99,11 @@ export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: (
           }}
         />
         <div className="comments__bar">
-          <button onClick={() => window.dispatchEvent(new CustomEvent(SELECTION_REQUEST, { detail: path }))} title="노트에서 선택한 글을 댓글에 붙여요">
-            선택한 글 인용
+          <button onClick={() => window.dispatchEvent(new CustomEvent(SELECTION_REQUEST, { detail: path }))} title={t('comments.quoteSelectedTitle')}>
+            {t('comments.quoteSelected')}
           </button>
           <button className="primary" disabled={!text.trim()} onClick={() => void submit()} title={keys('⌘Enter')}>
-            남기기
+            {t('comments.submit')}
           </button>
         </div>
         {error && (
@@ -116,13 +113,13 @@ export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: (
         )}
       </div>
       {items.length === 0 ? (
-        <p className="muted small pad">아직 댓글이 없어요. 메모·검토 의견·할 일을 남겨 보세요.</p>
+        <p className="muted small pad">{t('comments.empty')}</p>
       ) : (
         <ul>{open.map(row)}</ul>
       )}
       {done.length > 0 && (
         <details className="comments__done">
-          <summary>해결된 댓글 {done.length}개</summary>
+          <summary>{t('comments.resolved', { count: done.length })}</summary>
           <ul>{done.map(row)}</ul>
         </details>
       )}

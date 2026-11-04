@@ -1,3 +1,4 @@
+import { getLocale, type Locale, type MessageKey } from '@nopsidian/i18n';
 /** 표준 유니코드 이모지(한국어 이름·태그로 검색). 데이터는 처음 쓸 때만 불러온다. */
 export interface EmojiItem {
   emoji: string;
@@ -7,27 +8,32 @@ export interface EmojiItem {
 }
 
 /** emojibase 그룹 번호 → 이름(2 = 구성 요소는 쓰지 않는다) */
-export const EMOJI_GROUPS: { group: number; name: string; icon: string }[] = [
-  { group: 0, name: '얼굴·감정', icon: '😀' },
-  { group: 1, name: '사람', icon: '👋' },
-  { group: 3, name: '동물·자연', icon: '🐶' },
-  { group: 4, name: '음식', icon: '🍎' },
-  { group: 5, name: '여행·장소', icon: '🚗' },
-  { group: 6, name: '활동', icon: '⚽' },
-  { group: 7, name: '사물', icon: '💡' },
-  { group: 8, name: '기호', icon: '❤️' },
-  { group: 9, name: '깃발', icon: '🏳️' },
+export const EMOJI_GROUPS: { group: number; labelKey: MessageKey; icon: string }[] = [
+  { group: 0, labelKey: 'emoji.group.faces', icon: '😀' },
+  { group: 1, labelKey: 'emoji.group.people', icon: '👋' },
+  { group: 3, labelKey: 'emoji.group.nature', icon: '🐶' },
+  { group: 4, labelKey: 'emoji.group.food', icon: '🍎' },
+  { group: 5, labelKey: 'emoji.group.travel', icon: '🚗' },
+  { group: 6, labelKey: 'emoji.group.activity', icon: '⚽' },
+  { group: 7, labelKey: 'emoji.group.objects', icon: '💡' },
+  { group: 8, labelKey: 'emoji.group.symbols', icon: '❤️' },
+  { group: 9, labelKey: 'emoji.group.flags', icon: '🏳️' },
 ];
 
-let cache: Promise<EmojiItem[]> | null = null;
+const caches = new Map<Locale, Promise<EmojiItem[]>>();
 
-export function loadEmojis(): Promise<EmojiItem[]> {
-  cache ??= import('emojibase-data/ko/compact.json').then((m) =>
+/** 이모지 이름·태그는 앱 언어 데이터셋에서 읽는다(ko·en 모두 emojibase). */
+export function loadEmojis(locale: Locale = getLocale()): Promise<EmojiItem[]> {
+  const cached = caches.get(locale);
+  if (cached) return cached;
+  const load = locale === 'ko' ? import('emojibase-data/ko/compact.json') : import('emojibase-data/en/compact.json');
+  const result = load.then((m) =>
     (m.default as { unicode: string; label: string; tags?: string[]; group?: number }[])
       .filter((e) => e.group !== undefined && e.group !== 2)
       .map((e) => ({ emoji: e.unicode, label: e.label, tags: e.tags ?? [], group: e.group! })),
   );
-  return cache;
+  caches.set(locale, result);
+  return result;
 }
 
 /** 이름·태그에 질의(공백으로 나눈 모든 낱말)가 들어 있는 이모지 */

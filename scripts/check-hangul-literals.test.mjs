@@ -35,6 +35,20 @@ describe('countHangulLines', () => {
     expect(countHangulLines("const d = '\\u0041';\n")).toBe(0);
   })
 
+  it('does not treat comment markers or quotes inside strings and regexes as syntax', () => {
+    expect(countHangulLines("const a = '/* 한글 */';\n")).toBe(1);
+    expect(countHangulLines('const re = /["\']/; const b = \'한글\';\n')).toBe(1);
+    expect(countHangulLines('s = s.replace(/`([^`]*)`/g, \'$1\');\n// 다음 줄 주석의 한글\n')).toBe(0);
+    expect(countHangulLines("const re = /['\"]/; // 한글 주석\n")).toBe(0);
+    expect(countHangulLines('return /[`]/; // 한글\n')).toBe(0);
+    expect(countHangulLines("throw /['\"]/; // 한글\n")).toBe(0);
+  })
+
+  it('skips single-line and multi-line block comments', () => {
+    expect(countHangulLines('/* 한글 */ const x = 1;\n')).toBe(0);
+    expect(countHangulLines('const y = 2; /* 한글 */\n')).toBe(0);
+  })
+
   it('skips line and block comments', () => {
     const source = [
       '// 한글 주석',

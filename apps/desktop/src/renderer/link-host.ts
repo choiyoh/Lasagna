@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import type { NoteSummary } from '@nopsidian/ipc-contract';
 import { createLinkResolver, linkNameFor } from '@nopsidian/core/links';
 import type { LinkQuery, LinkSuggestion, NopsLinkHost } from '@nopsidian/editor/nops';
@@ -50,7 +51,7 @@ export function createLinkHost(src: Sources): NopsLinkHost {
             const b = blocks.find((x) => String(x.line) === h.path)!;
             return {
               label: b.text,
-              detail: b.id ? `^${b.id}` : '링크용 ID를 새로 만들어요',
+              detail: b.id ? `^${b.id}` : t('link.newId'),
               target,
               block: b.id,
               ranges: h.field === 'title' ? h.ranges : [],
@@ -68,7 +69,7 @@ export function createLinkHost(src: Sources): NopsLinkHost {
         );
         return hits.map((h) => ({
           label: h.title,
-          detail: query.name ? note.title : '이 노트',
+          detail: query.name ? note.title : t('link.thisNote'),
           target,
           heading: h.title,
           ranges: h.field === 'title' ? h.ranges : [],
@@ -101,7 +102,7 @@ export function createLinkHost(src: Sources): NopsLinkHost {
 
       const exact = out.some((o) => o.target.toLowerCase() === query.name.toLowerCase());
       if (query.name && !exact) {
-        out.push({ label: `“${query.name}” 링크 만들기`, detail: '아직 없는 노트', target: query.name, kind: 'create' });
+        out.push({ label: t('link.create', { name: query.name }), detail: t('link.missingNote'), target: query.name, kind: 'create' });
       }
       return out;
     },

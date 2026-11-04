@@ -74,6 +74,28 @@ describe('messages', () => {
     expect(warn).toHaveBeenCalledTimes(1)
   })
 
+  it('pluralizes English counts and composes multi-count sentences', () => {
+    setLocale('en')
+    expect(tPlural('count.notes', 1)).toBe('1 note')
+    expect(tPlural('count.notes', 2)).toBe('2 notes')
+    expect(tPlural('count.notes', 0)).toBe('0 notes')
+    expect(tPlural('count.items', 1)).toBe('1 item')
+    expect(tPlural('count.links', 2)).toBe('2 links')
+    expect(tPlural('history.diff', 1)).toContain('1 line differs')
+    expect(tPlural('history.diff', 2)).toContain('2 lines differ')
+    expect(t('import.doneNotes.one', { notes: 1 })).toBe('Imported 1 note')
+    expect(t('import.doneNotes.other', { notes: 2 })).toBe('Imported 2 notes')
+    expect(
+      t('import.doneNotesAssets', { notes: tPlural('count.notes', 1), assets: tPlural('count.assets', 2) }),
+    ).toBe('Imported 1 note and 2 attachments')
+    expect(t('entry.movedWithLinks', { items: tPlural('count.items', 1), links: tPlural('count.links', 1) })).toBe(
+      'Moved 1 item (updated 1 link)',
+    )
+    setLocale('ko')
+    expect(tPlural('count.notes', 1)).toBe('노트 1개')
+    expect(t('import.doneNotes.other', { notes: 3 })).toBe('노트 3개를 가져왔어요')
+  })
+
   it('chooses plural keys with Intl.PluralRules', () => {
     expect(pluralCategory('en', 1)).toBe('one')
     expect(pluralCategory('en', 2)).toBe('other')

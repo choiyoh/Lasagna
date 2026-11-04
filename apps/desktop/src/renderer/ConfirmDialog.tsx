@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { useEffect } from 'react';
 
 interface Props {
@@ -34,7 +35,7 @@ export function ConfirmDialog({ title, lines, confirmLabel, tone = 'primary', on
           ))}
         </ul>
         <div className="dialog__actions">
-          <button onClick={onCancel}>취소</button>
+          <button onClick={onCancel}>{t('common.cancel')}</button>
           <button className={tone === 'danger' ? 'danger' : 'primary'} onClick={onConfirm} autoFocus>
             {confirmLabel}
           </button>

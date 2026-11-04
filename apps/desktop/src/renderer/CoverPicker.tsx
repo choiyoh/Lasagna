@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { vaultUrl } from '@nopsidian/core/assets';
@@ -68,7 +69,7 @@ export function CoverPicker({ images, vaultId, current, onPick, onUpload, onClos
       const path = await onUpload(file);
       onPick({ image: path });
     } catch (e) {
-      setError(e instanceof Error ? e.message : '올리지 못했어요');
+      setError(e instanceof Error ? e.message : t('cover.uploadFailed'));
     } finally {
       setBusy(false);
       // 같은 파일을 다시 고를 수 있게 입력칸을 비운다
@@ -77,13 +78,13 @@ export function CoverPicker({ images, vaultId, current, onPick, onUpload, onClos
   };
 
   return (
-    <div className="coverpicker" ref={box} role="dialog" aria-label="커버 고르기" data-testid="cover-picker">
-      <div className="coverpicker__tabs" role="tablist" aria-label="커버 종류">
+    <div className="coverpicker" ref={box} role="dialog" aria-label={t('cover.pickerAria')} data-testid="cover-picker">
+      <div className="coverpicker__tabs" role="tablist" aria-label={t('cover.tabsAria')}>
         <button role="tab" aria-selected={tab === 'image'} className={tab === 'image' ? 'active' : ''} onClick={() => setTab('image')}>
-          이미지
+          {t('cover.image')}
         </button>
         <button role="tab" aria-selected={tab === 'gradient'} className={tab === 'gradient' ? 'active' : ''} onClick={() => setTab('gradient')}>
-          그라디언트
+          {t('cover.gradient')}
         </button>
       </div>
 
@@ -92,16 +93,16 @@ export function CoverPicker({ images, vaultId, current, onPick, onUpload, onClos
           <input
             autoFocus
             value={query}
-            aria-label="이미지 검색"
-            placeholder="이미지 검색"
+            aria-label={t('cover.search')}
+            placeholder={t('cover.search')}
             onChange={(e) => {
               setQuery(e.target.value);
               setLimit(PAGE);
             }}
           />
           <div className="coverpicker__grid">
-            {images.length === 0 && <span className="muted small">볼트에 이미지가 없어요. 올려 보세요.</span>}
-            {images.length > 0 && hits.length === 0 && <span className="muted small">찾는 이미지가 없어요</span>}
+            {images.length === 0 && <span className="muted small">{t('cover.noImages')}</span>}
+            {images.length > 0 && hits.length === 0 && <span className="muted small">{t('cover.noHits')}</span>}
             {shown.map((path) => {
               const name = baseName(path);
               const selected = isPickedImage(path);
@@ -119,10 +120,10 @@ export function CoverPicker({ images, vaultId, current, onPick, onUpload, onClos
               );
             })}
           </div>
-          {hits.length > shown.length && <button onClick={() => setLimit((n) => n + PAGE)}>더 보기</button>}
+          {hits.length > shown.length && <button onClick={() => setLimit((n) => n + PAGE)}>{t('common.more')}</button>}
           <div className="coverpicker__foot">
             <button data-testid="cover-upload" disabled={busy} onClick={() => fileInput.current?.click()}>
-              {busy ? '올리는 중…' : '컴퓨터에서 올리기'}
+              {busy ? t('cover.uploading') : t('cover.upload')}
             </button>
             <input
               ref={fileInput}
@@ -151,9 +152,9 @@ export function CoverPicker({ images, vaultId, current, onPick, onUpload, onClos
                 key={g.id}
                 className={selected ? 'coverpicker__swatch selected' : 'coverpicker__swatch'}
                 style={{ background: g.css }}
-                aria-label={g.label}
+                aria-label={t(g.labelKey)}
                 aria-pressed={selected}
-                title={g.label}
+                title={t(g.labelKey)}
                 data-testid={`gradient-${g.id}`}
                 onClick={() => onPick({ gradient: g.id })}
               />
@@ -164,7 +165,7 @@ export function CoverPicker({ images, vaultId, current, onPick, onUpload, onClos
 
       {parsed !== null && (
         <div className="coverpicker__foot">
-          <button onClick={() => onPick(null)}>커버 제거</button>
+          <button onClick={() => onPick(null)}>{t('cover.remove')}</button>
         </div>
       )}
     </div>

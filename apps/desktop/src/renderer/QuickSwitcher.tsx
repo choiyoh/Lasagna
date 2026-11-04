@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { NoteSummary } from '@nopsidian/ipc-contract';
 import { quickSwitch, type SwitchHit } from '../workers/index/quick-switch';
@@ -44,11 +45,11 @@ export function QuickSwitcher({ notes, onOpen, onCreate, onClose }: Props) {
 
   return (
     <div className="dialog-backdrop top" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="switcher" role="dialog" aria-modal="true" aria-label="빠른 전환기">
+      <div className="switcher" role="dialog" aria-modal="true" aria-label={t('quick.title')}>
         <input
           autoFocus
           value={query}
-          placeholder="노트 이름·별칭·경로 (한글 초성 가능)"
+          placeholder={t('quick.placeholder')}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return;
@@ -93,7 +94,7 @@ export function QuickSwitcher({ notes, onOpen, onCreate, onClose }: Props) {
                 e.preventDefault();
                 choose(-1);
               }}>
-              <span className="switcher__title">“{query.trim()}” 새 노트 만들기</span>
+              <span className="switcher__title">{t('quick.create', { name: query.trim() })}</span>
               <span className="switcher__path">Enter</span>
             </div>
           )}

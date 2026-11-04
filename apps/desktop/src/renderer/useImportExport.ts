@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { t, tPlural } from '@nopsidian/i18n';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Toast } from './app-types';
 import { flushAll } from './flush';
@@ -11,9 +12,9 @@ export function useImportExport({ selected, refresh, setToast }: { selected: str
       try {
         await flushAll();
         const r = await window.nops.export.note({ path: selected, format });
-        if (r.saved) setToast({ message: `내보냈어요: ${r.saved}` });
+        if (r.saved) setToast({ message: t('import.exported', { path: r.saved }) });
       } catch (e) {
-        setToast({ message: `내보내기 실패: ${e instanceof Error ? e.message : String(e)}` });
+        setToast({ message: t('import.exportFailed', { message: e instanceof Error ? e.message : String(e) }) });
       }
     },
     [selected, setToast],
@@ -22,9 +23,17 @@ export function useImportExport({ selected, refresh, setToast }: { selected: str
     try {
       await flushAll();
       const r = await window.nops.export.vault();
-      if (r.dir) setToast({ message: `노트 ${r.notes}개·첨부 ${r.assets}개를 내보냈어요: ${r.dir}` });
+      if (r.dir) {
+        setToast({
+          message: t('import.exportedVault', {
+            notes: tPlural('count.notes', r.notes),
+            assets: tPlural('count.assets', r.assets),
+            dir: r.dir,
+          }),
+        });
+      }
     } catch (e) {
-      setToast({ message: `내보내기 실패: ${e instanceof Error ? e.message : String(e)}` });
+      setToast({ message: t('import.exportFailed', { message: e instanceof Error ? e.message : String(e) }) });
     }
   }, [setToast]);
 
@@ -34,10 +43,16 @@ export function useImportExport({ selected, refresh, setToast }: { selected: str
       if (!r.folder) return;
       refresh();
       setToast({
-        message: `Notion에서 노트 ${r.notes}개·데이터베이스 ${r.databases}개·첨부 ${r.assets}개를 "${r.folder}" 폴더로 가져왔어요${r.unresolvedLinks ? ` (연결 못 한 링크 ${r.unresolvedLinks}개)` : ''}.`,
+        message: t(r.unresolvedLinks ? 'import.notionDoneUnresolved' : 'import.notionDone', {
+          notes: tPlural('count.notes', r.notes),
+          databases: tPlural('count.databases', r.databases),
+          assets: tPlural('count.assets', r.assets),
+          folder: r.folder,
+          links: tPlural('count.unlinkedLinks', r.unresolvedLinks),
+        }),
       });
     } catch (e) {
-      setToast({ message: `가져오기 실패: ${e instanceof Error ? e.message : String(e)}` });
+      setToast({ message: t('import.failed', { message: e instanceof Error ? e.message : String(e) }) });
     }
   }, [refresh, setToast]);
 
@@ -47,12 +62,18 @@ export function useImportExport({ selected, refresh, setToast }: { selected: str
         const r = await window.nops.import.markdown({ mode, paths, into });
         if (r.imported.length === 0 && r.skipped.length === 0) return;
         refresh();
-        const parts = [`노트 ${r.notes}개${r.assets ? `·첨부 ${r.assets}개` : ''}를 가져왔어요`];
-        if (r.renamed) parts.push(`이름이 겹친 ${r.renamed}개는 번호를 붙였어요`);
-        if (r.skipped.length) parts.push(`건너뜀 ${r.skipped.length}개(${r.skipped.slice(0, 2).join(', ')}${r.skipped.length > 2 ? ' …' : ''})`);
+        const parts = [
+          r.assets
+            ? t('import.doneNotesAssets', { notes: tPlural('count.notes', r.notes), assets: tPlural('count.assets', r.assets) })
+            : t(r.notes === 1 ? 'import.doneNotes.one' : 'import.doneNotes.other', { notes: r.notes }),
+        ];
+        if (r.renamed) parts.push(t(r.renamed === 1 ? 'import.renamed.one' : 'import.renamed.other', { count: r.renamed }));
+        if (r.skipped.length) {
+          parts.push(t('import.skipped', { count: r.skipped.length, names: `${r.skipped.slice(0, 2).join(', ')}${r.skipped.length > 2 ? ' …' : ''}` }));
+        }
         setToast({ message: `${parts.join(' · ')}.` });
       } catch (e) {
-        setToast({ message: `가져오기 실패: ${e instanceof Error ? e.message : String(e)}` });
+        setToast({ message: t('import.failed', { message: e instanceof Error ? e.message : String(e) }) });
       }
     },
     [refresh, setToast],

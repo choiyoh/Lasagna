@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { t } from '@nopsidian/i18n';
+import { t, tPlural } from '@nopsidian/i18n';
 import type { NoteSummary, SearchHit, SyncStatus, VaultInfo } from '@nopsidian/ipc-contract';
 import { NoteEditor } from './NoteEditor';
 import { useAssetStore } from './assets';
@@ -436,7 +436,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         </div>
         {progress && (
           <p className="muted small">
-            인덱싱 {progress.done}/{progress.total}
+            {t('app.indexing', { done: progress.done, total: progress.total })}
           </p>
         )}
         <nav
@@ -459,16 +459,15 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           {hits ? (
             hits.length === 0 ? (
               <EmptyState
-                title="검색 결과가 없어요"
-                description="다른 검색어로 시도해 보세요."
+                title={t('search.emptyTitle')}
+                description={t('search.emptyBody')}
                 onReset={() => setQuery('')}
-                resetLabel="검색어 지우기"
+                resetLabel={t('search.clear')}
               />
             ) : (
               <>
                 <p className="searchcount muted small" role="status">
-                  {hits.length}
-                  {hits.length >= 50 ? '+' : ''}개
+                  {tPlural('search.count', hits.length, { n: `${hits.length}${hits.length >= 50 ? '+' : ''}` })}
                 </p>
                 {hits.map((h) => (
                   <button key={h.path} className="hit" onClick={() => setSelected(h.path)}>
@@ -487,18 +486,18 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             <div className="marks" data-testid="bookmarks">
               {selected && (
                 <button className="marks__toggle" onClick={() => toggleBookmark(selected)} data-testid="bookmark-toggle">
-                  {bookmarks.includes(selected) ? '★ 현재 노트 북마크 해제' : '☆ 현재 노트 북마크'}
+                  {bookmarks.includes(selected) ? t('app.bookmarkRemove') : t('app.bookmarkAdd')}
                 </button>
               )}
-              {bookmarks.length === 0 && <p className="muted small pad">북마크한 노트가 없어요.</p>}
+              {bookmarks.length === 0 && <p className="muted small pad">{t('app.noBookmarks')}</p>}
               {bookmarks.map((p) => {
                 const note = notes.find((n) => n.path === p);
                 return (
                   <div key={p} className={note ? 'marks__row' : 'marks__row missing'}>
                     <button className="marks__open" disabled={!note} onClick={() => setSelected(p)} title={p}>
-                      {note?.title ?? `${p} (없음)`}
+                      {note?.title ?? t('app.missingNote', { path: p })}
                     </button>
-                    <button className="marks__x" onClick={() => toggleBookmark(p)} aria-label={`${p} 북마크 해제`}>
+                    <button className="marks__x" onClick={() => toggleBookmark(p)} aria-label={t('app.removeBookmarkAria', { path: p })}>
                       ×
                     </button>
                   </div>
@@ -526,7 +525,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       </aside>
       <main className="content">
         {dbOpen !== null ? (
-          <ErrorBoundary label="데이터베이스">
+          <ErrorBoundary label={t('app.database')}>
             <DatabaseScreen
               key={dbOpen}
               folder={dbOpen}
@@ -540,7 +539,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               onRenameNote={renameNoteTitle}
               onToast={setToast}
               renderNote={(p) => (
-                <ErrorBoundary label="노트" resetKeys={[p]}>
+                <ErrorBoundary label={t('app.note')} resetKeys={[p]}>
                   <NoteEditor
                     key={p}
                     path={p}
@@ -563,7 +562,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             />
           </ErrorBoundary>
         ) : graphOpen ? (
-          <ErrorBoundary label="그래프">
+          <ErrorBoundary label={t('app.graph')}>
             <GraphScreen
               vaultId={vault.id}
               current={selected}
@@ -602,7 +601,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               />
             }
             renderEditor={(p, pane) => (
-              <ErrorBoundary label="노트" resetKeys={[p]}>
+              <ErrorBoundary label={t('app.note')} resetKeys={[p]}>
                 <NoteEditor
                   key={p}
                   path={p}
@@ -633,33 +632,33 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               <div className="dockbody__bar">
                 <div className="dockbody__tabs" role="tablist">
                   <button role="tab" aria-selected={dockTab === 'links'} className={dockTab === 'links' ? 'active' : ''} onClick={() => setDockTab('links')}>
-                    링크
+                    {t('dock.links')}
                   </button>
                   <button role="tab" aria-selected={dockTab === 'outline'} className={dockTab === 'outline' ? 'active' : ''} onClick={() => setDockTab('outline')}>
-                    개요
+                    {t('dock.outline')}
                   </button>
                   <button role="tab" aria-selected={dockTab === 'comments'} className={dockTab === 'comments' ? 'active' : ''} onClick={() => setDockTab('comments')}>
-                    댓글{commentCount > 0 && <span className="count"> {commentCount}</span>}
+                    {t('dock.comments')}{commentCount > 0 && <span className="count"> {commentCount}</span>}
                   </button>
                   <button role="tab" aria-selected={dockTab === 'graph'} className={dockTab === 'graph' ? 'active' : ''} onClick={() => setDockTab('graph')}>
-                    로컬 그래프
+                    {t('dock.graph')}
                   </button>
                   <button role="tab" aria-selected={dockTab === 'history'} className={dockTab === 'history' ? 'active' : ''} onClick={() => setDockTab('history')}>
-                    기록
+                    {t('dock.history')}
                   </button>
                 </div>
-                <button className="dockbody__close" onClick={togglePanel} title="링크 패널 열기/닫기" aria-label="링크 패널 닫기" aria-expanded>
+                <button className="dockbody__close" onClick={togglePanel} title={t('dock.togglePanel')} aria-label={t('dock.closePanel')} aria-expanded>
                   ×
                 </button>
               </div>
-              <ErrorBoundary label="패널" resetKeys={[dockTab, selected]}>
+              <ErrorBoundary label={t('app.panel')} resetKeys={[dockTab, selected]}>
                 {dockTab === 'links' ? <LinkPanel path={selected} onOpen={setSelected} /> : dockTab === 'outline' ? <OutlinePanel path={selected} /> : dockTab === 'comments' ? <CommentsPanel path={selected} onChanged={countComments} /> : dockTab === 'history' ? <HistoryPanel path={selected} onRestored={(message) => setToast({ message })} /> : <LocalGraph path={selected} onOpen={setSelected} />}
               </ErrorBoundary>
             </div>
           ) : (
-            <button className="rightdock__rail" onClick={togglePanel} title="링크 패널 열기/닫기" aria-label="링크 패널 열기" aria-expanded={false}>
+            <button className="rightdock__rail" onClick={togglePanel} title={t('dock.togglePanel')} aria-label={t('dock.openPanel')} aria-expanded={false}>
               <span className="rightdock__railtop" aria-hidden>‹</span>
-              <span className="rightdock__raillabel" aria-hidden>링크</span>
+              <span className="rightdock__raillabel" aria-hidden>{t('dock.rail')}</span>
             </button>
           )}
         </div>
@@ -675,7 +674,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           onRestored={(p, isFolder) => {
             refresh();
             if (!isFolder) setSelected(p);
-            setToast({ message: `복원했어요: ${p.replace(/\.md$/i, '')}` });
+            setToast({ message: t('app.restored', { name: p.replace(/\.md$/i, '') }) });
           }}
         />
       )}

@@ -1,4 +1,6 @@
+import { t } from '@nopsidian/i18n';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocale } from './useLocale';
 import { EMOJI_GROUPS, loadEmojis, pushRecentEmoji, recentEmojis, searchEmojis, type EmojiItem } from './emoji';
 
 interface Props {
@@ -11,6 +13,7 @@ interface Props {
 
 /** 이모지 고르기: 이름·태그 검색, 분류 탭, 최근 사용. 표준 유니코드 이모지(운영체제 글꼴로 보인다). */
 export function EmojiPicker({ onPick, onClose, hasIcon }: Props) {
+  const locale = useLocale();
   const [all, setAll] = useState<EmojiItem[]>([]);
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<number | 'recent'>(recentEmojis().length ? 'recent' : 0);
@@ -18,8 +21,8 @@ export function EmojiPicker({ onPick, onClose, hasIcon }: Props) {
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    void loadEmojis().then(setAll);
-  }, []);
+    void loadEmojis(locale).then(setAll);
+  }, [locale]);
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (box.current && !box.current.contains(e.target as Node)) onClose();
@@ -53,48 +56,48 @@ export function EmojiPicker({ onPick, onClose, hasIcon }: Props) {
   };
 
   return (
-    <div className="emojipicker" ref={box} role="dialog" aria-label="아이콘 고르기" data-testid="emoji-picker">
+    <div className="emojipicker" ref={box} role="dialog" aria-label={t('emoji.title')} data-testid="emoji-picker">
       <div className="emojipicker__bar">
         <input
           autoFocus
           value={query}
-          placeholder="이모지 검색 (예: 책, 웃음, 로켓)"
-          aria-label="이모지 검색"
+          placeholder={t('emoji.search')}
+          aria-label={t('emoji.searchAria')}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <button onClick={() => pick(randomOf(all) ?? '📄')} title="무작위로 고르기" aria-label="무작위 이모지">
+        <button onClick={() => pick(randomOf(all) ?? '📄')} title={t('emoji.random')} aria-label={t('emoji.randomAria')}>
           🎲
         </button>
         {hasIcon && (
           <button className="emojipicker__remove" onClick={() => onPick(null)}>
-            제거
+            {t('common.remove')}
           </button>
         )}
       </div>
       {!query.trim() && (
         <div className="emojipicker__tabs" role="tablist">
           {recentEmojis().length > 0 && (
-            <button role="tab" aria-selected={group === 'recent'} className={group === 'recent' ? 'active' : ''} onClick={() => setGroup('recent')} title="최근 사용">
+            <button role="tab" aria-selected={group === 'recent'} className={group === 'recent' ? 'active' : ''} onClick={() => setGroup('recent')} title={t('emoji.recent')}>
               🕘
             </button>
           )}
           {EMOJI_GROUPS.map((g) => (
-            <button key={g.group} role="tab" aria-selected={group === g.group} className={group === g.group ? 'active' : ''} onClick={() => setGroup(g.group)} title={g.name}>
+            <button key={g.group} role="tab" aria-selected={group === g.group} className={group === g.group ? 'active' : ''} onClick={() => setGroup(g.group)} title={t(g.labelKey)}>
               {g.icon}
             </button>
           ))}
         </div>
       )}
-      <div className="emojipicker__grid" role="listbox" aria-label="이모지 목록">
-        {all.length === 0 && <span className="muted small">불러오는 중…</span>}
-        {all.length > 0 && shown.length === 0 && <span className="muted small">찾는 이모지가 없어요</span>}
+      <div className="emojipicker__grid" role="listbox" aria-label={t('emoji.list')}>
+        {all.length === 0 && <span className="muted small">{t('common.loading')}</span>}
+        {all.length > 0 && shown.length === 0 && <span className="muted small">{t('emoji.noHits')}</span>}
         {shown.map((e) => (
           <button key={e.emoji} role="option" aria-label={e.label} title={e.label} onMouseEnter={() => setHover(e)} onClick={() => pick(e.emoji)}>
             {e.emoji}
           </button>
         ))}
       </div>
-      <div className="emojipicker__foot muted small">{hover ? `${hover.emoji} ${hover.label}` : '이모지를 눌러 이 문서의 아이콘으로 정해요'}</div>
+      <div className="emojipicker__foot muted small">{hover ? `${hover.emoji} ${hover.label}` : t('emoji.footer')}</div>
     </div>
   );
 }

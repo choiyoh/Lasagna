@@ -1,3 +1,4 @@
+import { getLocale, t } from '@nopsidian/i18n';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
 interface Props {
@@ -61,18 +62,18 @@ export class ErrorBoundary extends Component<Props, State> {
     if (fallback) return fallback(error, this.reset);
     return (
       <div className="errorboundary" role="alert">
-        <strong>{label ? `${label}${objectParticle(label)} 표시하는 중 문제가 생겼어요` : '이 화면을 표시하는 중 문제가 생겼어요'}</strong>
+        <strong>{label ? t('error.crashedWith', { label: getLocale() === 'ko' ? `${label}${objectParticle(label)}` : label }) : t('error.crashed')}</strong>
         <pre className="errorboundary__message muted small">
           <code>{error.message || String(error)}</code>
         </pre>
         <div className="errorboundary__actions">
           <button type="button" onClick={this.reset}>
-            다시 시도
+            {t('error.retry')}
           </button>
           {/* 앱 전체를 감싸는 최상위 경계에서만 창을 새로 불러온다(자식 경계에서 새로고침은 과하다) */}
           {!label && (
             <button type="button" onClick={() => window.location.reload()}>
-              앱 다시 불러오기
+              {t('error.reload')}
             </button>
           )}
         </div>

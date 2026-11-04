@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import type { ReactNode } from 'react';
 import type { TabsAction, TabsState } from './tabs';
 
@@ -24,7 +25,7 @@ export function Panes({ tabs, dispatch, titleOf, renderEditor, empty, onPopOut }
           onMouseDownCapture={() => i !== tabs.activePane && dispatch({ type: 'focusPane', pane: i })}
         >
           {(pane.tabs.length > 0 || tabs.panes.length > 1) && (
-            <div className="tabbar" role="tablist" aria-label={`탭 ${i + 1}`}>
+            <div className="tabbar" role="tablist" aria-label={t('tab.bar', { n: i + 1 })}>
               {pane.tabs.map((p) => (
                 <div
                   key={p}
@@ -42,7 +43,7 @@ export function Panes({ tabs, dispatch, titleOf, renderEditor, empty, onPopOut }
                   <span className="tab__title">{titleOf(p)}</span>
                   <button
                     className="tab__close"
-                    aria-label={`${titleOf(p)} 탭 닫기`}
+                    aria-label={t('tab.close', { title: titleOf(p) })}
                     onClick={(e) => {
                       e.stopPropagation();
                       dispatch({ type: 'close', pane: i, path: p });
@@ -52,7 +53,7 @@ export function Panes({ tabs, dispatch, titleOf, renderEditor, empty, onPopOut }
                   </button>
                 </div>
               ))}
-              {pane.tabs.length === 0 && <span className="muted small tabbar__empty">이 칸에 열 노트를 선택하세요</span>}
+              {pane.tabs.length === 0 && <span className="muted small tabbar__empty">{t('tab.empty')}</span>}
             </div>
           )}
           <div className="pane__body">{pane.active ? renderEditor(pane.active, i) : <div className="pane__empty">{empty}</div>}</div>

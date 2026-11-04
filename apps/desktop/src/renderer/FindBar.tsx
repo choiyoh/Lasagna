@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { EditorView } from 'prosemirror-view';
 import { clearFind, findCount, findFromCursor, findMove, replaceEvery, replaceOne, setFind } from '@nopsidian/editor/nops';
@@ -62,16 +63,16 @@ export function FindBar({ view, initial, focusTick, docTick, onClose }: Props) {
           className="findbar__toggle"
           onClick={() => setShowReplace((v) => !v)}
           aria-expanded={showReplace}
-          aria-label="바꾸기 열기"
-          title="바꾸기"
+          aria-label={showReplace ? t('find.toggleHide') : t('find.toggleShow')}
+          title={t('find.toggle')}
         >
           {showReplace ? '▾' : '▸'}
         </button>
         <input
           ref={inputRef}
           value={text}
-          placeholder="노트에서 찾기"
-          aria-label="찾을 말"
+          placeholder={t('find.placeholder')}
+          aria-label={t('find.term')}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
@@ -84,23 +85,23 @@ export function FindBar({ view, initial, focusTick, docTick, onClose }: Props) {
           }}
         />
         <span className="findbar__count" data-testid="find-count">
-          {text ? (count.total ? `${count.current || '–'}/${count.total}` : '없음') : ''}
+          {text ? (count.total ? `${count.current || '–'}/${count.total}` : t('find.none')) : ''}
         </span>
         <button
           className="findbar__opt"
           aria-pressed={caseSensitive}
           onClick={() => setCaseSensitive((v) => !v)}
-          title="대소문자 구분"
+          title={t('find.case')}
         >
           Aa
         </button>
-        <button onClick={() => move(-1)} aria-label="이전" title={keys('이전 (⇧Enter)')} disabled={!count.total}>
+        <button onClick={() => move(-1)} aria-label={t('find.previous')} title={keys(t('find.previousTitle'))} disabled={!count.total}>
           ↑
         </button>
-        <button onClick={() => move(1)} aria-label="다음" title="다음 (Enter)" disabled={!count.total}>
+        <button onClick={() => move(1)} aria-label={t('find.next')} title={t('find.nextTitle')} disabled={!count.total}>
           ↓
         </button>
-        <button onClick={close} aria-label="찾기 닫기" title="닫기 (Esc)">
+        <button onClick={close} aria-label={t('find.closeAria')} title={t('find.closeTitle')}>
           ×
         </button>
       </div>
@@ -109,8 +110,8 @@ export function FindBar({ view, initial, focusTick, docTick, onClose }: Props) {
           <span className="findbar__spacer" />
           <input
             value={replace}
-            placeholder="바꿀 말"
-            aria-label="바꿀 말"
+            placeholder={t('find.replacePlaceholder')}
+            aria-label={t('find.replacePlaceholder')}
             onChange={(e) => setReplace(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -130,7 +131,7 @@ export function FindBar({ view, initial, focusTick, docTick, onClose }: Props) {
               setCount(findCount(view));
             }}
           >
-            바꾸기
+            {t('find.replace')}
           </button>
           <button
             disabled={!count.total}
@@ -139,7 +140,7 @@ export function FindBar({ view, initial, focusTick, docTick, onClose }: Props) {
               setCount(findCount(view));
             }}
           >
-            모두 바꾸기
+            {t('find.replaceAll')}
           </button>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { t, tPlural, type MessageKey } from '@nopsidian/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BacklinkContext, OutgoingLink, UnlinkedMention } from '@nopsidian/ipc-contract';
 import { cleanSnippet, noteNameOf } from './link-snippet';
@@ -77,28 +78,28 @@ export function LinkPanel({ path, onOpen }: Props) {
     };
   }, [load]);
 
-  const tabs: [Tab, string, number | null][] = [
-    ['backlinks', '백링크', data.backlinks.length],
-    ['outgoing', '나가는 링크', data.outgoing.length],
-    ['unlinked', '링크 안 된 언급', data.unlinked?.length ?? null],
+  const tabs: [Tab, MessageKey, number | null][] = [
+    ['backlinks', 'link.backlinks', data.backlinks.length],
+    ['outgoing', 'link.outgoing', data.outgoing.length],
+    ['unlinked', 'link.unlinked', data.unlinked?.length ?? null],
   ];
   /** 스니펫에서 강조할 말 = 지금 노트의 파일 이름 */
   const term = noteNameOf(path);
 
   return (
-    <aside className="linkpanel" aria-label="링크 패널">
+    <aside className="linkpanel" aria-label={t('link.panel')}>
       <div className="linkpanel__tabs" role="tablist">
         {tabs.map(([id, label, n]) => (
           <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
-            {label} {n !== null && <span className="count">{n}</span>}
+            {t(label)} {n !== null && <span className="count">{n}</span>}
           </button>
         ))}
       </div>
       <div className="linkpanel__body" data-testid={`panel-${tab}`}>
-        {loading && <p className="muted small pad">불러오는 중…</p>}
+        {loading && <p className="muted small pad">{t('common.loading')}</p>}
         {tab === 'backlinks' &&
           (data.backlinks.length === 0 ? (
-            <p className="muted small pad">이 노트를 가리키는 링크가 없어요.</p>
+            <p className="muted small pad">{t('link.noBacklinks')}</p>
           ) : (
             groupBy(data.backlinks).map(([p, items]) => (
               <section key={p}>
@@ -108,9 +109,9 @@ export function LinkPanel({ path, onOpen }: Props) {
                 {items.map((it, i) => (
                   <button key={i} className="linkpanel__snippet" onClick={() => onOpen(p)} title={`${p}:${it.line} — ${it.snippet}`}>
                     <span className="linkpanel__text">
-                      <Highlighted text={cleanSnippet(it.snippet) || '(문맥 없음)'} term={term} />
+                      <Highlighted text={cleanSnippet(it.snippet) || t('link.noContext')} term={term} />
                     </span>
-                    {it.kind !== 'wikilink' && <span className="kind">{it.kind === 'relation' ? '속성' : it.kind === 'embed' ? '임베드' : '링크'}</span>}
+                    {it.kind !== 'wikilink' && <span className="kind">{it.kind === 'relation' ? t('link.kind.relation') : it.kind === 'embed' ? t('link.kind.embed') : t('link.kind.link')}</span>}
                   </button>
                 ))}
               </section>
@@ -118,30 +119,30 @@ export function LinkPanel({ path, onOpen }: Props) {
           ))}
         {tab === 'outgoing' &&
           (data.outgoing.length === 0 ? (
-            <p className="muted small pad">이 노트에는 링크가 없어요.</p>
+            <p className="muted small pad">{t('link.noOutgoing')}</p>
           ) : (
             <ul className="linkpanel__list">
               {data.outgoing.map((l, i) => (
                 <li key={i}>
                   {l.resolvedPath ? (
                     <button onClick={() => onOpen(l.resolvedPath!)}>
-                      {l.target || '이 노트'}
+                      {l.target || t('link.thisNote')}
                       {l.heading ? ` › ${l.heading}` : ''}
                       {l.block ? ` › ^${l.block}` : ''}
                     </button>
                   ) : (
-                    <span className="unresolved" title="아직 없는 노트">
+                    <span className="unresolved" title={t('link.unresolvedTitle')}>
                       {l.target}
                     </span>
                   )}
-                  <span className="kind">{l.line}줄</span>
+                  <span className="kind">{tPlural('link.line', l.line)}</span>
                 </li>
               ))}
             </ul>
           ))}
         {tab === 'unlinked' &&
           (data.unlinked === null ? null : data.unlinked.length === 0 ? (
-            <p className="muted small pad">링크 없이 언급된 곳이 없어요.</p>
+            <p className="muted small pad">{t('link.noUnlinked')}</p>
           ) : (
             groupBy(data.unlinked).map(([p, items]) => (
               <section key={p}>
@@ -157,13 +158,13 @@ export function LinkPanel({ path, onOpen }: Props) {
                     </button>
                     <button
                       className="linkpanel__convert"
-                      title="[[링크]]로 바꾸기"
+                      title={t('link.convertTitle')}
                       onClick={async () => {
                         await window.nops.link.convertMention({ path: p, line: it.line, targetPath: path });
                         void load();
                       }}
                     >
-                      링크로 변환
+                      {t('link.convert')}
                     </button>
                   </div>
                 ))}

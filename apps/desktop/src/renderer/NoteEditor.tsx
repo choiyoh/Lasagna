@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { Editor, NopsPeekHost } from '@nopsidian/editor/nops';
 import { createDbViewHost } from './db/dbview-host';
@@ -63,9 +64,9 @@ interface Props {
 
 /** 저장 결과가 앱의 내용과 달라졌을 때 사용자에게 알리는 문구 */
 const NOTICES = {
-  merged: '다른 곳에서 바뀐 내용과 자동으로 합쳤어요.',
-  conflict: '같은 부분을 두 곳에서 고쳐서 양쪽 내용을 모두 남겼어요. 충돌 표시(<!-- nopsidian:conflict -->)를 보고 정리해 주세요.',
-  copy: '파일이 다른 곳에서 바뀌어서, 내가 고친 내용은 ‘(충돌 …)’ 사본으로 따로 저장했어요.',
+  merged: 'note.merged',
+  conflict: 'note.conflict',
+  copy: 'note.copy',
 } as const;
 
 /** 링크로 열었을 때 그 제목/블록으로 커서와 화면을 옮긴다. */
@@ -208,8 +209,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       slashItems: [
         {
           icon: '📋',
-          label: '템플릿 삽입',
-          description: '템플릿 노트의 내용을 여기에 넣어요',
+          label: t('note.template.label'),
+          description: t('note.template.description'),
           category: 'advanced',
           keywords: ['template', '템플릿', '양식', '서식'],
           run: () => setPicker(true),
@@ -219,8 +220,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         noteName: () => nameRef.current,
         copy: (text) => {
           navigator.clipboard.writeText(text).then(
-            () => setNotice(`복사했어요: ${text}`),
-            (e) => setNotice(`복사하지 못했어요: ${e instanceof Error ? e.message : String(e)}`),
+            () => setNotice(t('note.copied', { text })),
+            (e) => setNotice(t('note.copyFailed', { message: e instanceof Error ? e.message : String(e) })),
           );
         },
       },
@@ -309,7 +310,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         if (r.status !== 'saved') {
           // 디스크 내용이 앱의 내용과 달라졌으므로 화면을 그 내용으로 다시 채운다
           showContent(r.content);
-          setNotice(NOTICES[r.status]);
+          setNotice(t(NOTICES[r.status]));
           dirty = false;
         } else {
           baseline = parseDocument(r.content).baseline;
@@ -317,7 +318,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         }
         setState(dirty ? 'dirty' : 'saved');
       } catch (e) {
-        console.error('저장 실패', e);
+        console.error('save failed', e);
         setState('error');
         return;
       } finally {
@@ -521,26 +522,26 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       )}
       <div className="note-editor__bar">
         <span className="note-editor__status" data-state={state} aria-live="polite">
-          {state === 'saved' ? '저장됨' : state === 'saving' ? '저장 중…' : state === 'error' ? '저장 실패' : '편집 중'}
+          {state === 'saved' ? t('note.saved') : state === 'saving' ? t('note.saving') : state === 'error' ? t('note.saveError') : t('note.editing')}
         </span>
         {onRename && (
-          <button className="note-editor__mode" onClick={onRename} title="이름 바꾸기 / 이동 (F2)">
-            이름 바꾸기
+          <button className="note-editor__mode" onClick={onRename} title={t('note.renameTitle')}>
+            {t('note.rename')}
           </button>
         )}
         <button
           className="note-editor__mode"
           onClick={() => toggleRef.current()}
-          title={keys('편집 모드 ↔ 소스 모드 (⌘E)')}
+          title={keys(t('note.modeTitle'))}
           aria-pressed={mode === 'source'}
         >
-          {mode === 'source' ? '편집 모드' : '소스 모드'}
+          {mode === 'source' ? t('note.editMode') : t('note.sourceMode')}
         </button>
       </div>
       {notice && (
         <div className="note-editor__notice" role="status">
           {notice}
-          <button onClick={() => setNotice(null)} aria-label="닫기">
+          <button onClick={() => setNotice(null)} aria-label={t('common.close')}>
             ×
           </button>
         </div>
@@ -555,15 +556,15 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
               (imagePath ? (
                 <img src={vaultUrl(vaultId, imagePath)} alt="" draggable={false} />
               ) : (
-                <span className="notecover__missing">커버 이미지를 찾을 수 없어요: {parsed.ref}</span>
+                <span className="notecover__missing">{t('note.coverMissing', { ref: parsed.ref })}</span>
               ))}
             {onSetCover && (
               <span className="notecover__actions">
                 <button onClick={() => setPickingCover(true)} data-testid="note-cover-change">
-                  커버 변경
+                  {t('note.changeCover')}
                 </button>
                 <button onClick={() => onSetCover(null)} data-testid="note-cover-remove">
-                  제거
+                  {t('common.remove')}
                 </button>
               </span>
             )}
@@ -573,17 +574,17 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       {(icon || onSetIcon || onSetCover) && (
         <div className="noteicon">
           {icon ? (
-            <button className="noteicon__btn" onClick={() => onSetIcon && setPickingIcon(true)} title="아이콘 바꾸기" aria-label="아이콘 바꾸기" data-testid="note-icon">
+            <button className="noteicon__btn" onClick={() => onSetIcon && setPickingIcon(true)} title={t('note.changeIcon')} aria-label={t('note.changeIcon')} data-testid="note-icon">
               {icon}
             </button>
           ) : (
             <button className="noteicon__add" onClick={() => setPickingIcon(true)} data-testid="note-icon-add">
-              ☺ 아이콘 추가
+              {t('note.addIcon', { icon: '☺' })}
             </button>
           )}
           {!parseCover(cover) && onSetCover && (
             <button className="noteicon__add" onClick={() => setPickingCover(true)} data-testid="note-cover-add">
-              🖼 커버 추가
+              {t('note.addCover')}
             </button>
           )}
           {pickingCover && onSetCover && (

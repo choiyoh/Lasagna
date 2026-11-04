@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { t, tPlural } from '@nopsidian/i18n';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { showTextPrompt } from '@nopsidian/editor/nops';
 import type { NoteSummary } from '@nopsidian/ipc-contract';
@@ -61,13 +62,13 @@ export function useEntryActions(deps: EntryActionDeps) {
   /** 새 폴더: 이름을 묻고 `parent` 안에 만든다 */
   const newFolder = useCallback(
     async (parent: string) => {
-      const name = (await showTextPrompt(parent ? `“${parent}” 안에 만들 폴더 이름` : '새 폴더 이름', '새 폴더'))?.trim().replace(/[\\/:*?"<>|]/g, ' ').trim();
+      const name = (await showTextPrompt(parent ? t('entry.folderNameIn', { parent }) : t('entry.newFolderName'), t('entry.newFolder')))?.trim().replace(/[\\/:*?"<>|]/g, ' ').trim();
       if (!name) return;
       try {
         await window.nops.folder.create({ path: parent ? `${parent}/${name}` : name });
         refresh();
       } catch (e) {
-        setToast({ message: `폴더를 만들지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
+        setToast({ message: t('entry.folderCreateFailed', { message: e instanceof Error ? e.message : String(e) }) });
       }
     },
     [refresh],
@@ -119,7 +120,7 @@ export function useEntryActions(deps: EntryActionDeps) {
     const dir = from.includes('/') ? from.slice(0, from.lastIndexOf('/')) : '';
     const currentName = (isFolder ? from : from.replace(/\.md$/i, '')).slice(dir ? dir.length + 1 : 0);
     const answer = preset ?? await showTextPrompt(
-      isFolder ? '폴더 이름 (다른 곳으로 옮기려면 ‘상위폴더/이름’으로 입력하세요)' : '새 이름 (다른 폴더로 옮기려면 ‘폴더/이름’으로 입력하세요)',
+      isFolder ? t('entry.renameFolderPrompt') : t('entry.renameNotePrompt'),
       currentName,
     );
     const typed = answer?.trim().replace(/^\/+|\/+$/g, '');
@@ -137,36 +138,36 @@ export function useEntryActions(deps: EntryActionDeps) {
         refresh();
         if (opts.auto && done.totalChanges === 0) return;
         setToast({
-          message: done.totalChanges > 0 ? `이름을 바꾸고 링크 ${done.totalChanges}개를 고쳤어요.` : '이름을 바꿨어요.',
+          message: done.totalChanges > 0 ? t('entry.renamedWithLinks', { links: tPlural('count.links', done.totalChanges) }) : t('entry.renamed'),
           undo: async () => {
             await flushAll();
             await window.nops.note.undoRename({ undoId: done.undoId });
             await applyMovedState(target, from, isFolder, true);
             refresh();
-            setToast({ message: '되돌렸어요.' });
+            setToast({ message: t('entry.undone') });
           },
         });
       };
       if (plan.totalChanges === 0 || opts.auto) return await apply();
       setConfirm({
-        title: '이름을 바꾸고 링크도 함께 고칠까요?',
+        title: t('entry.renameConfirmTitle'),
         lines: [
           `${from} → ${target}`,
-          `${plan.edits.length}개 노트의 링크 ${plan.totalChanges}개를 고쳐요.`,
+          t('entry.renameConfirmBody', { notes: plan.edits.length, links: plan.totalChanges }),
           ...plan.edits.slice(0, 8).map((e) => `· ${e.newPath} (${e.changes})`),
-          ...(plan.edits.length > 8 ? [`… 외 ${plan.edits.length - 8}개`] : []),
+          ...(plan.edits.length > 8 ? [t('entry.moreCount', { count: plan.edits.length - 8 })] : []),
         ],
-        confirmLabel: '바꾸기',
+        confirmLabel: t('entry.renameConfirm'),
         onConfirm: () => {
           setConfirm(null);
-          void apply().catch((e) => setToast({ message: `실패: ${e instanceof Error ? e.message : String(e)}` }));
+          void apply().catch((e) => setToast({ message: t('entry.failed', { message: e instanceof Error ? e.message : String(e) }) }));
         },
       });
     } catch (e) {
       setToast({
         message: opts.auto
-          ? `같은 이름의 노트가 있거나 바꿀 수 없어서 파일 이름은 그대로 두었어요.`
-          : `이름을 바꿀 수 없어요: ${e instanceof Error ? e.message : String(e)}`,
+          ? t('entry.renameKeptFile')
+          : t('entry.renameFailed', { message: e instanceof Error ? e.message : String(e) }),
       });
     }
   }, [refresh, applyMovedState]);
@@ -186,7 +187,7 @@ export function useEntryActions(deps: EntryActionDeps) {
         window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: p }));
         refresh();
       } catch (e) {
-        setToast({ message: `아이콘을 바꾸지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
+        setToast({ message: t('entry.iconFailed', { message: e instanceof Error ? e.message : String(e) }) });
       }
     },
     [refresh],
@@ -203,7 +204,7 @@ export function useEntryActions(deps: EntryActionDeps) {
         window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: p }));
         refresh();
       } catch (e) {
-        setToast({ message: `커버를 바꾸지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
+        setToast({ message: t('entry.coverFailed', { message: e instanceof Error ? e.message : String(e) }) });
       }
     },
     [refresh],
@@ -223,7 +224,7 @@ export function useEntryActions(deps: EntryActionDeps) {
     async (raw: Entry[], toFolder: string, after?: (names: string[]) => void) => {
       const baseOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
       const items = topLevel(raw).filter((it) => !(it.isFolder && (toFolder === it.path || toFolder.startsWith(`${it.path}/`))));
-      if (items.length < topLevel(raw).length) setToast({ message: '폴더를 자기 자신 안으로는 옮길 수 없어요.' });
+      if (items.length < topLevel(raw).length) setToast({ message: t('entry.moveIntoSelf') });
       if (!items.length) return;
       const dest = (it: Entry) => (toFolder ? `${toFolder}/${baseOf(it.path)}` : baseOf(it.path));
       if (items.length === 1) {
@@ -251,7 +252,16 @@ export function useEntryActions(deps: EntryActionDeps) {
       refresh();
       if (!done.length && !failed) return;
       setToast({
-        message: `${done.length}개를 옮겼어요${links > 0 ? ` (링크 ${links}개 갱신)` : ''}${failed ? ` · ${failed}개는 같은 이름이 있어 옮기지 못했어요` : ''}`,
+        message: failed
+          ? t(links > 0 ? 'entry.movedWithLinksPartial' : 'entry.movedPartial', {
+              items: tPlural('count.items', done.length),
+              links: tPlural('count.links', links),
+              failed: tPlural('count.items', failed),
+            })
+          : t(links > 0 ? 'entry.movedWithLinks' : 'entry.moved', {
+              items: tPlural('count.items', done.length),
+              links: tPlural('count.links', links),
+            }),
         undo: done.length
           ? async () => {
               await flushAll();
@@ -260,7 +270,7 @@ export function useEntryActions(deps: EntryActionDeps) {
                 await applyMovedState(d.target, d.from, d.isFolder, false);
               }
               refresh();
-              setToast({ message: '되돌렸어요.' });
+              setToast({ message: t('entry.undone') });
             }
           : undefined,
       });
@@ -278,7 +288,7 @@ export function useEntryActions(deps: EntryActionDeps) {
       const baseOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
       const items = topLevel(raw).filter((it) => it.path !== target && !(it.isFolder && target.startsWith(`${it.path}/`)));
       if (!items.length) {
-        if (raw.some((it) => it.isFolder && target.startsWith(`${it.path}/`))) setToast({ message: '폴더를 자기 자신 안으로는 옮길 수 없어요.' });
+        if (raw.some((it) => it.isFolder && target.startsWith(`${it.path}/`))) setToast({ message: t('entry.moveIntoSelf') });
         return;
       }
       const parent = dirOf(target);
@@ -298,12 +308,12 @@ export function useEntryActions(deps: EntryActionDeps) {
     (target: string, isFolder: boolean) => {
       const name = target.slice(target.lastIndexOf('/') + 1).replace(/\.md$/i, '');
       setConfirm({
-        title: isFolder ? `폴더를 삭제할까요? “${name}”` : `노트를 삭제할까요? “${name}”`,
+        title: isFolder ? t('entry.deleteFolderTitle', { name }) : t('entry.deleteNoteTitle', { name }),
         lines: [
-          isFolder ? '폴더 안의 모든 노트와 첨부가 함께 휴지통으로 옮겨져요. 사이드바 하단 휴지통에서 복원할 수 있어요.' : '휴지통으로 옮겨져요. 사이드바 하단 휴지통에서 복원할 수 있어요.',
-          '이 노트를 가리키던 [[링크]]는 그대로 남고 ‘없는 노트’로 표시돼요.',
+          isFolder ? t('entry.deleteFolderBody') : t('entry.deleteNoteBody'),
+          t('entry.deleteBacklinkNote'),
         ],
-        confirmLabel: '삭제',
+        confirmLabel: t('common.delete'),
         tone: 'danger',
         onConfirm: () => {
           setConfirm(null);
@@ -319,16 +329,16 @@ export function useEntryActions(deps: EntryActionDeps) {
               });
               refresh();
               setToast({
-                message: `휴지통으로 옮겼어요: ${name}`,
+                message: t('entry.trashed', { name }),
                 undo: async () => {
                   const back = await window.nops.note.restore({ trashId: r.trashId });
                   refresh();
                   if (!r.isFolder) setSelected(back.path);
-                  setToast({ message: '되돌렸어요.' });
+                  setToast({ message: t('entry.undone') });
                 },
               });
             } catch (e) {
-              setToast({ message: `삭제하지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
+              setToast({ message: t('entry.deleteFailed', { message: e instanceof Error ? e.message : String(e) }) });
             }
           })();
         },
@@ -345,13 +355,13 @@ export function useEntryActions(deps: EntryActionDeps) {
       if (!items.length) return;
       const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1).replace(/\.md$/i, '');
       setConfirm({
-        title: `${items.length}개 항목을 삭제할까요?`,
+        title: t('entry.deleteManyTitle', { items: tPlural('count.items', items.length) }),
         lines: [
           ...items.slice(0, 6).map((it) => `· ${it.isFolder ? '📁 ' : ''}${nameOf(it.path)}`),
-          ...(items.length > 6 ? [`… 외 ${items.length - 6}개`] : []),
-          '휴지통으로 옮겨져요. 사이드바 하단 휴지통에서 복원할 수 있어요.',
+          ...(items.length > 6 ? [t('entry.moreCount', { count: items.length - 6 })] : []),
+          t('entry.deleteNoteBody'),
         ],
-        confirmLabel: '삭제',
+        confirmLabel: t('common.delete'),
         tone: 'danger',
         onConfirm: () => {
           setConfirm(null);
@@ -371,16 +381,16 @@ export function useEntryActions(deps: EntryActionDeps) {
               });
               refresh();
               setToast({
-                message: `${items.length}개를 휴지통으로 옮겼어요`,
+                message: t('entry.trashedMany', { items: tPlural('count.items', items.length) }),
                 undo: async () => {
                   for (const id of trashed) await window.nops.note.restore({ trashId: id });
                   refresh();
-                  setToast({ message: '되돌렸어요.' });
+                  setToast({ message: t('entry.undone') });
                 },
               });
             } catch (e) {
               refresh();
-              setToast({ message: `삭제하지 못했어요: ${e instanceof Error ? e.message : String(e)}` });
+              setToast({ message: t('entry.deleteFailed', { message: e instanceof Error ? e.message : String(e) }) });
             }
           })();
         },

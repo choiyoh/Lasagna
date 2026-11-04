@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { useEffect, useState } from 'react';
 
 interface Props {
@@ -29,7 +30,7 @@ export function TagPanel({ onOpen }: Props) {
     void window.nops.tag.notes({ tag: open }).then(setNotes);
   }, [open]);
 
-  if (tags.length === 0) return <p className="muted small pad">태그가 없어요. 본문에 #태그를 쓰거나 프런트매터 tags에 넣어 보세요.</p>;
+  if (tags.length === 0) return <p className="muted small pad">{t('tags.empty')}</p>;
 
   const sorted = [...tags].sort((a, b) => a.tag.localeCompare(b.tag, 'ko'));
   return (

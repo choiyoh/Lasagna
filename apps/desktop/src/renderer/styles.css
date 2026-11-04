@@ -203,6 +203,8 @@ button.link { color: var(--muted); }
 .dockbody__bar { display: flex; align-items: center; gap: 6px; padding: 10px 6px 0 14px; border-bottom: 1px solid var(--border); }
 .dockbody__tabs { flex: 1; min-width: 0; display: flex; gap: 14px; overflow-x: auto; scrollbar-width: none; }
 .dockbody__tabs::-webkit-scrollbar { display: none; }
+/* 영어 라벨은 도크 폭을 넘기므로 라벨을 자르지 않고 탭 줄을 다음 줄로 내린다(한국어 레이아웃은 그대로). */
+html[lang='en'] .dockbody__tabs { flex-wrap: wrap; row-gap: 2px; }
 .dockbody__tabs button { white-space: nowrap; padding: 5px 0 6px; font-size: 12.5px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .dockbody__tabs button.active { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
 .dockbody .linkpanel__tabs { padding-top: 6px; }

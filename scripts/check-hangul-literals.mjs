@@ -96,8 +96,10 @@ export function countHangulLines(source) {
         continue;
       }
       if (HANGUL.test(ch)) hit = true;
-      if (/[A-Za-z_$0-9]/.test(ch)) word += ch;
-      else if (!/\s/.test(ch)) {
+      if (/[A-Za-z_$0-9]/.test(ch)) {
+        word += ch;
+        previous = ch; // 숫자·식별자 뒤의 / 는 나눗셈이다
+      } else if (!/\s/.test(ch)) {
         previous = ch;
         word = '';
       }

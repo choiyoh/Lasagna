@@ -112,6 +112,42 @@ const cases: Case[] = [
   { name: 'comments.resolved', base: (n) => `해결된 댓글 ${n}개`, render: (n) => t('comments.resolved', { count: n }) },
   { name: 'entry.deleteCount', base: (n) => `${n}개 삭제`, render: (n) => t('entry.deleteCount', { count: n }) },
   { name: 'entry.moreCount', base: (n) => `… 외 ${n}개`, render: (n) => t('entry.moreCount', { count: n }) },
+  { name: 'sync.last', base: () => `마지막: 어제`, render: () => t('sync.last', { time: '어제' }) },
+  { name: 'sync.lastSuccess', base: () => `마지막 성공: 어제`, render: () => t('sync.lastSuccess', { time: '어제' }) },
+  { name: 'sync.lastAttempt', base: () => `마지막 시도: 오늘`, render: () => t('sync.lastAttempt', { time: '오늘' }) },
+  {
+    name: 'sync.changedFiles',
+    base: (n) => `이 기기에서 바뀐 파일: ${n}개`,
+    render: (n) => t('sync.changedFiles', { value: tPlural('count.files', n) }),
+  },
+  {
+    name: 'diag.pending',
+    base: (n) => `이 기기에서 바뀐 파일: ${n}개`,
+    render: (n) => t('diag.pending', { value: tPlural('count.files', n) }),
+  },
+  { name: 'sync.conflictsLabel', base: (n) => `충돌: ${n}건`, render: (n) => t('sync.conflictsLabel', { count: n }) },
+  { name: 'diag.conflicts', base: (n) => `충돌: ${n}건`, render: (n) => t('diag.conflicts', { count: n }) },
+  { name: 'sync.conflictsHeading', base: (n) => `충돌 ${n}건`, render: (n) => t('sync.conflictsHeading', { count: n }) },
+  {
+    name: 'sync.resultSummary',
+    base: (n, m) => `올림 ${n} · 내려받음 ${m} · 병합 ${m} · 삭제 ${n}`,
+    render: (n, m) =>
+      t('sync.resultSummary', { pushed: n, pulled: m, merged: m, deleted: n }),
+  },
+  { name: 'sync.resultFailed', base: (n) => ` · 실패 ${n}`, render: (n) => t('sync.resultFailed', { n }) },
+  { name: 'sync.folderId', base: () => ` · ID abc`, render: () => t('sync.folderId', { id: 'abc' }) },
+  { name: 'sync.folderCheckedAt', base: () => ` · 어제 확인`, render: () => t('sync.folderCheckedAt', { time: '어제' }) },
+  { name: 'sync.tokenValid', base: () => `유효 · 어제까지`, render: () => t('sync.tokenValid', { date: '어제' }) },
+  {
+    name: 'diag.tokenExpiry',
+    base: () => `토큰 만료: 2023-11-14T22:15:00.000Z (유효)`,
+    render: () => t('diag.tokenExpiry', { value: '2023-11-14T22:15:00.000Z', state: t('diag.valid') }),
+  },
+  {
+    name: 'diag.failureValue',
+    base: () => `인터넷 [NETWORK] @ 2023-11-14T22:13:00.000Z`,
+    render: () => t('diag.failureValue', { title: '인터넷', code: 'NETWORK', at: '2023-11-14T22:13:00.000Z' }),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

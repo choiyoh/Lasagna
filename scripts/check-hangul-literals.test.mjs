@@ -49,6 +49,13 @@ describe('countHangulLines', () => {
     expect(countHangulLines('const y = 2; /* 한글 */\n')).toBe(0);
   })
 
+  it('treats / after a value as division, not a regex', () => {
+    expect(countHangulLines('const x = 1 / 2; // 한글\n')).toBe(0);
+    expect(countHangulLines("const x = 1 / 2; const s = '한글';\n")).toBe(1);
+    expect(countHangulLines("const n = (1 + 2) / 3; const s = '한글';\n")).toBe(1);
+    expect(countHangulLines("const m = a[0] / 2; const s = '한글';\n")).toBe(1);
+  })
+
   it('skips line and block comments', () => {
     const source = [
       '// 한글 주석',

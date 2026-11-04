@@ -1,6 +1,8 @@
+import { t } from '@nopsidian/i18n';
 import type { NoteSummary } from '@nopsidian/ipc-contract';
 import { keys } from './keys';
 import { Logo } from './Logo';
+import { useLocale } from './useLocale';
 
 export interface WelcomeAction {
   icon: string;
@@ -11,11 +13,12 @@ export interface WelcomeAction {
 
 /** 열린 노트가 없을 때의 첫 화면: 자주 쓰는 동작과 최근 고친 노트 */
 export function Welcome({ notes, onOpen, actions }: { notes: NoteSummary[]; onOpen: (path: string) => void; actions: WelcomeAction[] }) {
+  useLocale();
   const recent = [...notes].sort((a, b) => b.mtime - a.mtime).slice(0, 6);
   return (
     <div className="welcome" data-testid="welcome">
       <Logo size={56} />
-      <h2>무엇을 할까요?</h2>
+      <h2>{t('welcome.title')}</h2>
       <div className="welcome__actions">
         {actions.map((a) => (
           <button key={a.label} onClick={a.run}>
@@ -27,7 +30,7 @@ export function Welcome({ notes, onOpen, actions }: { notes: NoteSummary[]; onOp
       </div>
       {recent.length > 0 ? (
         <section className="welcome__recent">
-          <h3>최근에 고친 노트</h3>
+          <h3>{t('welcome.recent')}</h3>
           <ul>
             {recent.map((n) => (
               <li key={n.path}>
@@ -40,7 +43,7 @@ export function Welcome({ notes, onOpen, actions }: { notes: NoteSummary[]; onOp
           </ul>
         </section>
       ) : (
-        <p className="muted">아직 노트가 없어요. “새 노트”로 시작해 보세요.</p>
+        <p className="muted">{t('welcome.empty')}</p>
       )}
     </div>
   );

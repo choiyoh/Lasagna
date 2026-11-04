@@ -30,7 +30,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { readAudit } from '@nopsidian/mcp/audit';
 import { RevertError, applyRestore, logRevert, planRevert } from '@nopsidian/mcp/revert';
 import { readPolicyFile, writePolicyFile } from '@nopsidian/mcp/policy-file';
-import { events, graphLayout, graphSettings, workspaceLayout, type EventName } from '@nopsidian/ipc-contract';
+import { events, graphLayout, graphSettings, workspaceLayout, type AppLanguage, type EventName } from '@nopsidian/ipc-contract';
+import { resolveLocale } from '@nopsidian/i18n';
+import { DEFAULT_APP_SETTINGS, readAppSettings, writeAppSettings, type AppSettings } from './app-settings';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
 import { runMcpStdio } from './mcp-stdio';
@@ -652,6 +654,31 @@ function registerHandlers() {
     if (!openExternalSafe(url)) throw new Error('허용되지 않은 URL');
     return undefined;
   });
+  handle('settings.language', () => currentLanguage());
+  handle('settings.setLanguage', ({ language }) => {
+    settings = { version: 1, language };
+    writeAppSettings(settingsFile(), settings);
+    const current = currentLanguage();
+    broadcast('language.changed', current);
+    return current;
+  });
+}
+
+let settings: AppSettings = DEFAULT_APP_SETTINGS;
+
+const settingsFile = () => path.join(app.getPath('userData'), 'app-settings.json');
+
+/**
+ * OS 언어. e2e 는 기존 한국어 셀렉터가 흔들리지 않도록 ko 로 고정하고,
+ * 언어 전환 테스트만 NOPS_E2E_LANG 로 덮어쓴다.
+ */
+function systemLanguages(): readonly string[] {
+  if (process.env.NOPS_E2E === '1') return [process.env.NOPS_E2E_LANG === 'en' ? 'en' : 'ko'];
+  return app.getPreferredSystemLanguages();
+}
+
+function currentLanguage(): AppLanguage {
+  return { setting: settings.language, locale: resolveLocale(settings.language, systemLanguages()) };
 }
 
 app.whenReady().then(() => {
@@ -671,6 +698,7 @@ app.whenReady().then(() => {
   });
   configureIpc({ devServerUrl });
   setBroadcaster(broadcast);
+  settings = readAppSettings(settingsFile());
   registerHandlers();
   createWindow();
 

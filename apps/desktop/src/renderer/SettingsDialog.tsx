@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
+import { t } from '@nopsidian/i18n';
+import type { LanguageSetting } from '@nopsidian/ipc-contract';
 import { applyPrefs, FONT_SIZES, loadPrefs, type Prefs } from './prefs';
-import { applyTheme, THEME_LABEL, type ThemeChoice } from './theme';
+import { applyTheme, THEME_KEY, type ThemeChoice } from './theme';
 import { keys } from './keys';
+import { changeLanguage } from './language';
+import { useLanguage } from './useLocale';
 import { McpSettings } from './McpSettings';
 
 interface Props {
@@ -15,9 +19,16 @@ interface Props {
   onReverted: (path: string, kind: 'restored' | 'trashed') => void;
 }
 
+const LANGUAGE_KEY: Record<LanguageSetting, Parameters<typeof t>[0]> = {
+  system: 'settings.language.system',
+  ko: 'settings.language.ko',
+  en: 'settings.language.en',
+};
+
 /** 설정(⌘,): 모양·편집·동기화·도움말. 값은 이 기기에만 저장된다. */
 export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShortcuts, onOpenTrash, onOpenNote, onReverted }: Props) {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const language = useLanguage();
   const set = (patch: Partial<Prefs>) =>
     setPrefs((cur) => {
       const next = { ...cur, ...patch };
@@ -32,77 +43,89 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
 
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog settings" role="dialog" aria-modal="true" aria-label="설정">
+      <div className="dialog settings" role="dialog" aria-modal="true" aria-label={t('settings.title')}>
         <header className="settings__head">
-          <h2>설정</h2>
-          <button className="settings__x" onClick={onClose} aria-label="닫기" title="닫기 (Esc)">
+          <h2>{t('settings.title')}</h2>
+          <button className="settings__x" onClick={onClose} aria-label={t('settings.close')} title={t('settings.closeHint')}>
             ×
           </button>
         </header>
         <div className="settings__body">
           <section>
-            <h3>모양</h3>
+            <h3>{t('settings.appearance')}</h3>
             <div className="settings__row">
-              <span>테마</span>
-              <div className="seg" role="radiogroup" aria-label="테마">
-                {(['system', 'light', 'dark'] as const).map((t) => (
+              <span>{t('settings.theme')}</span>
+              <div className="seg" role="radiogroup" aria-label={t('settings.theme')}>
+                {(['system', 'light', 'dark'] as const).map((choice) => (
                   <button
-                    key={t}
+                    key={choice}
                     role="radio"
-                    aria-checked={theme === t}
-                    className={theme === t ? 'on' : ''}
+                    aria-checked={theme === choice}
+                    className={theme === choice ? 'on' : ''}
                     onClick={() => {
-                      applyTheme(t);
-                      onTheme(t);
+                      applyTheme(choice);
+                      onTheme(choice);
                     }}
                   >
-                    {THEME_LABEL[t]}
+                    {t(THEME_KEY[choice])}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="settings__row">
+              <span>{t('settings.language')}</span>
+              <div className="seg" role="radiogroup" aria-label={t('settings.language')}>
+                {(['system', 'ko', 'en'] as const).map((option) => (
+                  <button
+                    key={option}
+                    role="radio"
+                    aria-checked={language.setting === option}
+                    className={language.setting === option ? 'on' : ''}
+                    onClick={() => void changeLanguage(option)}
+                  >
+                    {t(LANGUAGE_KEY[option])}
                   </button>
                 ))}
               </div>
             </div>
             <label className="settings__row">
-              <span>본문 글자 크기</span>
-              <select value={prefs.fontSize} onChange={(e) => set({ fontSize: Number(e.target.value) })} aria-label="본문 글자 크기">
+              <span>{t('settings.fontSize')}</span>
+              <select value={prefs.fontSize} onChange={(e) => set({ fontSize: Number(e.target.value) })} aria-label={t('settings.fontSize')}>
                 {FONT_SIZES.map((n) => (
                   <option key={n} value={n}>
-                    {n}px{n === 16 ? ' (기본)' : ''}
+                    {n === 16 ? t('settings.fontSizeDefault', { size: n }) : t('settings.fontSizeValue', { size: n })}
                   </option>
                 ))}
               </select>
             </label>
             <div className="settings__row">
-              <span>본문 너비</span>
-              <div className="seg" role="radiogroup" aria-label="본문 너비">
-                {([
-                  ['normal', '보통'],
-                  ['wide', '넓게'],
-                  ['full', '창 너비'],
-                ] as const).map(([w, label]) => (
-                  <button key={w} role="radio" aria-checked={prefs.width === w} className={prefs.width === w ? 'on' : ''} onClick={() => set({ width: w })}>
-                    {label}
+              <span>{t('settings.width')}</span>
+              <div className="seg" role="radiogroup" aria-label={t('settings.width')}>
+                {(['normal', 'wide', 'full'] as const).map((width) => (
+                  <button key={width} role="radio" aria-checked={prefs.width === width} className={prefs.width === width ? 'on' : ''} onClick={() => set({ width })}>
+                    {t(`settings.width.${width}`)}
                   </button>
                 ))}
               </div>
             </div>
           </section>
           <section>
-            <h3>편집</h3>
+            <h3>{t('settings.editing')}</h3>
             <label className="settings__row">
               <span>
-                제목을 바꾸면 파일 이름도 맞추기
-                <small className="muted">노트를 떠날 때 첫 제목(H1)에 맞춰 파일 이름을 바꿔요. 링크도 함께 고쳐요.</small>
+                {t('settings.titleSync')}
+                <small className="muted">{t('settings.titleSyncHint')}</small>
               </span>
-              <input type="checkbox" checked={prefs.titleSync} onChange={(e) => set({ titleSync: e.target.checked })} aria-label="제목을 바꾸면 파일 이름도 맞추기" />
+              <input type="checkbox" checked={prefs.titleSync} onChange={(e) => set({ titleSync: e.target.checked })} aria-label={t('settings.titleSync')} />
             </label>
           </section>
           <McpSettings onOpenNote={(p) => { onOpenNote(p); onClose(); }} onReverted={onReverted} />
           <section>
-            <h3>볼트</h3>
+            <h3>{t('settings.vault')}</h3>
             <div className="settings__links">
-              <button onClick={onOpenSync}>☁ Google Drive 동기화…</button>
-              <button onClick={onOpenTrash}>🗑 휴지통…</button>
-              <button onClick={onOpenShortcuts}>⌨ 단축키 목록 ({keys('F1')})</button>
+              <button onClick={onOpenSync}>☁ {t('settings.vault.sync')}</button>
+              <button onClick={onOpenTrash}>🗑 {t('settings.vault.trash')}</button>
+              <button onClick={onOpenShortcuts}>⌨ {t('settings.vault.shortcuts', { key: keys('F1') })}</button>
             </div>
           </section>
         </div>

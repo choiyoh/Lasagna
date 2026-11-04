@@ -468,7 +468,7 @@ export const en: Record<MessageKey, string> = {
   'sync.token': 'Token',
   'sync.tokenChecking': 'Checking…',
   'sync.tokenValid': 'Valid until {date}',
-  'sync.tokenExpired': 'Expired · renewed when you press \'Check now\'',
+  'sync.tokenExpired': 'Expired · renewed when you press “Check now”',
   'sync.refreshFailed': 'Token refresh failed: {title}',
   'sync.guideLink': 'Setup guide (docs/sync-setup.md)',
   'sync.errorCode': 'Error code: {code}',

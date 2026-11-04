@@ -22,7 +22,12 @@ describe('formatDateTime', () => {
   it('matches toLocaleString for Korean and keeps seconds by default', () => {
     expect(formatDateTime(at, 'ko')).toBe(at.toLocaleString('ko-KR'))
     expect(formatDateTime(at, 'ko', false)).not.toBe(formatDateTime(at, 'ko'))
-    expect(formatDateTime(at, 'en')).toBe(at.toLocaleString('en-US'))
+    const english = formatDateTime(at, 'en')
+    expect(english).toContain('Nov')
+    expect(english).toContain('2026')
+    expect(english).toContain('15:12')
+    expect(english).not.toContain('33') // 초 없음
+    expect(english).not.toMatch(/AM|PM/) // 24시간
   })
 })
 
@@ -53,5 +58,9 @@ describe('formatRelativeTime', () => {
     setLocale('en')
     expect(formatRelativeTime(now - 5_000, now)).toBe('Just now')
     expect(formatRelativeTime(now - 5 * 60_000, now)).toBe('5 min ago')
+    // 한 시간이 넘으면 같은 24시간·초 없음 규칙으로 떨어진다.
+    const old = formatRelativeTime(new Date(2026, 10, 4, 23, 39, 33).getTime(), new Date(2026, 10, 4, 23, 39, 33).getTime() + 2 * 3600_000)
+    expect(old).toContain('23:39')
+    expect(old).not.toMatch(/AM|PM|33$/)
   })
 })

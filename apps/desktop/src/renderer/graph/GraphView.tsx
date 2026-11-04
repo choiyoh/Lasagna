@@ -12,6 +12,7 @@ import { LEGACY_GLOBAL_KEY, loadLayout, saveLayout } from './layout-cache';
 import { SETTLE_WINDOW_MS, SPINNER_DELAY_MS, isSettled, statsText } from './settle';
 import { webglAvailable } from './webgl';
 import { EmptyState } from '../components/EmptyState';
+import { drawsBaseLabel } from './hover-label';
 
 interface Props {
   data: GraphData;
@@ -45,6 +46,8 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   const view = useRef<{ bbox: { x: [number, number]; y: [number, number] }; camera: { x: number; y: number; ratio: number; angle: number } } | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const hover = useRef<string | null>(null);
+  /** sigma 가 실제로 hover 중인 노드(검색 포커스와 구분한다) */
+  const hoverNode = useRef<string | null>(null);
   const live = useRef({ settings, current, onOpen });
   live.current = { settings, current, onOpen };
   const [stats, setStats] = useState('');
@@ -161,6 +164,9 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
         stagePadding: 70,
         defaultDrawNodeLabel: (ctx, data, settings) => {
           if (!data.label) return;
+          // 호버 라벨이 같은 자리를 한 번 더 그리므로 기본 라벨은 숨긴다(글자 겹침 방지).
+          const key = (data as { key?: string }).key;
+          if (key && !drawsBaseLabel(key, hoverNode.current)) return;
           const p = pal.current;
           const size = settings.labelSize;
           ctx.font = `${settings.labelWeight} ${size}px ${settings.labelFont}`;
@@ -287,10 +293,12 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     });
     sigma.on('enterNode', ({ node }) => {
       hover.current = node;
+      hoverNode.current = node;
       sigma.refresh({ skipIndexation: true });
     });
     sigma.on('leaveNode', () => {
       hover.current = null;
+      hoverNode.current = null;
       sigma.refresh({ skipIndexation: true });
     });
 

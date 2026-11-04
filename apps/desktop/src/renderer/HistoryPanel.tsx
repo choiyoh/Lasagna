@@ -1,4 +1,4 @@
-import { formatShortDateTime, t } from '@nopsidian/i18n';
+import { formatShortDateTime, t, tPlural } from '@nopsidian/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HistoryEntryDto } from './history-types';
 import { lineDiff } from '@nopsidian/core/diff';
@@ -95,7 +95,7 @@ export function HistoryPanel({ path, onRestored }: Props) {
       {picked && (
         <div className="history__diff">
           <div className="history__bar">
-            <span className="muted small">{changed === 0 ? t('history.same') : t('history.diff', { n: changed })}</span>
+            <span className="muted small">{changed === 0 ? t('history.same') : tPlural('history.diff', changed)}</span>
             <button onClick={() => void restore()} disabled={changed === 0} data-testid="history-restore">
               {t('history.restore')}
             </button>

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { t } from '@nopsidian/i18n';
+import { t, tPlural } from '@nopsidian/i18n';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { showTextPrompt } from '@nopsidian/editor/nops';
 import type { NoteSummary } from '@nopsidian/ipc-contract';
@@ -138,7 +138,7 @@ export function useEntryActions(deps: EntryActionDeps) {
         refresh();
         if (opts.auto && done.totalChanges === 0) return;
         setToast({
-          message: done.totalChanges > 0 ? t('entry.renamedWithLinks', { count: done.totalChanges }) : t('entry.renamed'),
+          message: done.totalChanges > 0 ? t('entry.renamedWithLinks', { links: tPlural('count.links', done.totalChanges) }) : t('entry.renamed'),
           undo: async () => {
             await flushAll();
             await window.nops.note.undoRename({ undoId: done.undoId });
@@ -253,8 +253,15 @@ export function useEntryActions(deps: EntryActionDeps) {
       if (!done.length && !failed) return;
       setToast({
         message: failed
-          ? t(links > 0 ? 'entry.movedWithLinksPartial' : 'entry.movedPartial', { count: done.length, links, failed })
-          : t(links > 0 ? 'entry.movedWithLinks' : 'entry.moved', { count: done.length, links }),
+          ? t(links > 0 ? 'entry.movedWithLinksPartial' : 'entry.movedPartial', {
+              items: tPlural('count.items', done.length),
+              links: tPlural('count.links', links),
+              failed: tPlural('count.items', failed),
+            })
+          : t(links > 0 ? 'entry.movedWithLinks' : 'entry.moved', {
+              items: tPlural('count.items', done.length),
+              links: tPlural('count.links', links),
+            }),
         undo: done.length
           ? async () => {
               await flushAll();
@@ -348,7 +355,7 @@ export function useEntryActions(deps: EntryActionDeps) {
       if (!items.length) return;
       const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1).replace(/\.md$/i, '');
       setConfirm({
-        title: t('entry.deleteManyTitle', { count: items.length }),
+        title: t('entry.deleteManyTitle', { items: tPlural('count.items', items.length) }),
         lines: [
           ...items.slice(0, 6).map((it) => `· ${it.isFolder ? '📁 ' : ''}${nameOf(it.path)}`),
           ...(items.length > 6 ? [t('entry.moreCount', { count: items.length - 6 })] : []),
@@ -374,7 +381,7 @@ export function useEntryActions(deps: EntryActionDeps) {
               });
               refresh();
               setToast({
-                message: t('entry.trashedMany', { count: items.length }),
+                message: t('entry.trashedMany', { items: tPlural('count.items', items.length) }),
                 undo: async () => {
                   for (const id of trashed) await window.nops.note.restore({ trashId: id });
                   refresh();

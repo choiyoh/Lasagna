@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { t } from '@nopsidian/i18n';
+import { t, tPlural } from '@nopsidian/i18n';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Toast } from './app-types';
 import { flushAll } from './flush';
@@ -23,7 +23,15 @@ export function useImportExport({ selected, refresh, setToast }: { selected: str
     try {
       await flushAll();
       const r = await window.nops.export.vault();
-      if (r.dir) setToast({ message: t('import.exportedVault', { notes: r.notes, assets: r.assets, dir: r.dir }) });
+      if (r.dir) {
+        setToast({
+          message: t('import.exportedVault', {
+            notes: tPlural('count.notes', r.notes),
+            assets: tPlural('count.assets', r.assets),
+            dir: r.dir,
+          }),
+        });
+      }
     } catch (e) {
       setToast({ message: t('import.exportFailed', { message: e instanceof Error ? e.message : String(e) }) });
     }
@@ -36,11 +44,11 @@ export function useImportExport({ selected, refresh, setToast }: { selected: str
       refresh();
       setToast({
         message: t(r.unresolvedLinks ? 'import.notionDoneUnresolved' : 'import.notionDone', {
-          notes: r.notes,
-          databases: r.databases,
-          assets: r.assets,
+          notes: tPlural('count.notes', r.notes),
+          databases: tPlural('count.databases', r.databases),
+          assets: tPlural('count.assets', r.assets),
           folder: r.folder,
-          links: r.unresolvedLinks,
+          links: tPlural('count.unlinkedLinks', r.unresolvedLinks),
         }),
       });
     } catch (e) {
@@ -54,8 +62,12 @@ export function useImportExport({ selected, refresh, setToast }: { selected: str
         const r = await window.nops.import.markdown({ mode, paths, into });
         if (r.imported.length === 0 && r.skipped.length === 0) return;
         refresh();
-        const parts = [r.assets ? t('import.doneNotesAssets', { notes: r.notes, assets: r.assets }) : t('import.doneNotes', { notes: r.notes })];
-        if (r.renamed) parts.push(t('import.renamed', { count: r.renamed }));
+        const parts = [
+          r.assets
+            ? t('import.doneNotesAssets', { notes: tPlural('count.notes', r.notes), assets: tPlural('count.assets', r.assets) })
+            : t(r.notes === 1 ? 'import.doneNotes.one' : 'import.doneNotes.other', { notes: r.notes }),
+        ];
+        if (r.renamed) parts.push(t(r.renamed === 1 ? 'import.renamed.one' : 'import.renamed.other', { count: r.renamed }));
         if (r.skipped.length) {
           parts.push(t('import.skipped', { count: r.skipped.length, names: `${r.skipped.slice(0, 2).join(', ')}${r.skipped.length > 2 ? ' …' : ''}` }));
         }

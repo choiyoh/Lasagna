@@ -63,7 +63,7 @@ export function FindBar({ view, initial, focusTick, docTick, onClose }: Props) {
           className="findbar__toggle"
           onClick={() => setShowReplace((v) => !v)}
           aria-expanded={showReplace}
-          aria-label={t('find.toggleAria')}
+          aria-label={showReplace ? t('find.toggleHide') : t('find.toggleShow')}
           title={t('find.toggle')}
         >
           {showReplace ? '▾' : '▸'}

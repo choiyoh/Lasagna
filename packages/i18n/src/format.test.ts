@@ -32,6 +32,7 @@ describe('formatCompactDateTime', () => {
     const english = formatCompactDateTime(new Date(2026, 10, 4, 17, 53), 'en')
     expect(english).toContain('Nov')
     expect(english).toContain('2026')
+    expect(english).toContain('17:53') // 댓글·찾기와 같은 24시간 표기
     expect(english).not.toBe('2026-11-04 17:53')
   })
 

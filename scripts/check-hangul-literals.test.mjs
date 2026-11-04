@@ -40,6 +40,8 @@ describe('countHangulLines', () => {
     expect(countHangulLines('const re = /["\']/; const b = \'한글\';\n')).toBe(1);
     expect(countHangulLines('s = s.replace(/`([^`]*)`/g, \'$1\');\n// 다음 줄 주석의 한글\n')).toBe(0);
     expect(countHangulLines("const re = /['\"]/; // 한글 주석\n")).toBe(0);
+    expect(countHangulLines('return /[`]/; // 한글\n')).toBe(0);
+    expect(countHangulLines("throw /['\"]/; // 한글\n")).toBe(0);
   })
 
   it('skips single-line and multi-line block comments', () => {

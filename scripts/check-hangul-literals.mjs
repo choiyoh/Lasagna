@@ -8,6 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
+// 이 낱말 뒤의 / 는 나눗셈이 아니라 정규식 리터럴이다.
+const REGEX_AFTER = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'yield', 'await', 'case', 'do', 'else', 'throw']);
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', '.vite', 'fixtures', 'test-results']);
 const SKIP_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 const SKIP_PATH = [
@@ -25,6 +27,7 @@ export function countHangulLines(source) {
   let regex = false;
   let regexClass = false;
   let previous = ''; // 정규식 시작 판별용: 마지막으로 본 의미 있는 글자
+  let word = ''; // 마지막 식별자(return·typeof 뒤의 / 는 정규식이다)
   for (const line of source.split('\n')) {
     let hit = false;
     let i = 0;
@@ -74,11 +77,15 @@ export function countHangulLines(source) {
         i += 2;
         continue;
       }
-      if (ch === '/' && (previous === '' || /[=(:,[!&|?{};+\-*%~^<>]/.test(previous))) {
+      if (
+        ch === '/' &&
+        (previous === '' || /[=(:,[!&|?{};+\-*%~^<>]/.test(previous) || REGEX_AFTER.has(word))
+      ) {
         // 앞이 연산자·괄호면 나눗셈이 아니라 정규식 리터럴이다. 안의 따옴표·백틱은 글자다.
         regex = true;
         regexClass = false;
         previous = '/';
+        word = '';
         i += 1;
         continue;
       }
@@ -89,7 +96,11 @@ export function countHangulLines(source) {
         continue;
       }
       if (HANGUL.test(ch)) hit = true;
-      if (!/\s/.test(ch)) previous = ch;
+      if (/[A-Za-z_$0-9]/.test(ch)) word += ch;
+      else if (!/\s/.test(ch)) {
+        previous = ch;
+        word = '';
+      }
       i += 1;
     }
     if (quote !== '`') quote = null; // 보통 문자열·정규식은 줄에서 끝난다

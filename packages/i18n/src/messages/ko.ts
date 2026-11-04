@@ -288,7 +288,7 @@ export const ko = {
   'entry.deleteBacklinkNote': '이 노트를 가리키던 [[링크]]는 그대로 남고 ‘없는 노트’로 표시돼요.',
   'entry.trashed': '휴지통으로 옮겼어요: {name}',
   'entry.deleteFailed': '삭제하지 못했어요: {message}',
-  'entry.deleteManyTitle': '{items}를 삭제할까요?',
+  'entry.deleteManyTitle': '{items} 항목을 삭제할까요?',
   'entry.trashedMany': '{items}를 휴지통으로 옮겼어요',
   'import.exported': '내보냈어요: {path}',
   'import.exportFailed': '내보내기 실패: {message}',

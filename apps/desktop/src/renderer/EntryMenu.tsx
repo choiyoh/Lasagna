@@ -95,7 +95,7 @@ export function EntryMenu(p: Props) {
             )}
             {!menu.isFolder && (
               <button role="menuitem" onClick={run(() => p.onToggleBookmark(menu.path))}>
-                {p.bookmarked ? t('app.bookmarkRemove') : t('nav.marks')}
+                {p.bookmarked ? t('entry.bookmarkRemove') : t('entry.bookmarkAdd')}
               </button>
             )}
             {menu.path !== '' && (

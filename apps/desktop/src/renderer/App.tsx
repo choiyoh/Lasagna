@@ -656,7 +656,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               </ErrorBoundary>
             </div>
           ) : (
-            <button className="rightdock__rail" onClick={togglePanel} title={t('dock.togglePanel')} aria-label={t('dock.links')} aria-expanded={false}>
+            <button className="rightdock__rail" onClick={togglePanel} title={t('dock.togglePanel')} aria-label={t('dock.openPanel')} aria-expanded={false}>
               <span className="rightdock__railtop" aria-hidden>‹</span>
               <span className="rightdock__raillabel" aria-hidden>{t('dock.rail')}</span>
             </button>

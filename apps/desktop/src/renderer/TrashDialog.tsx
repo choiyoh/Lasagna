@@ -1,4 +1,4 @@
-import { t } from '@nopsidian/i18n';
+import { formatCompactDateTime, t } from '@nopsidian/i18n';
 import { useCallback, useEffect, useState } from 'react';
 
 interface Item {
@@ -14,11 +14,7 @@ interface Props {
   onRestored: (path: string, isFolder: boolean) => void;
 }
 
-const when = (iso: string) => {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-};
+const when = (iso: string) => formatCompactDateTime(iso);
 
 /** 휴지통: 지운 노트·폴더를 되돌리거나 영구 삭제한다. */
 export function TrashDialog({ onClose, onRestored }: Props) {

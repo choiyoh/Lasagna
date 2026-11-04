@@ -51,3 +51,19 @@ export function formatRelativeTime(timestamp: number | null, now = Date.now(), l
   if (sec < 3600) return t('time.minutesAgo', { n: Math.round(sec / 60) })
   return formatDateTime(timestamp, locale)
 }
+
+/** 휴지통·파일 시각: ko 는 지금까지의 'YYYY-MM-DD HH:mm' 그대로, en 은 로캘 서식. */
+export function formatCompactDateTime(value: number | string | Date, locale: Locale = getLocale()): string {
+  const date = toDate(value)
+  if (Number.isNaN(date.getTime())) return ''
+  if (locale === 'ko') {
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  }
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}

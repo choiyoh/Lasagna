@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { setLocale } from './index'
-import { formatDateTime, formatRelativeTime, formatShortDateTime } from './format'
+import { formatCompactDateTime, formatDateTime, formatRelativeTime, formatShortDateTime } from './format'
 
 const at = new Date(2026, 10, 4, 15, 12, 33, 0)
 
@@ -23,6 +23,20 @@ describe('formatDateTime', () => {
     expect(formatDateTime(at, 'ko')).toBe(at.toLocaleString('ko-KR'))
     expect(formatDateTime(at, 'ko', false)).not.toBe(formatDateTime(at, 'ko'))
     expect(formatDateTime(at, 'en')).toBe(at.toLocaleString('en-US'))
+  })
+})
+
+describe('formatCompactDateTime', () => {
+  it('keeps the Korean YYYY-MM-DD HH:mm and uses the English locale format', () => {
+    expect(formatCompactDateTime(new Date(2026, 10, 4, 17, 53), 'ko')).toBe('2026-11-04 17:53')
+    const english = formatCompactDateTime(new Date(2026, 10, 4, 17, 53), 'en')
+    expect(english).toContain('Nov')
+    expect(english).toContain('2026')
+    expect(english).not.toBe('2026-11-04 17:53')
+  })
+
+  it('returns an empty string for an invalid date', () => {
+    expect(formatCompactDateTime('not a date', 'ko')).toBe('')
   })
 })
 

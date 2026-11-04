@@ -22,6 +22,9 @@ export function countHangulLines(source) {
   let lines = 0;
   let block = false;
   let quote = null; // 여러 줄에 걸친 템플릿 리터럴만 유지한다
+  let regex = false;
+  let regexClass = false;
+  let previous = ''; // 정규식 시작 판별용: 마지막으로 본 의미 있는 글자
   for (const line of source.split('\n')) {
     let hit = false;
     let i = 0;
@@ -54,21 +57,44 @@ export function countHangulLines(source) {
         i += 1;
         continue;
       }
+      if (regex) {
+        if (ch === '\\') {
+          i += 2;
+          continue;
+        }
+        if (ch === '[') regexClass = true;
+        else if (ch === ']') regexClass = false;
+        else if (ch === '/' && !regexClass) regex = false;
+        i += 1;
+        continue;
+      }
       if (ch === '/' && line[i + 1] === '/') break;
       if (ch === '/' && line[i + 1] === '*') {
         block = true;
         i += 2;
         continue;
       }
+      if (ch === '/' && (previous === '' || /[=(:,[!&|?{};+\-*%~^<>]/.test(previous))) {
+        // 앞이 연산자·괄호면 나눗셈이 아니라 정규식 리터럴이다. 안의 따옴표·백틱은 글자다.
+        regex = true;
+        regexClass = false;
+        previous = '/';
+        i += 1;
+        continue;
+      }
       if (ch === "'" || ch === '"' || ch === '`') {
         quote = ch;
+        previous = 'x';
         i += 1;
         continue;
       }
       if (HANGUL.test(ch)) hit = true;
+      if (!/\s/.test(ch)) previous = ch;
       i += 1;
     }
-    if (quote !== '`') quote = null; // 보통 문자열은 줄에서 끝난다
+    if (quote !== '`') quote = null; // 보통 문자열·정규식은 줄에서 끝난다
+    regex = false;
+    regexClass = false;
     if (hit) lines += 1;
   }
   return lines;

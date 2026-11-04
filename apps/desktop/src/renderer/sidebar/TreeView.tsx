@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import type React from 'react';
 import { endDrag, entryDropProps, startDrag } from './drag';
 import type { TreeNode } from './build-tree';
@@ -100,8 +101,8 @@ export function TreeView({ nodes: all, ctx, depth = 0, parent = '' }: { nodes: T
                 <span>{n.name}</span>
                 <button
                   className="treerename"
-                  title="폴더 이름 변경/이동"
-                  aria-label={`${n.name} 폴더 이름 변경`}
+                  title={t('tree.renameFolderTitle')}
+                  aria-label={t('tree.renameFolderAria', { name: n.name })}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -119,7 +120,7 @@ export function TreeView({ nodes: all, ctx, depth = 0, parent = '' }: { nodes: T
       {all.length > nodes.length && (
         <li className="tree__more" style={{ paddingLeft: 8 + depth * 14 }}>
           <button onClick={() => ctx.showMore(parent)} data-testid="tree-more">
-            … {all.length - nodes.length}개 더 보기
+            {t('tree.more', { count: all.length - nodes.length })}
           </button>
         </li>
       )}

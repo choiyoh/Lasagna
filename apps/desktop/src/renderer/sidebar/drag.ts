@@ -1,3 +1,4 @@
+import { tPlural } from '@nopsidian/i18n';
 import type React from 'react';
 import type { Entry } from './selection';
 export const DRAG_TYPE = 'application/x-nops-entry';
@@ -26,7 +27,7 @@ export function startDrag(e: React.DragEvent, items: Entry[]) {
   if (items.length > 1 && typeof e.dataTransfer.setDragImage === 'function') {
     const badge = document.createElement('div');
     badge.className = 'dragbadge';
-    badge.textContent = `${items.length}개 항목`;
+    badge.textContent = tPlural('tree.dragCount', items.length);
     document.body.append(badge);
     e.dataTransfer.setDragImage(badge, 12, 12);
     setTimeout(() => badge.remove(), 0);

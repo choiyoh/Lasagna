@@ -1,3 +1,4 @@
+import { t, tPlural } from '@nopsidian/i18n';
 export interface EmptyStateSuggestion {
   label: string;
   count: number;
@@ -28,11 +29,11 @@ export function EmptyState({ title, description, detail, suggestions = [], onRes
               <button
                 className="emptystate__suggestion"
                 onClick={s.onApply}
-                aria-label={`「${s.label}」 조건 빼기 — ${s.count}개 남음`}
+                aria-label={t('empty.suggestionAria', { label: s.label, count: s.count })}
               >
                 <span className="emptystate__suggestion-icon" aria-hidden>−</span>
-                <span className="emptystate__suggestion-label">「{s.label}」 빼면</span>{' '}
-                <span className="emptystate__suggestion-count">{s.count}개</span>
+                <span className="emptystate__suggestion-label">{t('empty.suggestionRemove', { label: s.label })}</span>{' '}
+                <span className="emptystate__suggestion-count">{tPlural('common.items', s.count)}</span>
               </button>
             </li>
           ))}

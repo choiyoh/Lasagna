@@ -78,3 +78,5 @@ export const t: Translate = (key, params) => translate(locale, key, params)
 export function tPlural(base: string, count: number, params?: TranslateParams, catalog?: MessageCatalog): string {
   return translate(locale, `${base}.${pluralCategory(locale, count)}`, { n: count, ...params }, catalog ?? catalogs[locale])
 }
+
+export * from './format'

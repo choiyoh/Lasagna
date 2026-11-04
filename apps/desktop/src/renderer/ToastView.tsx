@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Toast } from './app-types';
 
@@ -23,10 +24,10 @@ export function ToastView({ toast, setToast }: { toast: Toast | null; setToast: 
           onClick={() => {
             const undo = toast.undo!;
             setToast(null);
-            void undo().catch((e) => setToast({ message: `되돌리지 못했어요: ${e instanceof Error ? e.message : String(e)}` }));
+            void undo().catch((e) => setToast({ message: t('toast.undoFailed', { message: e instanceof Error ? e.message : String(e) }) }));
           }}
         >
-          되돌리기
+          {t('toast.undo')}
         </button>
       )}
     </div>

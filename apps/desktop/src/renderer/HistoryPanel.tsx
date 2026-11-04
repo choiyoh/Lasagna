@@ -1,3 +1,4 @@
+import { formatShortDateTime, t } from '@nopsidian/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HistoryEntryDto } from './history-types';
 import { lineDiff } from '@nopsidian/core/diff';
@@ -9,11 +10,7 @@ interface Props {
   onRestored: (message: string) => void;
 }
 
-const fmt = (iso: string) => {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-};
+const fmt = (iso: string) => formatShortDateTime(iso, { seconds: true });
 
 /** 오른쪽 패널 "기록": 저장 때마다 남긴 이전 버전 목록, 현재 내용과의 줄 단위 비교, 복원. */
 export function HistoryPanel({ path, onRestored }: Props) {
@@ -75,7 +72,7 @@ export function HistoryPanel({ path, onRestored }: Props) {
     const cur = await window.nops.note.read({ path });
     await window.nops.note.save({ path, content: old, baseHash: cur.hash });
     window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: path }));
-    onRestored('이전 버전으로 되돌렸어요. 되돌리기 직전 내용도 기록에 남아 있어요.');
+    onRestored(t('history.restored'));
     setPicked(null);
     void load();
   };
@@ -85,7 +82,7 @@ export function HistoryPanel({ path, onRestored }: Props) {
 
   return (
     <div className="history" data-testid="panel-history">
-      {entries.length === 0 && <p className="muted small pad">아직 기록이 없어요. 노트를 고치면 저장할 때마다 이전 버전이 남아요.</p>}
+      {entries.length === 0 && <p className="muted small pad">{t('history.empty')}</p>}
       <ul className="history__list">
         {entries.map((e) => (
           <li key={e.id}>
@@ -98,9 +95,9 @@ export function HistoryPanel({ path, onRestored }: Props) {
       {picked && (
         <div className="history__diff">
           <div className="history__bar">
-            <span className="muted small">{changed === 0 ? '현재와 같아요' : `현재와 ${changed}줄이 달라요 (빨강: 이 버전 / 초록: 현재)`}</span>
+            <span className="muted small">{changed === 0 ? t('history.same') : t('history.diff', { n: changed })}</span>
             <button onClick={() => void restore()} disabled={changed === 0} data-testid="history-restore">
-              이 버전으로 복원
+              {t('history.restore')}
             </button>
           </div>
           <pre data-testid="history-diff">

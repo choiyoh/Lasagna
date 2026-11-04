@@ -1,3 +1,5 @@
+import type { MessageKey } from '@nopsidian/i18n';
+
 /**
  * 노트 커버(프런트매터 `cover`) 값 해석. React·DOM 없이 도는 순수 함수만 둔다.
  * 값은 볼트 안 이미지 경로(`attachments/산.jpg`)이거나 내장 그라디언트(`gradient:ocean`)이다.
@@ -5,21 +7,21 @@
 
 export interface GradientPreset {
   id: string;
-  label: string;
+  labelKey: MessageKey;
   /** CSS background 값 */
   css: string;
 }
 
 /** 내장 그라디언트 8개. 라이트·다크 어디서나 보기 좋게 중간 채도로 골랐다. */
 export const GRADIENTS: readonly GradientPreset[] = [
-  { id: 'ocean', label: '바다', css: 'linear-gradient(135deg, #2b6cb0 0%, #63b3ed 55%, #90cdf4 100%)' },
-  { id: 'sunset', label: '노을', css: 'linear-gradient(135deg, #ea580c 0%, #f59e0b 50%, #fb7185 100%)' },
-  { id: 'forest', label: '숲', css: 'linear-gradient(135deg, #2f855a 0%, #68d391 100%)' },
-  { id: 'lavender', label: '라벤더', css: 'linear-gradient(135deg, #7c3aed 0%, #c4b5fd 100%)' },
-  { id: 'peach', label: '복숭아', css: 'linear-gradient(135deg, #fb923c 0%, #fda4af 100%)' },
-  { id: 'slate', label: '슬레이트', css: 'linear-gradient(135deg, #334155 0%, #94a3b8 100%)' },
-  { id: 'aurora', label: '오로라', css: 'linear-gradient(135deg, #14b8a6 0%, #6366f1 50%, #d946ef 100%)' },
-  { id: 'sand', label: '모래', css: 'linear-gradient(135deg, #b08968 0%, #e6ccb2 100%)' },
+  { id: 'ocean', labelKey: 'cover.gradient.ocean', css: 'linear-gradient(135deg, #2b6cb0 0%, #63b3ed 55%, #90cdf4 100%)' },
+  { id: 'sunset', labelKey: 'cover.gradient.sunset', css: 'linear-gradient(135deg, #ea580c 0%, #f59e0b 50%, #fb7185 100%)' },
+  { id: 'forest', labelKey: 'cover.gradient.forest', css: 'linear-gradient(135deg, #2f855a 0%, #68d391 100%)' },
+  { id: 'lavender', labelKey: 'cover.gradient.lavender', css: 'linear-gradient(135deg, #7c3aed 0%, #c4b5fd 100%)' },
+  { id: 'peach', labelKey: 'cover.gradient.peach', css: 'linear-gradient(135deg, #fb923c 0%, #fda4af 100%)' },
+  { id: 'slate', labelKey: 'cover.gradient.slate', css: 'linear-gradient(135deg, #334155 0%, #94a3b8 100%)' },
+  { id: 'aurora', labelKey: 'cover.gradient.aurora', css: 'linear-gradient(135deg, #14b8a6 0%, #6366f1 50%, #d946ef 100%)' },
+  { id: 'sand', labelKey: 'cover.gradient.sand', css: 'linear-gradient(135deg, #b08968 0%, #e6ccb2 100%)' },
 ];
 
 export const GRADIENT_PREFIX = 'gradient:';

@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { useEffect, useState } from 'react';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, type OutlineEvent, type OutlineItem } from './outline';
 
@@ -16,9 +17,9 @@ export function OutlinePanel({ path }: { path: string }) {
   }, [path]);
   const min = items.reduce((m, i) => Math.min(m, i.level), 6);
   return (
-    <nav className="outline" aria-label="개요" data-testid="outline">
+    <nav className="outline" aria-label={t('outline.title')} data-testid="outline">
       {items.length === 0 ? (
-        <p className="muted small pad">제목이 없어요. ‘#’ 으로 제목을 만들면 여기에 보여요.</p>
+        <p className="muted small pad">{t('outline.empty')}</p>
       ) : (
         <ul>
           {items.map((it, i) => (
@@ -29,7 +30,7 @@ export function OutlinePanel({ path }: { path: string }) {
                 onClick={() => window.dispatchEvent(new CustomEvent(OUTLINE_JUMP, { detail: { path, pos: it.pos } }))}
                 title={it.text}
               >
-                {it.text || '(빈 제목)'}
+                {it.text || t('outline.untitled')}
               </button>
             </li>
           ))}

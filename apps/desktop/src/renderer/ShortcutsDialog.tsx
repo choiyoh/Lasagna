@@ -1,40 +1,41 @@
 import { useEffect } from 'react';
+import { t, type MessageKey } from '@nopsidian/i18n';
 import { keys } from './keys';
 
-const GROUPS: { title: string; items: [string, string][] }[] = [
+const shortcutGroups = (): { title: MessageKey; items: [string, MessageKey][] }[] => [
   {
-    title: '이동',
+    title: 'shortcuts.move',
     items: [
-      ['⌘O', '노트 찾기'],
-      ['⌘P', '명령 팔레트'],
-      ['⌘⇧F', '본문 검색'],
-      ['⌘⇧\\', '링크 패널 열기·닫기'],
-      ['⌘,', '설정'],
-      ['⌘⌥D', '오늘의 노트'],
-      ['⌘⇧G', '그래프'],
-      ['⌘N', '새 노트(제목 없음)'],
-      ['⌘W', '현재 탭 닫기'],
-      ['⌘ 클릭', '새 탭에서 열기'],
+      ['⌘O', 'shortcuts.quickSwitch'],
+      ['⌘P', 'shortcuts.palette'],
+      ['⌘⇧F', 'shortcuts.search'],
+      ['⌘⇧\\', 'shortcuts.panel'],
+      ['⌘,', 'shortcuts.settings'],
+      ['⌘⌥D', 'shortcuts.daily'],
+      ['⌘⇧G', 'shortcuts.graph'],
+      ['⌘N', 'shortcuts.newNote'],
+      ['⌘W', 'shortcuts.closeTab'],
+      [t('shortcuts.metaClick'), 'shortcuts.newTab'],
     ],
   },
   {
-    title: '노트',
+    title: 'shortcuts.note',
     items: [
-      ['F2', '이름 바꾸기'],
-      ['⌘F', '노트 안에서 찾기·바꾸기'],
-      ['⌘E', '편집 모드 ↔ 소스 모드'],
-      ['⌘⇧B', '북마크 추가·해제'],
+      ['F2', 'shortcuts.rename'],
+      ['⌘F', 'shortcuts.find'],
+      ['⌘E', 'shortcuts.mode'],
+      ['⌘⇧B', 'shortcuts.bookmark'],
     ],
   },
   {
-    title: '편집',
+    title: 'shortcuts.edit',
     items: [
-      ['/', '블록 추가(슬래시 메뉴)'],
-      ['[[', '노트 링크'],
-      ['⌘/', '블록 메뉴'],
-      ['⌘D', '블록 복제'],
-      ['⌘⇧↑ / ⌘⇧↓', '블록 위·아래로 이동'],
-      ['⌘Z / ⌘⇧Z', '되돌리기 / 다시 하기'],
+      ['/', 'shortcuts.slash'],
+      ['[[', 'shortcuts.wikilink'],
+      ['⌘/', 'shortcuts.blockMenu'],
+      ['⌘D', 'shortcuts.duplicate'],
+      ['⌘⇧↑ / ⌘⇧↓', 'shortcuts.moveBlock'],
+      ['⌘Z / ⌘⇧Z', 'shortcuts.undo'],
     ],
   },
 ];
@@ -46,21 +47,22 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+  const groups = shortcutGroups();
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog shortcuts" role="dialog" aria-modal="true" aria-label="단축키">
-        <h2>단축키</h2>
+      <div className="dialog shortcuts" role="dialog" aria-modal="true" aria-label={t('shortcuts.title')}>
+        <h2>{t('shortcuts.title')}</h2>
         <div className="shortcuts__grid">
-          {GROUPS.map((g) => (
+          {groups.map((g) => (
             <section key={g.title}>
-              <h3>{g.title}</h3>
+              <h3>{t(g.title)}</h3>
               <dl>
                 {g.items.map(([k, label]) => (
                   <div key={k}>
                     <dt>
                       <kbd>{keys(k)}</kbd>
                     </dt>
-                    <dd>{label}</dd>
+                    <dd>{t(label)}</dd>
                   </div>
                 ))}
               </dl>
@@ -69,7 +71,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
         </div>
         <div className="dialog__actions">
           <button className="primary" onClick={onClose}>
-            닫기
+            {t('common.close')}
           </button>
         </div>
       </div>

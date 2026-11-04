@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { useEffect } from 'react';
 
 export interface EntryMenuState {
@@ -54,52 +55,52 @@ export function EntryMenu(p: Props) {
         {menu.multi ? (
           <>
             <button role="menuitem" className="danger" onClick={run(p.onDeletePicked)}>
-              {p.pickedCount}개 삭제
+              {t('entry.deleteCount', { count: p.pickedCount })}
             </button>
             <button role="menuitem" onClick={run(p.onClearPicked)}>
-              선택 해제
+              {t('entry.clearSelection')}
             </button>
           </>
         ) : (
           <>
             {!menu.isFolder && (
               <button role="menuitem" onClick={run(() => p.onOpenInNewTab(menu.path))}>
-                새 탭에서 열기
+                {t('entry.openNewTab')}
               </button>
             )}
             {menu.isFolder && menu.path !== '' && (
               <>
                 <button role="menuitem" onClick={run(() => p.onNewNote(menu.path))}>
-                  여기에 새 노트
+                  {t('entry.newNoteHere')}
                 </button>
                 <button role="menuitem" onClick={run(() => p.onNewFolder(menu.path))}>
-                  새 하위 폴더
+                  {t('entry.newSubfolder')}
                 </button>
               </>
             )}
             {menu.path === '' && (
               <>
                 <button role="menuitem" onClick={run(() => p.onNewNote(''))}>
-                  새 노트
+                  {t('entry.newNote')}
                 </button>
                 <button role="menuitem" onClick={run(() => p.onNewFolder(''))}>
-                  새 폴더
+                  {t('entry.newFolder')}
                 </button>
               </>
             )}
             {menu.path !== '' && (
               <button role="menuitem" onClick={run(() => p.onRename(menu.path, menu.isFolder))}>
-                이름 바꾸기
+                {t('entry.rename')}
               </button>
             )}
             {!menu.isFolder && (
               <button role="menuitem" onClick={run(() => p.onToggleBookmark(menu.path))}>
-                {p.bookmarked ? '북마크 해제' : '북마크'}
+                {p.bookmarked ? t('app.bookmarkRemove') : t('nav.marks')}
               </button>
             )}
             {menu.path !== '' && (
               <button role="menuitem" className="danger" onClick={run(() => p.onDelete(menu.path, menu.isFolder))}>
-                삭제
+                {t('common.delete')}
               </button>
             )}
           </>

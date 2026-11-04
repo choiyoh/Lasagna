@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { useCallback, useEffect, useState } from 'react';
 
 interface Item {
@@ -33,38 +34,38 @@ export function TrashDialog({ onClose, onRestored }: Props) {
 
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog trashdialog" role="dialog" aria-modal="true" aria-label="휴지통">
-        <h2>🗑 휴지통</h2>
+      <div className="dialog trashdialog" role="dialog" aria-modal="true" aria-label={t('trash.title')}>
+        <h2>🗑 {t('trash.title')}</h2>
         {items === null ? (
-          <p className="muted">불러오는 중…</p>
+          <p className="muted">{t('common.loading')}</p>
         ) : items.length === 0 ? (
-          <p className="muted">휴지통이 비어 있어요.</p>
+          <p className="muted">{t('trash.empty')}</p>
         ) : (
           <ul className="trashdialog__list">
-            {items.map((t) => (
-              <li key={t.trashId}>
-                <span className="trashdialog__name" title={t.path}>
-                  {t.isFolder ? '📁 ' : '📄 '}
-                  {t.path.replace(/\.md$/i, '')}
+            {items.map((item) => (
+              <li key={item.trashId}>
+                <span className="trashdialog__name" title={item.path}>
+                  {item.isFolder ? '📁 ' : '📄 '}
+                  {item.path.replace(/\.md$/i, '')}
                 </span>
-                <span className="muted small">{when(t.at)}</span>
+                <span className="muted small">{when(item.at)}</span>
                 <button
                   onClick={async () => {
-                    const r = await window.nops.note.restore({ trashId: t.trashId });
-                    onRestored(r.path, t.isFolder);
+                    const r = await window.nops.note.restore({ trashId: item.trashId });
+                    onRestored(r.path, item.isFolder);
                     load();
                   }}
                 >
-                  복원
+                  {t('trash.restore')}
                 </button>
                 <button
                   className="danger"
                   onClick={async () => {
-                    await window.nops.trash.purge({ trashId: t.trashId });
+                    await window.nops.trash.purge({ trashId: item.trashId });
                     load();
                   }}
                 >
-                  영구 삭제
+                  {t('trash.purge')}
                 </button>
               </li>
             ))}
@@ -81,13 +82,13 @@ export function TrashDialog({ onClose, onRestored }: Props) {
                   load();
                 }}
               >
-                정말 모두 영구 삭제
+                {t('trash.confirmAll')}
               </button>
             ) : (
-              <button onClick={() => setConfirmAll(true)}>휴지통 비우기</button>
+              <button onClick={() => setConfirmAll(true)}>{t('trash.emptyAll')}</button>
             ))}
           <button className="primary" onClick={onClose}>
-            닫기
+            {t('common.close')}
           </button>
         </div>
       </div>

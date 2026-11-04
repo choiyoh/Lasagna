@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { t } from '@nopsidian/i18n';
 import type { SyncStatus } from '@nopsidian/ipc-contract';
+import { useLocale } from '../useLocale';
 
 const FAILED = new Set<SyncStatus['state']>(['error', 'offline', 'needsAuth', 'blocked']);
 
@@ -17,34 +19,34 @@ export function syncBarCopy(status: SyncStatus | null, recent: boolean): SyncBar
   if (!status) return null;
   switch (status.state) {
     case 'syncing':
-      return { label: '동기화 중…', title: 'Google Drive 동기화 중', announcement: '동기화 중입니다.' };
+      return  { label: t('syncbar.syncing'), title: t('syncbar.syncingTitle'), announcement: t('syncbar.syncingAnnounce') };
     case 'error':
       return {
-        label: '동기화 오류',
-        title: '일부 파일을 동기화하지 못했어요. 눌러서 확인하세요.',
-        announcement: '일부 파일을 동기화하지 못했습니다.',
+        label: t('syncbar.error'),
+        title: t('syncbar.errorTitle'),
+        announcement: t('syncbar.errorAnnounce'),
       };
     case 'offline':
       return {
-        label: '오프라인',
-        title: '오프라인 — 연결되면 자동으로 다시 시도해요.',
-        announcement: '오프라인입니다. 연결되면 자동으로 다시 시도합니다.',
+        label: t('syncbar.offline'),
+        title: t('syncbar.offlineTitle'),
+        announcement: t('syncbar.offlineAnnounce'),
       };
     case 'needsAuth':
       return {
-        label: '재연결 필요',
-        title: 'Google 계정을 다시 연결해 주세요.',
-        announcement: 'Google 계정을 다시 연결해야 합니다.',
+        label: t('syncbar.needsAuth'),
+        title: t('syncbar.needsAuthTitle'),
+        announcement: t('syncbar.needsAuthAnnounce'),
       };
     case 'blocked':
       return {
-        label: '동기화 멈춤',
-        title: '삭제가 많아 동기화를 멈췄어요. 눌러서 확인하세요.',
-        announcement: '삭제가 많아 동기화를 멈췄습니다. 확인이 필요합니다.',
+        label: t('syncbar.blocked'),
+        title: t('syncbar.blockedTitle'),
+        announcement: t('syncbar.blockedAnnounce'),
       };
     case 'idle':
       return recent
-        ? { label: '방금 동기화됨', title: 'Google Drive 동기화 완료', announcement: '동기화가 완료되었습니다.' }
+        ? { label: t('syncbar.done'), title: t('syncbar.doneTitle'), announcement: t('syncbar.doneAnnounce') }
         : null;
     default:
       return null;
@@ -54,6 +56,7 @@ export function syncBarCopy(status: SyncStatus | null, recent: boolean): SyncBar
 /** 동기화가 진행 중이거나 방금 끝났거나 실패했을 때만 보이는 상태 버튼. */
 export function SyncBar({ status, onOpen }: { status: SyncStatus | null; onOpen: () => void }) {
   const [recent, setRecent] = useState(false);
+  useLocale();
   const prev = useRef<SyncStatus['state'] | undefined>(status?.state);
 
   useEffect(() => {

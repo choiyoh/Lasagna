@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { quickSwitch } from '../workers/index/quick-switch';
 
@@ -30,12 +31,12 @@ export function TemplatePicker({ onPick, onClose }: Props) {
 
   return (
     <div className="dialog-backdrop top" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="switcher" role="dialog" aria-modal="true" aria-label="템플릿 삽입">
+      <div className="switcher" role="dialog" aria-modal="true" aria-label={t('template.title')}>
         <input
           ref={inputRef}
           autoFocus
           value={query}
-          placeholder="삽입할 템플릿"
+          placeholder={t('template.search')}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return;
@@ -55,11 +56,11 @@ export function TemplatePicker({ onPick, onClose }: Props) {
           }}
         />
         <div className="switcher__list" role="listbox">
-          {templates === null && <div className="switcher__item"><span className="switcher__path">불러오는 중…</span></div>}
+          {templates === null && <div className="switcher__item"><span className="switcher__path">{t('common.loading')}</span></div>}
           {templates !== null && templates.length === 0 && (
             <div className="switcher__item">
-              <span className="switcher__title">템플릿이 없어요</span>
-              <span className="switcher__path">볼트의 「템플릿」 폴더에 노트를 만들어 두면 여기에 나와요. {'{{date}}'} {'{{time}}'} {'{{title}}'} 변수를 쓸 수 있어요.</span>
+              <span className="switcher__title">{t('template.empty')}</span>
+              <span className="switcher__path">{t('template.hint')}</span>
             </div>
           )}
           {hits.map((h, i) => (

@@ -54,7 +54,7 @@ describe('cover', () => {
     expect(new Set(GRADIENTS.map((g) => g.id)).size).toBe(8);
     for (const g of GRADIENTS) {
       expect(g.id).toMatch(/^[a-z]+$/);
-      expect(g.label).not.toBe('');
+      expect(g.labelKey.startsWith('cover.gradient.')).toBe(true);
       expect(g.css.startsWith('linear-gradient(')).toBe(true);
     }
   });

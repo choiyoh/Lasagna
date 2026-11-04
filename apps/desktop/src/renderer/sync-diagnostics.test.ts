@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { setLocale } from '@nopsidian/i18n';
 import type { SyncDiagnostics, SyncStatus } from '@nopsidian/ipc-contract';
 import { formatSyncDiagnostics } from './sync-diagnostics';
 
@@ -49,6 +50,20 @@ describe('formatSyncDiagnostics', () => {
     const text = formatSyncDiagnostics({ ...status, clientSource: 'builtin', builtinClientAvailable: true }, diagnostics);
     expect(text).toContain('클라이언트: 내장 (…hijk)');
     expect(text).not.toContain('builtin-secret');
+  });
+
+  it('영어 설정에서는 같은 정보를 영어 라벨로 만든다(서버 문구 제외)', () => {
+    setLocale('en');
+    try {
+      const text = formatSyncDiagnostics(status, { ...diagnostics, lastFailure: null, lastRefreshFailure: null });
+      expect(text).toContain('Lasagna sync diagnostics');
+      expect(text).toContain('State: idle');
+      expect(text).toContain('Conflicts: 1');
+      expect(text).toContain('Files changed on this device: 3 files');
+      expect(text).not.toMatch(/[가-힣]/);
+    } finally {
+      setLocale('ko');
+    }
   });
 
   it('토큰·전체 이메일·노트 이름/경로는 넣지 않는다', () => {

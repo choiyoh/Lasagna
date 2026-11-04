@@ -1,43 +1,41 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { SyncDiagnostics, SyncStatus } from '@nopsidian/ipc-contract';
+import { formatDateTime, formatRelativeTime, t, tPlural, type MessageKey } from '@nopsidian/i18n';
+import { useLocale } from './useLocale';
 import { formatSyncDiagnostics } from './sync-diagnostics';
 
 type Plan = Awaited<ReturnType<typeof window.nops.sync.plan>>;
 type Run = Awaited<ReturnType<typeof window.nops.sync.run>>;
 
-const STATE_LABEL: Record<SyncStatus['state'], string> = {
-  off: '꺼져 있어요',
-  idle: '동기화됨',
-  syncing: '동기화 중…',
-  offline: '오프라인 — 연결되면 다시 시도해요',
-  error: '일부 파일을 동기화하지 못했어요',
-  needsAuth: 'Google 계정을 다시 연결해 주세요',
-  blocked: '삭제가 많아 멈췄어요',
+const STATE_KEY: Record<SyncStatus['state'], MessageKey> = {
+  off: 'sync.state.off',
+  idle: 'sync.state.idle',
+  syncing: 'sync.state.syncing',
+  offline: 'sync.state.offline',
+  error: 'sync.state.error',
+  needsAuth: 'sync.state.needsAuth',
+  blocked: 'sync.state.blocked',
 };
 
-const OP_LABEL: Record<string, string> = {
-  push: '올리기',
-  pull: '내려받기',
-  merge: '병합',
-  trashLocal: '이 기기에서 삭제',
-  trashRemote: 'Drive에서 삭제',
-  moveLocal: '이 기기에서 이동',
-  moveRemote: 'Drive에서 이동',
-  record: '기록만',
-  forget: '기록 정리',
+const OP_KEY: Record<string, MessageKey> = {
+  push: 'sync.op.push',
+  pull: 'sync.op.pull',
+  merge: 'sync.op.merge',
+  trashLocal: 'sync.op.trashLocal',
+  trashRemote: 'sync.op.trashRemote',
+  moveLocal: 'sync.op.moveLocal',
+  moveRemote: 'sync.op.moveRemote',
+  record: 'sync.op.record',
+  forget: 'sync.op.forget',
 };
 
-export const syncStateText = (s: SyncStatus | null): string => (s ? STATE_LABEL[s.state] : '');
+const opLabel = (type: string): string => (OP_KEY[type] ? t(OP_KEY[type]!) : type);
 
-const ago = (t: number | null) => {
-  if (!t) return '아직 동기화한 적이 없어요';
-  const sec = Math.round((Date.now() - t) / 1000);
-  if (sec < 60) return '방금';
-  if (sec < 3600) return `${Math.round(sec / 60)}분 전`;
-  return new Date(t).toLocaleString('ko-KR');
-};
+export const syncStateText = (s: SyncStatus | null): string => (s ? t(STATE_KEY[s.state]) : '');
 
-const at = (t: number | null) => (t === null ? '없음' : new Date(t).toLocaleString('ko-KR'));
+const ago = (value: number | null) => (value ? formatRelativeTime(value) : t('sync.never'));
+
+const at = (value: number | null) => (value === null ? t('common.none') : formatDateTime(value));
 
 interface Props {
   status: SyncStatus | null;
@@ -47,6 +45,7 @@ interface Props {
 
 /** Google Drive 동기화 설정·실행 대화상자. 첫 동기화는 계획을 먼저 보여 주고 확인을 받는다. */
 export function SyncDialog({ status, onClose, onOpenNote }: Props) {
+  useLocale();
   const [clientId, setClientId] = useState('');
   const [secret, setSecret] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -95,9 +94,9 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
     if (!status || !diag) return;
     try {
       await navigator.clipboard.writeText(formatSyncDiagnostics(status, diag));
-      setCopied('복사했어요');
+      setCopied(t('sync.copied'));
     } catch {
-      setCopied('복사하지 못했어요');
+      setCopied(t('sync.copyFailed'));
     }
     setTimeout(() => setCopied(null), 2500);
   }, [status, diag]);
@@ -107,15 +106,15 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
   const builtinAvailable = s?.builtinClientAvailable === true;
   const clientForm = (
     <>
-      <input placeholder="클라이언트 ID (….apps.googleusercontent.com)" value={clientId} onChange={(e) => setClientId(e.target.value)} aria-label="클라이언트 ID" />
-      <input placeholder="클라이언트 보안 비밀(있으면)" value={secret} onChange={(e) => setSecret(e.target.value)} aria-label="클라이언트 보안 비밀" type="password" />
+      <input placeholder={t('sync.clientIdPlaceholder')} value={clientId} onChange={(e) => setClientId(e.target.value)} aria-label={t('sync.clientId')} />
+      <input placeholder={t('sync.clientSecretPlaceholder')} value={secret} onChange={(e) => setSecret(e.target.value)} aria-label={t('sync.clientSecret')} type="password" />
       <div className="dialog__actions left">
         <button disabled={!clientId.trim() || !!busy} onClick={() => void act('client', () => window.nops.sync.setClient({ clientId: clientId.trim(), clientSecret: secret.trim() || undefined }).then(() => { setClientId(''); setSecret(''); }))}>
-          저장
+          {t('common.save')}
         </button>
         {builtinAvailable && s?.clientSource === 'custom' && (
           <button disabled={!!busy} onClick={() => void act('builtin', () => window.nops.sync.useBuiltin())}>
-            앱 내장 클라이언트로
+            {t('sync.useBuiltin')}
           </button>
         )}
       </div>
@@ -130,67 +129,69 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
       }
     });
   const tokenText = !s?.connected
-    ? '없음'
+    ? t('common.none')
     : diag === null
-      ? '확인 중…'
+      ? t('sync.tokenChecking')
       : diag.tokenValid
-        ? `유효 · ${at(diag.tokenExpiresAt)}까지`
-        : `만료됨 · '지금 확인' 때 갱신을 시도해요`;
+        ? t('sync.tokenValid', { date: at(diag.tokenExpiresAt) })
+        : t('sync.tokenExpired');
   const folder = diag?.folder;
   const folderText =
     folder === undefined || folder.checkedAt === null
-      ? '확인 전'
+      ? t('sync.folderUnknown')
       : folder.exists
-        ? `확인됨${folder.id === null ? '' : ` · ID ${folder.id}`}`
-        : '아직 없음';
+        ? `${t('sync.folderExists')}${folder.id === null ? '' : t('sync.folderId', { id: folder.id })}`
+        : t('sync.folderMissing');
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog syncdialog" role="dialog" aria-modal="true" aria-label="Google Drive 동기화">
-        <h2>Google Drive 동기화</h2>
-        <p className="muted small">켜지 않으면 앱은 계속 완전한 오프라인으로 동작해요. 앱이 만든 파일에만 접근하는 <code>drive.file</code> 권한만 요청해요.</p>
+      <div className="dialog syncdialog" role="dialog" aria-modal="true" aria-label={t('sync.title')}>
+        <h2>{t('sync.title')}</h2>
+        <p className="muted small">
+          {t('sync.intro1')} <code>drive.file</code> {t('sync.intro2')}
+        </p>
 
         {isBuiltin ? (
           <section>
-            <h3>1. Google 계정</h3>
-            <p className="small">앱에 내장된 Google 클라이언트로 연결해요. Google Cloud 설정은 이미 끝났어요.</p>
+            <h3>{t('sync.accountHeading', { n: 1 })}</h3>
+            <p className="small">{t('sync.builtinHint')}</p>
             {s?.connected ? (
               <>
-                <p className="small">Google 계정이 연결돼 있어요.</p>
-                <button disabled={!!busy} onClick={() => void act('disconnect', () => window.nops.sync.disconnect())}>연결 해제</button>
+                <p className="small">{t('sync.accountConnected')}</p>
+                <button disabled={!!busy} onClick={() => void act('disconnect', () => window.nops.sync.disconnect())}>{t('sync.disconnect')}</button>
               </>
             ) : (
               <button disabled={!s?.configured || !!busy} onClick={() => void connectAction()}>
-                {busy === 'connect' ? '브라우저에서 로그인해 주세요…' : 'Google로 로그인'}
+                {busy === 'connect' ? t('sync.waitingLogin') : t('sync.loginGoogle')}
               </button>
             )}
             <details className="syncdialog__advanced">
-              <summary className="muted small">고급: 다른 클라이언트 쓰기</summary>
-              <p className="muted small">직접 입력한 클라이언트가 있으면 내장 클라이언트보다 우선해요. 바꾸면 기존 토큰은 다시 로그인해야 해요.</p>
+              <summary className="muted small">{t('sync.advanced')}</summary>
+              <p className="muted small">{t('sync.advancedHint')}</p>
               {clientForm}
             </details>
           </section>
         ) : (
           <>
             <section>
-              <h3>1. Google 클라이언트</h3>
+              <h3>{t('sync.clientHeading', { n: 1 })}</h3>
               {s?.clientSource === 'custom' ? (
-                <p className="small">클라이언트 ID가 저장돼 있어요. 직접 입력한 클라이언트를 사용하고 있어요(OS 키체인에 암호화).</p>
+                <p className="small">{t('sync.customSaved')}</p>
               ) : (
-                <p className="muted small">이 빌드에는 내장 클라이언트가 없어요. 본인의 Google Cloud 프로젝트에서 “데스크톱 앱” OAuth 클라이언트를 만들어 ID를 붙여 넣어 주세요. (docs/sync-setup.md)</p>
+                <p className="muted small">{t('sync.noBuiltin')}</p>
               )}
               {clientForm}
             </section>
 
             <section>
-              <h3>2. 계정</h3>
+              <h3>{t('sync.accountStep', { n: 2 })}</h3>
               {s?.connected ? (
                 <>
-                  <p className="small">Google 계정이 연결돼 있어요.</p>
-                  <button disabled={!!busy} onClick={() => void act('disconnect', () => window.nops.sync.disconnect())}>연결 해제</button>
+                  <p className="small">{t('sync.accountConnected')}</p>
+                  <button disabled={!!busy} onClick={() => void act('disconnect', () => window.nops.sync.disconnect())}>{t('sync.disconnect')}</button>
                 </>
               ) : (
                 <button disabled={!s?.configured || !!busy} onClick={() => void connectAction()}>
-                  {busy === 'connect' ? '브라우저에서 로그인해 주세요…' : 'Google 계정 연결'}
+                  {busy === 'connect' ? t('sync.waitingLogin') : t('sync.loginAccount')}
                 </button>
               )}
             </section>
@@ -198,62 +199,64 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
         )}
 
         <section>
-          <h3>{isBuiltin ? '2' : '3'}. 이 볼트</h3>
+          <h3>{t('sync.vaultStep', { n: isBuiltin ? 2 : 3 })}</h3>
           <label className="small">
-            <input type="checkbox" checked={!!s?.enabled} disabled={!s?.connected || !!busy} onChange={(e) => void act('enable', () => window.nops.sync.enable({ enabled: e.target.checked }))} /> 이 볼트를 Drive와 동기화
+            <input type="checkbox" checked={!!s?.enabled} disabled={!s?.connected || !!busy} onChange={(e) => void act('enable', () => window.nops.sync.enable({ enabled: e.target.checked }))} /> {t('sync.enableVault')}
           </label>
           <p className="small" data-testid="sync-state">
             {syncStateText(s)}
-            {s?.enabled && <> · 마지막: {ago(s.lastSync)}</>}
+            {s?.enabled && <> · {t('sync.last', { time: ago(s.lastSync) })}</>}
           </p>
           {s?.message && <p className="small warn">{s.message}</p>}
           <div className="dialog__actions left">
             <button disabled={!s?.enabled || !s.connected || !!busy || diagLoading} onClick={() => void act('plan', async () => { setResult(null); setPlan(await window.nops.sync.plan()); })}>
-              {s?.confirmedFirst ? '지금 동기화…' : '첫 동기화 미리보기'}
+              {s?.confirmedFirst ? t('sync.syncNow') : t('sync.firstPreview')}
             </button>
           </div>
         </section>
 
         <section data-testid="sync-diagnostics">
-          <h3>{isBuiltin ? '3' : '4'}. 진단</h3>
+          <h3>{t('sync.diagStep', { n: isBuiltin ? 3 : 4 })}</h3>
           <p className="small">
-            Google 클라이언트:{' '}
-            {s?.clientSource === 'builtin' ? '앱에 내장됨' : s?.clientSource === 'custom' ? '직접 입력' : '등록 안 됨'}
+            {t('sync.clientLabel')}:{' '}
+            {s?.clientSource === 'builtin' ? t('sync.clientBuiltin') : s?.clientSource === 'custom' ? t('sync.clientCustom') : t('sync.notRegistered')}
             {diag?.clientIdSuffix ? ` (…${diag.clientIdSuffix})` : ''}
-            {' · '}보안 비밀:{' '}
-            {diag?.hasClientSecret ? '등록됨' : '등록 안 됨'}
+            {' · '}{t('sync.secretLabel')}:{' '}
+            {diag?.hasClientSecret ? t('sync.registered') : t('sync.notRegistered')}
           </p>
           <p className="small" data-testid="sync-account">
-            계정:{' '}
+            {t('sync.accountLabel')}:{' '}
             {diag?.accountEmail ??
               (s?.connected
                 ? diag?.folder.checkedAt
-                  ? '이메일을 읽을 수 없어요'
-                  : '아직 확인 전 — ‘지금 확인’을 눌러 주세요'
-                : '연결 안 됨')}
+                  ? t('sync.emailUnreadable')
+                  : t('sync.accountUnverified')
+                : t('sync.accountDisconnected'))}
           </p>
           <p className="small" data-testid="sync-token">
-            토큰: {tokenText}
+            {t('sync.token')}: {tokenText}
           </p>
           {diag?.lastRefreshFailure && (
             <div className="syncdialog__failure" data-testid="sync-refresh-failure">
-              <strong className="small">토큰 갱신 실패: {diag.lastRefreshFailure.title}</strong>
+              <strong className="small">{t('sync.refreshFailed', { title: diag.lastRefreshFailure.title })}</strong>
               <p className="small">{diag.lastRefreshFailure.action}</p>
               <a href={diag.lastRefreshFailure.docs} target="_blank" rel="noreferrer">
-                단계별 안내 (docs/sync-setup.md)
+                {t('sync.guideLink')}
               </a>
               <details>
-                <summary className="muted small">오류 코드: {diag.lastRefreshFailure.code}</summary>
+                <summary className="muted small">{t('sync.errorCode', { code: diag.lastRefreshFailure.code })}</summary>
                 <p className="muted small">{at(diag.lastRefreshFailure.at)}</p>
               </details>
             </div>
           )}
           <p className="small">
-            마지막 성공: {s?.lastSync ? at(s.lastSync) : '아직 없음'}
-            {' · '}마지막 시도: {s?.lastAttempt ? at(s.lastAttempt) : '아직 없음'}
+            {t('sync.lastSuccess', { time: s?.lastSync ? at(s.lastSync) : t('sync.notYet') })}
+            {' · '}{t('sync.lastAttempt', { time: s?.lastAttempt ? at(s.lastAttempt) : t('sync.notYet') })}
           </p>
           <p className="small" data-testid="sync-pending">
-            이 기기에서 바뀐 파일: {diag?.pendingChanges === null || diag === null ? '확인 전' : `${diag.pendingChanges}개`}
+            {t('sync.changedFiles', {
+              value: diag?.pendingChanges === null || diag === null ? t('sync.beforeCheck') : tPlural('count.files', diag.pendingChanges),
+            })}
             {' · '}
             {s && s.conflicts.length > 0 ? (
               <button
@@ -261,25 +264,25 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
                 data-testid="sync-conflicts-count"
                 onClick={() => document.querySelector('[data-testid="sync-conflicts"]')?.scrollIntoView({ block: 'nearest' })}
               >
-                충돌: {s.conflicts.length}건
+                {t('sync.conflictsLabel', { count: s.conflicts.length })}
               </button>
             ) : (
-              <>충돌: 0건</>
+              <>{t('sync.conflictsZero')}</>
             )}
           </p>
           <p className="small" data-testid="sync-folder">
-            Drive 폴더: {folder?.path ?? 'Nopsidian/…'} · {folderText}
-            {folder?.checkedAt ? ` · ${at(folder.checkedAt)} 확인` : ''}
+            {t('sync.folderLabel')}: {folder?.path ?? 'Nopsidian/…'} · {folderText}
+            {folder?.checkedAt ? t('sync.folderCheckedAt', { time: at(folder.checkedAt) }) : ''}
           </p>
           {diag?.lastFailure && (
             <div className="syncdialog__failure" data-testid="sync-last-failure">
               <strong className="small">{diag.lastFailure.title}</strong>
               <p className="small">{diag.lastFailure.action}</p>
               <a href={diag.lastFailure.docs} target="_blank" rel="noreferrer">
-                단계별 안내 (docs/sync-setup.md)
+                {t('sync.guideLink')}
               </a>
               <details>
-                <summary className="muted small">오류 코드: {diag.lastFailure.code}</summary>
+                <summary className="muted small">{t('sync.errorCode', { code: diag.lastFailure.code })}</summary>
                 <p className="muted small">{at(diag.lastFailure.at)}</p>
               </details>
             </div>
@@ -295,50 +298,50 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
                 })
               }
             >
-              {busy === 'check' || diagLoading ? '확인 중…' : '지금 확인'}
+              {busy === 'check' || diagLoading ? t('sync.checking') : t('sync.check')}
             </button>
             <button data-testid="sync-copy-diagnostics" disabled={!diag} onClick={() => void copyDiagnostics()}>
-              진단 정보 복사
+              {t('sync.copyDiagnostics')}
             </button>
             {copied && <span className="muted small">{copied}</span>}
           </div>
-          <p className="muted small">‘지금 확인’은 토큰과 Drive 폴더만 읽고, 동기화·업로드·삭제는 하지 않아요.</p>
-          <p className="muted small">복사에는 비밀 값·이메일·폴더 ID/경로가 들어가지 않아요.</p>
+          <p className="muted small">{t('sync.checkHint')}</p>
+          <p className="muted small">{t('sync.copyHint')}</p>
         </section>
 
         {plan && (
           <section data-testid="sync-plan">
-            <h3>{plan.firstSync ? '첫 동기화 계획' : '동기화 계획'}</h3>
-            <p className="small">{Object.entries(plan.counts).map(([k, n]) => `${OP_LABEL[k] ?? k} ${n}`).join(' · ') || '바뀐 내용이 없어요'}</p>
+            <h3>{plan.firstSync ? t('sync.firstPlan') : t('sync.plan')}</h3>
+            <p className="small">{Object.entries(plan.counts).map(([k, n]) => `${opLabel(k)} ${n}`).join(' · ') || t('sync.noChanges')}</p>
             {plan.blocked && <p className="small warn">{plan.blocked}</p>}
             <ul className="syncdialog__ops">
               {plan.ops.slice(0, 60).map((o, i) => (
                 <li key={i}>
-                  <span className="muted">{OP_LABEL[o.type] ?? o.type}</span> {o.path}
+                  <span className="muted">{opLabel(o.type)}</span> {o.path}
                   {o.to ? ` → ${o.to}` : ''}
                 </li>
               ))}
-              {plan.ops.length > 60 && <li className="muted">… 외 {plan.ops.length - 60}개</li>}
+              {plan.ops.length > 60 && <li className="muted">{t('entry.moreCount', { count: plan.ops.length - 60 })}</li>}
             </ul>
             <div className="dialog__actions">
-              <button onClick={() => setPlan(null)}>닫기</button>
+              <button onClick={() => setPlan(null)}>{t('common.close')}</button>
               <button
                 className="primary"
                 disabled={!!busy || !s?.enabled}
                 onClick={() => void act('run', async () => { const force = !!plan.blocked; setResult(await window.nops.sync.run({ force })); setPlan(null); })}
               >
-                {plan.blocked ? '그래도 실행' : '실행'}
+                {plan.blocked ? t('sync.forceRun') : t('sync.run')}
               </button>
             </div>
-            {s && !s.enabled && <p className="muted small">먼저 위에서 ‘이 볼트를 Drive와 동기화’를 켜 주세요.</p>}
+            {s && !s.enabled && <p className="muted small">{t('sync.enableFirst')}</p>}
           </section>
         )}
 
         {result && (
           <section data-testid="sync-result">
             <p className="small">
-              올림 {result.pushed} · 내려받음 {result.pulled} · 병합 {result.merged} · 삭제 {result.deleted}
-              {result.failed > 0 && <span className="warn"> · 실패 {result.failed}</span>}
+              {t('sync.resultSummary', { pushed: result.pushed, pulled: result.pulled, merged: result.merged, deleted: result.deleted })}
+              {result.failed > 0 && <span className="warn">{t('sync.resultFailed', { n: result.failed })}</span>}
             </p>
             {result.errors.map((e, i) => (
               <p key={i} className="small warn">{e.path}: {e.message}</p>
@@ -348,8 +351,8 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
 
         {s && s.conflicts.length > 0 && (
           <section data-testid="sync-conflicts">
-            <h3>충돌 {s.conflicts.length}건</h3>
-            <p className="muted small">양쪽 내용을 모두 남겼어요. 확인하고 정리해 주세요.</p>
+            <h3>{t('sync.conflictsHeading', { count: s.conflicts.length })}</h3>
+            <p className="muted small">{t('sync.conflictsHint')}</p>
             <ul className="syncdialog__ops">
               {s.conflicts.map((p) => (
                 <li key={p}><button className="link" onClick={() => { onOpenNote(p); onClose(); }}>{p}</button></li>
@@ -360,7 +363,7 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
 
         {error && <p className="small warn" role="alert">{error}</p>}
         <div className="dialog__actions">
-          <button onClick={onClose}>닫기</button>
+          <button onClick={onClose}>{t('common.close')}</button>
         </div>
       </div>
     </div>

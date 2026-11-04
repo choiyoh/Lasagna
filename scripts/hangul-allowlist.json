@@ -40,8 +40,6 @@
   "apps/desktop/src/renderer/McpSettings.tsx": 42,
   "apps/desktop/src/renderer/note-title.ts": 2,
   "apps/desktop/src/renderer/NoteEditor.tsx": 1,
-  "apps/desktop/src/renderer/sync-diagnostics.ts": 20,
-  "apps/desktop/src/renderer/SyncDialog.tsx": 90,
   "apps/desktop/src/workers/index/db-compute.ts": 4,
   "apps/desktop/src/workers/index/db-queries.ts": 5,
   "apps/desktop/src/workers/index/index-worker.ts": 1,

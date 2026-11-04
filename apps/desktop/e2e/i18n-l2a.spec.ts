@@ -105,11 +105,53 @@ test('English smoke: shortcuts, links panel, find bar, and switcher have no Kore
   expect(await findbar.innerText()).not.toMatch(HANGUL);
   await page.keyboard.press('Escape');
 
-  // 4) 빠른 전환기 (⌘O)
+  // 4) 동기화 대화상자 (팔레트에서 열기)
+  await page.keyboard.press('ControlOrMeta+p');
+  const palette = page.getByTestId('command-palette');
+  await expect(palette).toBeVisible();
+  await palette.getByRole('option', { name: /Google Drive sync/ }).click();
+  const sync = page.locator('.dialog.syncdialog');
+  await expect(sync).toBeVisible();
+  await expect(sync.getByRole('heading', { name: 'Google Drive sync' })).toBeVisible();
+  expect(await sync.innerText()).not.toMatch(HANGUL);
+  await page.keyboard.press('Escape');
+  await expect(sync).toHaveCount(0);
+
+  // 5) 빠른 전환기 (⌘O)
   await page.keyboard.press('ControlOrMeta+o');
   const switcher = page.getByRole('dialog', { name: 'Quick switcher' });
   await expect(switcher).toBeVisible();
   await expect(switcher.getByPlaceholder('Note title, alias, or path')).toBeVisible();
   expect(await switcher.innerText()).not.toMatch(HANGUL);
   await page.keyboard.press('Escape');
+
+  // 6) 독 탭: 댓글 수가 붙어도 영어에서 잘리지 않는다(줄바꿈 허용, 라벨 자르지 않음)
+  const commentsTab = page.locator('.dockbody__tabs').getByRole('tab', { name: /Comments/ });
+  await commentsTab.click();
+  const box = page.locator('.comments textarea');
+  await box.fill('Nice note');
+  await page.locator('.comments__bar').getByRole('button', { name: 'Comment' }).click();
+  await expect(page.locator('.dockbody__tabs').getByRole('tab', { name: 'Comments 1' })).toBeVisible();
+  for (const [w, h] of [[920, 760], [1440, 900]] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.waitForTimeout(200);
+    const m = await page.evaluate(() => {
+      const row = document.querySelector('.dockbody__tabs') as HTMLElement;
+      const tabs = [...row.querySelectorAll('button')] as HTMLElement[];
+      const rowRect = row.getBoundingClientRect();
+      return {
+        overflow: row.scrollWidth - row.clientWidth,
+        clipped: tabs.filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.right > rowRect.right + 1 || el.scrollWidth > el.clientWidth + 1 || r.width === 0;
+        }).map((el) => el.textContent),
+        history: tabs.find((el) => el.textContent === 'History')?.getBoundingClientRect().right ?? null,
+        rowRight: rowRect.right,
+      };
+    });
+    expect(m.overflow).toBeLessThanOrEqual(0);
+    expect(m.clipped).toEqual([]);
+    expect(m.history).not.toBeNull();
+    expect((m.history ?? 0) <= m.rowRight + 1).toBe(true);
+  }
 });

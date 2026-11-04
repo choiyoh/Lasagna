@@ -1,37 +1,54 @@
 import type { SyncDiagnostics, SyncStatus } from '@nopsidian/ipc-contract';
+import { t, tPlural } from '@nopsidian/i18n';
 
-const iso = (t: number | null): string => (t === null ? '없음' : new Date(t).toISOString());
+const iso = (value: number | null): string => (value === null ? t('diag.none') : new Date(value).toISOString());
 
-const yes = (v: boolean): string => (v ? '예' : '아니오');
+const yes = (value: boolean): string => (value ? t('diag.yes') : t('diag.no'));
 
 /**
  * 진단 정보 복사용 텍스트. 비밀 값·토큰·이메일·폴더 ID/경로·노트 이름/경로는 절대 넣지 않는다.
- * 경로는 개수만, 폴더는 있음/없음/확인 못 함만 넣는다.
+ * 경로는 개수만, 폴더는 있음/없음/확인 못 함만 넣는다. 문구는 호출 시점 언어로 만든다.
  */
 export function formatSyncDiagnostics(status: SyncStatus, d: SyncDiagnostics): string {
-  const source = status.clientSource === 'builtin' ? '내장' : status.clientSource === 'custom' ? '직접 입력' : '없음';
+  const source =
+    status.clientSource === 'builtin'
+      ? t('diag.sourceBuiltin')
+      : status.clientSource === 'custom'
+        ? t('diag.sourceCustom')
+        : t('diag.none');
+  const failure = (value: { title: string; code: string; at: number }): string =>
+    t('diag.failureValue', { title: value.title, code: value.code, at: iso(value.at) });
   const lines = [
-    'Lasagna 동기화 진단',
-    `생성: ${new Date().toISOString()}`,
+    t('diag.title'),
+    t('diag.created', { time: new Date().toISOString() }),
     '',
-    `상태: ${status.state}`,
-    `동기화 켜짐: ${yes(status.enabled)}`,
-    `첫 동기화 완료: ${yes(status.confirmedFirst)}`,
-    `마지막 성공: ${iso(status.lastSync)}`,
-    `마지막 시도: ${iso(status.lastAttempt)}`,
-    `이 기기에서 바뀐 파일: ${d.pendingChanges === null ? '확인 전' : `${d.pendingChanges}개`}`,
-    `충돌: ${status.conflicts.length}건`,
+    t('diag.state', { state: status.state }),
+    t('diag.enabled', { value: yes(status.enabled) }),
+    t('diag.confirmedFirst', { value: yes(status.confirmedFirst) }),
+    t('diag.lastSuccess', { value: iso(status.lastSync) }),
+    t('diag.lastAttempt', { value: iso(status.lastAttempt) }),
+    t('diag.pending', {
+      value: d.pendingChanges === null ? t('diag.beforeCheck') : tPlural('count.files', d.pendingChanges),
+    }),
+    t('diag.conflicts', { count: status.conflicts.length }),
     '',
-    `클라이언트: ${d.clientIdSuffix === null ? '없음' : `${source} (…${d.clientIdSuffix})`}`,
-    `클라이언트 보안 비밀: ${d.hasClientSecret ? '등록됨' : '등록 안 됨'}`,
-    `계정: ${status.connected ? '계정 연결됨' : '계정 연결 안 됨'}`,
-    `토큰 만료: ${iso(d.tokenExpiresAt)} (${d.tokenValid ? '유효' : '만료/없음'})`,
-    `마지막 토큰 갱신 실패: ${d.lastRefreshFailure === null ? '없음' : `${d.lastRefreshFailure.title} [${d.lastRefreshFailure.code}] @ ${iso(d.lastRefreshFailure.at)}`}`,
+    t('diag.client', {
+      value: d.clientIdSuffix === null ? t('diag.none') : t('diag.clientValue', { source, suffix: d.clientIdSuffix }),
+    }),
+    t('diag.clientSecret', { value: d.hasClientSecret ? t('diag.registered') : t('diag.notRegistered') }),
+    t('diag.account', { value: status.connected ? t('diag.accountConnected') : t('diag.accountDisconnected') }),
+    t('diag.tokenExpiry', {
+      value: iso(d.tokenExpiresAt),
+      state: d.tokenValid ? t('diag.valid') : t('diag.expired'),
+    }),
+    t('diag.refreshFailure', { value: d.lastRefreshFailure === null ? t('diag.none') : failure(d.lastRefreshFailure) }),
     '',
-    `Drive 폴더: ${d.folder.checkedAt === null ? '확인 못 함' : d.folder.exists ? '있음' : '없음'}`,
-    `마지막 실패: ${d.lastFailure === null ? '없음' : `${d.lastFailure.title} [${d.lastFailure.code}] @ ${iso(d.lastFailure.at)}`}`,
+    t('diag.folder', {
+      value: d.folder.checkedAt === null ? t('diag.folderUnknown') : d.folder.exists ? t('diag.folderExists') : t('diag.folderMissing'),
+    }),
+    t('diag.lastFailure', { value: d.lastFailure === null ? t('diag.none') : failure(d.lastFailure) }),
     '',
-    '노트 이름·경로는 이 진단에 포함하지 않았습니다.',
+    t('diag.footer'),
   ];
   return `${lines.join('\n')}\n`;
 }

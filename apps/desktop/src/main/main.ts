@@ -30,7 +30,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { readAudit } from '@nopsidian/mcp/audit';
 import { RevertError, applyRestore, logRevert, planRevert } from '@nopsidian/mcp/revert';
 import { readPolicyFile, writePolicyFile } from '@nopsidian/mcp/policy-file';
-import { events, graphLayout, graphSettings, workspaceLayout, type EventName } from '@nopsidian/ipc-contract';
+import { events, graphLayout, graphSettings, workspaceLayout, type AppLanguage, type EventName } from '@nopsidian/ipc-contract';
+import { resolveLocale } from '@nopsidian/i18n';
+import { AppSettingsStore, readAppSettings } from './app-settings';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
 import { runMcpStdio } from './mcp-stdio';
@@ -652,6 +654,37 @@ function registerHandlers() {
     if (!openExternalSafe(url)) throw new Error('허용되지 않은 URL');
     return undefined;
   });
+  handle('settings.language', () => currentLanguage());
+  handle('settings.setLanguage', ({ language }) => {
+    settingsStore().setLanguage(language);
+    const current = currentLanguage();
+    broadcast('language.changed', current);
+    return current;
+  });
+}
+
+let settings: AppSettingsStore | null = null;
+
+const settingsFile = () => path.join(app.getPath('userData'), 'app-settings.json');
+
+/** 첫 사용(창이 뜬 뒤)에 파일을 읽는다. 쓰기 실패는 던져서 IPC 오류로 렌더러에 전달된다. */
+function settingsStore(): AppSettingsStore {
+  settings ??= new AppSettingsStore(settingsFile(), readAppSettings(settingsFile()));
+  return settings;
+}
+
+/**
+ * OS 언어. e2e 는 기존 한국어 셀렉터가 흔들리지 않도록 ko 로 고정하고,
+ * 언어 전환 테스트만 NOPS_E2E_LANG 로 덮어쓴다.
+ */
+function systemLanguages(): readonly string[] {
+  if (process.env.NOPS_E2E === '1') return [process.env.NOPS_E2E_LANG === 'en' ? 'en' : 'ko'];
+  return app.getPreferredSystemLanguages();
+}
+
+function currentLanguage(): AppLanguage {
+  const { language } = settingsStore().value;
+  return { setting: language, locale: resolveLocale(language, systemLanguages()) };
 }
 
 app.whenReady().then(() => {

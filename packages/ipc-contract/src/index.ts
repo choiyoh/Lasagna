@@ -300,6 +300,16 @@ export const mcpPolicyFile = z
 export type McpPolicyFile = z.infer<typeof mcpPolicyFile>;
 
 /**
+ * 앱 언어 설정과 그 결과 로캘. 원본은 main 의 userData/app-settings.json 이고, 렌더러는 IPC 로만 바꾼다.
+ * `setting` 은 무엇을 따를지(system|ko|en), `locale` 은 실제 표시 언어(ko|en)다.
+ */
+export const languageSetting = z.enum(['system', 'ko', 'en']);
+export const localeCode = z.enum(['ko', 'en']);
+export const appLanguage = z.object({ setting: languageSetting, locale: localeCode });
+export type LanguageSetting = z.infer<typeof languageSetting>;
+export type AppLanguage = z.infer<typeof appLanguage>;
+
+/**
  * 렌더러가 호출할 수 있는 모든 채널의 단일 정의.
  * 여기에 없는 채널은 main이 등록하지 않고, preload도 노출하지 않는다.
  */
@@ -575,6 +585,10 @@ export const contract = {
   'comment.resolve': { input: z.object({ path: relPath, id: z.string().max(40), resolved: z.boolean() }), output: z.object({ ok: z.boolean() }) },
   'comment.remove': { input: z.object({ path: relPath, id: z.string().max(40) }), output: z.object({ ok: z.boolean() }) },
   'app.openExternal': { input: z.object({ url: z.string().url() }), output: z.undefined() },
+  /** 지금 언어 설정과 실제 로캘. */
+  'settings.language': { input: z.undefined(), output: appLanguage },
+  /** 언어 설정을 저장하고 모든 창에 알린다. */
+  'settings.setLanguage': { input: z.object({ language: languageSetting }), output: appLanguage },
 } as const;
 
 export type Contract = typeof contract;
@@ -593,6 +607,8 @@ export const events = {
   'asset.changed': z.object({ path: relPath, kind: z.enum(['add', 'change', 'unlink']) }),
   'sync.changed': syncStatus,
   'index.progress': z.object({ done: z.number(), total: z.number() }),
+  /** 언어 설정이 바뀌었다(다른 창에서 바꿔도 따라간다). */
+  'language.changed': appLanguage,
 } as const;
 export type EventName = keyof typeof events;
 

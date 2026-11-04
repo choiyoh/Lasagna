@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { t } from '@nopsidian/i18n';
 import type { NoteSummary, SearchHit, SyncStatus, VaultInfo } from '@nopsidian/ipc-contract';
 import { NoteEditor } from './NoteEditor';
 import { useAssetStore } from './assets';
@@ -28,7 +29,8 @@ import { useEntryActions } from './useEntryActions';
 import { useAppShortcuts } from './useAppShortcuts';
 import { useLinkHosts } from './useLinkHosts';
 import { useImportExport } from './useImportExport';
-import { applyTheme, loadTheme, nextTheme, THEME_ICON, THEME_LABEL, type ThemeChoice } from './theme';
+import { applyTheme, loadTheme, nextTheme, THEME_ICON, THEME_KEY, type ThemeChoice } from './theme';
+import { useLocale } from './useLocale';
 import { initialTabs, parseTabs, selectedOf, tabsReducer } from './tabs';
 import { DatabaseScreen } from './db/DatabaseScreen';
 import { DbList } from './db/DbList';
@@ -51,6 +53,7 @@ function Marked({ text, query }: { text: string; query: string }) {
 }
 
 export function App() {
+  useLocale();
   const [vault, setVault] = useState<VaultInfo | null | undefined>(undefined);
   useEffect(() => {
     void window.nops.vault.current().then(setVault);
@@ -62,6 +65,7 @@ export function App() {
 }
 
 function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }) {
+  const locale = useLocale();
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   /** 빈 폴더도 보이게 따로 받는 폴더 목록 */
   const [folders, setFolders] = useState<string[]>([]);
@@ -270,41 +274,41 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
 
   const commands = useMemo<PaletteCommand[]>(
     () => [
-      { id: 'quick', label: '노트 찾기 (빠른 이동)', hint: '⌘O', keywords: ['open', '열기', '전환', 'ㅇㄱ'], run: () => setSwitcher(true) },
-      { id: 'new-folder', label: '새 폴더', keywords: ['folder', 'new', '폴더', '새로'], run: () => void newFolder('') },
-      { id: 'trash', label: '휴지통 열기', keywords: ['trash', 'restore', '휴지통', '복원'], run: () => setTrashOpen(true) },
-      { id: 'settings', label: '설정', hint: '⌘,', keywords: ['settings', 'preferences', '설정', '환경'], run: () => setSettingsOpen(true) },
-      { id: 'shortcuts', label: '단축키 목록', hint: 'F1', keywords: ['shortcut', 'keys', 'help', '단축키', '도움말'], run: () => setShortcutsOpen(true) },
-      { id: 'new', label: '새 노트', hint: '⌘N', keywords: ['new', '새로', '만들기'], run: () => void quickNote('') },
-      { id: 'daily', label: '오늘의 노트', hint: '⌘⌥D', keywords: ['daily', 'today', '일기', '데일리'], run: () => void openDaily() },
-      { id: 'graph', label: '그래프 보기', hint: '⌘⇧G', keywords: ['graph', '그래프'], run: () => { setDbOpen(null); setGraphOpen((o) => !o); } },
-      { id: 'bookmark', label: '현재 노트 북마크 추가·해제', hint: '⌘⇧B', keywords: ['bookmark', '북마크', '즐겨찾기'], enabled: !!selected, run: () => selected && toggleBookmark(selected) },
-      { id: 'bookmarks', label: '북마크 목록 보기', keywords: ['bookmarks', '북마크'], run: () => setSideTab('marks') },
-      { id: 'rename', label: '현재 노트 이름 바꾸기', hint: 'F2', keywords: ['rename', '이름', '이동'], enabled: !!selected, run: () => void renameCurrent() },
-      { id: 'delete', label: '현재 노트 삭제 (휴지통)', keywords: ['delete', 'remove', 'trash', '삭제', '지우기', '휴지통'], enabled: !!selected, run: () => selected && deleteEntry(selected, false) },
-      { id: 'source', label: '소스 모드 전환', hint: '⌘E', keywords: ['source', 'markdown', '소스', '원문'], enabled: !!selected, run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', metaKey: true })) },
-      { id: 'links', label: '링크·기록 패널 열기', keywords: ['panel', '패널', '백링크', '기록', '링크'], enabled: dockVisible, run: () => openPanel() },
-      { id: 'history', label: '버전 기록 보기', keywords: ['history', '기록', '버전', '복원'], enabled: dockVisible, run: () => { openPanel(); setDockTab('history'); } },
-      { id: 'tags', label: '태그 목록', keywords: ['tags', '태그'], run: () => setSideTab('tags') },
-      { id: 'dbs', label: '데이터베이스 목록', keywords: ['database', 'db', '데이터베이스'], run: () => setSideTab('db') },
-      { id: 'files', label: '파일 목록', keywords: ['files', '파일', '탐색기'], run: () => setSideTab('files') },
-      { id: 'sync', label: 'Google Drive 동기화', keywords: ['sync', 'drive', '동기화', '구글'], run: () => setSyncOpen(true) },
-      { id: 'export-html', label: '현재 노트를 HTML로 내보내기', keywords: ['export', 'html', '내보내기'], enabled: !!selected, run: () => void exportNote('html') },
-      { id: 'export-pdf', label: '현재 노트를 PDF로 내보내기', keywords: ['export', 'pdf', '내보내기'], enabled: !!selected, run: () => void exportNote('pdf') },
-      { id: 'export-vault', label: '볼트 전체를 HTML 사이트로 내보내기', keywords: ['export', 'site', 'html', '내보내기', '사이트'], run: () => void exportVault() },
-      { id: 'import-md-files', label: 'Markdown 파일 가져오기 (컴퓨터에서 .md 선택)', keywords: ['import', 'markdown', 'md', '가져오기', '마크다운'], run: () => void importMarkdown('files') },
-      { id: 'import-md-folder', label: 'Markdown 폴더 가져오기 (Obsidian 볼트 등)', keywords: ['import', 'markdown', 'folder', 'obsidian', '옵시디언', '가져오기', '폴더'], run: () => void importMarkdown('folder') },
-      { id: 'import-notion', label: 'Notion에서 가져오기 (내보낸 ZIP 파일)', keywords: ['import', 'notion', '노션', '가져오기'], run: () => void importNotion() },
-      { id: 'tab-new', label: '새 탭에서 노트 열기', keywords: ['tab', '탭'], run: () => { setSwitcherNewTab(true); setSwitcher(true); } },
-      { id: 'tab-close', label: '현재 탭 닫기', hint: '⌘W', keywords: ['close', 'tab', '탭', '닫기'], enabled: !!selected, run: () => selected && dispatchTabs({ type: 'close', pane: tabs.activePane, path: selected }) },
-      { id: 'split-right', label: '오른쪽으로 분할', keywords: ['split', '분할', '좌우'], run: () => dispatchTabs({ type: 'split', dir: 'row' }) },
-      { id: 'split-down', label: '아래로 분할', keywords: ['split', '분할', '상하'], run: () => dispatchTabs({ type: 'split', dir: 'col' }) },
-      { id: 'unsplit', label: '분할 합치기', keywords: ['unsplit', 'merge', '분할', '합치기'], enabled: tabs.panes.length > 1, run: () => dispatchTabs({ type: 'unsplit' }) },
-      { id: 'new-window', label: '새 창에서 열기', keywords: ['window', '창', '새 창'], enabled: !!selected, run: () => selected && void window.nops.window.new({ path: selected }) },
-      { id: 'theme', label: '테마 바꾸기 (시스템 → 라이트 → 다크)', keywords: ['theme', 'dark', 'light', '다크', '라이트', '테마', '다크모드'], run: cycleTheme },
-      { id: 'close', label: '다른 볼트 열기', keywords: ['vault', '볼트', '닫기'], run: onClose },
+      { id: 'quick', label: t('palette.quick'), hint: '⌘O', keywords: ['open', '열기', '전환', 'ㅇㄱ'], run: () => setSwitcher(true) },
+      { id: 'new-folder', label: t('palette.newFolder'), keywords: ['folder', 'new', '폴더', '새로'], run: () => void newFolder('') },
+      { id: 'trash', label: t('palette.trash'), keywords: ['trash', 'restore', '휴지통', '복원'], run: () => setTrashOpen(true) },
+      { id: 'settings', label: t('palette.settings'), hint: '⌘,', keywords: ['settings', 'preferences', '설정', '환경'], run: () => setSettingsOpen(true) },
+      { id: 'shortcuts', label: t('palette.shortcuts'), hint: 'F1', keywords: ['shortcut', 'keys', 'help', '단축키', '도움말'], run: () => setShortcutsOpen(true) },
+      { id: 'new', label: t('palette.new'), hint: '⌘N', keywords: ['new', '새로', '만들기'], run: () => void quickNote('') },
+      { id: 'daily', label: t('palette.daily'), hint: '⌘⌥D', keywords: ['daily', 'today', '일기', '데일리'], run: () => void openDaily() },
+      { id: 'graph', label: t('palette.graph'), hint: '⌘⇧G', keywords: ['graph', '그래프'], run: () => { setDbOpen(null); setGraphOpen((o) => !o); } },
+      { id: 'bookmark', label: t('palette.bookmark'), hint: '⌘⇧B', keywords: ['bookmark', '북마크', '즐겨찾기'], enabled: !!selected, run: () => selected && toggleBookmark(selected) },
+      { id: 'bookmarks', label: t('palette.bookmarks'), keywords: ['bookmarks', '북마크'], run: () => setSideTab('marks') },
+      { id: 'rename', label: t('palette.rename'), hint: 'F2', keywords: ['rename', '이름', '이동'], enabled: !!selected, run: () => void renameCurrent() },
+      { id: 'delete', label: t('palette.delete'), keywords: ['delete', 'remove', 'trash', '삭제', '지우기', '휴지통'], enabled: !!selected, run: () => selected && deleteEntry(selected, false) },
+      { id: 'source', label: t('palette.source'), hint: '⌘E', keywords: ['source', 'markdown', '소스', '원문'], enabled: !!selected, run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', metaKey: true })) },
+      { id: 'links', label: t('palette.links'), keywords: ['panel', '패널', '백링크', '기록', '링크'], enabled: dockVisible, run: () => openPanel() },
+      { id: 'history', label: t('palette.history'), keywords: ['history', '기록', '버전', '복원'], enabled: dockVisible, run: () => { openPanel(); setDockTab('history'); } },
+      { id: 'tags', label: t('palette.tags'), keywords: ['tags', '태그'], run: () => setSideTab('tags') },
+      { id: 'dbs', label: t('palette.dbs'), keywords: ['database', 'db', '데이터베이스'], run: () => setSideTab('db') },
+      { id: 'files', label: t('palette.files'), keywords: ['files', '파일', '탐색기'], run: () => setSideTab('files') },
+      { id: 'sync', label: t('palette.sync'), keywords: ['sync', 'drive', '동기화', '구글'], run: () => setSyncOpen(true) },
+      { id: 'export-html', label: t('palette.exportHtml'), keywords: ['export', 'html', '내보내기'], enabled: !!selected, run: () => void exportNote('html') },
+      { id: 'export-pdf', label: t('palette.exportPdf'), keywords: ['export', 'pdf', '내보내기'], enabled: !!selected, run: () => void exportNote('pdf') },
+      { id: 'export-vault', label: t('palette.exportVault'), keywords: ['export', 'site', 'html', '내보내기', '사이트'], run: () => void exportVault() },
+      { id: 'import-md-files', label: t('palette.importFiles'), keywords: ['import', 'markdown', 'md', '가져오기', '마크다운'], run: () => void importMarkdown('files') },
+      { id: 'import-md-folder', label: t('palette.importFolder'), keywords: ['import', 'markdown', 'folder', 'obsidian', '옵시디언', '가져오기', '폴더'], run: () => void importMarkdown('folder') },
+      { id: 'import-notion', label: t('palette.importNotion'), keywords: ['import', 'notion', '노션', '가져오기'], run: () => void importNotion() },
+      { id: 'tab-new', label: t('palette.tabNew'), keywords: ['tab', '탭'], run: () => { setSwitcherNewTab(true); setSwitcher(true); } },
+      { id: 'tab-close', label: t('palette.tabClose'), hint: '⌘W', keywords: ['close', 'tab', '탭', '닫기'], enabled: !!selected, run: () => selected && dispatchTabs({ type: 'close', pane: tabs.activePane, path: selected }) },
+      { id: 'split-right', label: t('palette.splitRight'), keywords: ['split', '분할', '좌우'], run: () => dispatchTabs({ type: 'split', dir: 'row' }) },
+      { id: 'split-down', label: t('palette.splitDown'), keywords: ['split', '분할', '상하'], run: () => dispatchTabs({ type: 'split', dir: 'col' }) },
+      { id: 'unsplit', label: t('palette.unsplit'), keywords: ['unsplit', 'merge', '분할', '합치기'], enabled: tabs.panes.length > 1, run: () => dispatchTabs({ type: 'unsplit' }) },
+      { id: 'new-window', label: t('palette.newWindow'), keywords: ['window', '창', '새 창'], enabled: !!selected, run: () => selected && void window.nops.window.new({ path: selected }) },
+      { id: 'theme', label: t('palette.theme'), keywords: ['theme', 'dark', 'light', '다크', '라이트', '테마', '다크모드'], run: cycleTheme },
+      { id: 'close', label: t('palette.switchVault'), keywords: ['vault', '볼트', '닫기'], run: onClose },
     ],
-    [selected, dockVisible, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, importMarkdown, cycleTheme, deleteEntry, newFolder, quickNote, onClose, openPanel, tabs.activePane, tabs.panes.length],
+    [selected, dockVisible, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, importMarkdown, cycleTheme, deleteEntry, newFolder, quickNote, onClose, openPanel, tabs.activePane, tabs.panes.length, locale],
   );
 
   useEffect(() => {
@@ -372,55 +376,62 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       <aside className="sidebar">
         <header className="drag">
           <strong>{vault.name}</strong>
-          <button className="link" onClick={onClose} title="다른 볼트 열기">
+          <button className="link" onClick={onClose} title={t('nav.switchVault')}>
             ⇄
           </button>
         </header>
-        <nav className="sidebar__nav" aria-label="빠른 메뉴">
-          <button className="navitem" onClick={() => setSwitcher(true)} title={keys('빠른 이동 — 제목·경로 (⌘O)')} aria-label="노트 찾기">
+        <nav className="sidebar__nav" aria-label={t('nav.menu')}>
+          <button className="navitem" onClick={() => setSwitcher(true)} title={keys(`${t('nav.quickSwitch')} — ${t('nav.quickSwitchSub')} (⌘O)`)} aria-label={t('nav.findNote')}>
             <span className="navitem__icon" aria-hidden><SearchIcon /></span>
             <span className="navitem__label">
-              빠른 이동<span className="navitem__sub">제목·경로</span>
+              {t('nav.quickSwitch')}<span className="navitem__sub">{t('nav.quickSwitchSub')}</span>
             </span>
             <kbd>{keys('⌘O')}</kbd>
           </button>
-          <button className="navitem" onClick={() => void quickNote('')} title={keys('새 노트 (⌘N)')} aria-label="새 노트">
+          <button className="navitem" onClick={() => void quickNote('')} title={keys(`${t('nav.newNote')} (⌘N)`)} aria-label={t('nav.newNote')}>
             <span className="navitem__icon" aria-hidden><PlusIcon /></span>
-            <span className="navitem__label">새 노트</span>
+            <span className="navitem__label">{t('nav.newNote')}</span>
           </button>
-          <button className="navitem" onClick={() => void newFolder('')} aria-label="새 폴더">
+          <button className="navitem" onClick={() => void newFolder('')} aria-label={t('nav.newFolder')}>
             <span className="navitem__icon" aria-hidden><NewFolderIcon /></span>
-            <span className="navitem__label">새 폴더</span>
+            <span className="navitem__label">{t('nav.newFolder')}</span>
           </button>
-          <button className="navitem" onClick={() => void openDaily()} title={keys('오늘의 노트 (⌘⌥D)')} aria-label="오늘">
+          <button className="navitem" onClick={() => void openDaily()} title={keys(`${t('nav.today')} (⌘⌥D)`)} aria-label={t('nav.todayShort')}>
             <span className="navitem__icon" aria-hidden><SunIcon /></span>
-            <span className="navitem__label">오늘의 노트</span>
+            <span className="navitem__label">{t('nav.today')}</span>
           </button>
-          <button className="navitem" onClick={() => { setDbOpen(null); setGraphOpen((o) => !o); }} title={keys('그래프 (⌘⇧G)')} aria-label="그래프">
+          <button className="navitem" onClick={() => { setDbOpen(null); setGraphOpen((o) => !o); }} title={keys(`${t('nav.graph')} (⌘⇧G)`)} aria-label={t('nav.graph')}>
             <span className="navitem__icon" aria-hidden><GraphIcon /></span>
-            <span className="navitem__label">그래프</span>
+            <span className="navitem__label">{t('nav.graph')}</span>
           </button>
-          <button className="navitem" onClick={() => setTrashOpen(true)} aria-label="휴지통">
+          <button className="navitem" onClick={() => setTrashOpen(true)} aria-label={t('nav.trash')}>
             <span className="navitem__icon" aria-hidden><TrashIcon /></span>
-            <span className="navitem__label">휴지통</span>
+            <span className="navitem__label">{t('nav.trash')}</span>
           </button>
         </nav>
         <label className="searchbox">
           <span className="searchbox__icon" aria-hidden><SearchIcon size={14} /></span>
-          <input ref={searchRef} className="search" type="search" placeholder="본문 검색" aria-label="본문 검색" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input ref={searchRef} className="search" type="search" placeholder={t('nav.search')} aria-label={t('nav.search')} value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
         <div className="sidebar__tabs" role="tablist">
           <button role="tab" aria-selected={sideTab === 'files'} className={sideTab === 'files' ? 'active' : ''} onClick={() => setSideTab('files')}>
-            파일
+            {t('nav.files')}
           </button>
-          <button role="tab" aria-selected={sideTab === 'marks'} className={sideTab === 'marks' ? 'active' : ''} onClick={() => setSideTab('marks')} title={keys('북마크 (⌘⇧B로 현재 노트 추가·해제)')}>
+          <button
+            role="tab"
+            aria-selected={sideTab === 'marks'}
+            className={sideTab === 'marks' ? 'active' : ''}
+            onClick={() => setSideTab('marks')}
+            title={keys(t('nav.marksHint'))}
+            aria-label={t('nav.marks')}
+          >
             ★
           </button>
           <button role="tab" aria-selected={sideTab === 'db'} className={sideTab === 'db' ? 'active' : ''} onClick={() => setSideTab('db')}>
             DB
           </button>
           <button role="tab" aria-selected={sideTab === 'tags'} className={sideTab === 'tags' ? 'active' : ''} onClick={() => setSideTab('tags')}>
-            태그
+            {t('nav.tags')}
           </button>
         </div>
         {progress && (
@@ -504,12 +515,12 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         </nav>
         <div className="sidebar__foot">
           <SyncBar status={sync} onOpen={() => setSyncOpen(true)} />
-          <button className="themebtn" onClick={() => setSettingsOpen(true)} title={keys('설정 (⌘,)')} aria-label="설정" data-testid="settings-btn">
+          <button className="themebtn" onClick={() => setSettingsOpen(true)} title={keys(`${t('nav.settings')} (⌘,)`)} aria-label={t('nav.settings')} data-testid="settings-btn">
             <SettingsIcon />
           </button>
-          <button className="themebtn" onClick={cycleTheme} title="테마 바꾸기: 시스템 → 라이트 → 다크" aria-label={`테마 ${THEME_LABEL[theme]}`} data-testid="theme-toggle">
+          <button className="themebtn" onClick={cycleTheme} title={t('nav.themeTitle')} aria-label={t('nav.themeAria', { theme: t(THEME_KEY[theme]) })} data-testid="theme-toggle">
             <ThemeIcon />
-            <span>{THEME_LABEL[theme]}</span>
+            <span>{t(THEME_KEY[theme])}</span>
           </button>
         </div>
       </aside>
@@ -580,13 +591,13 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 notes={notes}
                 onOpen={setSelected}
                 actions={[
-                  { icon: '＋', label: '새 노트', hint: '', run: () => void quickNote('') },
-                  { icon: '☀', label: '오늘의 노트', hint: '⌘⌥D', run: () => void openDaily() },
-                  { icon: '⌕', label: '노트 찾기', hint: '⌘O', run: () => setSwitcher(true) },
-                  { icon: '⌘', label: '명령 팔레트', hint: '⌘P', run: () => setPalette(true) },
-                  { icon: '◎', label: '그래프', hint: '⌘⇧G', run: () => { setDbOpen(null); setGraphOpen(true); } },
-                  { icon: '⇩', label: 'Markdown 가져오기', hint: '', run: () => void importMarkdown('files') },
-                  { icon: '⇪', label: 'Notion 가져오기', hint: '', run: () => void importNotion() },
+                  { icon: '＋', label: t('welcome.action.new'), hint: '', run: () => void quickNote('') },
+                  { icon: '☀', label: t('palette.daily'), hint: '⌘⌥D', run: () => void openDaily() },
+                  { icon: '⌕', label: t('welcome.action.find'), hint: '⌘O', run: () => setSwitcher(true) },
+                  { icon: '⌘', label: t('welcome.action.palette'), hint: '⌘P', run: () => setPalette(true) },
+                  { icon: '◎', label: t('welcome.action.graph'), hint: '⌘⇧G', run: () => { setDbOpen(null); setGraphOpen(true); } },
+                  { icon: '⇩', label: t('welcome.action.importMarkdown'), hint: '', run: () => void importMarkdown('files') },
+                  { icon: '⇪', label: t('welcome.action.importNotion'), hint: '', run: () => void importNotion() },
                 ]}
               />
             }

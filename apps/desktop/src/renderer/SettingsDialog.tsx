@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { t } from '@nopsidian/i18n';
+import type { LanguageSetting } from '@nopsidian/ipc-contract';
 import { applyPrefs, FONT_SIZES, loadPrefs, type Prefs } from './prefs';
-import { applyTheme, THEME_LABEL, type ThemeChoice } from './theme';
+import { applyTheme, THEME_KEY, type ThemeChoice } from './theme';
 import { keys } from './keys';
+import { changeLanguage } from './language';
+import { useLanguage } from './useLocale';
 import { McpSettings } from './McpSettings';
 
 interface Props {
@@ -15,9 +19,107 @@ interface Props {
   onReverted: (path: string, kind: 'restored' | 'trashed') => void;
 }
 
+const LANGUAGE_KEY: Record<LanguageSetting, Parameters<typeof t>[0]> = {
+  system: 'settings.language.system',
+  ko: 'settings.language.ko',
+  en: 'settings.language.en',
+};
+
+interface SegOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+/**
+ * 테마·언어 라디오그룹. 표준 라디오 패턴: 선택된 항목만 Tab 으로 닿고(로빙 tabindex),
+ * ←/→/↑/↓ 는 이동하며 선택, Home/End 는 처음/끝. Space·Enter 는 버튼 기본 동작.
+ * onSelect 가 false(저장 실패)를 돌려주면 선택된 항목으로 포커스를 되돌린다.
+ */
+function RadioSeg<T extends string>({
+  label,
+  value,
+  options,
+  onSelect,
+}: {
+  label: string;
+  value: T;
+  options: ReadonlyArray<SegOption<T>>;
+  onSelect: (value: T) => void | boolean | Promise<boolean>;
+}) {
+  const refs = useRef(new Map<T, HTMLButtonElement | null>());
+  const focusValue = (next: T) => refs.current.get(next)?.focus();
+  const pick = (option: SegOption<T>) => {
+    const result = onSelect(option.value);
+    if (result instanceof Promise) {
+      void result.then((ok) => {
+        if (ok === false) focusValue(value);
+      });
+      return;
+    }
+    if (result === false) focusValue(value);
+  };
+  const selectAt = (index: number) => {
+    const option = options[index];
+    if (!option) return;
+    pick(option);
+    focusValue(option.value);
+  };
+  const step = (from: number, delta: -1 | 1) => {
+    const next = (from + delta + options.length) % options.length;
+    selectAt(next);
+  };
+  return (
+    <div className="seg" role="radiogroup" aria-label={label}>
+      {options.map((option, index) => (
+        <button
+          key={option.value}
+          ref={(node) => {
+            refs.current.set(option.value, node);
+          }}
+          role="radio"
+          aria-checked={option.value === value}
+          tabIndex={option.value === value ? 0 : -1}
+          className={option.value === value ? 'on' : ''}
+          onClick={() => pick(option)}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+              event.preventDefault();
+              step(index, 1);
+            } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              step(index, -1);
+            } else if (event.key === 'Home') {
+              event.preventDefault();
+              selectAt(0);
+            } else if (event.key === 'End') {
+              event.preventDefault();
+              selectAt(options.length - 1);
+            }
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** 설정(⌘,): 모양·편집·동기화·도움말. 값은 이 기기에만 저장된다. */
 export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShortcuts, onOpenTrash, onOpenNote, onReverted }: Props) {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const [languageError, setLanguageError] = useState(false);
+  const language = useLanguage();
+  const chooseLanguage = async (option: LanguageSetting): Promise<boolean> => {
+    setLanguageError(false);
+    try {
+      await changeLanguage(option);
+      return true;
+    } catch {
+      // 저장 실패: useLanguage() 가 이전 설정을 그대로 보여 주고, 라디오 포커스도 원래 값으로 돌아간다.
+      setLanguageError(true);
+      return false;
+    }
+  };
   const set = (patch: Partial<Prefs>) =>
     setPrefs((cur) => {
       const next = { ...cur, ...patch };
@@ -32,77 +134,76 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
 
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog settings" role="dialog" aria-modal="true" aria-label="설정">
+      <div className="dialog settings" role="dialog" aria-modal="true" aria-label={t('settings.title')}>
         <header className="settings__head">
-          <h2>설정</h2>
-          <button className="settings__x" onClick={onClose} aria-label="닫기" title="닫기 (Esc)">
+          <h2>{t('settings.title')}</h2>
+          <button className="settings__x" onClick={onClose} aria-label={t('settings.close')} title={t('settings.closeHint')}>
             ×
           </button>
         </header>
         <div className="settings__body">
           <section>
-            <h3>모양</h3>
+            <h3>{t('settings.appearance')}</h3>
             <div className="settings__row">
-              <span>테마</span>
-              <div className="seg" role="radiogroup" aria-label="테마">
-                {(['system', 'light', 'dark'] as const).map((t) => (
-                  <button
-                    key={t}
-                    role="radio"
-                    aria-checked={theme === t}
-                    className={theme === t ? 'on' : ''}
-                    onClick={() => {
-                      applyTheme(t);
-                      onTheme(t);
-                    }}
-                  >
-                    {THEME_LABEL[t]}
-                  </button>
-                ))}
-              </div>
+              <span>{t('settings.theme')}</span>
+              <RadioSeg
+                label={t('settings.theme')}
+                value={theme}
+                options={(['system', 'light', 'dark'] as const).map((choice) => ({ value: choice, label: t(THEME_KEY[choice]) }))}
+                onSelect={(choice) => {
+                  applyTheme(choice);
+                  onTheme(choice);
+                }}
+              />
             </div>
+            <div className="settings__row">
+              <span>{t('settings.language')}</span>
+              <RadioSeg
+                label={t('settings.language')}
+                value={language.setting}
+                options={(['system', 'ko', 'en'] as const).map((option) => ({ value: option, label: t(LANGUAGE_KEY[option]) }))}
+                onSelect={(option) => chooseLanguage(option)}
+              />
+            </div>
+            {languageError ? <p className="error" role="alert">{t('settings.language.error')}</p> : null}
             <label className="settings__row">
-              <span>본문 글자 크기</span>
-              <select value={prefs.fontSize} onChange={(e) => set({ fontSize: Number(e.target.value) })} aria-label="본문 글자 크기">
+              <span>{t('settings.fontSize')}</span>
+              <select value={prefs.fontSize} onChange={(e) => set({ fontSize: Number(e.target.value) })} aria-label={t('settings.fontSize')}>
                 {FONT_SIZES.map((n) => (
                   <option key={n} value={n}>
-                    {n}px{n === 16 ? ' (기본)' : ''}
+                    {n === 16 ? t('settings.fontSizeDefault', { size: n }) : t('settings.fontSizeValue', { size: n })}
                   </option>
                 ))}
               </select>
             </label>
             <div className="settings__row">
-              <span>본문 너비</span>
-              <div className="seg" role="radiogroup" aria-label="본문 너비">
-                {([
-                  ['normal', '보통'],
-                  ['wide', '넓게'],
-                  ['full', '창 너비'],
-                ] as const).map(([w, label]) => (
-                  <button key={w} role="radio" aria-checked={prefs.width === w} className={prefs.width === w ? 'on' : ''} onClick={() => set({ width: w })}>
-                    {label}
+              <span>{t('settings.width')}</span>
+              <div className="seg" role="radiogroup" aria-label={t('settings.width')}>
+                {(['normal', 'wide', 'full'] as const).map((width) => (
+                  <button key={width} role="radio" aria-checked={prefs.width === width} className={prefs.width === width ? 'on' : ''} onClick={() => set({ width })}>
+                    {t(`settings.width.${width}`)}
                   </button>
                 ))}
               </div>
             </div>
           </section>
           <section>
-            <h3>편집</h3>
+            <h3>{t('settings.editing')}</h3>
             <label className="settings__row">
               <span>
-                제목을 바꾸면 파일 이름도 맞추기
-                <small className="muted">노트를 떠날 때 첫 제목(H1)에 맞춰 파일 이름을 바꿔요. 링크도 함께 고쳐요.</small>
+                {t('settings.titleSync')}
+                <small className="muted">{t('settings.titleSyncHint')}</small>
               </span>
-              <input type="checkbox" checked={prefs.titleSync} onChange={(e) => set({ titleSync: e.target.checked })} aria-label="제목을 바꾸면 파일 이름도 맞추기" />
+              <input type="checkbox" checked={prefs.titleSync} onChange={(e) => set({ titleSync: e.target.checked })} aria-label={t('settings.titleSync')} />
             </label>
           </section>
           <McpSettings onOpenNote={(p) => { onOpenNote(p); onClose(); }} onReverted={onReverted} />
           <section>
-            <h3>볼트</h3>
+            <h3>{t('settings.vault')}</h3>
             <div className="settings__links">
-              <button onClick={onOpenSync}>☁ Google Drive 동기화…</button>
-              <button onClick={onOpenTrash}>🗑 휴지통…</button>
-              <button onClick={onOpenShortcuts}>⌨ 단축키 목록 ({keys('F1')})</button>
+              <button onClick={onOpenSync}>☁ {t('settings.vault.sync')}</button>
+              <button onClick={onOpenTrash}>🗑 {t('settings.vault.trash')}</button>
+              <button onClick={onOpenShortcuts}>⌨ {t('settings.vault.shortcuts', { key: keys('F1') })}</button>
             </div>
           </section>
         </div>

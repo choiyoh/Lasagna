@@ -39,6 +39,7 @@
     "@nopsidian/core": "workspace:*",
     "@nopsidian/editor": "workspace:*",
     "@nopsidian/formula": "workspace:*",
+    "@nopsidian/i18n": "workspace:*",
     "@nopsidian/ipc-contract": "workspace:*",
     "@nopsidian/mcp": "workspace:*",
     "@nopsidian/sync-gdrive": "workspace:*",

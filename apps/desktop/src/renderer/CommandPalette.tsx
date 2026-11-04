@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '@nopsidian/i18n';
 import { keys } from './keys';
+import { useLocale } from './useLocale';
 import { quickSwitch } from '../workers/index/quick-switch';
 
 export interface PaletteCommand {
@@ -21,6 +23,7 @@ interface Props {
 
 /** ⌘P 명령 팔레트: 이름·보조어·한글 초성으로 찾아 실행한다. */
 export function CommandPalette({ commands, onClose }: Props) {
+  useLocale();
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -48,7 +51,7 @@ export function CommandPalette({ commands, onClose }: Props) {
 
   return (
     <div className="dialog-backdrop top" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="switcher palette" role="dialog" aria-modal="true" aria-label="명령 팔레트" data-testid="command-palette">
+      <div className="switcher palette" role="dialog" aria-modal="true" aria-label={t('palette.title')} data-testid="command-palette">
         <div className="switcher__search">
           <span className="switcher__icon" aria-hidden>
             ⌕
@@ -56,7 +59,7 @@ export function CommandPalette({ commands, onClose }: Props) {
           <input
             autoFocus
             value={query}
-            placeholder="명령 검색…"
+            placeholder={t('palette.placeholder')}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.nativeEvent.isComposing) return;
@@ -92,11 +95,11 @@ export function CommandPalette({ commands, onClose }: Props) {
               <span className="switcher__path">{c.hint ? keys(c.hint) : ''}</span>
             </div>
           ))}
-          {hits.length === 0 && <div className="switcher__item"><span className="muted">일치하는 명령이 없어요</span></div>}
+          {hits.length === 0 && <div className="switcher__item"><span className="muted">{t('palette.empty')}</span></div>}
         </div>
         <div className="switcher__foot">
-          <span>한글 초성 가능</span>
-          <span>↑↓ 이동 · ↵ 실행 · esc 닫기</span>
+          <span>{t('palette.initials')}</span>
+          <span>{t('palette.keys')}</span>
         </div>
       </div>
     </div>

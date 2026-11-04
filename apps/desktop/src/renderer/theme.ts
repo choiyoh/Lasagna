@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import type { MessageKey } from '@nopsidian/i18n';
 import { ThemeMonitorIcon, ThemeMoonIcon, ThemeSunIcon } from './icons';
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -26,7 +27,8 @@ export function applyTheme(choice: ThemeChoice): void {
 }
 
 export const nextTheme = (c: ThemeChoice): ThemeChoice => (c === 'system' ? 'light' : c === 'light' ? 'dark' : 'system');
-export const THEME_LABEL: Record<ThemeChoice, string> = { system: '시스템', light: '라이트', dark: '다크' };
+/** 설정 라디오·푸터 버튼이 쓰는 메시지 키(표시 언어에 따라 번역된다). */
+export const THEME_KEY: Record<ThemeChoice, MessageKey> = { system: 'theme.system', light: 'theme.light', dark: 'theme.dark' };
 export const THEME_ICON: Record<ThemeChoice, ComponentType<{ size?: number }>> = {
   system: ThemeMonitorIcon,
   light: ThemeSunIcon,

@@ -2178,7 +2178,7 @@ views:
 
     // 5) 북마크: ⌘⇧B 로 현재 노트를 추가·해제하고, 별 탭에서 열 수 있으며 .nopsidian/bookmarks.json 에 저장된다
     await page.keyboard.press('ControlOrMeta+Shift+B');
-    await page.getByRole('tab', { name: '★' }).click();
+    await page.getByRole('tab', { name: '북마크' }).click();
     const marks = page.getByTestId('bookmarks');
     await expect(marks).toContainText('발췌사용');
     await expect.poll(() => readFileSync(path.join(vaultDir, '.nopsidian/bookmarks.json'), 'utf8'), { timeout: 5000 }).toContain('발췌사용.md');
@@ -3253,7 +3253,7 @@ views:
 test('계약에 없는 채널은 호출할 수 없다', async () => {
   const page = await app.firstWindow();
   const keys = await page.evaluate(() => Object.keys(window.nops).sort());
-  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'comment', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'mcp', 'note', 'on', 'order', 'pathForFile', 'search', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
+  expect(keys).toEqual(['app', 'asset', 'bookmarks', 'comment', 'daily', 'db', 'export', 'folder', 'graph', 'history', 'import', 'link', 'mcp', 'note', 'on', 'order', 'pathForFile', 'search', 'settings', 'sync', 'tag', 'template', 'trash', 'vault', 'window', 'workspace']);
 });
 
 test('앱 URL이 app:// 오리진이다', async () => {

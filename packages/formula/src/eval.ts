@@ -1,5 +1,5 @@
 import type { Node } from './ast.js';
-import { FormulaError, compareValues, isDate, toDisplayString, typeOf, valuesEqual, type FValue } from './value.js';
+import { FormulaError, compareValues, formulaError, isDate, toDisplayString, typeParam, valuesEqual, type ErrorParam, type FValue } from './value.js';
 import { DATE_FNS } from './fn-date.js';
 import { LIST_FNS } from './fn-list.js';
 import { MATH_FNS } from './fn-math.js';
@@ -14,14 +14,14 @@ export interface Env {
 
 export const truthy = (v: FValue): boolean => !(v === null || v === false || v === 0 || v === '' || (Array.isArray(v) && v.length === 0));
 
-const err = (n: Node, msg: string) => new FormulaError(msg, n.pos, n.end);
+const err = (n: Node, key: Parameters<typeof formulaError>[0], params: Parameters<typeof formulaError>[1] = {}) => formulaError(key, params, n.pos, n.end);
 
-function num(v: FValue, n: Node, what: string): number {
+function num(v: FValue, n: Node, what: ErrorParam): number {
   if (v === null) return 0; // 빈 값은 산술에서 0
   if (typeof v === 'number') return v;
-  throw err(n, `${what}: 숫자가 필요한데 ${typeName(v)} 이에요`);
+  throw err(n, 'formula.err.needsNumber', { what, type: typeName(v) });
 }
-const typeName = (v: FValue) => ({ null: '빈 값', number: '숫자', string: '문자열', boolean: '불리언', date: '날짜', list: '목록' })[typeOf(v)];
+const typeName = (v: FValue) => typeParam(v);
 
 /** 콜백을 쓰는 목록 함수와 제어 함수 */
 const LAZY: Record<string, LazyFunctionDef> = {
@@ -43,7 +43,7 @@ const LAZY: Record<string, LazyFunctionDef> = {
     max: 3,
     impl: (a, ev) => {
       const name = a[0]!;
-      if (name.kind !== 'ident') throw err(name, 'let 의 첫 인자는 이름이어야 해요');
+      if (name.kind !== 'ident') throw err(name, 'formula.err.letFirstArg');
       return ev(a[2]!, { [name.name]: ev(a[1]!) });
     },
   },
@@ -57,10 +57,10 @@ const LAZY: Record<string, LazyFunctionDef> = {
       let i = 0;
       for (; i + 1 < a.length; i += 2) {
         const name = a[i]!;
-        if (name.kind !== 'ident') throw err(name, 'lets 의 이름 자리에는 이름이 와야 해요');
+        if (name.kind !== 'ident') throw err(name, 'formula.err.letsName');
         scope[name.name] = ev(a[i + 1]!, scope);
       }
-      if (i >= a.length) throw err(a[a.length - 1]!, 'lets 의 마지막 인자는 본문이어야 해요');
+      if (i >= a.length) throw err(a[a.length - 1]!, 'formula.err.letsBody');
       return ev(a[i]!, scope);
     },
   },
@@ -68,7 +68,7 @@ const LAZY: Record<string, LazyFunctionDef> = {
 
 function listArg(v: FValue, n: Node, fn: string): FValue[] {
   if (v === null) return [];
-  if (!Array.isArray(v)) throw err(n, `${fn}: 목록이 필요한데 ${typeName(v)} 이에요`);
+  if (!Array.isArray(v)) throw err(n, 'formula.err.needsList', { fn, type: typeName(v) });
   return v;
 }
 
@@ -115,17 +115,17 @@ function binary(op: Node & { kind: 'binary' }, l: FValue, r: FValue): FValue {
       return num(l, op.left, '*') * num(r, op.right, '*');
     case '/': {
       const d = num(r, op.right, '/');
-      if (d === 0) throw err(op, '0으로 나눌 수 없어요');
+      if (d === 0) throw err(op, 'formula.err.divideByZero');
       return num(l, op.left, '/') / d;
     }
     case '%': {
       const d = num(r, op.right, '%');
-      if (d === 0) throw err(op, '0으로 나눌 수 없어요');
+      if (d === 0) throw err(op, 'formula.err.divideByZero');
       return num(l, op.left, '%') % d;
     }
     case '^': {
       const v = num(l, op.left, '^') ** num(r, op.right, '^');
-      if (!Number.isFinite(v)) throw err(op, '계산 결과가 숫자가 아니에요');
+      if (!Number.isFinite(v)) throw err(op, 'formula.err.notNumber');
       return v;
     }
     case '==':
@@ -138,13 +138,13 @@ function binary(op: Node & { kind: 'binary' }, l: FValue, r: FValue): FValue {
     case '>=': {
       if (l === null || r === null) return false;
       const ok = (typeof l === typeof r && typeof l !== 'object') || (isDate(l) && isDate(r));
-      if (!ok) throw err(op, `${typeName(l)} 와 ${typeName(r)} 는 비교할 수 없어요`);
+      if (!ok) throw err(op, 'formula.err.notComparable', { left: typeName(l), right: typeName(r) });
       const c = compareValues(l, r);
       return op.op === '<' ? c < 0 : op.op === '<=' ? c <= 0 : op.op === '>' ? c > 0 : c >= 0;
     }
     case '&&':
     case '||':
-      throw err(op, '내부 오류'); // 아래에서 단락 평가로 처리한다
+      throw err(op, 'formula.err.internal'); // 아래에서 단락 평가로 처리한다
   }
 }
 
@@ -164,7 +164,7 @@ export function evaluate(root: Node, env: Env): FValue {
         return node.items.map((i) => run(i, scope));
       case 'ident':
         if (node.name in scope) return scope[node.name]!;
-        throw err(node, `알 수 없는 이름: ${node.name}`);
+        throw err(node, 'formula.err.unknownName', { name: node.name });
       case 'unary': {
         const v = run(node.arg, scope);
         return node.op === '!' ? !truthy(v) : -num(v, node.arg, '-');
@@ -180,23 +180,23 @@ export function evaluate(root: Node, env: Env): FValue {
         const argNodes = node.kind === 'method' ? [node.target, ...node.args] : node.args;
         if (node.name === 'prop' && node.kind === 'call') {
           const a = argNodes[0];
-          if (!a || a.kind !== 'str') throw err(node, 'prop() 에는 속성 이름을 문자열로 직접 써야 해요');
+          if (!a || a.kind !== 'str') throw err(node, 'formula.err.propLiteralArg');
           try {
             return env.prop(a.value);
           } catch (e) {
-            if (e instanceof FormulaError) throw new FormulaError(e.message, a.pos, a.end);
+            if (e instanceof FormulaError) throw new FormulaError(e.message, a.pos, a.end, { key: e.key!, params: e.params });
             throw e;
           }
         }
         const def = REGISTRY[node.name];
-        if (!def) throw err(node, `알 수 없는 함수: ${node.name}`);
-        if (argNodes.length < def.min || argNodes.length > def.max) throw err(node, `${node.name}() 의 인자 개수가 맞지 않아요`);
+        if (!def) throw err(node, 'formula.err.unknownFunction', { name: node.name });
+        if (argNodes.length < def.min || argNodes.length > def.max) throw err(node, 'formula.err.arityMismatch', { name: node.name });
         if (isLazy(def)) return def.impl(argNodes, ev, ctx);
         const args = argNodes.map((a) => run(a, scope));
         try {
           return def.impl(args, ctx);
         } catch (e) {
-          if (e instanceof FormulaError && e.pos === undefined) throw new FormulaError(e.message, node.pos, node.end);
+          if (e instanceof FormulaError && e.pos === undefined) throw new FormulaError(e.message, node.pos, node.end, { key: e.key!, params: e.params });
           throw e;
         }
       }

@@ -105,3 +105,61 @@ describe('데이터베이스 질의(인덱서)', () => {
     expect(after.rows.find((x) => x.title === '메모')!.values['평점']).toBe(3);
   });
 });
+
+describe('계산 오류 문구와 로캘', () => {
+  it('언어를 바꾸면 다음 질의에서 오류 문구가 새 언어로 다시 계산된다(캐시 무효화)', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'nops-db-locale-'));
+    const file = (rel: string, body: string) => {
+      mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      writeFileSync(path.join(dir, rel), body);
+    };
+    file(
+      '수식/_db.yaml',
+      `title: 수식
+properties:
+  값: { type: text }
+  계산: { type: formula, expr: 'round(prop("값"))' }
+views:
+  - { id: all, name: 전체, type: table }
+`,
+    );
+    file('수식/행.md', '---\n값: abc\n---\n');
+    const local = new Indexer(dir, ':memory:');
+    local.scan();
+    const ko = local.queryDatabase({ folder: '수식', viewId: 'all', locale: 'ko' });
+    expect(ko.errors['수식/행.md']?.['계산']).toBe('round: 숫자가 필요한데 문자열 이에요');
+    const en = local.queryDatabase({ folder: '수식', viewId: 'all', locale: 'en' });
+    expect(en.errors['수식/행.md']?.['계산']).toBe('round: expected a number but got Text');
+    // 같은 언어로 다시 물으면 캐시를 쓴다(문구 동일)
+    expect(local.queryDatabase({ folder: '수식', viewId: 'all', locale: 'en' }).errors['수식/행.md']?.['계산']).toBe(
+      'round: expected a number but got Text',
+    );
+  });
+});
+
+describe('행 노트(rowDatabase) 오류 문구와 로캘', () => {
+  it('db.row 경로도 요청 언어로 수식 오류를 만든다', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'nops-db-row-locale-'));
+    const file = (rel: string, body: string) => {
+      mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      writeFileSync(path.join(dir, rel), body);
+    };
+    file(
+      '수식/_db.yaml',
+      `title: 수식
+properties:
+  값: { type: text }
+  계산: { type: formula, expr: 'round(prop("값"))' }
+views:
+  - { id: all, name: 전체, type: table }
+`,
+    );
+    file('수식/행.md', '---\n값: abc\n---\n');
+    const local = new Indexer(dir, ':memory:');
+    local.scan();
+    const ko = local.rowDatabase('수식/행.md', 'ko');
+    expect(ko?.errors['계산']).toBe('round: 숫자가 필요한데 문자열 이에요');
+    const en = local.rowDatabase('수식/행.md', 'en');
+    expect(en?.errors['계산']).toBe('round: expected a number but got Text');
+  });
+});

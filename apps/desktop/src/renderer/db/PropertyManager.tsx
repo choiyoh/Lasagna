@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { compileFormula, suggestAt, type SuggestResult } from '@nopsidian/formula';
+import { compileFormula, formulaErrorText, suggestAt, type SuggestResult } from '@nopsidian/formula';
 import { ROLLUP_FNS } from '@nopsidian/core/db/rollup';
 import { t, tPlural, type MessageKey } from '@nopsidian/i18n';
 import type { Property } from '@nopsidian/core/db';
@@ -93,7 +93,7 @@ function Details({ name, def, data, dbs, onApply }: { name: string; def: Propert
         )}
         {err ? (
           <p className="warn small" role="alert">
-            ⚠ {err.message}
+            ⚠ {formulaErrorText(err)}
             <br />
             <code>{draft.expr.slice(0, err.pos)}<mark>{draft.expr.slice(err.pos, Math.max(err.end, err.pos + 1)) || ' '}</mark>{draft.expr.slice(Math.max(err.end, err.pos + 1))}</code>
           </p>

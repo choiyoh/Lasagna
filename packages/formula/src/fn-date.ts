@@ -1,5 +1,5 @@
 import type { FunctionDef } from './registry.js';
-import { FormulaError, isDate, type FDate, type FValue } from './value.js';
+import { formulaError, isDate, type FDate, type FValue } from './value.js';
 
 /**
  * 함수 라이브러리(date) — 날짜 값 만들기·산술·서식.
@@ -21,7 +21,7 @@ const mkDate = (ms: number, hasTime: boolean, endMs?: number): FDate =>
 
 /** 날짜 인자를 꺼낸다(null 은 호출 쪽에서 먼저 걸러 낸다). */
 function asDate(v: FValue, fn: string): FDate {
-  if (!isDate(v)) throw new FormulaError(`${fn}: 날짜 인자가 필요한데 ${typeof v === 'object' ? '목록' : String(v)} 이에요`);
+  if (!isDate(v)) throw formulaError('formula.err.needsDate', { fn, type: typeof v === 'object' ? { key: 'formula.type.list' } : String(v) });
   return v;
 }
 
@@ -40,17 +40,17 @@ const UNITS: Record<string, Unit> = {
 
 /** 단위 문자열(단수·복수)을 정규화한다. 모르는 단위는 FormulaError. */
 function unitOf(v: FValue, fn: string): Unit {
-  if (typeof v !== 'string') throw new FormulaError(`${fn}: 단위는 문자열이어야 해요`);
+  if (typeof v !== 'string') throw formulaError('formula.err.unitString', { fn });
   const key = v.trim().toLowerCase().replace(/s$/, '');
   const u = UNITS[key];
-  if (!u) throw new FormulaError(`모르는 단위: ${v}`);
+  if (!u) throw formulaError('formula.err.unknownUnit', { unit: String(v) });
   return u;
 }
 
 /** 수량은 정수. 빈 값은 0, 소수는 FormulaError. */
 function amountOf(v: FValue, fn: string): number {
   if (v === null) return 0;
-  if (typeof v !== 'number' || !Number.isInteger(v)) throw new FormulaError(`${fn}: 수량은 정수여야 해요`);
+  if (typeof v !== 'number' || !Number.isInteger(v)) throw formulaError('formula.err.quantityInteger', { fn });
   return v;
 }
 
@@ -106,7 +106,7 @@ const DATE_RE = /^(\d{4})[-/](\d{2})[-/](\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})
 function parseDate(v: FValue): FValue {
   if (v === null) return null;
   if (isDate(v)) return v;
-  if (typeof v !== 'string') throw new FormulaError('parseDate: 문자열이나 날짜가 필요한데 ' + (typeof v === 'object' ? '목록' : String(v)) + ' 이에요');
+  if (typeof v !== 'string') throw formulaError('formula.err.parseDateArg', { type: typeof v === 'object' ? { key: 'formula.type.list' } : String(v) });
   const m = DATE_RE.exec(v.trim());
   if (!m) return null;
   const year = Number(m[1]);
@@ -227,7 +227,7 @@ function formatImpl(args: FValue[]): FValue {
   if (v === null) return '';
   const d = asDate(v, 'formatDate');
   const format = args[1]!;
-  if (typeof format !== 'string') throw new FormulaError('formatDate: 형식은 문자열이어야 해요');
+  if (typeof format !== 'string') throw formulaError('formula.err.formatString');
   const t = new Date(d.ms);
   const p: Parts = {
     year: t.getFullYear(),
@@ -280,7 +280,7 @@ function startOfImpl(args: FValue[]): FValue {
   if (v === null) return null;
   const d = asDate(v, 'startOf');
   const unit = unitOf(args[1]!, 'startOf');
-  if (unit === 'second') throw new FormulaError('startOf: 쓸 수 없는 단위: second');
+  if (unit === 'second') throw formulaError('formula.err.startOfSecond');
   const t = new Date(d.ms);
   switch (unit) {
     case 'year':
@@ -348,7 +348,7 @@ export const DATE_FNS: Record<string, FunctionDef> = {
     impl: (args) => {
       const v = args[0]!;
       if (v === null) return null;
-      if (typeof v !== 'number') throw new FormulaError('fromTimestamp: 숫자가 필요한데 ' + String(v) + ' 이에요');
+      if (typeof v !== 'number') throw formulaError('formula.err.fromTimestampArg', { value: String(v) });
       return mkDate(v, true);
     },
   },
@@ -363,7 +363,7 @@ export const DATE_FNS: Record<string, FunctionDef> = {
       const e = asDate(bv, 'dateRange');
       const start = s.ms;
       const end = e.endMs ?? e.ms;
-      if (end < start) throw new FormulaError('dateRange: 끝이 시작보다 빠를 수 없어요');
+      if (end < start) throw formulaError('formula.err.dateRangeOrder');
       return mkDate(start, s.hasTime || e.hasTime, end);
     },
   },

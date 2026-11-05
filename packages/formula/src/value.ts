@@ -1,3 +1,5 @@
+import { t, type MessageKey, type TranslateParams } from '@nopsidian/i18n';
+
 /**
  * 수식이 다루는 값. 노트의 속성 값(`CellValue`)과 따로 둔다 — 경계(`prop()` 를 채우는 쪽)가 변환한다.
  *
@@ -16,16 +18,52 @@ export type FValue = null | number | string | boolean | FDate | FValue[];
 
 export type FType = 'null' | 'number' | 'string' | 'boolean' | 'date' | 'list';
 
+/** 오류 파라미터. `{ key }` 로 넘기면 표시 시점에 그 문구를 지금 언어로 풀어 넣는다. */
+export type ErrorParam = string | number | { key: MessageKey };
+export type ErrorParams = Record<string, ErrorParam>;
+
+const resolveParams = (params?: ErrorParams): TranslateParams | undefined =>
+  params &&
+  Object.fromEntries(Object.entries(params).map(([k, v]) => [k, typeof v === 'object' ? t(v.key) : v]));
+
 /** 수식 오류. `pos`/`end` 는 원문 안의 위치(문자 오프셋, end 는 배타). 평가 중 오류는 위치가 없을 수 있다. */
 export class FormulaError extends Error {
-  constructor(
-    message: string,
-    public readonly pos?: number,
-    public readonly end?: number,
-  ) {
+  /** 문구가 사전 키면 그 키 — 화면에서는 `formulaErrorText()` 로 지금 언어로 다시 만든다 */
+  readonly key: MessageKey | null;
+  readonly params?: ErrorParams;
+
+  constructor(message: string, public readonly pos?: number, public readonly end?: number, translation?: { key: MessageKey; params?: ErrorParams }) {
     super(message);
+    this.key = translation?.key ?? null;
+    this.params = translation?.params;
     this.name = 'FormulaError';
   }
+}
+
+/** 값 종류의 표시 이름(문구에 바로 넣을 때). */
+export function typeLabel(type: FType): string {
+  return t(`formula.type.${type}` as MessageKey);
+}
+
+/** 값 종류를 오류 파라미터로(표시 시점에 번역된다). */
+export function typeParam(v: FValue): ErrorParam {
+  return { key: `formula.type.${typeOf(v)}` as MessageKey };
+}
+
+/** 사전 키로 만드는 수식 오류(문구는 만들 때와 표시할 때 각각 지금 언어로). */
+export function formulaError(key: MessageKey, params: ErrorParams = {}, pos?: number, end?: number): FormulaError {
+  return new FormulaError(t(key, resolveParams(params)), pos, end, { key, params });
+}
+
+/** 오류 문구를 지금 언어로. 사전 키가 아닌 오류는 원래 메시지를 그대로. */
+export function formulaErrorText(e: unknown): string {
+  if (e instanceof FormulaError) return e.key ? t(e.key, resolveParams(e.params)) : e.message;
+  if (e && typeof e === 'object') {
+    const o = e as { key?: MessageKey; params?: ErrorParams; message?: string };
+    if (o.key) return t(o.key, resolveParams(o.params));
+    if (typeof o.message === 'string') return o.message;
+  }
+  return e instanceof Error ? e.message : String(e);
 }
 
 export const isDate = (v: FValue): v is FDate => v !== null && typeof v === 'object' && !Array.isArray(v) && v.kind === 'date';

@@ -654,8 +654,8 @@ export class Indexer {
   }
 
   /** 데이터베이스 뷰 질의(필터·정렬·그룹·계산 행) */
-  rowDatabase(notePath: string) {
-    return rowDatabase(this.db, this.root, notePath, this.generation);
+  rowDatabase(notePath: string, locale?: 'ko' | 'en') {
+    return rowDatabase(this.db, this.root, notePath, this.generation, locale);
   }
   queryDatabase(params: DbQueryParams) {
     return queryDatabase(this.db, this.root, params, this.generation);

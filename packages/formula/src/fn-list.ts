@@ -1,28 +1,27 @@
-import { FormulaError, compareValues, typeOf, valuesEqual, type FValue } from './value.js';
+import { compareValues, formulaError, typeParam, valuesEqual, type ErrorParam, type FValue } from './value.js';
 import type { FunctionDef } from './registry.js';
 
 /** 목록이 아닌 값을 받았을 때의 오류 메시지용 타입 이름(eval.ts 와 같은 표기) */
-const typeName = (v: FValue) =>
-  ({ null: '빈 값', number: '숫자', string: '문자열', boolean: '불리언', date: '날짜', list: '목록' })[typeOf(v)];
+const typeName = (v: FValue) => typeParam(v);
 
 /** 첫 인자를 목록으로. 빈 값(null)은 빈 목록으로 본다. */
 function listArg(v: FValue, fn: string): FValue[] {
   if (v === null) return [];
-  if (!Array.isArray(v)) throw new FormulaError(`${fn}: 목록이 필요한데 ${typeName(v)} 이에요`);
+  if (!Array.isArray(v)) throw formulaError('formula.err.needsList', { fn, type: typeName(v) });
   return v;
 }
 
 /** 숫자 인자. 빈 값(null)은 0 으로 본다(산술 연산과 같은 규칙). */
-function numArg(v: FValue, fn: string, what: string): number {
+function numArg(v: FValue, fn: string, what: ErrorParam): number {
   if (v === null) return 0;
-  if (typeof v !== 'number' || !Number.isFinite(v)) throw new FormulaError(`${fn}: ${what} 값이 숫자가 아니에요`);
+  if (typeof v !== 'number' || !Number.isFinite(v)) throw formulaError('formula.err.argNotNumber', { fn, what });
   return v;
 }
 
 /** 정수 인자. 1.5 처럼 정수가 아니면 FormulaError. */
-function intArg(v: FValue, fn: string, what: string): number {
+function intArg(v: FValue, fn: string, what: ErrorParam): number {
   const n = numArg(v, fn, what);
-  if (!Number.isInteger(n)) throw new FormulaError(`${fn}: ${what} 값은 정수여야 해요`);
+  if (!Number.isInteger(n)) throw formulaError('formula.err.argNotInteger', { fn, what });
   return n;
 }
 
@@ -42,7 +41,7 @@ export const LIST_FNS: Record<string, FunctionDef> = {
     max: 2,
     impl: (args) => {
       const list = listArg(args[0]!, 'at');
-      const i = intArg(args[1]!, 'at', '인덱스');
+      const i = intArg(args[1]!, 'at', { key: 'formula.arg.index' });
       const idx = i < 0 ? list.length + i : i;
       return idx >= 0 && idx < list.length ? list[idx]! : null;
     },
@@ -103,14 +102,14 @@ export const LIST_FNS: Record<string, FunctionDef> = {
     min: 2,
     max: 3,
     impl: (args) => {
-      const start = numArg(args[0]!, 'range', '시작');
-      const end = numArg(args[1]!, 'range', '끝');
-      const step = args.length > 2 ? numArg(args[2]!, 'range', '간격') : 1;
-      if (step === 0) throw new FormulaError('range: 간격은 0이 될 수 없어요');
+      const start = numArg(args[0]!, 'range', { key: 'formula.arg.start' });
+      const end = numArg(args[1]!, 'range', { key: 'formula.arg.end' });
+      const step = args.length > 2 ? numArg(args[2]!, 'range', { key: 'formula.arg.step' }) : 1;
+      if (step === 0) throw formulaError('formula.err.rangeStep');
       // 간격의 부호와 끝(포함하지 않음)에 맞는 개수를 먼저 세어 무한 루프를 막는다.
       const count = Math.ceil((end - start) / step);
       if (count <= 0) return [];
-      if (count > 10000) throw new FormulaError('range: 결과가 10000개를 넘을 수 없어요');
+      if (count > 10000) throw formulaError('formula.err.rangeTooMany');
       const out: FValue[] = [];
       // 누적 대신 곱셈으로 만들어 부동소수점 오차가 쌓이지 않게 한다.
       for (let i = 0; i < count; i++) out.push(start + i * step);

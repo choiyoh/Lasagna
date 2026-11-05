@@ -2,7 +2,9 @@ import type { Node } from './ast.js';
 import { REGISTRY, evaluate, type Env } from './eval.js';
 import { parseFormula } from './parse.js';
 import { isLazy } from './registry.js';
-import { FormulaError, type FValue } from './value.js';
+import { FormulaError, formulaError, type FValue } from './value.js';
+import type { MessageKey } from '@nopsidian/i18n';
+import type { ErrorParams } from './value.js';
 
 export interface Compiled {
   source: string;
@@ -15,10 +17,20 @@ export interface FormulaIssue {
   message: string;
   pos: number;
   end: number;
+  /** 사전 키면 표시 시점에 지금 언어로 다시 만든다(캐시에 문구가 박히지 않게) */
+  key?: MessageKey;
+  params?: ErrorParams;
 }
 export type CompileResult = { ok: true; compiled: Compiled } | { ok: false; error: FormulaIssue };
 
 const CALLBACK_VARS = ['current', 'index'];
+
+const issueOf = (e: FormulaError): FormulaIssue => ({
+  message: e.message,
+  pos: e.pos ?? 0,
+  end: e.end ?? e.pos ?? 0,
+  ...(e.key ? { key: e.key, params: e.params } : {}),
+});
 
 /** 파싱 + 정적 검사(없는 함수·인자 개수·prop() 인자·이름 범위). 실행하지 않는다. */
 export function compileFormula(source: string): CompileResult {
@@ -35,7 +47,9 @@ export function compileFormula(source: string): CompileResult {
         case 'list':
           return n.items.forEach((i) => walk(i, names));
         case 'ident':
-          if (!names.has(n.name)) throw new FormulaError(`알 수 없는 이름: ${n.name}${CALLBACK_VARS.includes(n.name) ? ' (map·filter 같은 함수 안에서만 쓸 수 있어요)' : ''}`, n.pos, n.end);
+          if (!names.has(n.name)) throw CALLBACK_VARS.includes(n.name)
+              ? formulaError('formula.err.unknownNameCallback', { name: n.name }, n.pos, n.end)
+              : formulaError('formula.err.unknownName', { name: n.name }, n.pos, n.end);
           return;
         case 'unary':
           return walk(n.arg, names);
@@ -51,15 +65,23 @@ export function compileFormula(source: string): CompileResult {
           const args = n.kind === 'method' ? [n.target, ...n.args] : n.args;
           if (n.kind === 'call' && n.name === 'prop') {
             const a = args[0];
-            if (args.length !== 1 || !a || a.kind !== 'str') throw new FormulaError('prop() 에는 속성 이름을 문자열로 하나만 써야 해요', n.pos, n.end);
+            if (args.length !== 1 || !a || a.kind !== 'str') throw formulaError('formula.err.propSingleArg', {}, n.pos, n.end);
             if (!deps.includes(a.value)) deps.push(a.value);
             return;
           }
           const def = REGISTRY[n.name];
-          if (!def) throw new FormulaError(`알 수 없는 함수: ${n.name}`, n.pos, n.end);
+          if (!def) throw formulaError('formula.err.unknownFunction', { name: n.name }, n.pos, n.end);
           if (args.length < def.min || args.length > def.max) {
-            const range = def.min === def.max ? `${def.min}` : def.max === Infinity ? `${def.min}개 이상` : `${def.min}~${def.max}`;
-            throw new FormulaError(`${n.name}() 는 인자가 ${range}개 필요해요(지금 ${args.length}개)`, n.pos, n.end);
+            // 영어 복수형은 필요한 인자 수에 맞춘다('takes at least 1 argument').
+            const one = def.min === 1 && def.max !== Infinity && def.max === 1;
+            const exactKey = (one ? 'formula.err.arityExact.one' : 'formula.err.arityExact.other') as MessageKey;
+            const atLeastKey = (def.min === 1 ? 'formula.err.arityAtLeast.one' : 'formula.err.arityAtLeast.other') as MessageKey;
+            const betweenKey = 'formula.err.arityBetween.other' as MessageKey;
+            throw def.min === def.max
+              ? formulaError(exactKey, { name: n.name, n: def.min, count: args.length }, n.pos, n.end)
+              : def.max === Infinity
+                ? formulaError(atLeastKey, { name: n.name, min: def.min, count: args.length }, n.pos, n.end)
+                : formulaError(betweenKey, { name: n.name, min: def.min, max: def.max, count: args.length }, n.pos, n.end);
           }
           if (!isLazy(def)) return args.forEach((a) => walk(a, names));
           if (n.name === 'let' || n.name === 'lets') return walkLet(args, names, n.name === 'lets', walk);
@@ -71,7 +93,7 @@ export function compileFormula(source: string): CompileResult {
     walk(ast, new Set());
     return { ok: true, compiled: { source, ast, deps } };
   } catch (e) {
-    if (e instanceof FormulaError) return { ok: false, error: { message: e.message, pos: e.pos ?? 0, end: e.end ?? e.pos ?? 0 } };
+    if (e instanceof FormulaError) return { ok: false, error: issueOf(e) };
     throw e;
   }
 }
@@ -80,18 +102,18 @@ function walkLet(args: Node[], names: ReadonlySet<string>, many: boolean, walk: 
   let scope = new Set(names);
   if (!many) {
     const [name, value, body] = args as [Node, Node, Node];
-    if (name.kind !== 'ident') throw new FormulaError('let 의 첫 인자는 이름이어야 해요', name.pos, name.end);
+    if (name.kind !== 'ident') throw formulaError('formula.err.letFirstArg', {}, name.pos, name.end);
     walk(value, names);
     return walk(body, new Set([...names, name.name]));
   }
   let i = 0;
   for (; i + 1 < args.length; i += 2) {
     const name = args[i]!;
-    if (name.kind !== 'ident') throw new FormulaError('lets 의 이름 자리에는 이름이 와야 해요', name.pos, name.end);
+    if (name.kind !== 'ident') throw formulaError('formula.err.letsName', {}, name.pos, name.end);
     walk(args[i + 1]!, scope);
     scope = new Set([...scope, name.name]);
   }
-  if (i >= args.length) throw new FormulaError('lets 의 마지막 인자는 본문이어야 해요', args[args.length - 1]!.pos, args[args.length - 1]!.end);
+  if (i >= args.length) throw formulaError('formula.err.letsBody', {}, args[args.length - 1]!.pos, args[args.length - 1]!.end);
   walk(args[i]!, scope);
 }
 
@@ -107,7 +129,7 @@ export function tryFormula(source: string, env: Env): { ok: true; value: FValue 
   try {
     return { ok: true, value: evalFormula(r.compiled, env) };
   } catch (e) {
-    if (e instanceof FormulaError) return { ok: false, error: { message: e.message, pos: e.pos ?? 0, end: e.end ?? e.pos ?? 0 } };
+    if (e instanceof FormulaError) return { ok: false, error: issueOf(e) };
     throw e;
   }
 }

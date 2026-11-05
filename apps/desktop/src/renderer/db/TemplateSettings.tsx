@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '@nopsidian/i18n';
 import type { DbData } from './types';
 
 interface Props {
@@ -17,20 +18,20 @@ export function TemplateSettings({ data, notes, onSave }: Props) {
   const titleOf = (p: string) => notes.find((n) => n.path === p)?.title ?? p;
 
   return (
-    <div className="dbpop dbtemplates" role="dialog" aria-label="템플릿">
-      <p className="muted small">새 행을 만들 때 본문과 기본 속성으로 쓸 노트예요. 변수: {'{{date}} {{time}} {{title}}'}</p>
-      {templates.length === 0 && <p className="muted small">등록된 템플릿이 없어요.</p>}
-      {templates.map((t) => (
-        <div key={t} className="dbpop__row">
+    <div className="dbpop dbtemplates" role="dialog" aria-label={t('dbtemplate.title')}>
+      <p className="muted small">{t('dbtemplate.hint')} {'{{date}} {{time}} {{title}}'}</p>
+      {templates.length === 0 && <p className="muted small">{t('dbtemplate.none')}</p>}
+      {templates.map((tpl) => (
+        <div key={tpl} className="dbpop__row">
           <label className="small">
-            <input type="radio" name="tpl-default" checked={def === t} onChange={() => onSave({ templates, defaultTemplate: t })} aria-label={`${titleOf(t)} 기본 템플릿`} /> {titleOf(t)}
+            <input type="radio" name="tpl-default" checked={def === tpl} onChange={() => onSave({ templates, defaultTemplate: tpl })} aria-label={t('dbtemplate.defaultAria', { title: titleOf(tpl) })} /> {titleOf(tpl)}
           </label>
-          <span className="muted small">{t}</span>
-          <button onClick={() => onSave({ templates: templates.filter((x) => x !== t), defaultTemplate: def === t ? null : def })} aria-label={`${titleOf(t)} 제거`}>×</button>
+          <span className="muted small">{tpl}</span>
+          <button onClick={() => onSave({ templates: templates.filter((x) => x !== tpl), defaultTemplate: def === tpl ? null : def })} aria-label={t('dbtemplate.removeAria', { title: titleOf(tpl) })}>×</button>
         </div>
       ))}
-      {def && <button onClick={() => onSave({ templates, defaultTemplate: null })}>기본 템플릿 해제</button>}
-      <input value={q} placeholder="템플릿으로 쓸 노트 검색…" onChange={(e) => setQ(e.target.value)} aria-label="템플릿 노트 검색" />
+      {def && <button onClick={() => onSave({ templates, defaultTemplate: null })}>{t('dbtemplate.clearDefault')}</button>}
+      <input value={q} placeholder={t('dbtemplate.search')} onChange={(e) => setQ(e.target.value)} aria-label={t('dbtemplate.searchAria')} />
       {hits.map((n) => (
         <button
           key={n.path}

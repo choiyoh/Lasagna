@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { useEffect, useState } from 'react';
+import { t, tPlural } from '@nopsidian/i18n';
 import { dbEmbedSource } from '@nopsidian/core/db/embed';
 import { showTextPrompt } from '@nopsidian/editor/nops';
 import type { NopsDbViewHost } from '@nopsidian/editor/nops';
@@ -26,18 +27,18 @@ function Picker({ onDone }: { onDone: (src: string | null) => void }) {
   }, [db]);
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onDone(null)}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-label="데이터베이스 보기 넣기">
-        <h2>{db ? `“${db.title}”의 보기` : '어떤 데이터베이스를 넣을까요?'}</h2>
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={t('dbview.insert')}>
+        <h2>{db ? t('dbview.viewsOf', { title: db.title }) : t('dbview.which')}</h2>
         {dbs === null ? (
-          <p className="muted">불러오는 중…</p>
+          <p className="muted">{t('db.loading')}</p>
         ) : !db ? (
           dbs.length === 0 ? (
-            <p className="muted">데이터베이스가 없어요. 사이드바의 DB 탭에서 만들어 주세요.</p>
+            <p className="muted">{t('dbview.noDbs')}</p>
           ) : (
             <ul className="picker">
               {dbs.map((d) => (
                 <li key={d.folder}>
-                  <button onClick={() => setDb(d)}>🗂 {d.title} <span className="muted small">{d.rowCount}행</span></button>
+                  <button onClick={() => setDb(d)}>🗂 {d.title} <span className="muted small">{tPlural('count.rows', d.rowCount)}</span></button>
                 </li>
               ))}
             </ul>
@@ -52,8 +53,8 @@ function Picker({ onDone }: { onDone: (src: string | null) => void }) {
           </ul>
         )}
         <div className="dialog__actions">
-          {db && <button onClick={() => setDb(null)}>뒤로</button>}
-          <button onClick={() => onDone(null)}>취소</button>
+          {db && <button onClick={() => setDb(null)}>{t('dbview.back')}</button>}
+          <button onClick={() => onDone(null)}>{t('db.cancel')}</button>
         </div>
       </div>
     </div>
@@ -73,7 +74,7 @@ export function createDbViewHost(host: DbEmbedHost): NopsDbViewHost {
       };
     },
     async create() {
-      const raw = await showTextPrompt('새 데이터베이스 이름', '할 일');
+      const raw = await showTextPrompt(t('db.newDbName'), '할 일');
       const name = raw?.trim().replace(/[\\/:*?"<>|]/g, ' ').trim();
       if (!name) return null;
       // 이름이 겹치면 번호를 붙인다(폴더 = 데이터베이스)
@@ -82,7 +83,8 @@ export function createDbViewHost(host: DbEmbedHost): NopsDbViewHost {
       for (let n = 2; taken.has(folder); n++) folder = `${name} ${n}`;
       await window.nops.db.create({ folder, title: folder });
       const edit = (op: Parameters<typeof window.nops.db.editSchema>[0]['op']) => window.nops.db.editSchema({ folder, op });
-      // 노션처럼 바로 쓸 수 있게 기본 속성과 보기를 둔다
+      // 노션처럼 바로 쓸 수 있게 기본 속성과 보기를 둔다.
+      // 속성·옵션·보기 이름은 _db.yaml 에 쓰이는 데이터 기본값이라 L3(새 기본값의 언어 대응) 전까지 한국어 그대로 둔다.
       await edit({ kind: 'setProperty', name: '상태', def: { type: 'select', options: [{ name: '할 일', color: 'gray' }, { name: '진행 중', color: 'blue' }, { name: '완료', color: 'green' }] } });
       await edit({ kind: 'setProperty', name: '날짜', def: { type: 'date' } });
       await edit({ kind: 'setProperty', name: '태그', def: { type: 'multi_select', options: [] } });

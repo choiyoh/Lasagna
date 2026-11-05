@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { t, tPlural } from '@nopsidian/i18n';
 import { parseDbEmbed } from '@nopsidian/core/db/embed';
 import type { DbQueryResult } from '@nopsidian/ipc-contract';
 import { BoardView } from './BoardView';
@@ -42,7 +43,7 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
       const found = dbs.find((d) => d.title === cfg.db) ?? dbs.find((d) => d.folder === cfg.db) ?? dbs.find((d) => d.title.toLowerCase() === cfg.db.toLowerCase());
       if (!found) {
         setData(null);
-        setError(`데이터베이스를 찾을 수 없어요: ${cfg.db}`);
+        setError(t('db.dbNotFound', { name: cfg.db }));
         return;
       }
       // 보기 이름 → id: 먼저 한 번 질의해 스키마의 보기 목록에서 찾는다
@@ -53,7 +54,7 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
         const v = views.find((x) => x.id === want) ?? views.find((x) => x.name === want);
         if (v && v.id !== (r.view as { id: string }).id) r = (await window.nops.db.query({ folder: found.folder, viewId: v.id, limit: cfg.limit ?? 100, groupLimit: 50 })) as DbQueryResult;
         else if (!v) {
-          setError(`보기를 찾을 수 없어요: ${want}`);
+          setError(t('db.viewNotFound', { name: want }));
         }
       }
       if (tmp) r = (await window.nops.db.query({ folder: found.folder, view: { ...(r.view as View), ...tmp }, limit: cfg.limit ?? 100, groupLimit: 50 })) as DbQueryResult;
@@ -111,15 +112,15 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
   };
 
   if (!parsed.ok) return <p className="warn small pad" role="alert">⚠ {parsed.error}</p>;
-  if (!data) return <p className={error ? 'warn small pad' : 'muted small pad'} role={error ? 'alert' : undefined}>{error ? `⚠ ${error}` : '불러오는 중…'}</p>;
+  if (!data) return <p className={error ? 'warn small pad' : 'muted small pad'} role={error ? 'alert' : undefined}>{error ? `⚠ ${error}` : t('db.loading')}</p>;
 
   const flat = data.groups ? data.groups.flatMap((g) => g.rows) : data.rows;
-  const t = data.view.type;
+  const type = data.view.type;
   return (
     <div className="dbembed" data-testid="db-embed">
       <div className="dbembed__head">
-        <strong>{data.schema.title ?? '데이터베이스'}</strong>
-        <div className="dbembed__views" role="tablist" aria-label="보기">
+        <strong>{data.schema.title ?? t('db.database')}</strong>
+        <div className="dbembed__views" role="tablist" aria-label={t('db.views')}>
           {data.schema.views.map((v) => (
             <button key={v.id} role="tab" aria-selected={v.id === data.view.id} className={v.id === data.view.id ? 'active' : ''} onClick={() => {
                 setTmp(null);
@@ -129,12 +130,12 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
             </button>
           ))}
         </div>
-        <span className="muted small">{data.matched}행</span>
+        <span className="muted small">{tPlural('count.rows', data.matched)}</span>
         <span className="spacer" />
-        <button onClick={() => folder !== null && host.openDb(folder)}>전체 화면</button>
+        <button onClick={() => folder !== null && host.openDb(folder)}>{t('db.openFullView')}</button>
       </div>
       {error && <p className="warn small pad" role="alert">⚠ {error}</p>}
-      {t === 'table' && (
+      {type === 'table' && (
         <TableView
           data={data}
           rows={flat}
@@ -142,7 +143,7 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
           onEdit={(r, p, v) => void updateCell(r, p, v)}
           onWidth={() => undefined}
           notes={host.notes}
-          onRenameTitle={host.renameNote ? (r, t) => host.renameNote!(r.path, t) : undefined}
+          onRenameTitle={host.renameNote ? (r, title) => host.renameNote!(r.path, title) : undefined}
           startRenaming={fresh}
           onStartedRenaming={() => setFresh(null)}
           onSort={(prop, dir) => {
@@ -153,16 +154,16 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
           onColumns={(cols) => setTmp({ columns: cols })}
         />
       )}
-      {(t === 'table' || t === 'list' || t === 'gallery' || t === 'timeline') && (
+      {(type === 'table' || type === 'list' || type === 'gallery' || type === 'timeline') && (
         <button className="dbembed__add" onClick={() => void addRow()} data-testid="embed-add-row">
-          + 새로 만들기
+          {t('db.embedAdd')}
         </button>
       )}
-      {t === 'board' && <BoardView vaultId={host.vaultId} data={data} onOpen={host.openNote} onMove={(r, p, v) => void updateCell(r, p, v)} onAdd={(key) => void addRow(data.view.groupBy && key ? { [data.view.groupBy]: key } : undefined)} />}
-      {t === 'list' && <ListView data={data} rows={flat} vaultId={host.vaultId} onOpen={host.openNote} />}
-      {t === 'gallery' && <GalleryView data={data} rows={flat} vaultId={host.vaultId} onOpen={host.openNote} />}
-      {t === 'calendar' && <CalendarView data={data} rows={flat} onOpen={host.openNote} onMove={(r, p, v) => void updateCell(r, p, v)} onAdd={(date) => void addRow(data.view.dateProp ? { [data.view.dateProp]: date } : undefined)} onOpenDaily={() => undefined} />}
-      {t === 'timeline' && <TimelineView data={data} rows={flat} onOpen={host.openNote} onChange={(r, p, v) => void updateCell(r, p, v)} />}
+      {type === 'board' && <BoardView vaultId={host.vaultId} data={data} onOpen={host.openNote} onMove={(r, p, v) => void updateCell(r, p, v)} onAdd={(key) => void addRow(data.view.groupBy && key ? { [data.view.groupBy]: key } : undefined)} />}
+      {type === 'list' && <ListView data={data} rows={flat} vaultId={host.vaultId} onOpen={host.openNote} />}
+      {type === 'gallery' && <GalleryView data={data} rows={flat} vaultId={host.vaultId} onOpen={host.openNote} />}
+      {type === 'calendar' && <CalendarView data={data} rows={flat} onOpen={host.openNote} onMove={(r, p, v) => void updateCell(r, p, v)} onAdd={(date) => void addRow(data.view.dateProp ? { [data.view.dateProp]: date } : undefined)} onOpenDaily={() => undefined} />}
+      {type === 'timeline' && <TimelineView data={data} rows={flat} onOpen={host.openNote} onChange={(r, p, v) => void updateCell(r, p, v)} />}
     </div>
   );
 }

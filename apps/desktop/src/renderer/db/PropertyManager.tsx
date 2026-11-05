@@ -1,15 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { compileFormula, suggestAt, type SuggestResult } from '@nopsidian/formula';
 import { ROLLUP_FNS } from '@nopsidian/core/db/rollup';
+import { t, tPlural, type MessageKey } from '@nopsidian/i18n';
 import type { Property } from '@nopsidian/core/db';
 import { optionsOf } from '@nopsidian/core/db/values';
+import { typeLabel } from './labels';
 import type { DbData } from './types';
 
-export const TYPE_LABEL: Record<string, string> = {
-  text: '텍스트', number: '숫자', select: '선택', multi_select: '다중 선택', status: '상태', date: '날짜', checkbox: '체크박스',
-  url: 'URL', email: '이메일', phone: '전화', files: '파일', created_time: '만든 시각', updated_time: '수정 시각', unique_id: '고유 ID',
-  relation: '관계', rollup: '롤업', formula: '수식',
-};
 const CREATABLE = ['text', 'number', 'select', 'multi_select', 'status', 'date', 'checkbox', 'url', 'email', 'phone', 'files', 'created_time', 'updated_time', 'relation', 'rollup', 'formula'];
 export const WITH_OPTIONS = new Set(['select', 'multi_select', 'status']);
 
@@ -25,10 +22,17 @@ export function makeDef(type: string, optionsText: string): Property {
   return { type } as Property;
 }
 
-const ROLLUP_LABEL: Record<string, string> = {
-  show_original: '원본 보기', count: '개수', count_values: '값 개수', count_unique: '고유 값 개수', count_empty: '빈 값 수', percent_empty: '빈 값 비율',
-  percent_not_empty: '채워진 비율', sum: '합계', avg: '평균', median: '중앙값', min: '최소', max: '최대', range: '범위', earliest: '가장 이른 날짜',
-  latest: '가장 늦은 날짜', date_range: '날짜 범위', checked: '체크된 수', unchecked: '체크 안 된 수', percent_checked: '체크된 비율', percent_unchecked: '체크 안 된 비율',
+const ROLLUP_KEYS: Record<string, MessageKey> = {
+  show_original: 'prop.rollup.showOriginal', count: 'prop.rollup.count', count_values: 'prop.rollup.countValues',
+  count_unique: 'prop.rollup.countUnique', count_empty: 'prop.rollup.countEmpty', percent_empty: 'prop.rollup.percentEmpty',
+  percent_not_empty: 'prop.rollup.percentNotEmpty', sum: 'prop.rollup.sum', avg: 'prop.rollup.avg', median: 'prop.rollup.median',
+  min: 'prop.rollup.min', max: 'prop.rollup.max', range: 'prop.rollup.range', earliest: 'prop.rollup.earliest',
+  latest: 'prop.rollup.latest', date_range: 'prop.rollup.dateRange', checked: 'prop.rollup.checked', unchecked: 'prop.rollup.unchecked',
+  percent_checked: 'prop.rollup.percentChecked', percent_unchecked: 'prop.rollup.percentUnchecked',
+};
+const rollupLabel = (fn: string): string => {
+  const key = ROLLUP_KEYS[fn];
+  return key ? t(key) : fn;
 };
 
 /** 관계·롤업·수식 속성의 세부 설정 */
@@ -55,10 +59,10 @@ function Details({ name, def, data, dbs, onApply }: { name: string; def: Propert
     return (
       <div className="dbprops__details">
         <textarea
-          aria-label={`${name} 수식`}
+          aria-label={t('prop.formulaAria', { name })}
           rows={3}
           value={draft.expr}
-          placeholder='예: prop("평점") * 20'
+          placeholder={t('prop.formulaPlaceholder')}
           ref={taRef}
           onChange={(e) => {
             setDraft({ ...draft, expr: e.target.value });
@@ -77,7 +81,7 @@ function Details({ name, def, data, dbs, onApply }: { name: string; def: Propert
           spellCheck={false}
         />
         {sug && (
-          <ul className="fsuggest" role="listbox" aria-label="수식 자동 완성">
+          <ul className="fsuggest" role="listbox" aria-label={t('prop.autocomplete')}>
             {sug.items.map((it) => (
               <li key={`${it.kind}:${it.label}`}>
                 <button role="option" aria-selected={false} onMouseDown={(e) => { e.preventDefault(); accept(it); }}>
@@ -94,9 +98,9 @@ function Details({ name, def, data, dbs, onApply }: { name: string; def: Propert
             <code>{draft.expr.slice(0, err.pos)}<mark>{draft.expr.slice(err.pos, Math.max(err.end, err.pos + 1)) || ' '}</mark>{draft.expr.slice(Math.max(err.end, err.pos + 1))}</code>
           </p>
         ) : (
-          <p className="muted small">{r && r.ok && r.compiled.deps.length ? `쓰는 속성: ${r.compiled.deps.join(', ')}` : '속성은 prop("이름")으로 읽어요. 함수: if, round, concat, dateAdd, map …'}</p>
+          <p className="muted small">{r && r.ok && r.compiled.deps.length ? t('prop.deps', { list: r.compiled.deps.join(', ') }) : t('prop.formulaHint')}</p>
         )}
-        <button className="primary" disabled={!!err || !draft.expr.trim() || draft.expr === (def.type === 'formula' ? def.expr : '')} onClick={() => onApply(draft)}>수식 적용</button>
+        <button className="primary" disabled={!!err || !draft.expr.trim() || draft.expr === (def.type === 'formula' ? def.expr : '')} onClick={() => onApply(draft)}>{t('prop.applyFormula')}</button>
       </div>
     );
   }
@@ -104,28 +108,28 @@ function Details({ name, def, data, dbs, onApply }: { name: string; def: Propert
     const rels = Object.entries(data.schema.properties).filter(([, p]) => p.type === 'relation').map(([n]) => n);
     return (
       <div className="dbprops__details">
-        <label className="small">관계 <select value={draft.relation} onChange={(e) => setDraft({ ...draft, relation: e.target.value })} aria-label={`${name} 관계`}>
+        <label className="small">{t('prop.relation')} <select value={draft.relation} onChange={(e) => setDraft({ ...draft, relation: e.target.value })} aria-label={t('prop.relationAria', { name })}>
           <option value="" />
           {rels.map((r) => <option key={r}>{r}</option>)}
         </select></label>
-        <label className="small">대상 속성 <input value={draft.property} onChange={(e) => setDraft({ ...draft, property: e.target.value })} aria-label={`${name} 대상 속성`} placeholder="title 또는 속성 이름" /></label>
-        <label className="small">집계 <select value={draft.fn} onChange={(e) => setDraft({ ...draft, fn: e.target.value })} aria-label={`${name} 집계`}>
-          {ROLLUP_FNS.map((f) => <option key={f} value={f}>{ROLLUP_LABEL[f] ?? f}</option>)}
+        <label className="small">{t('prop.targetProp')} <input value={draft.property} onChange={(e) => setDraft({ ...draft, property: e.target.value })} aria-label={t('prop.targetPropAria', { name })} placeholder={t('prop.targetPropPlaceholder')} /></label>
+        <label className="small">{t('prop.aggregate')} <select value={draft.fn} onChange={(e) => setDraft({ ...draft, fn: e.target.value })} aria-label={t('prop.aggregateAria', { name })}>
+          {ROLLUP_FNS.map((f) => <option key={f} value={f}>{rollupLabel(f)}</option>)}
         </select></label>
-        <button className="primary" disabled={!draft.relation || !draft.property.trim()} onClick={() => onApply({ ...draft, property: draft.property.trim() })}>적용</button>
+        <button className="primary" disabled={!draft.relation || !draft.property.trim()} onClick={() => onApply({ ...draft, property: draft.property.trim() })}>{t('prop.apply')}</button>
       </div>
     );
   }
   if (draft.type === 'relation') {
     return (
       <div className="dbprops__details">
-        <label className="small">대상 <select value={draft.target} onChange={(e) => setDraft({ ...draft, target: e.target.value })} aria-label={`${name} 대상`}>
-          <option value="*">모든 노트</option>
+        <label className="small">{t('prop.target')} <select value={draft.target} onChange={(e) => setDraft({ ...draft, target: e.target.value })} aria-label={t('prop.targetAria', { name })}>
+          <option value="*">{t('prop.allNotes')}</option>
           {dbs.map((d) => <option key={d.folder} value={d.folder}>{d.title}</option>)}
         </select></label>
-        <label className="small"><input type="checkbox" checked={draft.twoWay} onChange={(e) => setDraft({ ...draft, twoWay: e.target.checked })} /> 양방향(반대쪽 노트에도 기록)</label>
-        {draft.twoWay && <label className="small">반대쪽 속성 <input value={draft.reverse ?? ''} onChange={(e) => setDraft({ ...draft, reverse: e.target.value })} aria-label={`${name} 반대쪽 속성`} placeholder="대상 노트의 관계 속성 이름" /></label>}
-        <button className="primary" disabled={draft.twoWay && !draft.reverse?.trim()} onClick={() => onApply({ ...draft, reverse: draft.twoWay ? draft.reverse?.trim() : undefined })}>적용</button>
+        <label className="small"><input type="checkbox" checked={draft.twoWay} onChange={(e) => setDraft({ ...draft, twoWay: e.target.checked })} /> {t('prop.twoWay')}</label>
+        {draft.twoWay && <label className="small">{t('prop.reverse')} <input value={draft.reverse ?? ''} onChange={(e) => setDraft({ ...draft, reverse: e.target.value })} aria-label={t('prop.reverseAria', { name })} placeholder={t('prop.reversePlaceholder')} /></label>}
+        <button className="primary" disabled={draft.twoWay && !draft.reverse?.trim()} onClick={() => onApply({ ...draft, reverse: draft.twoWay ? draft.reverse?.trim() : undefined })}>{t('prop.apply')}</button>
       </div>
     );
   }
@@ -166,17 +170,17 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename, onClo
   const taken = (n: string) => n === 'title' || names.includes(n);
 
   return (
-    <div className="dbpop dbprops" role="dialog" aria-label="속성 관리">
+    <div className="dbpop dbprops" role="dialog" aria-label={t('prop.manager')}>
       <header className="dbprops__head">
-        <strong className="dbprops__title">속성 {names.length}개</strong>
-        <button className="dbprops__x" onClick={onClose} aria-label="속성 관리 닫기" title="닫기">
+        <strong className="dbprops__title">{tPlural('prop.count', names.length)}</strong>
+        <button className="dbprops__x" onClick={onClose} aria-label={t('prop.close')} title={t('db.close')}>
           ×
         </button>
       </header>
       <div className="dbprops__cols" aria-hidden="true">
-        <span>이름</span>
-        <span>유형</span>
-        <span>옵션</span>
+        <span>{t('prop.name')}</span>
+        <span>{t('prop.type')}</span>
+        <span>{t('prop.options')}</span>
         <span />
       </div>
       <div className="dbprops__list">
@@ -196,10 +200,10 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename, onClo
                       setRenaming(null);
                     }}
                     onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLElement).blur()}
-                    aria-label="새 이름"
+                    aria-label={t('prop.newName')}
                   />
                 ) : (
-                  <button className="dbprops__name" onClick={() => setRenaming({ from: n, to: n })} title="이름 바꾸기">
+                  <button className="dbprops__name" onClick={() => setRenaming({ from: n, to: n })} title={t('prop.rename')}>
                     {n}
                   </button>
                 )}
@@ -211,11 +215,11 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename, onClo
                     const keep = WITH_OPTIONS.has(e.target.value) ? optionsOf(p).map((o) => o.name).join(',') : '';
                     onSetProperty(n, makeDef(e.target.value, keep));
                   }}
-                  aria-label={`${n} 형식`}
+                  aria-label={t('prop.typeAria', { name: n })}
                   disabled={p.type === 'relation' || p.type === 'rollup' || p.type === 'formula'}
                 >
-                  {[...new Set([...CREATABLE, p.type])].map((t) => (
-                    <option key={t} value={t}>{TYPE_LABEL[t] ?? t}</option>
+                  {[...new Set([...CREATABLE, p.type])].map((type) => (
+                    <option key={type} value={type}>{typeLabel(type)}</option>
                   ))}
                 </select>
               </div>
@@ -223,22 +227,22 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename, onClo
                 {WITH_OPTIONS.has(p.type) && (
                   <input
                     defaultValue={optionsOf(p).map((o) => o.name).join(', ')}
-                    placeholder="옵션(쉼표로 구분)"
+                    placeholder={t('prop.optionsPlaceholder')}
                     onBlur={(e) => {
                       const next = parseOptions(e.target.value);
                       const same = next.map((o) => o.name).join('\n') === optionsOf(p).map((o) => o.name).join('\n');
                       // 기존 옵션의 색·그룹은 이름이 같은 것끼리 유지한다
                       if (!same) onSetProperty(n, { ...p, options: next.map((o) => optionsOf(p).find((x) => x.name === o.name) ?? o) } as Property);
                     }}
-                    aria-label={`${n} 옵션`}
+                    aria-label={t('prop.optionsAria', { name: n })}
                   />
                 )}
                 {(p.type === 'relation' || p.type === 'rollup' || p.type === 'formula') && (
-                  <button onClick={() => setDetail(detail === n ? null : n)} aria-label={`${n} 설정`} aria-expanded={detail === n}>설정</button>
+                  <button onClick={() => setDetail(detail === n ? null : n)} aria-label={t('prop.settingsAria', { name: n })} aria-expanded={detail === n}>{t('prop.settings')}</button>
                 )}
               </div>
               <div className="dbprops__cell dbprops__cell--end">
-                <button onClick={() => onRemove(n)} aria-label={`${n} 삭제`} title="속성 삭제(노트의 값은 남아요)">×</button>
+                <button onClick={() => onRemove(n)} aria-label={t('prop.removeAria', { name: n })} title={t('prop.removeTitle')}>×</button>
               </div>
               {detail === n && <Details name={n} def={p} data={data} dbs={dbs} onApply={(d) => onSetProperty(n, d)} />}
             </div>
@@ -246,13 +250,13 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename, onClo
         })}
       </div>
       <div className="dbpop__row dbprops__new">
-        <input value={name} placeholder="새 속성 이름" onChange={(e) => setName(e.target.value)} aria-label="새 속성 이름" />
-        <select value={type} onChange={(e) => setType(e.target.value)} aria-label="새 속성 형식">
-          {CREATABLE.map((t) => (
-            <option key={t} value={t}>{TYPE_LABEL[t]}</option>
+        <input value={name} placeholder={t('prop.newNamePlaceholder')} onChange={(e) => setName(e.target.value)} aria-label={t('prop.newNamePlaceholder')} />
+        <select value={type} onChange={(e) => setType(e.target.value)} aria-label={t('prop.newTypeAria')}>
+          {CREATABLE.map((type) => (
+            <option key={type} value={type}>{typeLabel(type)}</option>
           ))}
         </select>
-        {WITH_OPTIONS.has(type) && <input value={opts} placeholder="옵션(쉼표)" onChange={(e) => setOpts(e.target.value)} aria-label="새 속성 옵션" />}
+        {WITH_OPTIONS.has(type) && <input value={opts} placeholder={t('prop.newOptionsPlaceholder')} onChange={(e) => setOpts(e.target.value)} aria-label={t('prop.newOptionsAria')} />}
         <button
           className="primary"
           disabled={!name.trim() || taken(name.trim())}
@@ -263,10 +267,10 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename, onClo
             setOpts('');
           }}
         >
-          추가
+          {t('prop.add')}
         </button>
       </div>
-      {name.trim() && taken(name.trim()) && <p className="muted small">이미 있거나 쓸 수 없는 이름이에요.</p>}
+      {name.trim() && taken(name.trim()) && <p className="muted small">{t('prop.taken')}</p>}
     </div>
   );
 }

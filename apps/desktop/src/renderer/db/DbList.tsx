@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { t } from '@nopsidian/i18n';
 import { CsvImportDialog } from './CsvImportDialog';
 import { DatabaseIcon } from '../icons';
 
@@ -17,14 +18,14 @@ export function DbList({ onOpen }: Props) {
   useEffect(() => {
     const load = () => void window.nops.db.list().then(setDbs).catch(() => undefined);
     load();
-    let t: ReturnType<typeof setTimeout> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const again = () => {
-      clearTimeout(t);
-      t = setTimeout(load, 500);
+      clearTimeout(timer);
+      timer = setTimeout(load, 500);
     };
     const offs = [window.nops.on('note.changed', again), window.nops.on('asset.changed', again)];
     return () => {
-      clearTimeout(t);
+      clearTimeout(timer);
       offs.forEach((o) => o());
     };
   }, []);
@@ -44,11 +45,11 @@ export function DbList({ onOpen }: Props) {
 
   return (
     <div className="dblistpanel" data-testid="db-panel">
-      {dbs.length === 0 && <p className="muted small pad">데이터베이스가 없어요. 폴더에 <code>_db.yaml</code> 이 있으면 데이터베이스가 돼요.</p>}
+      {dbs.length === 0 && <p className="muted small pad">{t('db.noneBefore')} <code>_db.yaml</code> {t('db.noneAfter')}</p>}
       <ul className="tags">
         {dbs.map((d) => (
           <li key={d.folder}>
-            <button className="tag" onClick={() => onOpen(d.folder)} title={d.folder || '(볼트 루트)'}>
+            <button className="tag" onClick={() => onOpen(d.folder)} title={d.folder || t('db.vaultRoot')}>
               <span className="tag__name"><DatabaseIcon size={15} />{d.title}</span>
               <span className="count">{d.rowCount}</span>
             </button>
@@ -60,19 +61,19 @@ export function DbList({ onOpen }: Props) {
           <input
             autoFocus
             value={name}
-            placeholder="새 데이터베이스(폴더) 이름"
+            placeholder={t('db.newDbPlaceholder')}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void create();
               if (e.key === 'Escape') setCreating(false);
             }}
-            aria-label="데이터베이스 이름"
+            aria-label={t('db.dbNameAria')}
           />
-          <button className="primary" onClick={() => void create()} disabled={!name.trim()}>만들기</button>
+          <button className="primary" onClick={() => void create()} disabled={!name.trim()}>{t('db.create')}</button>
         </div>
       ) : (
         <>
-          <button className="new-note" onClick={() => setCreating(true)}>+ 새 데이터베이스</button>
+          <button className="new-note" onClick={() => setCreating(true)}>{t('db.newDb')}</button>
           <button
             className="new-note"
             onClick={() =>
@@ -82,7 +83,7 @@ export function DbList({ onOpen }: Props) {
               )
             }
           >
-            CSV 가져오기
+            {t('db.importCsv')}
           </button>
         </>
       )}

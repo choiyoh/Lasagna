@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { formatMonthTitle, formatWeekdayShort, t } from '@nopsidian/i18n';
 import { addDays, daysBetween, parseYmd, rowSpan, shiftValue, startOfWeek, ymd } from './date-util';
 import { spanToValue } from './timeline-math';
 import type { CellValue, DbData, DbRowDto } from './types';
@@ -14,7 +15,9 @@ interface Props {
   empty?: ReactNode;
 }
 
-const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
+/** 주는 월요일에서 시작한다. 2024-01-01 이 월요일이라 그 주를 요일 머리글 순서로 쓴다. */
+const WEEKDAY_DATES = Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i));
+const weekdays = () => WEEKDAY_DATES.map((d) => formatWeekdayShort(d));
 
 /** 캘린더 뷰(월/주): 날짜 속성 기준으로 행을 날짜 칸에 놓는다. 칩을 다른 날로 끌면 날짜(기간이면 둘 다)가 옮겨진다. */
 export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily, empty }: Props) {
@@ -54,28 +57,28 @@ export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily, e
         <div className="dbcal__empty">{empty}</div>
       </div>
     ) : (
-      <p className="muted pad">캘린더 보기에는 날짜 속성이 필요해요. 속성 관리에서 “날짜” 속성을 추가해 주세요.</p>
+      <p className="muted pad">{t('calendar.needDateProp')}</p>
     );
   }
   const move = (dir: number) => setAnchor((a) => (mode === 'month' ? new Date(a.getFullYear(), a.getMonth() + dir, 1) : addDays(a, dir * 7)));
-  const title = mode === 'month' ? `${anchor.getFullYear()}년 ${anchor.getMonth() + 1}월` : `${ymd(days[0]!)} ~ ${ymd(days[6]!)}`;
+  const title = mode === 'month' ? formatMonthTitle(anchor) : `${ymd(days[0]!)} ~ ${ymd(days[6]!)}`;
 
   return (
     <div className="dbcal" data-testid="db-calendar">
       <div className="dbcal__bar">
-        <button onClick={() => move(-1)} aria-label="이전">‹</button>
+        <button onClick={() => move(-1)} aria-label={t('calendar.prev')}>‹</button>
         <strong>{title}</strong>
-        <button onClick={() => move(1)} aria-label="다음">›</button>
-        <button onClick={() => setAnchor(new Date())}>오늘</button>
-        <select value={mode} onChange={(e) => setMode(e.target.value as 'month' | 'week')} aria-label="달력 단위">
-          <option value="month">월</option>
-          <option value="week">주</option>
+        <button onClick={() => move(1)} aria-label={t('calendar.next')}>›</button>
+        <button onClick={() => setAnchor(new Date())}>{t('calendar.today')}</button>
+        <select value={mode} onChange={(e) => setMode(e.target.value as 'month' | 'week')} aria-label={t('calendar.unit')}>
+          <option value="month">{t('calendar.month')}</option>
+          <option value="week">{t('calendar.week')}</option>
         </select>
-        <span className="muted small">날짜 속성: {prop}</span>
+        <span className="muted small">{t('calendar.dateProp', { prop })}</span>
       </div>
       {empty && <div className="dbcal__empty">{empty}</div>}
       <div className={mode === 'month' ? 'dbcal__grid' : 'dbcal__grid week'}>
-        {WEEKDAYS.map((w) => (
+        {weekdays().map((w) => (
           <div key={w} className="dbcal__dow">{w}</div>
         ))}
         {days.map((d) => {
@@ -106,8 +109,8 @@ export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily, e
               }}
             >
               <div className="dbcal__head">
-                <button className="dbcal__num" onClick={() => onOpenDaily(k)} title="데일리 노트 열기">{d.getDate()}</button>
-                <button className="dbcal__add" onClick={() => onAdd(k)} aria-label={`${k} 새 행`}>+</button>
+                <button className="dbcal__num" onClick={() => onOpenDaily(k)} title={t('calendar.openDaily')}>{d.getDate()}</button>
+                <button className="dbcal__add" onClick={() => onAdd(k)} aria-label={t('calendar.addRowAria', { date: k })}>+</button>
               </div>
               {items.slice(0, mode === 'month' ? 4 : 30).map((r) => {
                 const sp = rowSpan(r, prop);
@@ -121,7 +124,7 @@ export function CalendarView({ data, rows, onOpen, onMove, onAdd, onOpenDaily, e
                       <span
                         className="dbcal__handle"
                         draggable
-                        title="끌어서 종료일 늘이기"
+                        title={t('calendar.resizeHint')}
                         data-testid="cal-resize"
                         onDragStart={(e) => {
                           e.stopPropagation();

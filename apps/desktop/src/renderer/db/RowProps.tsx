@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { t } from '@nopsidian/i18n';
 import { createRoot } from 'react-dom/client';
 import type { NopsRowPropsHost } from '@nopsidian/editor/nops';
 import { CellEditor, CellView } from './CellEditor';
-import { makeDef, TYPE_LABEL, WITH_OPTIONS } from './PropertyManager';
+import { typeLabel } from './labels';
+import { makeDef, WITH_OPTIONS } from './PropertyManager';
 import type { CellValue, DbRowDto, DbSchema, Property } from './types';
 
 /** 행 패널에서 바로 만들 수 있는 속성 형식(관계·롤업·수식은 데이터베이스 화면의 속성 관리에서) */
@@ -65,7 +67,7 @@ function RowProps({ path, notes, hasTitle, onRename }: { path: string; notes: ()
     if (!adding || !info) return;
     const name = adding.name.trim();
     if (!name || name === 'title' || name in (info.schema.properties as Record<string, unknown>)) {
-      setAddError(!name ? '이름을 입력해 주세요' : '이미 있는 이름이에요');
+      setAddError(!name ? t('prop.needName') : t('prop.nameTaken'));
       return;
     }
     try {
@@ -82,17 +84,17 @@ function RowProps({ path, notes, hasTitle, onRename }: { path: string; notes: ()
   if (!info) return null;
   const entries = Object.entries(info.schema.properties) as [string, Property][];
   if (entries.length === 0) return null;
-  const dbName = info.schema.title ?? info.folder.split('/').pop() ?? '데이터베이스';
+  const dbName = info.schema.title ?? info.folder.split('/').pop() ?? t('db.database');
 
   return (
     <div className="rowprops" data-testid="row-props-panel">
       {!hasTitle && (
-        <h1 className="rowprops__title" title="이름 바꾸기" onClick={onRename}>
+        <h1 className="rowprops__title" title={t('prop.rename')} onClick={onRename}>
           {info.row.title}
         </h1>
       )}
       <button className="rowprops__head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <span aria-hidden>{open ? '▾' : '▸'}</span> {dbName} 속성
+        <span aria-hidden>{open ? '▾' : '▸'}</span> {t('rowprops.heading', { name: dbName })}
       </button>
       {open &&
         entries.map(([name, prop]) => {
@@ -112,8 +114,8 @@ function RowProps({ path, notes, hasTitle, onRename }: { path: string; notes: ()
                 ) : editing === name ? (
                   <CellEditor prop={prop} value={value} autoFocus notes={notes()} onCommit={(v) => void commit(name, v)} />
                 ) : (
-                  <button className="rowprops__cell" onClick={() => setEditing(name)} aria-label={`${name} 편집`}>
-                    {value === null || (Array.isArray(value) && !value.length) ? <span className="muted">비어 있음</span> : <CellView prop={prop} value={value} />}
+                  <button className="rowprops__cell" onClick={() => setEditing(name)} aria-label={t('rowprops.editAria', { name })}>
+                    {value === null || (Array.isArray(value) && !value.length) ? <span className="muted">{t('rowprops.empty')}</span> : <CellView prop={prop} value={value} />}
                   </button>
                 )}
               </div>
@@ -126,8 +128,8 @@ function RowProps({ path, notes, hasTitle, onRename }: { path: string; notes: ()
             <input
               autoFocus
               value={adding.name}
-              placeholder="속성 이름"
-              aria-label="새 속성 이름"
+              placeholder={t('prop.newNamePlaceholder')}
+              aria-label={t('prop.newNamePlaceholder')}
               onChange={(e) => setAdding({ ...adding, name: e.target.value })}
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing) return;
@@ -135,23 +137,23 @@ function RowProps({ path, notes, hasTitle, onRename }: { path: string; notes: ()
                 if (e.key === 'Escape') setAdding(null);
               }}
             />
-            <select value={adding.type} aria-label="새 속성 형식" onChange={(e) => setAdding({ ...adding, type: e.target.value })}>
-              {QUICK_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_LABEL[t]}
+            <select value={adding.type} aria-label={t('prop.newTypeAria')} onChange={(e) => setAdding({ ...adding, type: e.target.value })}>
+              {QUICK_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {typeLabel(type)}
                 </option>
               ))}
             </select>
             {WITH_OPTIONS.has(adding.type) && (
-              <input value={adding.opts} placeholder="옵션(쉼표로 구분)" aria-label="새 속성 옵션" onChange={(e) => setAdding({ ...adding, opts: e.target.value })} />
+              <input value={adding.opts} placeholder={t('prop.optionsPlaceholder')} aria-label={t('prop.newOptionsAria')} onChange={(e) => setAdding({ ...adding, opts: e.target.value })} />
             )}
-            <button className="primary" onClick={() => void addProperty()}>추가</button>
-            <button onClick={() => setAdding(null)}>취소</button>
+            <button className="primary" onClick={() => void addProperty()}>{t('prop.add')}</button>
+            <button onClick={() => setAdding(null)}>{t('db.cancel')}</button>
             {addError && <span className="warn small">{addError}</span>}
           </div>
         ) : (
           <button className="rowprops__add" onClick={() => setAdding({ name: '', type: 'text', opts: '' })} data-testid="row-prop-add">
-            + 속성 추가
+            {t('rowprops.addProp')}
           </button>
         ))}
     </div>

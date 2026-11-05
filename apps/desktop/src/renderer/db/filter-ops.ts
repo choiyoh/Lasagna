@@ -1,3 +1,4 @@
+import { t, type MessageKey } from '@nopsidian/i18n';
 import type { FilterOp, Property } from '@nopsidian/core/db';
 
 /**
@@ -13,10 +14,14 @@ export const OPS_BY_KIND: Record<string, FilterOp[]> = {
   checkbox: ['=', '!='],
 };
 
-export const OP_LABEL: Record<FilterOp, string> = {
-  '=': '같음', '!=': '다름', '>': '초과', '>=': '이상', '<': '미만', '<=': '이하', contains: '포함', '!contains': '포함 안 함',
-  startsWith: '시작', endsWith: '끝', empty: '비어 있음', '!empty': '비어 있지 않음', in: '중 하나',
+export const OP_KEYS: Record<FilterOp, MessageKey> = {
+  '=': 'db.op.equals', '!=': 'db.op.notEquals', '>': 'db.op.gt', '>=': 'db.op.gte', '<': 'db.op.lt', '<=': 'db.op.lte',
+  contains: 'db.op.contains', '!contains': 'db.op.notContains', startsWith: 'db.op.startsWith', endsWith: 'db.op.endsWith',
+  empty: 'db.op.empty', '!empty': 'db.op.notEmpty', in: 'db.op.in',
 };
+
+/** 연산자 표시 이름. 연산자 값 자체는 저장·비교에 쓰이므로 바꾸지 않는다. */
+export const opLabel = (op: FilterOp): string => t(OP_KEYS[op]);
 
 /** 속성 종류 → 연산자 목록 키. 속성이 없으면(제목) 텍스트로 본다. */
 export const kindOf = (p: Property | undefined): keyof typeof OPS_BY_KIND => {

@@ -148,6 +148,157 @@ const cases: Case[] = [
     base: () => `인터넷 [NETWORK] @ 2023-11-14T22:13:00.000Z`,
     render: () => t('diag.failureValue', { title: '인터넷', code: 'NETWORK', at: '2023-11-14T22:13:00.000Z' }),
   },
+  // L2b: 데이터베이스·그래프 화면
+  {
+    name: 'db.rows',
+    base: (n) => `${n}행`,
+    render: (n) => tPlural('count.rows', n),
+  },
+  {
+    name: 'db.rowsFiltered',
+    base: (n, m) => `${m} / ${n}행`,
+    render: (n, m) => tPlural('db.rowsFiltered', n, { matched: m }),
+  },
+  {
+    name: 'db.selectedCount',
+    base: (n) => `${n}개 선택됨`,
+    render: (n) => t('db.selectedCount', { count: n }),
+  },
+  {
+    name: 'db.duplicateCount',
+    base: (n) => `${n}개 복제`,
+    render: (n) => t('db.duplicateCount', { count: n }),
+  },
+  {
+    name: 'db.deleteCount',
+    base: (n) => `${n}개 삭제`,
+    render: (n) => t('db.deleteCount', { count: n }),
+  },
+  {
+    name: 'db.groupMore',
+    base: (n) => `${n}개 더 있음(필터로 좁혀 보세요)`,
+    render: (n) => t('db.groupMore', { count: n }),
+  },
+  {
+    name: 'db.rowsDuplicated',
+    base: (n) => `${n}개 행을 복제했어요`,
+    render: (n) => t('db.rowsDuplicated', { count: n }),
+  },
+  {
+    name: 'db.rowsTrashed',
+    base: (n) => `${n}개 행을 휴지통으로 옮겼어요`,
+    render: (n) => t('db.rowsTrashed', { count: n }),
+  },
+  {
+    name: 'db.csvSaved',
+    base: (n) => `${n}행을 CSV로 저장했어요`,
+    render: (n) => tPlural('db.csvSaved', n),
+  },
+  {
+    name: 'db.truncated',
+    base: (n, m) => `처음 ${n}행만 보여요(전체 ${m}행). 필터로 좁혀 보세요.`,
+    render: (n, m) => t('db.truncated', { shown: n, total: m }),
+  },
+  {
+    name: 'db.yamlIssues',
+    base: (n) => `⚠ _db.yaml 문제 ${n}건`,
+    render: (n) => tPlural('db.yamlIssues', n),
+  },
+  {
+    name: 'db.calcFor',
+    base: (n) => `상태 ${n} 계산`,
+    render: (n) => t('db.calcFor', { prop: `상태 ${n}` }),
+  },
+  {
+    name: 'db.renameHint',
+    base: (n) => `a${n}.md — 두 번 눌러 이름 바꾸기`,
+    render: (n) => t('db.renameHint', { path: `a${n}.md` }),
+  },
+  {
+    name: 'db.rowSelect',
+    base: (n) => `노트${n} 선택`,
+    render: (n) => t('db.rowSelect', { title: `노트${n}` }),
+  },
+  {
+    name: 'db.cellError',
+    base: (n) => `오류: 잘못된 값 ${n}`,
+    render: (n) => t('db.cellError', { message: `잘못된 값 ${n}` }),
+  },
+  {
+    name: 'db.deleteViewQuestion',
+    base: (n) => `‘보기 ${n}’ 보기를 삭제할까요?`,
+    render: (n) => t('db.deleteViewQuestion', { name: `보기 ${n}` }),
+  },
+  {
+    name: 'db.viewNotFound',
+    base: (n) => `보기를 찾을 수 없어요: 보기 ${n}`,
+    render: (n) => t('db.viewNotFound', { name: `보기 ${n}` }),
+  },
+  {
+    name: 'csv.heading',
+    base: (n) => `CSV 가져오기 — a.csv (${n}행)`,
+    render: (n) => tPlural('csv.heading', n, { file: 'a.csv' }),
+  },
+  {
+    name: 'csv.done',
+    base: (n) => `${n}개 행을 가져왔어요.`,
+    render: (n) => tPlural('csv.done', n),
+  },
+  {
+    name: 'csv.addRowsTo',
+    base: (n) => `“DB${n}”에 행 추가`,
+    render: (n) => t('csv.addRowsTo', { title: `DB${n}` }),
+  },
+  {
+    name: 'csv.propNameAria',
+    base: (n) => `열${n} 속성 이름`,
+    render: (n) => t('csv.propNameAria', { header: `열${n}` }),
+  },
+  {
+    name: 'calendar.addRowAria',
+    base: (n) => `2026-11-0${n} 새 행`,
+    render: (n) => t('calendar.addRowAria', { date: `2026-11-0${n}` }),
+  },
+  {
+    name: 'calendar.dateProp',
+    base: (n) => `날짜 속성: 날짜${n}`,
+    render: (n) => t('calendar.dateProp', { prop: `날짜${n}` }),
+  },
+  {
+    name: 'timeline.undated',
+    base: (n, m) => `날짜가 없는 행 ${n}개: a${m} …`,
+    render: (n, m) => t('timeline.undated', { count: n, titles: `a${m}`, more: ' …' }),
+  },
+  {
+    name: 'prop.count',
+    base: (n) => `속성 ${n}개`,
+    render: (n) => tPlural('prop.count', n),
+  },
+  {
+    name: 'prop.deps',
+    base: (n) => `쓰는 속성: a${n}, b${n}`,
+    render: (n) => t('prop.deps', { list: `a${n}, b${n}` }),
+  },
+  {
+    name: 'prop.formulaAria',
+    base: (n) => `점수${n} 수식`,
+    render: (n) => t('prop.formulaAria', { name: `점수${n}` }),
+  },
+  {
+    name: 'dbview.viewsOf',
+    base: (n) => `“DB${n}”의 보기`,
+    render: (n) => t('dbview.viewsOf', { title: `DB${n}` }),
+  },
+  {
+    name: 'rowprops.heading',
+    base: (n) => `DB${n} 속성`,
+    render: (n) => t('rowprops.heading', { name: `DB${n}` }),
+  },
+  {
+    name: 'dbtemplate.defaultAria',
+    base: (n) => `템플릿${n} 기본 템플릿`,
+    render: (n) => t('dbtemplate.defaultAria', { title: `템플릿${n}` }),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

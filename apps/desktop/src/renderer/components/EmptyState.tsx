@@ -13,10 +13,12 @@ interface Props {
   suggestions?: EmptyStateSuggestion[];
   onReset?: () => void;
   resetLabel?: string;
+  /** 추천 항목의 개수 단위. 데이터베이스는 행이라 `rows` 로 센다. */
+  countUnit?: 'rows';
 }
 
 /** 빈 결과 화면의 공통 골격. 아이콘·카드 배경·그림자 없이 여백과 타이포만 쓴다. */
-export function EmptyState({ title, description, detail, suggestions = [], onReset, resetLabel }: Props) {
+export function EmptyState({ title, description, detail, suggestions = [], onReset, resetLabel, countUnit }: Props) {
   return (
     <div className="emptystate" role="status">
       <strong className="emptystate__title">{title}</strong>
@@ -33,7 +35,7 @@ export function EmptyState({ title, description, detail, suggestions = [], onRes
               >
                 <span className="emptystate__suggestion-icon" aria-hidden>−</span>
                 <span className="emptystate__suggestion-label">{t('empty.suggestionRemove', { label: s.label })}</span>{' '}
-                <span className="emptystate__suggestion-count">{tPlural('common.items', s.count)}</span>
+                <span className="emptystate__suggestion-count">{tPlural(countUnit === 'rows' ? 'empty.suggestionCount.rows' : 'common.items', s.count)}</span>
               </button>
             </li>
           ))}

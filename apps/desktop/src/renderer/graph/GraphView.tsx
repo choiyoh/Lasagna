@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '@nopsidian/i18n';
 import Graph from 'graphology';
 import Sigma from 'sigma';
 import { EdgeArrowProgram, EdgeRectangleProgram } from 'sigma/rendering';
@@ -50,7 +51,11 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   const hoverNode = useRef<string | null>(null);
   const live = useRef({ settings, current, onOpen });
   live.current = { settings, current, onOpen };
-  const [stats, setStats] = useState('');
+  /**
+   * 통계는 숫자와 상태만 들고 문구는 렌더 시점에 만든다 — 언어를 바꿔도 다시 그리면
+   * 새 언어의 문구가 나온다(문자열을 상태로 들면 이전 언어가 남는다).
+   */
+  const [stats, setStats] = useState<{ nodes: number; links: number; settled: boolean; matched: number } | null>(null);
   /** WebGL 을 못 쓰면 그래프 대신 안내를 보여 준다(사유가 있으면 함께 보여 준다) */
   const [glFailure, setGlFailure] = useState<{ message: string } | null>(null);
   /**
@@ -422,7 +427,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
         settledRef.current = nowSettled;
         setSettled(nowSettled);
       }
-      setStats(statsText(ids.length, graph.size, nowSettled, matchRef.current));
+      setStats({ nodes: ids.length, links: graph.size, settled: nowSettled, matched: matchRef.current });
       // 예산 안에 수렴하지 못해 잠시 멈춘 배치도 남긴다 — 다음 진입에서 이어서 다듬는다(done:false)
       if (!done && !busy) saveLayout(cacheKey, snapshot(), false);
     };
@@ -431,7 +436,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     workerForces.current = init.forces;
     worker.postMessage(init);
     // 캐시 자리를 보여 주며 뒤에서 다듬는 경우(paintOnly)는 화면이 이미 정적이다 — 문구·스피너를 켜지 않는다
-    setStats(statsText(ids.length, graph.size, paintOnly, matchRef.current));
+    setStats({ nodes: ids.length, links: graph.size, settled: paintOnly, matched: matchRef.current });
     if (paintOnly) {
       settledRef.current = true;
       setSettled(true);
@@ -477,7 +482,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
   useEffect(() => {
     const g = graphRef.current;
     if (!g) return;
-    setStats(statsText(data.nodes.length, g.size, settledRef.current, matchCount));
+    setStats({ nodes: data.nodes.length, links: g.size, settled: settledRef.current, matched: matchCount });
   }, [matchCount, data]);
 
   // 그래프 검색으로 고른 노드로 이동
@@ -516,8 +521,8 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     <div className="graphview" data-testid={testId}>
       {glFailure ? (
         <div className="graphview__fallback" role="status" data-testid={`${testId}-fallback`}>
-          <strong>WebGL을 사용할 수 없어요</strong>
-          <p className="muted small">이 컴퓨터(또는 원격·가상 환경)에서는 그래프를 그릴 수 없어요. 노트와 링크 기능은 그대로 쓸 수 있어요.</p>
+          <strong>{t('graph.webglUnavailable')}</strong>
+          <p className="muted small">{t('graph.webglHint')}</p>
           {glFailure.message && (
             <pre className="graphview__error muted small">
               <code>{glFailure.message}</code>
@@ -530,16 +535,16 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
           {filteredOut && (
             <div className="graphview__empty">
               <EmptyState
-                title="조건에 맞는 노드가 없어요"
-                description="필터를 지우거나 조건을 바꿔 보세요."
+                title={t('graph.noMatchNodes')}
+                description={t('graph.noMatchHint')}
                 onReset={onClearFilter}
-                resetLabel="필터 지우기"
+                resetLabel={t('db.clearFilter')}
               />
             </div>
           )}
           <span className="graphview__stats muted small" data-testid={`${testId}-stats`}>
-            {slow && <i className="graphview__spin" role="img" aria-label="배치 중" />}
-            {stats}
+            {slow && <i className="graphview__spin" role="img" aria-label={t('graph.settling')} />}
+            {stats && statsText(stats.nodes, stats.links, stats.settled, stats.matched)}
           </span>
         </>
       )}

@@ -403,6 +403,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           : undefined
       }
       resetLabel={view.filter ? t('db.clearAllFilters') : undefined}
+      countUnit="rows"
     />
   ) : null;
   const propertyManager = showProps ? (

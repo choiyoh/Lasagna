@@ -6,6 +6,8 @@
  * 사실과 달랐다(리뷰: 0.2s 에 ready, 4.0s 에야 문구 해제). 그래서 일정 시간(200ms) 동안의
  * 최대 이동이 그래프 크기의 0.4% 미만이면 "가라앉았다"로 본다.
  */
+import { t, tPlural } from '@nopsidian/i18n';
+
 export const SETTLE_WINDOW_MS = 200;
 export const SETTLE_RATIO = 0.004;
 /** 이만큼 늦게까지 안 가라앉으면 작은 스피너를 붙인다 */
@@ -48,6 +50,6 @@ export function isSettled(prev: Float32Array, next: Float32Array, windowMs: numb
 
 export function statsText(nodes: number, links: number, settled: boolean, matched = nodes): string {
   // 필터가 걸려 있으면 "일치 / 전체"로 보여 준다 — 0건일 때 멈춘 것처럼 보이지 않게
-  const head = matched === nodes ? `${nodes}개 노드` : `${matched} / ${nodes}개 노드`;
-  return `${head} · ${links}개 링크${settled ? '' : ' · 배치 중…'}`;
+  const head = matched === nodes ? tPlural('graph.stats.nodes', nodes) : tPlural('graph.stats.nodesOf', nodes, { matched });
+  return `${head} · ${tPlural('graph.stats.links', links)}${settled ? '' : t('graph.stats.layouting')}`;
 }

@@ -19,11 +19,12 @@ title: Tasks
 properties:
   Status: { type: status, options: [{ name: Todo, group: todo }, { name: Doing, group: doing }, { name: Done, group: done }] }
   Score: { type: number, format: number }
+  Due: { type: date }
 views:
   - id: v1
     name: All
     type: table
-    columns: [title, Status, Score]
+    columns: [title, Status, Score, Due]
   - id: v2
     name: Board
     type: board
@@ -43,8 +44,8 @@ test.beforeAll(async () => {
   const dbDir = path.join(vaultDir, 'Tasks');
   mkdirSync(dbDir, { recursive: true });
   writeFileSync(path.join(dbDir, '_db.yaml'), DB_YAML);
-  for (const [title, status, score] of [['Alpha', 'Todo', 3], ['Beta', 'Doing', 5], ['Gamma', 'Done', 8]] as const) {
-    writeFileSync(path.join(dbDir, `${title}.md`), `---\nStatus: ${status}\nScore: ${score}\ncreated: 2026-11-01T00:00:00.000Z\n---\n${title} note\n`);
+  for (const [title, status, score, due] of [['Alpha', 'Todo', 3, '2026-11-05'], ['Beta', 'Doing', 5, '2026-11-06'], ['Gamma', 'Done', 8, '2026-11-07']] as const) {
+    writeFileSync(path.join(path.join(vaultDir, 'Tasks'), `${title}.md`), `---\nStatus: ${status}\nScore: ${score}\nDue: ${due}\ncreated: 2026-11-01T00:00:00.000Z\n---\n${title} note\n`);
   }
   app = await electron.launch({
     executablePath: packagedExecutable(),
@@ -184,4 +185,23 @@ test('English smoke: database toolbar, filter, properties and templates have no 
   await expect(csv).toContainText('Import CSV — import.csv (1 row)');
   expect(await csv.innerText()).not.toMatch(HANGUL);
   await csv.getByRole('button', { name: 'Cancel' }).click();
+
+  // 날짜 고르기: 기간 체크 상자의 표시 라벨과 aria 이름이 같다(영어)
+  const alpha = page.getByTestId('db-table').locator('.dbtable__row', { hasText: 'Alpha' });
+  await alpha.locator('.dbtable__td').nth(3).click();
+  const picker = page.locator('.datepicker');
+  await expect(picker).toBeVisible();
+  await expect(picker).toHaveAttribute('aria-label', 'Pick a date');
+  const rangeBox = picker.locator('input[type=checkbox]');
+  await expect(rangeBox).toHaveAttribute('aria-label', 'Date range');
+  await expect(picker.getByText('Date range', { exact: true })).toBeVisible();
+  expect(await picker.innerText()).not.toMatch(HANGUL);
+  await page.keyboard.press('Escape');
+
+  // 캘린더 단위 선택 라벨
+  await screen.getByLabel('View type').selectOption('calendar');
+  const unit = page.locator('.dbcal').getByLabel('Time scale');
+  await expect(unit).toBeVisible();
+  await expect(unit.getByRole('option', { name: 'Month' })).toHaveCount(1);
+  await screen.getByLabel('View type').selectOption('table');
 });

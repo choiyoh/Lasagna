@@ -1,4 +1,5 @@
 import { t } from '@nopsidian/i18n';
+import { useLocale } from './useLocale';
 import { useEffect, useRef, useState } from 'react';
 import type { Editor, NopsPeekHost } from '@nopsidian/editor/nops';
 import { createDbViewHost } from './db/dbview-host';
@@ -28,7 +29,7 @@ import {
 } from '@nopsidian/editor/nops';
 import type { SourceEditor } from '@nopsidian/editor/nops/source';
 import type { AssetStore } from './assets';
-import { registerFlush } from './flush';
+import { flushAll, registerFlush } from './flush';
 import { TemplatePicker } from './TemplatePicker';
 
 const SAVE_DELAY_MS = 500;
@@ -131,6 +132,11 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   onRenameRef.current = onRename;
   const onTitleRenameRef = useRef(onTitleRename);
   onTitleRenameRef.current = onTitleRename;
+  const locale = useLocale();
+  /** 언어가 바뀌면 에디터를 새로 만든다(문구는 만들 때 잡힌다) — 그 전에 저장하고 커서를 옮겨 둔다 */
+  const localeRef = useRef(locale);
+  const restoreSel = useRef<{ anchor: number; head: number } | null>(null);
+  const [epoch, setEpoch] = useState(0);
   const [pickingIcon, setPickingIcon] = useState(false);
   const [pickingCover, setPickingCover] = useState(false);
   const peekRef = useRef(peek);
@@ -145,6 +151,15 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   /** 찾기 막대: 열린 상태·처음 채울 말·초점 다시 주기·문서 변경 횟수 */
   const [find, setFindState] = useState<{ initial: string; tick: number } | null>(null);
   const [docTick, setDocTick] = useState(0);
+
+  useEffect(() => {
+    if (localeRef.current === locale) return;
+    localeRef.current = locale;
+    const view = editorRef.current?.getView();
+    if (view) restoreSel.current = { anchor: view.state.selection.anchor, head: view.state.selection.head };
+    // 미저장 편집을 먼저 저장한 뒤 새 언어로 에디터를 다시 만든다(내용·커서 유지).
+    void flushAll().then(() => setEpoch((e) => e + 1));
+  }, [locale]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -280,10 +295,18 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       setState('saved');
       if (!first) return;
       syncTitle = loadPrefs().titleSync && (freshNotes.has(path) || titleInSync(path, firstTitle(view.state.doc)));
+      const restored = restoreSel.current;
+      restoreSel.current = null;
       const carried = carrySelection.get(path);
       carrySelection.delete(path);
       const size = view.state.doc.content.size;
-      if (carried) {
+      if (restored) {
+        const sel =
+          restored.anchor === restored.head
+            ? TextSelection.near(view.state.doc.resolve(Math.min(restored.head, size)))
+            : TextSelection.create(view.state.doc, Math.min(restored.anchor, size), Math.min(restored.head, size));
+        view.dispatch(view.state.tr.setSelection(sel));
+      } else if (carried) {
         // 제목 동기화로 이름이 바뀌어 다시 열린 경우: 커서를 그대로
         const sel =
           carried.anchor === carried.head
@@ -467,7 +490,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       source?.destroy();
       editor.destroy();
     };
-  }, [path, vaultId, assets]);
+  }, [path, vaultId, assets, epoch]);
 
   // 같은 노트가 열린 채로 이동할 곳이 바뀌면(노트 안 링크 클릭 등) 그 자리로 옮긴다.
   // 처음 여는 노트는 load() 가 이미 옮겨 주므로, 다 읽은 뒤의 변화만 다룬다.

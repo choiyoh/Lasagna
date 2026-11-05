@@ -245,7 +245,7 @@ export function DatePicker({ value, includeTime = false, onCommit, onClose, auto
               if (!e.target.checked && cur.start) apply(cur.start, null);
             }}
           />
-          {t('datepicker.endDate')}
+          {t('datepicker.rangeLabel')}
         </label>
         <button
           type="button"

@@ -871,4 +871,8 @@ export const ko = {
   'dbview.which': '어떤 데이터베이스를 넣을까요?',
   'dbview.noDbs': '데이터베이스가 없어요. 사이드바의 DB 탭에서 만들어 주세요.',
   'dbview.back': '뒤로',
+
+  'empty.suggestionCount.rows.one': '{n}개',
+  'empty.suggestionCount.rows.other': '{n}개',
+  'datepicker.rangeLabel': '끝 날짜',
 } as const

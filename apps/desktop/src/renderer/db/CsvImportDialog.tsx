@@ -109,7 +109,7 @@ export function CsvImportDialog({ preview, existing, onClose, onDone }: Props) {
                           }
                           aria-label={t('csv.typeAria', { header: c.header })}
                         >
-                          {locked && !TYPES.includes(locked) && <option value={locked}>{t('csv.existingType', { type: locked })}</option>}
+                          {locked && !TYPES.includes(locked) && <option value={locked}>{t('csv.existingType', { type: typeLabelFor(locked) })}</option>}
                           {TYPES.map((type) => (
                             <option key={type} value={type}>{typeLabelFor(type)}</option>
                           ))}

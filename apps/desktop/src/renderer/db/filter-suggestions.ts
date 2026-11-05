@@ -1,4 +1,4 @@
-import { t } from '@nopsidian/i18n';
+import { getLocale, t } from '@nopsidian/i18n';
 import { evalFilter, type DbRow, type DbSchema, type FilterNode, type FilterOp } from '@nopsidian/core/db';
 import { OP_KEYS, needsValue } from './filter-ops';
 import { type Condition, childrenOf, groupKind, isCondition, normalizeRoot, removeAt, simplify } from './filter-tree';
@@ -18,11 +18,16 @@ const valueText = (value: unknown): string => {
   return String(value);
 };
 
+/** `Contains` → `contains` — 문장 가운데에 넣을 때만 쓴다. */
+const lowerFirst = (text: string): string => (text ? text.charAt(0).toLowerCase() + text.slice(1) : text);
+
 /** UI 에 보여 줄 조건 한 줄. 예: `상태 = 완료`, `제목 포함 디자인` */
 export function conditionLabel(cond: Condition): string {
   const name = cond.prop === TITLE ? t('db.title') : cond.prop;
   const value = needsValue(cond.op) ? valueText(cond.value) : '';
-  return `${name} ${OP_GLYPH[cond.op] ?? t(OP_KEYS[cond.op])}${value ? ` ${value}` : ''}`;
+  // 영어는 문장 가운데라 연산자 낱말을 소문자로 시작한다("Title contains Landing"). 한국어 문구는 그대로.
+  const op = OP_GLYPH[cond.op] ?? (getLocale() === 'en' ? lowerFirst(t(OP_KEYS[cond.op])) : t(OP_KEYS[cond.op]));
+  return `${name} ${op}${value ? ` ${value}` : ''}`;
 }
 
 export interface FilterRemovalSuggestion {

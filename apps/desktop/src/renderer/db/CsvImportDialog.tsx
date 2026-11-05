@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { t } from '@nopsidian/i18n';
+import { t, tPlural } from '@nopsidian/i18n';
 import { typeLabel } from './labels';
 
 type Preview = NonNullable<Awaited<ReturnType<typeof window.nops.db.importCsvPreview>>>;
@@ -53,10 +53,10 @@ export function CsvImportDialog({ preview, existing, onClose, onDone }: Props) {
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog csvdialog" role="dialog" aria-modal="true" aria-label={t('csv.title')}>
-        <h2>{t('csv.heading', { file: preview.fileName, count: preview.rowCount })}</h2>
+        <h2>{tPlural('csv.heading', preview.rowCount, { file: preview.fileName })}</h2>
         {result ? (
           <>
-            <p>{t('csv.done', { count: result.rows })}</p>
+            <p>{tPlural('csv.done', result.rows)}</p>
             {result.issues.length > 0 && (
               <ul className="csvdialog__issues">
                 {result.issues.map((i, k) => (

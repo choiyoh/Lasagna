@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { compileFormula, suggestAt, type SuggestResult } from '@nopsidian/formula';
 import { ROLLUP_FNS } from '@nopsidian/core/db/rollup';
-import { t, type MessageKey } from '@nopsidian/i18n';
+import { t, tPlural, type MessageKey } from '@nopsidian/i18n';
 import type { Property } from '@nopsidian/core/db';
 import { optionsOf } from '@nopsidian/core/db/values';
 import { typeLabel } from './labels';
@@ -172,7 +172,7 @@ export function PropertyManager({ data, onSetProperty, onRemove, onRename, onClo
   return (
     <div className="dbpop dbprops" role="dialog" aria-label={t('prop.manager')}>
       <header className="dbprops__head">
-        <strong className="dbprops__title">{t('prop.count', { count: names.length })}</strong>
+        <strong className="dbprops__title">{tPlural('prop.count', names.length)}</strong>
         <button className="dbprops__x" onClick={onClose} aria-label={t('prop.close')} title={t('db.close')}>
           ×
         </button>

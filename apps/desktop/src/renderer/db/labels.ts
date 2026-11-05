@@ -1,6 +1,8 @@
 import { t, type MessageKey } from '@nopsidian/i18n';
 
 const TYPE_KEYS: Record<string, MessageKey> = {
+  // CSV 가져오기에서 제목 열을 고를 때도 쓴다.
+  title: 'db.title',
   text: 'prop.type.text',
   number: 'prop.type.number',
   select: 'prop.type.select',

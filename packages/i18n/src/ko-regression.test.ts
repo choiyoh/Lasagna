@@ -192,7 +192,7 @@ const cases: Case[] = [
   {
     name: 'db.csvSaved',
     base: (n) => `${n}행을 CSV로 저장했어요`,
-    render: (n) => t('db.csvSaved', { count: n }),
+    render: (n) => tPlural('db.csvSaved', n),
   },
   {
     name: 'db.truncated',
@@ -202,7 +202,7 @@ const cases: Case[] = [
   {
     name: 'db.yamlIssues',
     base: (n) => `⚠ _db.yaml 문제 ${n}건`,
-    render: (n) => t('db.yamlIssues', { count: n }),
+    render: (n) => tPlural('db.yamlIssues', n),
   },
   {
     name: 'db.calcFor',
@@ -237,12 +237,12 @@ const cases: Case[] = [
   {
     name: 'csv.heading',
     base: (n) => `CSV 가져오기 — a.csv (${n}행)`,
-    render: (n) => t('csv.heading', { file: 'a.csv', count: n }),
+    render: (n) => tPlural('csv.heading', n, { file: 'a.csv' }),
   },
   {
     name: 'csv.done',
     base: (n) => `${n}개 행을 가져왔어요.`,
-    render: (n) => t('csv.done', { count: n }),
+    render: (n) => tPlural('csv.done', n),
   },
   {
     name: 'csv.addRowsTo',
@@ -272,7 +272,7 @@ const cases: Case[] = [
   {
     name: 'prop.count',
     base: (n) => `속성 ${n}개`,
-    render: (n) => t('prop.count', { count: n }),
+    render: (n) => tPlural('prop.count', n),
   },
   {
     name: 'prop.deps',

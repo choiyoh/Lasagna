@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { setLocale } from './index'
-import { formatCompactDateTime, formatDateTime, formatRelativeTime, formatShortDateTime } from './format'
+import {
+  formatCompactDateTime,
+  formatDateTime,
+  formatMonthTitle,
+  formatRelativeTime,
+  formatShortDateTime,
+  formatWeekdayShort,
+} from './format'
 
 const at = new Date(2026, 10, 4, 15, 12, 33, 0)
 
@@ -62,5 +69,22 @@ describe('formatRelativeTime', () => {
     const old = formatRelativeTime(new Date(2026, 10, 4, 23, 39, 33).getTime(), new Date(2026, 10, 4, 23, 39, 33).getTime() + 2 * 3600_000)
     expect(old).toContain('23:39')
     expect(old).not.toMatch(/AM|PM|33$/)
+  })
+})
+
+describe('formatWeekdayShort / formatMonthTitle', () => {
+  // 2024-01-01 은 월요일 — 달력·날짜 고르기가 쓰는 첫 요일.
+  const monday = new Date(2024, 0, 1)
+
+  it('keeps the Korean weekday and month wording the app already had', () => {
+    expect(formatWeekdayShort(monday, 'ko')).toBe('월')
+    expect(formatWeekdayShort(new Date(2024, 0, 7), 'ko')).toBe('일')
+    expect(formatMonthTitle(new Date(2026, 10, 1), 'ko')).toBe('2026년 11월')
+  })
+
+  it('uses short English weekdays and a month-year title', () => {
+    expect(formatWeekdayShort(monday, 'en')).toBe('Mon')
+    expect(formatWeekdayShort(new Date(2024, 0, 7), 'en')).toBe('Sun')
+    expect(formatMonthTitle(new Date(2026, 10, 1), 'en')).toBe('November 2026')
   })
 })

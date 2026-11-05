@@ -20,6 +20,7 @@ import { addConditionTo, childrenOf, groupKind, isCondition, normalizeRoot, simp
 import { defaultOp } from './filter-ops';
 import { suggestFilterRemovals } from './filter-suggestions';
 import { EmptyState } from '../components/EmptyState';
+import { useLocale } from '../useLocale';
 
 interface Props {
   folder: string;
@@ -174,12 +175,14 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
     };
   }, [folder, suggestable, view]);
 
+  // 조건 라벨은 지금 언어의 t() 결과라, 언어가 바뀌면 다시 만든다.
+  const locale = useLocale();
   const suggestions = useMemo(() => {
     if (!suggestable || !allRows || !view || !data) return [];
     const started = performance.now();
     const out = suggestFilterRemovals(data.schema, view.filter, allRows);
     return performance.now() - started > 200 ? [] : out;
-  }, [allRows, data, suggestable, view]);
+  }, [allRows, data, locale, suggestable, view]);
 
   // 보기 설정(필터·정렬·열 등)은 바꾸면 잠시 뒤 `_db.yaml` 에 자동 저장한다.
   // "되돌리기"는 아직 저장 전이면 바꾼 것을 버리고, 저장 뒤면 바로 앞의 보기로 돌려놓는다.
@@ -362,7 +365,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
 
   const exportCsv = () =>
     void window.nops.db.exportCsv({ folder, viewId: data?.view.id ?? '' }).then(
-      (r) => r && setNotice(t('db.csvSaved', { count: r.rows })),
+      (r) => r && setNotice(tPlural('db.csvSaved', r.rows)),
       (e) => setError(String(e)),
     );
   const importCsv = () =>
@@ -527,7 +530,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
       />
       {data.issues.length > 0 && (
         <details className="dbissues">
-          <summary>{t('db.yamlIssues', { count: data.issues.length })}</summary>
+          <summary>{tPlural('db.yamlIssues', data.issues.length)}</summary>
           <ul>
             {data.issues.map((i, k) => (
               <li key={k}><code>{i.path || t('db.document')}</code> {i.message}</li>

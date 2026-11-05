@@ -669,7 +669,8 @@ export const ko = {
   'db.rowDuplicated': '행을 복제했어요',
   'db.rowsTrashed': '{count}개 행을 휴지통으로 옮겼어요',
   'db.rowTrashed': '행을 휴지통으로 옮겼어요',
-  'db.csvSaved': '{count}행을 CSV로 저장했어요',
+  'db.csvSaved.one': '{n}행을 CSV로 저장했어요',
+  'db.csvSaved.other': '{n}행을 CSV로 저장했어요',
   'db.emptyFiltered': '조건에 맞는 결과가 없어요',
   'db.emptyNoRows': '행이 없어요',
   'db.emptyFilteredHint': '조건을 하나만 빼도 결과가 나와요.',
@@ -693,7 +694,8 @@ export const ko = {
   'db.views': '보기',
   'db.addView': '보기 추가',
   'db.deleteView': '이 보기 삭제',
-  'db.yamlIssues': '⚠ _db.yaml 문제 {count}건',
+  'db.yamlIssues.one': '⚠ _db.yaml 문제 {n}건',
+  'db.yamlIssues.other': '⚠ _db.yaml 문제 {n}건',
   'db.document': '(문서)',
   'db.undoDelete': '삭제 되돌리기',
   'db.dismiss': '알림 닫기',
@@ -730,8 +732,10 @@ export const ko = {
 
   // CSV 가져오기
   'csv.title': 'CSV 가져오기',
-  'csv.heading': 'CSV 가져오기 — {file} ({count}행)',
-  'csv.done': '{count}개 행을 가져왔어요.',
+  'csv.heading.one': 'CSV 가져오기 — {file} ({n}행)',
+  'csv.heading.other': 'CSV 가져오기 — {file} ({n}행)',
+  'csv.done.one': '{n}개 행을 가져왔어요.',
+  'csv.done.other': '{n}개 행을 가져왔어요.',
   'csv.openDb': '데이터베이스 열기',
   'csv.newDb': '새 데이터베이스',
   'csv.newDbName': '새 데이터베이스 이름',
@@ -800,7 +804,8 @@ export const ko = {
 
   // 속성 관리
   'prop.manager': '속성 관리',
-  'prop.count': '속성 {count}개',
+  'prop.count.one': '속성 {n}개',
+  'prop.count.other': '속성 {n}개',
   'prop.close': '속성 관리 닫기',
   'prop.name': '이름',
   'prop.type': '유형',

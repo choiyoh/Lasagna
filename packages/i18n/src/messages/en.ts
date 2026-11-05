@@ -668,7 +668,8 @@ export const en: Record<MessageKey, string> = {
   'db.rowDuplicated': 'Row duplicated',
   'db.rowsTrashed': 'Moved {count} rows to the trash',
   'db.rowTrashed': 'Row moved to the trash',
-  'db.csvSaved': 'Saved {count} rows as CSV',
+  'db.csvSaved.one': 'Saved {n} row as CSV',
+  'db.csvSaved.other': 'Saved {n} rows as CSV',
   'db.emptyFiltered': 'No rows match the filter',
   'db.emptyNoRows': 'No rows yet',
   'db.emptyFilteredHint': 'Removing one condition may bring rows back.',
@@ -692,7 +693,8 @@ export const en: Record<MessageKey, string> = {
   'db.views': 'Views',
   'db.addView': 'Add view',
   'db.deleteView': 'Delete this view',
-  'db.yamlIssues': '⚠ _db.yaml issues: {count}',
+  'db.yamlIssues.one': '⚠ _db.yaml issue: {n}',
+  'db.yamlIssues.other': '⚠ _db.yaml issues: {n}',
   'db.document': '(document)',
   'db.undoDelete': 'Undo delete',
   'db.dismiss': 'Dismiss',
@@ -729,8 +731,10 @@ export const en: Record<MessageKey, string> = {
 
   // CSV import
   'csv.title': 'Import CSV',
-  'csv.heading': 'Import CSV — {file} ({count} rows)',
-  'csv.done': 'Imported {count} rows.',
+  'csv.heading.one': 'Import CSV — {file} ({n} row)',
+  'csv.heading.other': 'Import CSV — {file} ({n} rows)',
+  'csv.done.one': 'Imported {n} row.',
+  'csv.done.other': 'Imported {n} rows.',
   'csv.openDb': 'Open database',
   'csv.newDb': 'New database',
   'csv.newDbName': 'New database name',
@@ -799,7 +803,8 @@ export const en: Record<MessageKey, string> = {
 
   // Property manager
   'prop.manager': 'Properties',
-  'prop.count': '{count} properties',
+  'prop.count.one': '{n} property',
+  'prop.count.other': '{n} properties',
   'prop.close': 'Close properties',
   'prop.name': 'Name',
   'prop.type': 'Type',

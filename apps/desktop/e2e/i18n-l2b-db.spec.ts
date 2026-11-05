@@ -122,6 +122,32 @@ test('English smoke: database toolbar, filter, properties and templates have no 
   await empty.getByRole('button', { name: 'Clear all filters' }).click();
   await expect(page.getByTestId('db-table')).toContainText('Alpha');
 
+  // 0행 추천 라벨은 언어를 바꾸면 다시 만들어진다(t() 결과를 캐시하지 않는다)
+  await screen.getByRole('button', { name: 'Filter', exact: true }).click();
+  const again = page.getByRole('dialog', { name: 'Filter' });
+  await again.getByRole('button', { name: '+ Add condition' }).click();
+  await again.getByLabel('Property', { exact: true }).selectOption('Score');
+  await again.getByLabel('Condition', { exact: true }).selectOption('>=');
+  await again.getByLabel('Value', { exact: true }).fill('100');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.emptystate')).toContainText('No rows match the filter');
+  await page.getByTestId('settings-btn').click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  await settings.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: '한국어' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.emptystate')).toContainText('조건에 맞는 결과가 없어요');
+  await expect(page.locator('.emptystate')).not.toContainText('No rows match the filter');
+  expect(await page.locator('.emptystate').innerText()).toMatch(HANGUL);
+  // 영어로 되돌린다
+  await page.getByTestId('settings-btn').click();
+  await page.getByRole('radiogroup', { name: '언어' }).getByRole('radio', { name: 'English' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.emptystate')).toContainText('No rows match the filter');
+  await page.locator('.emptystate').getByRole('button', { name: 'Clear all filters' }).click();
+  await expect(page.getByTestId('db-table')).toContainText('Alpha');
+
   // 속성 관리: 유형 라벨이 영어다
   await screen.getByRole('button', { name: 'Properties', exact: true }).click();
   const props = page.getByRole('dialog', { name: 'Properties' });
@@ -142,4 +168,20 @@ test('English smoke: database toolbar, filter, properties and templates have no 
   await expect(templates).toContainText('No templates yet.');
   expect(await templates.innerText()).not.toMatch(HANGUL);
   await screen.getByRole('button', { name: 'Templates', exact: true }).click();
+
+  // CSV 가져오기: 제목(type=title) 라벨이 raw 키가 아니라 영어 낱말이다
+  const csvPath = path.join(vaultDir, 'import.csv');
+  writeFileSync(csvPath, 'Name,Note\nOne,n1\n');
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [file] })) as typeof dialog.showOpenDialog;
+  }, csvPath);
+  await screen.getByRole('button', { name: 'Import CSV', exact: true }).click();
+  const csv = page.getByRole('dialog', { name: 'Import CSV' });
+  await expect(csv).toBeVisible();
+  const firstType = csv.locator('tbody tr').first().getByRole('combobox');
+  await expect(firstType.getByRole('option', { name: 'Title', exact: true })).toHaveCount(1);
+  await expect(firstType.getByRole('option', { name: 'title', exact: true })).toHaveCount(0);
+  await expect(csv).toContainText('Import CSV — import.csv (1 row)');
+  expect(await csv.innerText()).not.toMatch(HANGUL);
+  await csv.getByRole('button', { name: 'Cancel' }).click();
 });

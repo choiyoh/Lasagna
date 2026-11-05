@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { t } from '@nopsidian/i18n';
 import { optionsOf } from '@nopsidian/core/db/values';
 import { coverOf } from './ListGalleryViews';import { CellView } from './CellEditor';
 import { chipBorderColor } from './chip-color';
@@ -31,7 +32,7 @@ export function BoardView({ data, onOpen, onMove, onAdd, onReorder, vaultId, emp
         <div className="dbboard__empty">{empty}</div>
       </div>
     ) : (
-      <p className="muted pad">보드 보기에는 그룹 속성이 필요해요. 위쪽 ‘그룹’에서 선택·상태 같은 속성을 골라 주세요.</p>
+      <p className="muted pad">{t('db.boardNeedGroup')}</p>
     );
   }
   const cols = visibleColumns(data).filter((c) => c !== TITLE && c !== prop).slice(0, 3);
@@ -101,11 +102,11 @@ export function BoardView({ data, onOpen, onMove, onAdd, onReorder, vaultId, emp
                   ))}
                 </article>
               ))}
-              {g.hidden > 0 && <p className="muted small">… 외 {g.hidden}개</p>}
+              {g.hidden > 0 && <p className="muted small">{t('db.boardMore', { count: g.hidden })}</p>}
             </div>
           )}
           <button className="dbboard__add" onClick={() => onAdd(g.key)}>
-            + 새 행
+            {t('db.boardAddRow')}
           </button>
         </section>
       ))}

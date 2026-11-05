@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { t } from '@nopsidian/i18n';
 import { DatePicker } from './DatePicker';
 import { linkNameFor } from '@nopsidian/core/links';
 import { cellText, optionsOf } from '@nopsidian/core/db/values';
@@ -35,8 +36,8 @@ function DateCell({ prop, value, onCommit, autoFocus, onDone }: { prop: Property
   const text = value === null ? '' : cellText(prop, value);
   return (
     <span className="cell__date">
-      <button ref={btn} type="button" className="cell__datebtn" onClick={openPicker} aria-label="날짜 고르기 열기">
-        {text || <span className="muted">날짜 고르기</span>}
+      <button ref={btn} type="button" className="cell__datebtn" onClick={openPicker} aria-label={t('cell.openDatePicker')}>
+        {text || <span className="muted">{t('cell.pickDate')}</span>}
       </button>
       {at &&
         createPortal(
@@ -73,10 +74,10 @@ function RelationEditor({ value, onCommit, notes = [] }: { value: CellValue; onC
       {cur.map((c) => (
         <span key={c} className="chip on">
           {relName(c)}
-          <button onClick={() => set(cur.filter((x) => x !== c))} aria-label={`${relName(c)} 연결 해제`}>×</button>
+          <button onClick={() => set(cur.filter((x) => x !== c))} aria-label={t('cell.unlink', { name: relName(c) })}>×</button>
         </span>
       ))}
-      <input value={q} placeholder="노트 연결…" onChange={(e) => setQ(e.target.value)} aria-label="관계 노트 검색" />
+      <input value={q} placeholder={t('cell.linkPlaceholder')} onChange={(e) => setQ(e.target.value)} aria-label={t('cell.searchNotes')} />
       {hits.length > 0 && (
         <ul className="cell__relhits" role="listbox">
           {hits.map((n) => (
@@ -166,7 +167,7 @@ export function CellEditor({ prop, value, onCommit, autoFocus, notes, onDone }: 
     case 'relation':
       return <RelationEditor value={value} onCommit={onCommit} notes={notes ?? []} />;
     case 'checkbox':
-      return <input type="checkbox" checked={value === true} onChange={(e) => onCommit(e.target.checked)} aria-label="체크" />;
+      return <input type="checkbox" checked={value === true} onChange={(e) => onCommit(e.target.checked)} aria-label={t('cell.check')} />;
     case 'select':
     case 'status':
       return (
@@ -199,7 +200,7 @@ export function CellEditor({ prop, value, onCommit, autoFocus, notes, onDone }: 
         const max = prop.max ?? 5;
         const n = typeof value === 'number' ? value : 0;
         return (
-          <span className="cell__stars" role="radiogroup" aria-label="별점">
+          <span className="cell__stars" role="radiogroup" aria-label={t('cell.stars')}>
             {Array.from({ length: max }, (_, i) => (
               <button key={i} role="radio" aria-checked={n === i + 1} className={i < n ? 'on' : ''} onClick={() => onCommit(n === i + 1 ? null : i + 1)}>
                 ★

@@ -72,3 +72,13 @@ export function formatCompactDateTime(value: number | string | Date, locale: Loc
   }
   return formatDateTime(date, 'en')
 }
+
+/** 요일 머리글. ko 는 지금까지의 `월`~`일`, en 은 `Mon`~`Sun`. */
+export function formatWeekdayShort(date: Date, locale: Locale = getLocale()): string {
+  return new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', { weekday: 'short' }).format(date)
+}
+
+/** 달력 머리글. ko 는 `2026년 11월`, en 은 `November 2026`. */
+export function formatMonthTitle(date: Date, locale: Locale = getLocale()): string {
+  return new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', { month: 'long', year: 'numeric' }).format(date)
+}

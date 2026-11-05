@@ -1,8 +1,9 @@
 import type { JSX } from 'react';
+import { t } from '@nopsidian/i18n';
 import type { FilterNode, FilterOp, Property } from '@nopsidian/core/db';
 import { optionsOf } from '@nopsidian/core/db/values';
 import { TITLE, type DbSchema } from './types';
-import { OP_LABEL, OPS_BY_KIND, defaultOp, kindOf, needsValue } from './filter-ops';
+import { OPS_BY_KIND, defaultOp, kindOf, needsValue, opLabel } from './filter-ops';
 import {
   type Condition,
   type Group,
@@ -27,7 +28,7 @@ export interface FilterBuilderProps {
   onChange: (next: FilterNode | undefined) => void;
 }
 
-const GROUP_LIMIT_TITLE = '조건 그룹은 3단계까지만 만들 수 있어요';
+const groupLimitTitle = () => t('filter.groupLimit');
 
 /** 새 조건의 기본값: 제목 contains '' (ViewToolbar 의 "+ 조건 추가" 와 같다) */
 const newCondition = (): Condition => ({ prop: TITLE, op: defaultOp(undefined), value: '' });
@@ -64,25 +65,25 @@ function ConditionRow({ root, path, cond, names, def, emit }: RowProps & { cond:
       <select
         value={cond.prop}
         onChange={(e) => emit(updateAt(root, path, { prop: e.target.value, op: defaultOp(def(e.target.value)), value: undefined }))}
-        aria-label="속성"
+        aria-label={t('filter.prop')}
       >
         {names.map((n) => (
-          <option key={n} value={n}>{n === TITLE ? '제목' : n}</option>
+          <option key={n} value={n}>{n === TITLE ? t('db.title') : n}</option>
         ))}
       </select>
-      <select value={cond.op} onChange={(e) => set({ op: e.target.value as FilterOp })} aria-label="조건">
+      <select value={cond.op} onChange={(e) => set({ op: e.target.value as FilterOp })} aria-label={t('filter.op')}>
         {ops.map((o) => (
-          <option key={o} value={o}>{OP_LABEL[o]}</option>
+          <option key={o} value={o}>{opLabel(o)}</option>
         ))}
       </select>
       {needsValue(cond.op) &&
         (kind === 'checkbox' ? (
-          <select value={String(cond.value ?? true)} onChange={(e) => set({ value: e.target.value === 'true' })} aria-label="값">
-            <option value="true">체크됨</option>
-            <option value="false">체크 안 됨</option>
+          <select value={String(cond.value ?? true)} onChange={(e) => set({ value: e.target.value === 'true' })} aria-label={t('filter.value')}>
+            <option value="true">{t('db.checked')}</option>
+            <option value="false">{t('db.unchecked')}</option>
           </select>
         ) : (kind === 'select' || kind === 'list') && opts.length ? (
-          <select value={String(cond.value ?? '')} onChange={(e) => set({ value: e.target.value })} aria-label="값">
+          <select value={String(cond.value ?? '')} onChange={(e) => set({ value: e.target.value })} aria-label={t('filter.value')}>
             <option value="" />
             {opts.map((o) => (
               <option key={o.name}>{o.name}</option>
@@ -91,14 +92,14 @@ function ConditionRow({ root, path, cond, names, def, emit }: RowProps & { cond:
         ) : (
           <input
             value={String(cond.value ?? '')}
-            placeholder={kind === 'date' ? 'YYYY-MM-DD, today, +7d' : '값'}
+            placeholder={kind === 'date' ? t('filter.datePlaceholder') : t('filter.valuePlaceholder')}
             onChange={(e) => set({
               value: kind === 'number' && e.target.value !== '' && !Number.isNaN(Number(e.target.value)) ? Number(e.target.value) : e.target.value,
             })}
-            aria-label="값"
+            aria-label={t('filter.value')}
           />
         ))}
-      <button onClick={() => emit(removeAt(root, path))} aria-label="조건 삭제">×</button>
+      <button onClick={() => emit(removeAt(root, path))} aria-label={t('filter.removeCondition')}>×</button>
     </div>
   );
 }
@@ -120,14 +121,14 @@ function GroupEditor({ root, path, names, def, emit, onClear }: GroupProps) {
   return (
     <div className={path.length === 0 ? 'filterb__group filterb__group--root' : 'filterb__group'}>
       <div className="filterb__head">
-        <select value={groupKind(g)} onChange={(e) => emit(setGroupKind(root, path, e.target.value as 'and' | 'or'))} aria-label="조건 결합">
-          <option value="and">모든 조건에 맞음</option>
-          <option value="or">하나라도 맞음</option>
+        <select value={groupKind(g)} onChange={(e) => emit(setGroupKind(root, path, e.target.value as 'and' | 'or'))} aria-label={t('filter.groupKind')}>
+          <option value="and">{t('filter.groupAnd')}</option>
+          <option value="or">{t('filter.groupOr')}</option>
         </select>
         {path.length === 0 ? (
-          <button onClick={onClear}>모두 지우기</button>
+          <button onClick={onClear}>{t('filter.clearAll')}</button>
         ) : (
-          <button onClick={() => emit(removeAt(root, path))} aria-label="그룹 삭제">×</button>
+          <button onClick={() => emit(removeAt(root, path))} aria-label={t('filter.removeGroup')}>×</button>
         )}
       </div>
       <div className="filterb__children">
@@ -140,8 +141,8 @@ function GroupEditor({ root, path, names, def, emit, onClear }: GroupProps) {
         )}
       </div>
       <div className="dbpop__actions">
-        <button onClick={() => emit(addConditionTo(root, path, newCondition()))}>+ 조건 추가</button>
-        <button disabled={!canAdd} title={canAdd ? undefined : GROUP_LIMIT_TITLE} onClick={addGroup}>+ 그룹 추가</button>
+        <button onClick={() => emit(addConditionTo(root, path, newCondition()))}>{t('filter.addCondition')}</button>
+        <button disabled={!canAdd} title={canAdd ? undefined : groupLimitTitle()} onClick={addGroup}>{t('filter.addGroup')}</button>
       </div>
     </div>
   );

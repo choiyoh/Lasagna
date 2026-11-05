@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
+import { formatMonthTitle, formatWeekdayShort, t } from '@nopsidian/i18n';
 import { addDays, parseYmd, ymd } from './date-util';
 import { addMonths, fromDateValue, monthGrid, pickRange, sameDay, toDateValue } from './date-picker-math';
 
@@ -15,7 +16,9 @@ interface Props {
   autoFocus?: boolean;
 }
 
-const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
+/** 주는 월요일에서 시작한다(2024-01-01 이 월요일). */
+const WEEKDAY_DATES = Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i));
+const weekdays = () => WEEKDAY_DATES.map((d) => formatWeekdayShort(d));
 /** 방향키 이동량(일) */
 const ARROW_STEPS: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
 
@@ -146,7 +149,7 @@ export function DatePicker({ value, includeTime = false, onCommit, onClose, auto
       ref={rootRef}
       className="datepicker"
       role="dialog"
-      aria-label="날짜 고르기"
+      aria-label={t('datepicker.pick')}
       data-testid="date-picker"
       onKeyDown={(e) => {
         if (e.key === 'Escape') onClose();
@@ -158,20 +161,20 @@ export function DatePicker({ value, includeTime = false, onCommit, onClose, auto
           type="text"
           value={startText}
           placeholder="YYYY-MM-DD"
-          aria-label="시작 날짜"
+          aria-label={t('datepicker.startDate')}
           onChange={(e) => setStartText(e.target.value)}
           onBlur={commitStartText}
           onKeyDown={(e) => {
             if (e.key === 'Enter') commitStartText();
           }}
         />
-        {includeTime && <input type="time" value={time} aria-label="시작 시각" onChange={(e) => commitTime(e.target.value)} />}
+        {includeTime && <input type="time" value={time} aria-label={t('datepicker.startTime')} onChange={(e) => commitTime(e.target.value)} />}
         {range && (
           <input
             type="text"
             value={endText}
             placeholder="YYYY-MM-DD"
-            aria-label="끝 날짜"
+            aria-label={t('datepicker.endDate')}
             onChange={(e) => setEndText(e.target.value)}
             onBlur={commitEndText}
             onKeyDown={(e) => {
@@ -182,27 +185,27 @@ export function DatePicker({ value, includeTime = false, onCommit, onClose, auto
       </div>
 
       <div className="datepicker__head">
-        <button type="button" onClick={() => goMonth(-1)} aria-label="이전 달">
+        <button type="button" onClick={() => goMonth(-1)} aria-label={t('datepicker.prevMonth')}>
           ‹
         </button>
-        <span className="datepicker__title">{`${view.getFullYear()}년 ${view.getMonth() + 1}월`}</span>
-        <button type="button" onClick={() => goMonth(1)} aria-label="다음 달">
+        <span className="datepicker__title">{formatMonthTitle(view)}</span>
+        <button type="button" onClick={() => goMonth(1)} aria-label={t('datepicker.nextMonth')}>
           ›
         </button>
         <button
           type="button"
           onClick={() => {
-            const t = new Date();
-            setView(monthOf(t));
-            selectDay(t);
+            const now = new Date();
+            setView(monthOf(now));
+            selectDay(now);
           }}
         >
-          오늘
+          {t('datepicker.today')}
         </button>
       </div>
 
       <div className="datepicker__dow">
-        {WEEKDAYS.map((w) => (
+        {weekdays().map((w) => (
           <span key={w}>{w}</span>
         ))}
       </div>
@@ -236,13 +239,13 @@ export function DatePicker({ value, includeTime = false, onCommit, onClose, auto
           <input
             type="checkbox"
             checked={range}
-            aria-label="기간"
+            aria-label={t('datepicker.range')}
             onChange={(e) => {
               setRange(e.target.checked);
               if (!e.target.checked && cur.start) apply(cur.start, null);
             }}
           />
-          끝 날짜
+          {t('datepicker.endDate')}
         </label>
         <button
           type="button"
@@ -251,10 +254,10 @@ export function DatePicker({ value, includeTime = false, onCommit, onClose, auto
             apply(null, null);
           }}
         >
-          지우기
+          {t('datepicker.clear')}
         </button>
         <button type="button" onClick={onClose}>
-          닫기
+          {t('db.close')}
         </button>
       </div>
     </div>

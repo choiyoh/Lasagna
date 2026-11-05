@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { t } from '@nopsidian/i18n';
 import { addDays, daysBetween, parseYmd, rowSpan, ymd } from './date-util';
 import { applyDrag, dxToDays, spanToValue, type DragMode } from './timeline-math';
 import type { CellValue, DbData, DbRowDto } from './types';
@@ -63,7 +64,7 @@ export function TimelineView({ data, rows, onOpen, onChange, empty }: Props) {
         <div className="dbtl__empty">{empty}</div>
       </div>
     ) : (
-      <p className="muted pad">타임라인 보기에는 날짜 속성이 필요해요. 속성 관리에서 “날짜” 속성을 추가해 주세요.</p>
+      <p className="muted pad">{t('timeline.needDateProp')}</p>
     );
   }
   const todayX = daysBetween(first, new Date()) * px;
@@ -73,12 +74,12 @@ export function TimelineView({ data, rows, onOpen, onChange, empty }: Props) {
   return (
     <div className="dbtl" data-testid="db-timeline">
       <div className="dbtl__bar">
-        <select value={scale} onChange={(e) => setScale(e.target.value as keyof typeof SCALES)} aria-label="축 단위">
-          <option value="day">일</option>
-          <option value="week">주</option>
-          <option value="month">월</option>
+        <select value={scale} onChange={(e) => setScale(e.target.value as keyof typeof SCALES)} aria-label={t('timeline.scale')}>
+          <option value="day">{t('timeline.day')}</option>
+          <option value="week">{t('timeline.week')}</option>
+          <option value="month">{t('timeline.month')}</option>
         </select>
-        <span className="muted small">날짜 속성: {prop}</span>
+        <span className="muted small">{t('calendar.dateProp', { prop })}</span>
       </div>
       <div className="dbtl__scroll" ref={scrollRef}>
         <div className="dbtl__inner" style={{ width: innerWidth }}>
@@ -95,7 +96,7 @@ export function TimelineView({ data, rows, onOpen, onChange, empty }: Props) {
               <TimelineBar row={row} start={start} end={end} first={first} px={px} propName={prop} onOpen={onOpen} onChange={onChange} />
             </div>
           ))}
-          {undated.length > 0 && <p className="muted small pad">날짜가 없는 행 {undated.length}개: {undated.slice(0, 8).map((r) => r.title).join(', ')}{undated.length > 8 ? ' …' : ''}</p>}
+          {undated.length > 0 && <p className="muted small pad">{t('timeline.undated', { count: undated.length, titles: undated.slice(0, 8).map((r) => r.title).join(', '), more: undated.length > 8 ? ' …' : '' })}</p>}
         </div>
         {empty && <div className="dbtl__empty">{empty}</div>}
       </div>

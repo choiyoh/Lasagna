@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { t, tPlural } from '@nopsidian/i18n';
 import type { DbRow, View } from '@nopsidian/core/db';
 import type { DbQueryResult } from '@nopsidian/ipc-contract';
 import type { Toast } from '../app-types';
@@ -300,9 +301,9 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
       }
       if (added && data && view && isHiddenByFilter(data.schema, view.filter, added)) {
         onToast?.({
-          message: '새 행을 만들었어요. 지금 필터 때문에 보이지 않아요.',
+          message: t('db.rowHiddenByFilter'),
           action: {
-            label: '필터 지우기',
+            label: t('db.clearFilter'),
             onClick: () => {
               const next = { ...view, filter: undefined };
               setDraft(next);
@@ -325,12 +326,12 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         if (action === 'duplicate') {
           for (const p of paths) await window.nops.note.duplicate({ path: p });
           setUndoDelete(null);
-          setNotice(paths.length > 1 ? `${paths.length}개 행을 복제했어요` : '행을 복제했어요');
+          setNotice(paths.length > 1 ? t('db.rowsDuplicated', { count: paths.length }) : t('db.rowDuplicated'));
         } else {
           const trashIds: string[] = [];
           for (const p of paths) trashIds.push((await window.nops.note.trash({ path: p })).trashId);
           setNotice('');
-          setUndoDelete({ message: paths.length > 1 ? `${paths.length}개 행을 휴지통으로 옮겼어요` : '행을 휴지통으로 옮겼어요', trashIds });
+          setUndoDelete({ message: paths.length > 1 ? t('db.rowsTrashed', { count: paths.length }) : t('db.rowTrashed'), trashIds });
         }
       } catch (e) {
         setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
@@ -361,7 +362,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
 
   const exportCsv = () =>
     void window.nops.db.exportCsv({ folder, viewId: data?.view.id ?? '' }).then(
-      (r) => r && setNotice(`${r.rows}행을 CSV로 저장했어요`),
+      (r) => r && setNotice(t('db.csvSaved', { count: r.rows })),
       (e) => setError(String(e)),
     );
   const importCsv = () =>
@@ -374,13 +375,13 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   const flat = useMemo(() => (data?.groups ? data.groups.flatMap((g) => g.rows) : rows), [data, rows]);
 
   if (!data || !view) {
-    return <div className="dbscreen">{error ? <p className="warn pad" role="alert">{error}</p> : <p className="muted pad">불러오는 중…</p>}</div>;
+    return <div className="dbscreen">{error ? <p className="warn pad" role="alert">{error}</p> : <p className="muted pad">{t('db.loading')}</p>}</div>;
   }
   const current: DbData = { ...data, view };
   const emptyState = data.matched === 0 ? (
     <EmptyState
-      title={view.filter ? '조건에 맞는 결과가 없어요' : '행이 없어요'}
-      description={view.filter ? '조건을 하나만 빼도 결과가 나와요.' : '새 행을 만들어 시작해 보세요.'}
+      title={view.filter ? t('db.emptyFiltered') : t('db.emptyNoRows')}
+      description={view.filter ? t('db.emptyFilteredHint') : t('db.emptyNoRowsHint')}
       suggestions={suggestions.map((s) => ({
         ...s,
         onApply: () => {
@@ -398,7 +399,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             }
           : undefined
       }
-      resetLabel={view.filter ? '필터 모두 지우기' : undefined}
+      resetLabel={view.filter ? t('db.clearAllFilters') : undefined}
     />
   ) : null;
   const propertyManager = showProps ? (
@@ -415,26 +416,26 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
     <div className="dbscreen" data-testid="db-screen">
       <header className="dbscreen__head">
         <div className="dbscreen__title">
-          <h2 title={data.schema.title ?? '데이터베이스'}>{data.schema.title ?? '데이터베이스'}</h2>
+          <h2 title={data.schema.title ?? t('db.database')}>{data.schema.title ?? t('db.database')}</h2>
           <span className="dbscreen__count muted small">
-            {data.matched === data.total ? `${data.total}행` : `${data.matched} / ${data.total}행`}
+            {data.matched === data.total ? tPlural('count.rows', data.total) : tPlural('db.rowsFiltered', data.total, { matched: data.matched })}
           </span>
         </div>
         <span className="spacer" />
         {!narrow && (
           <>
-            <button onClick={exportCsv}>CSV 내보내기</button>
-            <button onClick={importCsv}>CSV 가져오기</button>
-            <button onClick={() => setShowTpl((s) => !s)} aria-expanded={showTpl}>템플릿</button>
+            <button onClick={exportCsv}>{t('db.exportCsv')}</button>
+            <button onClick={importCsv}>{t('db.importCsv')}</button>
+            <button onClick={() => setShowTpl((s) => !s)} aria-expanded={showTpl}>{t('db.templates')}</button>
             <div className="dbscreen__props dbscreen__popanchor">
-              <button onClick={() => setShowProps((s) => !s)} aria-expanded={showProps}>속성</button>
+              <button onClick={() => setShowProps((s) => !s)} aria-expanded={showProps}>{t('db.props')}</button>
               {propertyManager}
             </div>
           </>
         )}
         {renderNote && (
           <label className="dbscreen__peek small">
-            {!narrow && <span className="muted">행 열기 </span>}
+            {!narrow && <span className="muted">{t('db.openRow')} </span>}
             <select
               value={peekMode}
               onChange={(e) => {
@@ -446,33 +447,33 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
                   // 저장할 수 없으면 이번 실행에서만 유지
                 }
               }}
-              aria-label="행 열기 방식"
+              aria-label={t('db.openRowMode')}
             >
-              <option value="full">전체 화면</option>
-              <option value="side">옆 창</option>
-              <option value="center">가운데 창</option>
+              <option value="full">{t('db.openFull')}</option>
+              <option value="side">{t('db.openSide')}</option>
+              <option value="center">{t('db.openCenter')}</option>
             </select>
           </label>
         )}
         {narrow && (
           <div className="dbscreen__more dbscreen__popanchor">
-            <button aria-label="더 보기" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}>⋯</button>
+            <button aria-label={t('db.more')} aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}>⋯</button>
             {moreOpen && (
               <>
                 <div className="dbscreen__menumask" onMouseDown={() => setMoreOpen(false)} />
-                <div className="dbscreen__menu" role="menu" aria-label="데이터베이스 메뉴">
-                  <button role="menuitem" onClick={() => { setMoreOpen(false); exportCsv(); }}>CSV 내보내기</button>
-                  <button role="menuitem" onClick={() => { setMoreOpen(false); importCsv(); }}>CSV 가져오기</button>
-                  <button role="menuitem" onClick={() => { setMoreOpen(false); setShowTpl(true); }}>템플릿</button>
-                  <button role="menuitem" onClick={() => { setMoreOpen(false); setShowProps(true); }}>속성</button>
+                <div className="dbscreen__menu" role="menu" aria-label={t('db.menu')}>
+                  <button role="menuitem" onClick={() => { setMoreOpen(false); exportCsv(); }}>{t('db.exportCsv')}</button>
+                  <button role="menuitem" onClick={() => { setMoreOpen(false); importCsv(); }}>{t('db.importCsv')}</button>
+                  <button role="menuitem" onClick={() => { setMoreOpen(false); setShowTpl(true); }}>{t('db.templates')}</button>
+                  <button role="menuitem" onClick={() => { setMoreOpen(false); setShowProps(true); }}>{t('db.props')}</button>
                 </div>
               </>
             )}
             {propertyManager}
           </div>
         )}
-        <button className="primary" onClick={() => setAdding({ title: '', values: {} })}>+ 새 행</button>
-        <button onClick={onClose} title="닫기 (Esc)">닫기</button>
+        <button className="primary" onClick={() => setAdding({ title: '', values: {} })}>{t('db.newRow')}</button>
+        <button onClick={onClose} title={t('db.closeHint')}>{t('db.close')}</button>
       </header>
       {showTpl && (
         <TemplateSettings
@@ -481,7 +482,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           onSave={({ templates, defaultTemplate }) => void edit({ kind: 'meta', templates, defaultTemplate })}
         />
       )}
-      <nav className="dbtabs" role="tablist" aria-label="보기">
+      <nav className="dbtabs" role="tablist" aria-label={t('db.views')}>
         {tabs.map((v) => (
           <button
             key={v.id}
@@ -506,12 +507,12 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
               setViewId(nv.id);
             });
           }}
-          aria-label="보기 추가"
+          aria-label={t('db.addView')}
         >
           +
         </button>
         {tabs.length > 1 && (
-          <button className="dbtabs__del" onClick={() => setConfirmDeleteView(data.view)} aria-label="이 보기 삭제" title="이 보기 삭제">
+          <button className="dbtabs__del" onClick={() => setConfirmDeleteView(data.view)} aria-label={t('db.deleteView')} title={t('db.deleteView')}>
             ×
           </button>
         )}
@@ -526,10 +527,10 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
       />
       {data.issues.length > 0 && (
         <details className="dbissues">
-          <summary>⚠ _db.yaml 문제 {data.issues.length}건</summary>
+          <summary>{t('db.yamlIssues', { count: data.issues.length })}</summary>
           <ul>
             {data.issues.map((i, k) => (
-              <li key={k}><code>{i.path || '(문서)'}</code> {i.message}</li>
+              <li key={k}><code>{i.path || t('db.document')}</code> {i.message}</li>
             ))}
           </ul>
         </details>
@@ -547,41 +548,41 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
               await load();
             }}
           >
-            삭제 되돌리기
+            {t('db.undoDelete')}
           </button>
-          <button aria-label="알림 닫기" onClick={() => setUndoDelete(null)}>×</button>
+          <button aria-label={t('db.dismiss')} onClick={() => setUndoDelete(null)}>×</button>
         </p>
       )}
       {!data.groups && data.matched > data.rows.length && (
-        <p className="muted small pad">처음 {data.rows.length}행만 보여요(전체 {data.matched}행). 필터로 좁혀 보세요.</p>
+        <p className="muted small pad">{t('db.truncated', { shown: data.rows.length, total: data.matched })}</p>
       )}
       {adding && (
-        <div className="dbadd" role="form" aria-label="새 행">
+        <div className="dbadd" role="form" aria-label={t('db.newRowForm')}>
           <input
             autoFocus
             value={adding.title}
-            placeholder="새 행의 제목"
+            placeholder={t('db.newRowTitle')}
             onChange={(e) => setAdding({ ...adding, title: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void addRow();
               if (e.key === 'Escape') setAdding(null);
             }}
-            aria-label="새 행 제목"
+            aria-label={t('db.newRowTitleAria')}
           />
           {data.schema.templates.length > 0 && (
             <select
               value={adding.template ?? data.schema.defaultTemplate ?? ''}
               onChange={(e) => setAdding({ ...adding, template: e.target.value || null })}
-              aria-label="새 행 템플릿"
+              aria-label={t('db.newRowTemplate')}
             >
-              <option value="">템플릿 없음</option>
+              <option value="">{t('db.noTemplate')}</option>
               {data.schema.templates.map((t) => (
                 <option key={t} value={t}>{notes.find((n) => n.path === t)?.title ?? t}</option>
               ))}
             </select>
           )}
-          <button className="primary" onClick={() => void addRow()} disabled={!adding.title.trim()}>만들기</button>
-          <button onClick={() => setAdding(null)}>취소</button>
+          <button className="primary" onClick={() => void addRow()} disabled={!adding.title.trim()}>{t('db.create')}</button>
+          <button onClick={() => setAdding(null)}>{t('db.cancel')}</button>
         </div>
       )}
       <div className={peek && peekMode === 'side' ? 'dbscreen__split' : 'dbscreen__splitoff'}>
@@ -593,7 +594,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             empty={emptyState}
             onOpen={openRow}
             onEdit={(r, p, v) => void updateCell(r, p, v)}
-            onRenameTitle={onRenameNote ? (r, t) => onRenameNote(r.path, t) : undefined}
+            onRenameTitle={onRenameNote ? (r, title) => onRenameNote(r.path, title) : undefined}
             onWidth={(prop, w) => setDraft({ ...view, widths: { ...(view.widths ?? {}), [prop]: w } })}
             onSort={(prop, dir) => setDraft(sortedView(view, prop, dir))}
             onHide={(prop) => setDraft(hiddenColumnView(current, view, prop))}
@@ -640,12 +641,12 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         {data.matched === 0 && view.type !== 'table' && view.type !== 'board' && view.type !== 'list' && view.type !== 'calendar' && view.type !== 'timeline' && <div className="dbscreen__empty">{emptyState}</div>}
       </div>
       {peek && renderNote && peekMode === 'side' && (
-        <aside className="dbpeek" aria-label="행 미리보기" data-testid="db-peek">
+        <aside className="dbpeek" aria-label={t('db.peek')} data-testid="db-peek">
           <header>
             <strong>{rowTitle(peek)}</strong>
             <span className="spacer" />
-            <button onClick={() => onOpenNote(peek)} title="전체 화면으로 열기">⤢</button>
-            <button onClick={() => setPeek(null)} aria-label="닫기">✕</button>
+            <button onClick={() => onOpenNote(peek)} title={t('db.openFullScreen')}>⤢</button>
+            <button onClick={() => setPeek(null)} aria-label={t('db.close')}>✕</button>
           </header>
           <div className="dbpeek__body">{renderNote(peek)}</div>
         </aside>
@@ -654,7 +655,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
       {importing && (
         <CsvImportDialog
           preview={importing}
-          existing={{ folder, title: data.schema.title ?? '데이터베이스', properties: data.schema.properties }}
+          existing={{ folder, title: data.schema.title ?? t('db.database'), properties: data.schema.properties }}
           onClose={() => setImporting(null)}
           onDone={() => {
             setImporting(null);
@@ -664,9 +665,9 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
       )}
       {confirmDeleteView && (
         <ConfirmDialog
-          title="보기 삭제"
-          lines={[`‘${confirmDeleteView.name}’ 보기를 삭제할까요?`, '필터·정렬·그룹·열 폭 설정이 함께 사라지며 되돌릴 수 없어요.']}
-          confirmLabel="삭제"
+          title={t('db.deleteViewTitle')}
+          lines={[t('db.deleteViewQuestion', { name: confirmDeleteView.name }), t('db.deleteViewDetail')]}
+          confirmLabel={t('db.delete')}
           tone="danger"
           onCancel={() => setConfirmDeleteView(null)}
           onConfirm={() => {
@@ -680,12 +681,12 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
       )}
       {peek && renderNote && peekMode === 'center' && (
         <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setPeek(null)}>
-          <div className="dbpeek dbpeek--center" role="dialog" aria-modal="true" aria-label="행 미리보기" data-testid="db-peek">
+          <div className="dbpeek dbpeek--center" role="dialog" aria-modal="true" aria-label={t('db.peek')} data-testid="db-peek">
             <header>
               <strong>{rowTitle(peek)}</strong>
               <span className="spacer" />
-              <button onClick={() => onOpenNote(peek)} title="전체 화면으로 열기">⤢</button>
-              <button onClick={() => setPeek(null)} aria-label="닫기">✕</button>
+              <button onClick={() => onOpenNote(peek)} title={t('db.openFullScreen')}>⤢</button>
+              <button onClick={() => setPeek(null)} aria-label={t('db.close')}>✕</button>
             </header>
             <div className="dbpeek__body">{renderNote(peek)}</div>
           </div>

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { t } from '@nopsidian/i18n';
 import { CellEditor, CellView, isEditable } from './CellEditor';
 import { COL_MIN, columnWidths } from './column-widths';
+import { calcLabel } from './labels';
 import { movedColumns, movedRows } from './view-edit';
 import { cellOf, TITLE, visibleColumns, type CellValue, type DbData, type DbGroupDto, type DbRowDto } from './types';
 
@@ -53,9 +55,6 @@ interface Props {
 
 export type RowAction = 'open' | 'duplicate' | 'delete';
 
-const CALC_LABEL: Record<string, string> = {
-  count: '개수', count_values: '값이 있는 수', count_empty: '빈 값 수', count_unique: '고유 값 수', sum: '합계', avg: '평균', min: '최소', max: '최대', checked: '체크됨', unchecked: '체크 안 됨',
-};
 const fmtCalc = (v: unknown) => (typeof v === 'number' ? String(Math.round(v * 1000) / 1000) : v === null || v === undefined ? '' : String(v));
 
 const ROW_H = 32;
@@ -240,19 +239,19 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
   return (
     <div className={selected.length ? 'dbtable has-picked' : 'dbtable'} ref={scroller} data-testid="db-table">
       {onRowAction && selected.length > 0 && (
-        <div className="dbtable__selbar" role="toolbar" aria-label="선택한 행" data-testid="db-selbar">
-          <strong>{selected.length}개 선택됨</strong>
-          <button onClick={() => act('duplicate', selected)}>복제</button>
-          <button className="danger" onClick={() => act('delete', selected)}>삭제</button>
-          <button onClick={() => setPicked(new Set())}>선택 해제</button>
+        <div className="dbtable__selbar" role="toolbar" aria-label={t('db.selectedRows')} data-testid="db-selbar">
+          <strong>{t('db.selectedCount', { count: selected.length })}</strong>
+          <button onClick={() => act('duplicate', selected)}>{t('db.duplicate')}</button>
+          <button className="danger" onClick={() => act('delete', selected)}>{t('db.delete')}</button>
+          <button onClick={() => setPicked(new Set())}>{t('db.deselect')}</button>
         </div>
       )}
       {rowMenu && onRowAction && (
         <div className="ctxmask" onMouseDown={() => setRowMenu(null)} onContextMenu={(e) => (e.preventDefault(), setRowMenu(null))}>
           <div className="ctxmenu" role="menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 190), top: Math.min(rowMenu.y, window.innerHeight - 130) }} onMouseDown={(e) => e.stopPropagation()}>
-            {selected.length === 1 && <button role="menuitem" onClick={() => act('open', selected)}>열기</button>}
-            <button role="menuitem" onClick={() => act('duplicate', selected)}>{selected.length > 1 ? `${selected.length}개 복제` : '복제'}</button>
-            <button role="menuitem" className="danger" onClick={() => act('delete', selected)}>{selected.length > 1 ? `${selected.length}개 삭제` : '삭제'}</button>
+            {selected.length === 1 && <button role="menuitem" onClick={() => act('open', selected)}>{t('db.open')}</button>}
+            <button role="menuitem" onClick={() => act('duplicate', selected)}>{selected.length > 1 ? t('db.duplicateCount', { count: selected.length }) : t('db.duplicate')}</button>
+            <button role="menuitem" className="danger" onClick={() => act('delete', selected)}>{selected.length > 1 ? t('db.deleteCount', { count: selected.length }) : t('db.delete')}</button>
           </div>
         </div>
       )}
@@ -276,23 +275,23 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
               aria-sort={sortOf(c) === 'asc' ? 'ascending' : sortOf(c) === 'desc' ? 'descending' : 'none'}>
               {onSort || onHide ? (
                 <button className="dbtable__thbtn" onClick={(e) => toggleMenu(c, e.currentTarget)} aria-haspopup="menu" aria-expanded={menu?.col === c} data-testid={`th-${c}`}>
-                  {c === TITLE ? '제목' : c}
+                  {c === TITLE ? t('db.title') : c}
                   {sortOf(c) && <span className="dbtable__sort" aria-hidden>{sortOf(c) === 'asc' ? ' ↑' : ' ↓'}</span>}
                 </button>
               ) : (
-                <span>{c === TITLE ? '제목' : c}</span>
+                <span>{c === TITLE ? t('db.title') : c}</span>
               )}
               {menu?.col === c &&
                 createPortal(
                   <div ref={menuRef} className="dbtable__menu" role="menu" style={{ left: menu.x, top: menu.y }}>
                     {onSort && (
                       <>
-                        <button role="menuitem" onClick={() => { onSort(c, 'asc'); closeMenu(true); }}>↑ 오름차순 정렬</button>
-                        <button role="menuitem" onClick={() => { onSort(c, 'desc'); closeMenu(true); }}>↓ 내림차순 정렬</button>
-                        {sortOf(c) && <button role="menuitem" onClick={() => { onSort(c, null); closeMenu(true); }}>정렬 해제</button>}
+                        <button role="menuitem" onClick={() => { onSort(c, 'asc'); closeMenu(true); }}>{t('db.sortAscMenu')}</button>
+                        <button role="menuitem" onClick={() => { onSort(c, 'desc'); closeMenu(true); }}>{t('db.sortDescMenu')}</button>
+                        {sortOf(c) && <button role="menuitem" onClick={() => { onSort(c, null); closeMenu(true); }}>{t('db.sortClear')}</button>}
                       </>
                     )}
-                    {onFilter && <button role="menuitem" onClick={() => { onFilter(c); closeMenu(); }}>이 열로 필터 추가</button>}
+                    {onFilter && <button role="menuitem" onClick={() => { onFilter(c); closeMenu(); }}>{t('db.filterByColumn')}</button>}
                     {onHide && c !== TITLE && (
                       <button
                         role="menuitem"
@@ -303,7 +302,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                           setTimeout(() => scroller.current?.querySelector<HTMLButtonElement>('.dbtable__thbtn')?.focus({ preventScroll: true }), 0);
                         }}
                       >
-                        이 열 숨기기
+                        {t('db.hideColumn')}
                       </button>
                     )}
                   </div>,
@@ -320,7 +319,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
               return (
                 <div key={item.key} className="dbtable__group" role="row" style={{ transform: `translateY(${vi.start}px)`, height: ROW_H, paddingLeft: 10 + item.depth * 18 }}>
                   <strong>{item.label}</strong> <span className="count">{item.count}</span>
-                  {item.hidden > 0 && <span className="muted small"> · {item.hidden}개 더 있음(필터로 좁혀 보세요)</span>}
+                  {item.hidden > 0 && <span className="muted small"> · {t('db.groupMore', { count: item.hidden })}</span>}
                 </div>
               );
             }
@@ -352,7 +351,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                 }}
               >
                 {rowsMovable && (
-                  <span className="dbtable__rowgrip" draggable title="끌어서 행 순서 바꾸기" aria-label="행 순서 바꾸기" onDragStart={() => setDragRow(row.path)} onDragEnd={() => setDragRow(null)}>
+                  <span className="dbtable__rowgrip" draggable title={t('db.rowGrip')} aria-label={t('db.rowGrip')} onDragStart={() => setDragRow(row.path)} onDragEnd={() => setDragRow(null)}>
                     ⋮⋮
                   </span>
                 )}
@@ -361,7 +360,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                     type="checkbox"
                     className="dbtable__check"
                     checked={picked.has(row.path)}
-                    aria-label={`${row.title} 선택`}
+                    aria-label={t('db.rowSelect', { title: row.title })}
                     onChange={() => undefined}
                     onClick={(e) => toggleRow(row.path, e.shiftKey)}
                   />
@@ -386,12 +385,12 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                           <input
                             autoFocus
                             defaultValue={row.title}
-                            aria-label="제목 바꾸기"
+                            aria-label={t('db.renameTitle')}
                             onClick={(e) => e.stopPropagation()}
                             onBlur={(e) => {
-                              const t = e.target.value.trim();
+                              const title = e.target.value.trim();
                               setRenaming(null);
-                              if (t && t !== row.title) onRenameTitle?.(row, t);
+                              if (title && title !== row.title) onRenameTitle?.(row, title);
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') (e.target as HTMLElement).blur();
@@ -416,7 +415,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                               clearTimeout(openTimer.current);
                               setRenaming(row.path);
                             }}
-                            title={`${row.path} — 두 번 눌러 이름 바꾸기`}
+                            title={t('db.renameHint', { path: row.path })}
                           >
                             {row.title}
                           </button>
@@ -432,7 +431,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                           <CellEditor prop={prop} value={value} notes={notes} autoFocus={isEd} onDone={() => setEditing(null)} onCommit={(nv) => { onEdit(row, c, nv); if (isEd && prop.type !== 'date') setEditing(null); }} />
                         </div>
                       ) : data.errors[row.path]?.[c] ? (
-                        <span className="cell__error" title={data.errors[row.path]![c]} role="img" aria-label={`오류: ${data.errors[row.path]![c]}`}>
+                        <span className="cell__error" title={data.errors[row.path]![c]} role="img" aria-label={t('db.cellError', { message: data.errors[row.path]![c] })}>
                           ⚠ {data.errors[row.path]![c]}
                         </span>
                       ) : (
@@ -449,7 +448,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
           <div className="dbtable__calc" role="row">
             {cols.map((c) => (
               <div key={c} className="dbtable__td" style={{ width: w(c) }}>
-                {data.view.calc?.[c] ? `${CALC_LABEL[data.view.calc[c]!] ?? data.view.calc[c]} ${fmtCalc(data.calc[c])}` : ''}
+                {data.view.calc?.[c] ? `${calcLabel(data.view.calc[c]!)} ${fmtCalc(data.calc[c])}` : ''}
               </div>
             ))}
           </div>

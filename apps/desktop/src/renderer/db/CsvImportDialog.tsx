@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { t } from '@nopsidian/i18n';
+import { typeLabel } from './labels';
 
 type Preview = NonNullable<Awaited<ReturnType<typeof window.nops.db.importCsvPreview>>>;
 
-const TYPES: [string, string][] = [
-  ['skip', '건너뛰기'], ['title', '제목'], ['text', '텍스트'], ['number', '숫자'], ['select', '선택'], ['multi_select', '다중 선택'],
-  ['date', '날짜'], ['checkbox', '체크박스'], ['url', 'URL'], ['email', '이메일'], ['phone', '전화'],
-];
+/** 가져올 때 고를 수 있는 열 형식. 값은 저장되는 키라 그대로 두고 라벨만 옮긴다. */
+const TYPES = ['skip', 'title', 'text', 'number', 'select', 'multi_select', 'date', 'checkbox', 'url', 'email', 'phone'];
+const typeLabelFor = (type: string): string => (type === 'skip' ? t('csv.skip') : typeLabel(type));
 
 interface Props {
   preview: Preview;
@@ -51,11 +52,11 @@ export function CsvImportDialog({ preview, existing, onClose, onDone }: Props) {
 
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog csvdialog" role="dialog" aria-modal="true" aria-label="CSV 가져오기">
-        <h2>CSV 가져오기 — {preview.fileName} ({preview.rowCount}행)</h2>
+      <div className="dialog csvdialog" role="dialog" aria-modal="true" aria-label={t('csv.title')}>
+        <h2>{t('csv.heading', { file: preview.fileName, count: preview.rowCount })}</h2>
         {result ? (
           <>
-            <p>{result.rows}개 행을 가져왔어요.</p>
+            <p>{t('csv.done', { count: result.rows })}</p>
             {result.issues.length > 0 && (
               <ul className="csvdialog__issues">
                 {result.issues.map((i, k) => (
@@ -64,29 +65,29 @@ export function CsvImportDialog({ preview, existing, onClose, onDone }: Props) {
               </ul>
             )}
             <div className="dialog__actions">
-              <button className="primary" onClick={() => onDone(result.folder)}>데이터베이스 열기</button>
+              <button className="primary" onClick={() => onDone(result.folder)}>{t('csv.openDb')}</button>
             </div>
           </>
         ) : (
           <>
             <div className="csvdialog__target">
               <label className="small">
-                <input type="radio" checked={mode === 'new'} onChange={() => setMode('new')} /> 새 데이터베이스
+                <input type="radio" checked={mode === 'new'} onChange={() => setMode('new')} /> {t('csv.newDb')}
               </label>
-              {mode === 'new' && <input value={name} onChange={(e) => setName(e.target.value)} aria-label="새 데이터베이스 이름" />}
+              {mode === 'new' && <input value={name} onChange={(e) => setName(e.target.value)} aria-label={t('csv.newDbName')} />}
               {existing && (
                 <label className="small">
-                  <input type="radio" checked={mode === 'existing'} onChange={() => setMode('existing')} aria-label="기존 데이터베이스에 추가" /> “{existing.title}”에 행 추가
+                  <input type="radio" checked={mode === 'existing'} onChange={() => setMode('existing')} aria-label={t('csv.addToExisting')} /> {t('csv.addRowsTo', { title: existing.title })}
                 </label>
               )}
             </div>
             <table className="csvdialog__table">
               <thead>
                 <tr>
-                  <th>CSV 열</th>
-                  <th>예시</th>
-                  <th>속성 이름</th>
-                  <th>형식</th>
+                  <th>{t('csv.colCsv')}</th>
+                  <th>{t('csv.sample')}</th>
+                  <th>{t('csv.propName')}</th>
+                  <th>{t('csv.type')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -97,7 +98,7 @@ export function CsvImportDialog({ preview, existing, onClose, onDone }: Props) {
                       <td>{c.header || `열${c.index + 1}`}</td>
                       <td className="muted small">{c.sample.filter(Boolean).slice(0, 2).join(' · ')}</td>
                       <td>
-                        <input value={c.name} onChange={(e) => setCols(cols.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} aria-label={`${c.header} 속성 이름`} disabled={c.type === 'skip'} />
+                        <input value={c.name} onChange={(e) => setCols(cols.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} aria-label={t('csv.propNameAria', { header: c.header })} disabled={c.type === 'skip'} />
                       </td>
                       <td>
                         <select
@@ -106,11 +107,11 @@ export function CsvImportDialog({ preview, existing, onClose, onDone }: Props) {
                           onChange={(e) =>
                             setCols(cols.map((x, j) => (j === i ? { ...x, type: e.target.value } : e.target.value === 'title' && x.type === 'title' ? { ...x, type: 'text' } : x)))
                           }
-                          aria-label={`${c.header} 형식`}
+                          aria-label={t('csv.typeAria', { header: c.header })}
                         >
-                          {locked && !TYPES.some(([t]) => t === locked) && <option value={locked}>{locked}(기존)</option>}
-                          {TYPES.map(([t, label]) => (
-                            <option key={t} value={t}>{label}</option>
+                          {locked && !TYPES.includes(locked) && <option value={locked}>{t('csv.existingType', { type: locked })}</option>}
+                          {TYPES.map((type) => (
+                            <option key={type} value={type}>{typeLabelFor(type)}</option>
                           ))}
                         </select>
                       </td>
@@ -119,12 +120,12 @@ export function CsvImportDialog({ preview, existing, onClose, onDone }: Props) {
                 })}
               </tbody>
             </table>
-            {titles !== 1 && <p className="warn small">제목으로 쓸 열을 하나 골라 주세요.</p>}
+            {titles !== 1 && <p className="warn small">{t('csv.needTitle')}</p>}
             {error && <p className="warn small" role="alert">{error}</p>}
             <div className="dialog__actions">
-              <button onClick={onClose}>취소</button>
+              <button onClick={onClose}>{t('db.cancel')}</button>
               <button className="primary" onClick={() => void apply()} disabled={busy || titles !== 1}>
-                {busy ? '가져오는 중…' : '가져오기'}
+                {busy ? t('csv.importing') : t('csv.import')}
               </button>
             </div>
           </>

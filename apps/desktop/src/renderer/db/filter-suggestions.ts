@@ -1,27 +1,15 @@
+import { t } from '@nopsidian/i18n';
 import { evalFilter, type DbRow, type DbSchema, type FilterNode, type FilterOp } from '@nopsidian/core/db';
-import { OP_LABEL, needsValue } from './filter-ops';
+import { OP_KEYS, needsValue } from './filter-ops';
 import { type Condition, childrenOf, groupKind, isCondition, normalizeRoot, removeAt, simplify } from './filter-tree';
 import { TITLE } from './types';
 
-const OP_SYMBOL: Record<FilterOp, string> = {
-  '=': '=',
-  '!=': '≠',
-  '>': '>',
-  '>=': '≥',
-  '<': '<',
-  '<=': '≤',
-  contains: '포함',
-  '!contains': '포함 안 함',
-  startsWith: '시작',
-  endsWith: '끝',
-  empty: '비어 있음',
-  '!empty': '비어 있지 않음',
-  in: '중 하나',
-};
+/** 기호로 표시하는 연산자. 나머지는 사전의 연산자 이름을 쓴다. */
+const OP_GLYPH: Partial<Record<FilterOp, string>> = { '=': '=', '!=': '≠', '>': '>', '>=': '≥', '<': '<', '<=': '≤' };
 
 const valueText = (value: unknown): string => {
   if (Array.isArray(value)) return value.map(String).join(', ');
-  if (typeof value === 'boolean') return value ? '체크됨' : '체크 안 됨';
+  if (typeof value === 'boolean') return value ? t('db.checked') : t('db.unchecked');
   if (value === null || value === undefined || value === '') return '';
   if (typeof value === 'object') {
     const start = (value as { start?: unknown }).start;
@@ -32,9 +20,9 @@ const valueText = (value: unknown): string => {
 
 /** UI 에 보여 줄 조건 한 줄. 예: `상태 = 완료`, `제목 포함 디자인` */
 export function conditionLabel(cond: Condition): string {
-  const name = cond.prop === TITLE ? '제목' : cond.prop;
+  const name = cond.prop === TITLE ? t('db.title') : cond.prop;
   const value = needsValue(cond.op) ? valueText(cond.value) : '';
-  return `${name} ${OP_SYMBOL[cond.op] ?? OP_LABEL[cond.op]}${value ? ` ${value}` : ''}`;
+  return `${name} ${OP_GLYPH[cond.op] ?? t(OP_KEYS[cond.op])}${value ? ` ${value}` : ''}`;
 }
 
 export interface FilterRemovalSuggestion {

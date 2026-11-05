@@ -1,5 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -117,4 +117,62 @@ test('English smoke: switching language while editing keeps the draft and locali
   // 전환 전에 입력한 문장이 저장되어 남는다(미저장 편집 보존)
   await expect.poll(() => readFileSync(path.join(vaultDir, 'Hello.md'), 'utf8'), { timeout: 10_000 }).toContain('저장 전 문장');
 
+});
+
+test('소스 모드에서 언어를 바꿔도 빈 화면이 되지 않는다', async () => {
+  const page = await app.firstWindow();
+  await page.locator('aside.sidebar').getByRole('button', { name: 'Hello', exact: true }).click();
+  await expect(page.locator('.ProseMirror')).toHaveText(/Hello/);
+
+  // 한국어로 되돌려 소스 모드에서 전환한다
+  await page.getByTestId('settings-btn').click();
+  await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: '한국어' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+  await page.keyboard.press('Escape');
+  await page.locator('.ProseMirror').click();
+  await page.keyboard.press('ControlOrMeta+e');
+  await expect(page.locator('.cm-content')).toBeVisible();
+
+  await page.getByTestId('settings-btn').click();
+  await page.getByRole('radiogroup', { name: '언어' }).getByRole('radio', { name: 'English' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.keyboard.press('Escape');
+
+  // 편집 모드로 돌아와 내용이 그대로 있고, 토글로 소스 모드에 다시 들어갈 수 있다
+  await expect(page.locator('.ProseMirror')).toHaveText(/Hello/);
+  await page.getByRole('button', { name: 'Source mode' }).click();
+  await expect(page.locator('.cm-content')).toContainText('Hello');
+  await expect(page.locator('.cm-content')).not.toHaveText('');
+  await page.getByRole('button', { name: 'Edit mode' }).click();
+  await expect(page.locator('.ProseMirror')).toHaveText(/Hello/);
+});
+
+test('저장이 실패하면 언어를 바꿔도 미저장 편집을 잃지 않는다', async () => {
+  const page = await app.firstWindow();
+  await page.locator('aside.sidebar').getByRole('button', { name: 'Hello', exact: true }).click();
+  const editor = page.locator('.ProseMirror');
+  await expect(editor).toHaveText(/Hello/);
+
+  await page.locator('.ProseMirror p').last().click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' 저장 실패 초안');
+
+  // 볼트 폴더를 읽기 전용으로 만들어 저장을 실패시킨다
+  chmodSync(vaultDir, 0o555);
+  try {
+    await page.getByTestId('settings-btn').click();
+    await page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: '한국어' }).click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+    await page.keyboard.press('Escape');
+    // 저장에 실패했으므로 에디터를 다시 만들지 않는다 — 초안이 화면에 그대로 남는다
+    await page.waitForTimeout(1200);
+    await expect(page.locator('.ProseMirror')).toHaveText(/저장 실패 초안/);
+  } finally {
+    chmodSync(vaultDir, 0o755);
+  }
+  // 디스크가 다시 쓰이면 다음 저장은 성공한다
+  await page.locator('.ProseMirror p').last().click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type('!');
+  await expect.poll(() => readFileSync(path.join(vaultDir, 'Hello.md'), 'utf8'), { timeout: 10_000 }).toContain('저장 실패 초안!');
 });

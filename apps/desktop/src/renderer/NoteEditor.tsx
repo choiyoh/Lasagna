@@ -29,7 +29,7 @@ import {
 } from '@nopsidian/editor/nops';
 import type { SourceEditor } from '@nopsidian/editor/nops/source';
 import type { AssetStore } from './assets';
-import { flushAll, registerFlush } from './flush';
+import { registerFlush } from './flush';
 import { TemplatePicker } from './TemplatePicker';
 
 const SAVE_DELAY_MS = 500;
@@ -136,7 +136,15 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   /** 언어가 바뀌면 에디터를 새로 만든다(문구는 만들 때 잡힌다) — 그 전에 저장하고 커서를 옮겨 둔다 */
   const localeRef = useRef(locale);
   const restoreSel = useRef<{ anchor: number; head: number } | null>(null);
+  /** 지금 열린 노트. 언어 전환 중에 노트가 바뀌면 이전 커서·재생성을 적용하지 않는다 */
+  const pathRef = useRef(path);
+  pathRef.current = path;
+  /** 미저장 편집을 지금 저장하고 성공 여부를 돌려준다(언어 전환 전 flush 용) */
+  const flushRef = useRef<(() => Promise<boolean>) | null>(null);
   const [epoch, setEpoch] = useState(0);
+  useEffect(() => {
+    restoreSel.current = null;
+  }, [path]);
   const [pickingIcon, setPickingIcon] = useState(false);
   const [pickingCover, setPickingCover] = useState(false);
   const peekRef = useRef(peek);
@@ -155,11 +163,20 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   useEffect(() => {
     if (localeRef.current === locale) return;
     localeRef.current = locale;
+    const at = path;
     const view = editorRef.current?.getView();
-    if (view) restoreSel.current = { anchor: view.state.selection.anchor, head: view.state.selection.head };
-    // 미저장 편집을 먼저 저장한 뒤 새 언어로 에디터를 다시 만든다(내용·커서 유지).
-    void flushAll().then(() => setEpoch((e) => e + 1));
-  }, [locale]);
+    const sel = view ? { anchor: view.state.selection.anchor, head: view.state.selection.head } : null;
+    void (async () => {
+      // 미저장 편집을 먼저 저장한다. 실패하면 화면 내용이 사라지지 않도록 에디터를 다시 만들지 않는다
+      // (앱 언어는 이미 바뀌었고, 이 에디터의 문구는 다음에 노트를 열 때 새 언어가 된다).
+      const ok = await (flushRef.current?.() ?? Promise.resolve(true));
+      if (!ok || pathRef.current !== at) return;
+      restoreSel.current = sel;
+      // 새 에디터는 편집 모드로 시작한다 — 소스 모드였다면 화면 모드도 편집으로 맞춘다(빈 화면 방지).
+      if (modeRef.current === 'source') setModeState('edit');
+      setEpoch((e) => e + 1);
+    })();
+  }, [locale, path]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -320,15 +337,15 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       } else scrollToFocus(editor, focusRef.current);
     };
 
-    const save = async (): Promise<void> => {
-      if (!loaded || saving || !dirty) return;
+    const save = async (): Promise<boolean> => {
+      if (!loaded || saving || !dirty) return true;
       saving = true;
       setState('saving');
       const atSave = snapshot();
       try {
         const content = currentContent();
         const r = await window.nops.note.save({ path, content, baseHash: hash });
-        if (disposed) return;
+        if (disposed) return true;
         hash = r.hash;
         if (r.status !== 'saved') {
           // 디스크 내용이 앱의 내용과 달라졌으므로 화면을 그 내용으로 다시 채운다
@@ -343,11 +360,12 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       } catch (e) {
         console.error('save failed', e);
         setState('error');
-        return;
+        return false;
       } finally {
         saving = false;
       }
       if (dirty) schedule();
+      return true;
     };
 
     const schedule = () => {
@@ -445,11 +463,16 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     };
     toggleRef.current = () => void setMode(current === 'edit' ? 'source' : 'edit');
 
-    // 이름 변경처럼 디스크를 건드리는 작업 전에 미저장 내용을 저장한다
-    const unregisterFlush = registerFlush(async () => {
+    /** 지금 저장하고 성공 여부를 돌려준다(디스크 문제로 실패하면 false). */
+    const flushNow = async (): Promise<boolean> => {
       clearTimeout(timer);
       while (saving) await new Promise((r) => setTimeout(r, 20));
-      await save();
+      return save();
+    };
+    flushRef.current = flushNow;
+    // 이름 변경처럼 디스크를 건드리는 작업 전에 미저장 내용을 저장한다
+    const unregisterFlush = registerFlush(async () => {
+      await flushNow();
     });
 
     const offChanged = window.nops.on('note.changed', (e) => {
@@ -475,6 +498,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       clearTimeout(outlineTimer);
       commitTitle();
       disposed = true;
+      if (flushRef.current === flushNow) flushRef.current = null;
       unregisterFlush();
       offChanged();
       window.removeEventListener('nops:reload-note', onReload);

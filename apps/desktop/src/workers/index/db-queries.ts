@@ -251,7 +251,9 @@ export interface RowDatabaseOutput {
 }
 
 /** 노트가 어떤 데이터베이스의 행이면 그 데이터베이스와 계산이 끝난 행 값을 돌려준다. */
-export function rowDatabase(db: Database.Database, root: string, notePath: string, generation = -1): RowDatabaseOutput | null {
+export function rowDatabase(db: Database.Database, root: string, notePath: string, generation = -1, locale?: 'ko' | 'en'): RowDatabaseOutput | null {
+  // 이 경로도 별도 스레드다 — 요청이 실었으면 지금 앱 언어로 문구를 만든다.
+  if (locale) setLocale(locale);
   const folders = [...dbFolders(db)].sort((a, b) => b.length - a.length);
   for (const folder of folders) {
     const dir = folder === '' ? '' : `${folder}/`;

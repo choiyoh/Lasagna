@@ -53,6 +53,41 @@ describe('ko↔en 전환에서도 오류 문구가 따라간다', () => {
     expect(formulaErrorText(err)).toBe('repeat: expected text but got List');
   });
 
+
+  it('날짜 함수의 목록 인자 오류도 표시 시점에 번역된다(formatDate/parseDate)', () => {
+    const listEnv: Env = { prop: () => [1] };
+    const cases: [string, string, string][] = [
+      ['formatDate(prop("목록"), "yyyy")', 'formatDate: 날짜 인자가 필요한데 목록 이에요', 'formatDate: expected a date but got List'],
+      ['parseDate(prop("목록"))', 'parseDate: 문자열이나 날짜가 필요한데 목록 이에요', 'parseDate: expected text or a date but got List'],
+    ];
+    for (const [src, koText, enText] of cases) {
+      setLocale('ko');
+      const compiled = compileFormula(src);
+      expect(compiled.ok).toBe(true);
+      let err: unknown = null;
+      try {
+        evalFormula((compiled as { ok: true; compiled: never }).compiled, listEnv);
+      } catch (e) {
+        err = e;
+      }
+      expect(formulaErrorText(err)).toBe(koText);
+      setLocale('en');
+      const text = formulaErrorText(err);
+      expect(text).toBe(enText);
+      expect(text).not.toMatch(/[가-힣]/);
+    }
+  });
+
+  it('영어 인자 수 문구는 1 일 때 단수다', () => {
+    setLocale('en');
+    const exact = compileFormula('round(1, 2, 3)');
+    expect(exact.ok).toBe(false);
+    if (!exact.ok) expect(formulaErrorText(exact.error)).toBe('round() takes 1–2 arguments (got 3)');
+    const atLeast = compileFormula('max()');
+    expect(atLeast.ok).toBe(false);
+    if (!atLeast.ok) expect(formulaErrorText(atLeast.error)).toBe('max() takes at least 1 argument (got 0)');
+  });
+
   it('평가기가 오류를 다시 던져도 키가 보존된다(위치만 채워서)', () => {
     setLocale('ko');
     const compiled = compileFormula('map(1, current + 1)');

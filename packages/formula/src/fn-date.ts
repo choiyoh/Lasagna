@@ -1,5 +1,4 @@
 import type { FunctionDef } from './registry.js';
-import { t as tr } from '@nopsidian/i18n';
 import { formulaError, isDate, type FDate, type FValue } from './value.js';
 
 /**
@@ -22,7 +21,7 @@ const mkDate = (ms: number, hasTime: boolean, endMs?: number): FDate =>
 
 /** 날짜 인자를 꺼낸다(null 은 호출 쪽에서 먼저 걸러 낸다). */
 function asDate(v: FValue, fn: string): FDate {
-  if (!isDate(v)) throw formulaError('formula.err.needsDate', { fn, type: typeof v === 'object' ? tr('formula.type.list') : String(v) });
+  if (!isDate(v)) throw formulaError('formula.err.needsDate', { fn, type: typeof v === 'object' ? { key: 'formula.type.list' } : String(v) });
   return v;
 }
 
@@ -107,7 +106,7 @@ const DATE_RE = /^(\d{4})[-/](\d{2})[-/](\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})
 function parseDate(v: FValue): FValue {
   if (v === null) return null;
   if (isDate(v)) return v;
-  if (typeof v !== 'string') throw formulaError('formula.err.parseDateArg', { type: typeof v === 'object' ? tr('formula.type.list') : String(v) });
+  if (typeof v !== 'string') throw formulaError('formula.err.parseDateArg', { type: typeof v === 'object' ? { key: 'formula.type.list' } : String(v) });
   const m = DATE_RE.exec(v.trim());
   if (!m) return null;
   const year = Number(m[1]);

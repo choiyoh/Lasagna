@@ -566,7 +566,8 @@ function registerHandlers() {
   handle('db.row', async ({ path: rel }) => {
     const v = requireVault();
     await v.index.ready;
-    return v.index.query('rowDatabase', rel) as never;
+    // 행 노트 패널(속성·수식 오류)의 문구도 앱 언어를 따르게 locale 을 함께 넘긴다.
+    return v.index.query('rowDatabase', rel, currentLanguage().locale) as never;
   });
   handle('db.query', async (input) => {
     const v = requireVault();

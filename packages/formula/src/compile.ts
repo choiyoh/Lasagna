@@ -72,11 +72,16 @@ export function compileFormula(source: string): CompileResult {
           const def = REGISTRY[n.name];
           if (!def) throw formulaError('formula.err.unknownFunction', { name: n.name }, n.pos, n.end);
           if (args.length < def.min || args.length > def.max) {
+            // 영어 복수형은 필요한 인자 수에 맞춘다('takes at least 1 argument').
+            const one = def.min === 1 && def.max !== Infinity && def.max === 1;
+            const exactKey = (one ? 'formula.err.arityExact.one' : 'formula.err.arityExact.other') as MessageKey;
+            const atLeastKey = (def.min === 1 ? 'formula.err.arityAtLeast.one' : 'formula.err.arityAtLeast.other') as MessageKey;
+            const betweenKey = 'formula.err.arityBetween.other' as MessageKey;
             throw def.min === def.max
-              ? formulaError('formula.err.arityExact', { name: n.name, n: def.min, count: args.length }, n.pos, n.end)
+              ? formulaError(exactKey, { name: n.name, n: def.min, count: args.length }, n.pos, n.end)
               : def.max === Infinity
-                ? formulaError('formula.err.arityAtLeast', { name: n.name, min: def.min, count: args.length }, n.pos, n.end)
-                : formulaError('formula.err.arityBetween', { name: n.name, min: def.min, max: def.max, count: args.length }, n.pos, n.end);
+                ? formulaError(atLeastKey, { name: n.name, min: def.min, count: args.length }, n.pos, n.end)
+                : formulaError(betweenKey, { name: n.name, min: def.min, max: def.max, count: args.length }, n.pos, n.end);
           }
           if (!isLazy(def)) return args.forEach((a) => walk(a, names));
           if (n.name === 'let' || n.name === 'lets') return walkLet(args, names, n.name === 'lets', walk);

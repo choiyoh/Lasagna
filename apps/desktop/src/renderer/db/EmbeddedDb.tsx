@@ -103,7 +103,7 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
     const first = firstSelect && 'options' in firstSelect[1] ? (firstSelect[1] as { options: { name: string }[] }).options[0]?.name : undefined;
     const base: Record<string, unknown> = firstSelect && first ? { [firstSelect[0]]: first } : {};
     try {
-      const r = await window.nops.db.addRow({ folder, title: '제목 없음', values: { ...base, ...(values ?? {}) } });
+      const r = await window.nops.db.addRow({ folder, title: t('default.untitled'), values: { ...base, ...(values ?? {}) } });
       setFresh(r.path);
       void load();
     } catch (e) {

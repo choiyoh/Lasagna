@@ -11,6 +11,7 @@ import {
   unlinkSync,
   writeSync,
 } from 'node:fs';
+import { t } from '@nopsidian/i18n';
 import path from 'node:path';
 import { pruneHistory } from './history.js';
 import { merge3 } from './merge3.js';
@@ -73,8 +74,8 @@ function dateStamp(d: Date) {
 export function conflictCopyPath(full: string, now = new Date()): string {
   const ext = path.extname(full);
   const stem = full.slice(0, full.length - ext.length);
-  let candidate = `${stem} (충돌 ${dateStamp(now)})${ext}`;
-  for (let n = 2; existsSync(candidate); n++) candidate = `${stem} (충돌 ${dateStamp(now)} ${n})${ext}`;
+  let candidate = t('default.conflictName', { stem, date: dateStamp(now), ext });
+  for (let n = 2; existsSync(candidate); n++) candidate = t('default.conflictNameN', { stem, date: dateStamp(now), n, ext });
   return candidate;
 }
 

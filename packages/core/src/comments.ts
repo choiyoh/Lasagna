@@ -4,6 +4,9 @@ import path from 'node:path';
 import { atomicWrite } from './save.js';
 
 /** 노트에 다는 댓글. 볼트의 `.nopsidian/comments/<경로 해시>.json` 에 노트마다 한 파일로 둔다(드라이브 동기화 대상). */
+/** 앱이 스스로 쓴 댓글의 저장 작성자 값(표시는 언어에 따라 다르다). */
+export const SELF_AUTHOR = '나';
+
 export interface Comment {
   id: string;
   /** 쓴 사람: 앱에서는 "나", 에이전트는 클라이언트 이름 */
@@ -68,7 +71,7 @@ export function addComment(root: string, rel: string, input: { author: string; t
   if (!text) throw new Error('댓글 내용이 비어 있어요');
   if (text.length > MAX_COMMENT_CHARS) throw new Error(`댓글이 너무 길어요(최대 ${MAX_COMMENT_CHARS}자)`);
   const quote = input.quote?.trim().replace(/\s+/g, ' ').slice(0, MAX_QUOTE_CHARS);
-  const c: Comment = { id: randomUUID().slice(0, 8), author: input.author.trim().slice(0, 60) || '나', text, ...(quote ? { quote } : {}), createdAt: now.toISOString() };
+  const c: Comment = { id: randomUUID().slice(0, 8), author: input.author.trim().slice(0, 60) || SELF_AUTHOR, text, ...(quote ? { quote } : {}), createdAt: now.toISOString() };
   const f = load(root, rel);
   f.comments.push(c);
   save(root, f);

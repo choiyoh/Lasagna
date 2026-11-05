@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { TITLE_PROP } from './schema.js';
 import type { DbSchema, Property } from './schema.js';
 import { normalizeValue, toFrontmatterValue } from './values.js';
@@ -271,7 +272,7 @@ export function guessColumns(rows: string[][]): ColumnGuess[] {
   return header.map((raw, index) => {
     const isTitle = index === titleIndex;
     const trimmed = raw.trim();
-    const base = trimmed === '' ? `열${index + 1}` : trimmed;
+    const base = trimmed === '' ? t('default.csvColumn', { n: index + 1 }) : trimmed;
     let name = base;
     for (let n = 2; used.has(name); n += 1) name = `${base} ${n}`;
     used.add(name);
@@ -325,7 +326,7 @@ export function csvToRows(rows: string[][], columns: ColumnGuess[]): ImportedRow
 
     if (title === '') {
       unnamed += 1;
-      title = `제목 없음 ${unnamed}`;
+      title = t('default.untitledN', { n: unnamed });
     }
     return { title, values, issues };
   });

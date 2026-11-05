@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { app, dialog, BrowserWindow } from 'electron';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
@@ -130,7 +131,10 @@ export interface VaultConfig {
 }
 
 export function readVaultConfig(root: string): VaultConfig {
-  const fallback: VaultConfig = { version: 1, attachmentFolder: 'attachments', dailyFolder: '일기', dailyTemplate: null, templatesFolder: '템플릿' };
+  // 설정이 없으면 지금 앱 언어의 기본 폴더를 쓴다. 예전 한국어 폴더가 이미 있으면 그 폴더를 계속 쓴다(기존 볼트 인식).
+  const dailyName = existsSync(path.join(root, t('legacy.dailyFolder'))) ? t('legacy.dailyFolder') : t('default.dailyFolder');
+  const templatesName = existsSync(path.join(root, t('legacy.templatesFolder'))) ? t('legacy.templatesFolder') : t('default.templatesFolder');
+  const fallback: VaultConfig = { version: 1, attachmentFolder: 'attachments', dailyFolder: dailyName, dailyTemplate: null, templatesFolder: templatesName };
   try {
     const raw = JSON.parse(readFileSync(path.join(root, '.nopsidian', 'config.json'), 'utf8')) as Partial<VaultConfig>;
     const folder = typeof raw.attachmentFolder === 'string' ? raw.attachmentFolder.replace(/^\/+|\/+$/g, '') : '';

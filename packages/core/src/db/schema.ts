@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 
@@ -128,7 +129,7 @@ export interface DbParseResult {
 
 /** 스키마가 없거나 깨졌을 때도 열 수 있는 기본값: 속성 없음, 표 뷰 하나 */
 export function defaultSchema(title?: string): DbSchema {
-  return { version: 1, title, rowsFolder: '.', properties: {}, views: [{ id: 'v1', name: '표', type: 'table', sort: [] }], templates: [] };
+  return { version: 1, title, rowsFolder: '.', properties: {}, views: [{ id: 'v1', name: t('db.view.table'), type: 'table', sort: [] }], templates: [] };
 }
 
 /**

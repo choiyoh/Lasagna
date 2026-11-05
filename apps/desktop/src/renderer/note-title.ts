@@ -1,3 +1,5 @@
+import { t as tr } from '@nopsidian/i18n';
+
 /** 노트 제목(첫 H1) ↔ 파일 이름 동기화 도우미 */
 
 /** 방금 만든 노트: 처음 열 때 제목에 커서를 둔다 */
@@ -36,7 +38,7 @@ export function titleRenameTarget(path: string, title: string): string | null {
 export function untitledPath(folder: string, existing: Iterable<string>): string {
   const taken = new Set([...existing].map((p) => p.toLowerCase()));
   const dir = folder ? `${folder}/` : '';
-  let name = '제목 없음';
-  for (let n = 2; taken.has(`${dir}${name}.md`.toLowerCase()); n++) name = `제목 없음 ${n}`;
+  let name = tr('default.untitled');
+  for (let n = 2; taken.has(`${dir}${name}.md`.toLowerCase()); n++) name = tr('default.untitledN', { n });
   return `${dir}${name}.md`;
 }

@@ -1,4 +1,5 @@
 import { formatShortDateTime, t } from '@nopsidian/i18n';
+import { commentAuthorName } from './comments-author';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CommentItem } from '@nopsidian/ipc-contract';
 import { keys } from './keys';
@@ -59,7 +60,7 @@ export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: (
   const row = (c: CommentItem) => (
     <li key={c.id} className={c.resolved ? 'comment resolved' : 'comment'} data-testid="comment">
       <div className="comment__head">
-        <strong>{c.author}</strong>
+        <strong>{commentAuthorName(c.author)}</strong>
         <span className="muted small">{when(c.createdAt)}</span>
         <span className="comment__actions">
           <button onClick={() => void mutate(() => window.nops.comment.resolve({ path, id: c.id, resolved: !c.resolved }))}>{c.resolved ? t('comments.reopen') : t('comments.resolve')}</button>

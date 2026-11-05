@@ -90,6 +90,23 @@ test('English smoke: graph screen, settings, stats and empty state have no Korea
   await expect(stats).toContainText('2 nodes', { timeout: 10_000 });
   await expect(stats).toContainText('1 link');
 
+  // 그래프를 연 채 언어를 바꾸면 통계 문구도 따라 바뀐다(en→ko→en)
+  await page.getByTestId('settings-btn').click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  await settings.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: '한국어' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+  await page.keyboard.press('Escape');
+  await expect(stats).toContainText('2개 노드');
+  await expect(stats).toContainText('1개 링크');
+  await expect(stats).not.toContainText('2 nodes');
+  await page.getByTestId('settings-btn').click();
+  await page.getByRole('radiogroup', { name: '언어' }).getByRole('radio', { name: 'English' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.keyboard.press('Escape');
+  await expect(stats).toContainText('2 nodes');
+  await expect(stats).toContainText('1 link');
+  await expect(stats).not.toContainText('2개 노드');
+
   // 0건 안내도 영어
   await screen.getByLabel('Graph filter').fill('zzz-no-match');
   const empty = page.locator('.graphview__empty .emptystate');

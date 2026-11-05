@@ -12,7 +12,7 @@ import { LEGACY_GLOBAL_KEY, loadLayout, saveLayout } from './layout-cache';
 import { SETTLE_WINDOW_MS, SPINNER_DELAY_MS, isSettled, statsText } from './settle';
 import { webglAvailable } from './webgl';
 import { EmptyState } from '../components/EmptyState';
-import { drawsBaseLabel } from './hover-label';
+import { drawBaseLabelUnlessHovered, resetHover } from './hover-label';
 
 interface Props {
   data: GraphData;
@@ -103,6 +103,8 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     const el = host.current;
     if (!el) return;
     settledRef.current = false;
+    // 그래프를 다시 만들면 새 sigma 에는 hover 가 없다 — 이전 hover 를 지워야 기본 라벨이 숨은 채로 남지 않는다.
+    resetHover({ hover, hoverNode });
     settleBase.current = null;
     settleAt.current = 0;
     setSettled(false);
@@ -162,11 +164,11 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
         labelGridCellSize: 110,
         zIndex: true,
         stagePadding: 70,
-        defaultDrawNodeLabel: (ctx, data, settings) => {
+        // 호버 라벨이 같은 자리를 한 번 더 그리므로, hover 중인 노드의 기본 라벨은 건너뛴다(글자 겹침 방지).
+        defaultDrawNodeLabel: drawBaseLabelUnlessHovered(
+          () => hoverNode.current,
+          (ctx, data, settings) => {
           if (!data.label) return;
-          // 호버 라벨이 같은 자리를 한 번 더 그리므로 기본 라벨은 숨긴다(글자 겹침 방지).
-          const key = (data as { key?: string }).key;
-          if (key && !drawsBaseLabel(key, hoverNode.current)) return;
           const p = pal.current;
           const size = settings.labelSize;
           ctx.font = `${settings.labelWeight} ${size}px ${settings.labelFont}`;
@@ -179,7 +181,8 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
           ctx.strokeText(data.label, x, y);
           ctx.fillStyle = p.fg;
           ctx.fillText(data.label, x, y);
-        },
+          },
+        ),
         defaultDrawNodeHover: (ctx, data, settings) => {
           const p = pal.current;
           ctx.beginPath();

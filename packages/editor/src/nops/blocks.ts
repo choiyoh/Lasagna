@@ -1,3 +1,4 @@
+import { t, type MessageKey } from '@nopsidian/i18n';
 import { Fragment, type Node as PMNode, type NodeType, type ResolvedPos } from 'prosemirror-model';
 import { type EditorState, TextSelection, type Transaction } from 'prosemirror-state';
 
@@ -220,19 +221,8 @@ export type TurnIntoKind =
   | 'callout'
   | 'toggle';
 
-export const TURN_INTO_LABELS: Record<TurnIntoKind, string> = {
-  paragraph: '텍스트',
-  h1: '제목 1',
-  h2: '제목 2',
-  h3: '제목 3',
-  bullet: '글머리 기호',
-  ordered: '번호 목록',
-  todo: '할 일',
-  quote: '인용',
-  code: '코드',
-  callout: '콜아웃',
-  toggle: '토글',
-};
+/** 블록 종류 표시 이름. 메뉴를 그리는 시점의 언어를 따른다(모듈 로드 시 t() 금지). */
+export const turnIntoLabel = (kind: TurnIntoKind): string => t(`editor.turn.${kind}` as MessageKey);
 
 /** 이 블록을 `kind`로 바꿀 수 있는가 */
 export function canTurnInto(ref: BlockRef, kind: TurnIntoKind): boolean {

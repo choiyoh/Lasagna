@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { css } from '@codemirror/lang-css';
 import { html } from '@codemirror/lang-html';
@@ -83,7 +84,7 @@ export function createSourceEditor(host: HTMLElement, options: SourceEditorOptio
         keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
         themeSlot.of(themeFor(isDark())),
         baseTheme,
-        EditorView.contentAttributes.of({ 'aria-label': '마크다운 소스', spellcheck: 'false' }),
+        EditorView.contentAttributes.of({ 'aria-label': t('editor.source.aria'), spellcheck: 'false' }),
         EditorView.updateListener.of((u) => {
           if (u.docChanged && !u.transactions.some((t) => t.annotation(programmatic))) options.onChange();
         }),

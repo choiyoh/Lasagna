@@ -2,6 +2,8 @@ import { Plugin } from 'prosemirror-state';
 import type { EditorView, NodeView } from 'prosemirror-view';
 import type { Node as PMNode } from 'prosemirror-model';
 import type { SlashItemSpec } from '@oh-new-editor/core';
+import { t } from '@nopsidian/i18n';
+import { lazySlashItem } from './slash-item';
 import { insertMarkdown } from './commands';
 
 export const TOC_LANG = 'toc';
@@ -18,7 +20,7 @@ function build(container: HTMLElement, view: EditorView) {
   if (heads.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'nops-toc__empty';
-    empty.textContent = '제목(#)을 쓰면 여기에 목차가 생겨요';
+    empty.textContent = t('editor.toc.empty');
     container.append(empty);
     return;
   }
@@ -48,7 +50,7 @@ export const tocNodeView = (node: PMNode, view: EditorView): NodeView => {
   dom.setAttribute('data-testid', 'toc');
   const title = document.createElement('div');
   title.className = 'nops-toc__title';
-  title.textContent = '목차';
+  title.textContent = t('editor.toc.title');
   const list = document.createElement('div');
   dom.append(title, list);
   const redraw = () => build(list, view);
@@ -77,11 +79,9 @@ export function createTocPlugin(): Plugin {
   });
 }
 
-export const tocSlashItem: SlashItemSpec = {
-  icon: '☰',
-  label: '목차',
-  description: '이 노트의 제목들로 자동 목차를 만들어요',
-  category: 'advanced',
-  keywords: ['toc', 'table of contents', '목차', '차례', '제목 목록'],
-  run: (v) => insertMarkdown(v, `\`\`\`${TOC_LANG}\n\`\`\`\n`),
-};
+export const tocSlashItem = (): SlashItemSpec =>
+  lazySlashItem(
+    { icon: '☰', category: 'advanced', keywords: ['toc', 'table of contents', '목차', '차례', '제목 목록'], run: (v) => insertMarkdown(v, `\`\`\`${TOC_LANG}\n\`\`\`\n`) },
+    'editor.toc.title',
+    'editor.toc.desc',
+  );

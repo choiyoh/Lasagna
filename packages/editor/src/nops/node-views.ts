@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import type { Node as PMNode } from 'prosemirror-model';
 import type { NodeView } from 'prosemirror-view';
 
@@ -43,7 +44,7 @@ function foldableView(kind: 'callout' | 'toggle') {
     button.className = `nops-${kind}__handle`;
     button.contentEditable = 'false';
     button.tabIndex = -1;
-    button.setAttribute('aria-label', '접기/펼치기');
+    button.setAttribute('aria-label', t('editor.callout.toggleAria'));
     const body = document.createElement('div');
     body.className = `nops-${kind}__content`;
     dom.append(button, body);

@@ -1,3 +1,4 @@
+import { formatWeekdayLong, formatWeekdayShort, t as tr, type MessageKey } from '@nopsidian/i18n';
 import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
 
@@ -9,13 +10,13 @@ export interface DateSuggestion {
   date: string;
 }
 
+// 입력 해석용 요일 글자(문법) — 표시는 Intl 로 그린다.
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-const WEEKDAY_NAMES = WEEKDAYS.map((w) => `${w}요일`);
 
 const p2 = (n: number) => String(n).padStart(2, '0');
 export const isoDate = (d: Date) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-const label = (name: string, d: Date) => `${name} · ${isoDate(d)} (${WEEKDAYS[d.getDay()]})`;
+const label = (name: string, d: Date) => `${name} · ${isoDate(d)} (${formatWeekdayShort(d)})`;
 
 /** 실제 달력에 있는 날짜인가(2월 30일 같은 것은 거른다) */
 function validDate(y: number, m: number, d: number): Date | null {
@@ -32,12 +33,13 @@ function nextWeekday(today: Date, weekday: number, next: boolean): Date {
   return addDays(today, (weekday - today.getDay() + 7) % 7 || 7);
 }
 
-const KEYWORDS: { names: string[]; offset: number; name: string }[] = [
-  { names: ['오늘', 'today', 'now'], offset: 0, name: '오늘' },
-  { names: ['내일', 'tomorrow'], offset: 1, name: '내일' },
-  { names: ['어제', 'yesterday'], offset: -1, name: '어제' },
-  { names: ['모레'], offset: 2, name: '모레' },
-  { names: ['그제', '그저께'], offset: -2, name: '그저께' },
+// names 는 사용자가 치는 말(문법)이라 언어와 무관하게 그대로 두고, 보이는 이름만 사전에서 가져온다.
+const KEYWORDS: { names: string[]; offset: number; labelKey: MessageKey }[] = [
+  { names: ['오늘', 'today', 'now'], offset: 0, labelKey: 'editor.date.today' },
+  { names: ['내일', 'tomorrow'], offset: 1, labelKey: 'editor.date.tomorrow' },
+  { names: ['어제', 'yesterday'], offset: -1, labelKey: 'editor.date.yesterday' },
+  { names: ['모레'], offset: 2, labelKey: 'editor.date.inTwoDays' },
+  { names: ['그제', '그저께'], offset: -2, labelKey: 'editor.date.twoDaysAgo' },
 ];
 
 /**
@@ -54,11 +56,11 @@ export function dateSuggestions(query: string, today: Date = new Date()): DateSu
   };
 
   if (!q) {
-    add('오늘', t);
-    add('내일', addDays(t, 1));
-    add('어제', addDays(t, -1));
-    add('다음 주 월요일', nextWeekday(t, 1, true));
-    add('다음 주 금요일', nextWeekday(t, 5, true));
+    add(tr('editor.date.today'), t);
+    add(tr('editor.date.tomorrow'), addDays(t, 1));
+    add(tr('editor.date.yesterday'), addDays(t, -1));
+    add(tr('editor.date.nextMonday'), nextWeekday(t, 1, true));
+    add(tr('editor.date.nextFriday'), nextWeekday(t, 5, true));
     return out;
   }
 
@@ -66,31 +68,32 @@ export function dateSuggestions(query: string, today: Date = new Date()): DateSu
   const full = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(q);
   if (full) {
     const d = validDate(Number(full[1]), Number(full[2]), Number(full[3]));
-    if (d) add('날짜', d);
+    if (d) add(tr('editor.date.date'), d);
     return out;
   }
   const short = /^(\d{1,2})[-/.](\d{1,2})$/.exec(q);
   if (short) {
     const d = validDate(t.getFullYear(), Number(short[1]), Number(short[2]));
-    if (d) add('날짜', d);
+    if (d) add(tr('editor.date.date'), d);
     return out;
   }
   // 며칠 뒤·전: +3 · -2 · +3d · 3일 뒤 · 3일 후 · 3일 전
   const rel = /^([+-]?)(\d{1,4})\s*(?:d|일)?\s*(뒤|후|전)?$/.exec(q);
   if (rel && (rel[1] || rel[3])) {
     const n = Number(rel[2]) * (rel[1] === '-' || rel[3] === '전' ? -1 : 1);
-    if (n !== 0) add(n > 0 ? `${n}일 뒤` : `${-n}일 전`, addDays(t, n));
+    if (n !== 0) add(n > 0 ? tr('editor.date.daysAfter', { n }) : tr('editor.date.daysBefore', { n: -n }), addDays(t, n));
     return out;
   }
 
-  for (const k of KEYWORDS) if (k.names.some((n) => n.startsWith(q) || q.startsWith(n))) add(k.name, addDays(t, k.offset));
+  for (const k of KEYWORDS) if (k.names.some((n) => n.startsWith(q) || q.startsWith(n))) add(tr(k.labelKey), addDays(t, k.offset));
   // 요일: `월` · `월요일` · `다음 주 월` · `다음주월요일` · `다음 월`
   const wk = /^(?:(다음|next)\s*(?:주)?\s*)?(일|월|화|수|목|금|토)(?:요일)?$/.exec(q);
   if (wk) {
     const idx = WEEKDAYS.indexOf(wk[2]!);
     const next = !!wk[1];
-    add(`${next ? '다음 주 ' : '이번 '}${WEEKDAY_NAMES[idx]}`, nextWeekday(t, idx, next));
-    if (!next) add(`다음 주 ${WEEKDAY_NAMES[idx]}`, nextWeekday(t, idx, true));
+    const name = formatWeekdayLong(nextWeekday(t, idx, next));
+    add(next ? tr('editor.date.nextWeekday', { weekday: name }) : tr('editor.date.thisWeekday', { weekday: name }), nextWeekday(t, idx, next));
+    if (!next) add(tr('editor.date.nextWeekday', { weekday: formatWeekdayLong(nextWeekday(t, idx, true)) }), nextWeekday(t, idx, true));
   }
   return out;
 }
@@ -183,7 +186,7 @@ class DateUi {
   ) {
     this.el.className = 'nops-date-suggest';
     this.el.setAttribute('role', 'listbox');
-    this.el.setAttribute('aria-label', '날짜 넣기');
+    this.el.setAttribute('aria-label', tr('editor.date.insert'));
     this.el.hidden = true;
     this.el.addEventListener('mousedown', (e) => e.preventDefault());
     document.body.append(this.el);

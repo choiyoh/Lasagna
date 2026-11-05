@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { Plugin } from 'prosemirror-state';
 import type { NopsPeekHost } from './peek-host';
 
@@ -39,7 +40,7 @@ export function createLinkPreviewPlugin(host: NopsPeekHost): Plugin {
         title.textContent = hit.value.title + (heading ? ` › ${heading}` : block ? ` › ^${block}` : '');
         const body = document.createElement('div');
         body.className = 'nops-preview__body';
-        body.textContent = hit.value.text || '(내용 없음)';
+        body.textContent = hit.value.text || t('editor.embed.empty');
         card.append(title, body);
         document.body.append(card);
         const r = el.getBoundingClientRect();

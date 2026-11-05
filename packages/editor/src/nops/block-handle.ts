@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { dropCursor } from 'prosemirror-dropcursor';
 import { keymap } from 'prosemirror-keymap';
 import { type EditorState, NodeSelection, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
@@ -5,7 +6,7 @@ import type { EditorView } from 'prosemirror-view';
 import {
   type BlockRef,
   type DragSource,
-  TURN_INTO_LABELS,
+  turnIntoLabel,
   type TurnIntoKind,
   blockAt,
   canTurnInto,
@@ -94,12 +95,12 @@ class BlockHandleView {
     this.add.type = 'button';
     this.add.className = 'nops-handle__add';
     this.add.textContent = '+';
-    this.add.title = '아래에 블록 추가';
+    this.add.title = t('editor.block.addBelow');
     this.add.tabIndex = -1;
     this.grip.className = 'nops-handle__grip';
     this.grip.textContent = '⋮⋮';
     this.grip.draggable = true;
-    this.grip.title = '끌어서 이동 · 클릭하면 메뉴';
+    this.grip.title = t('editor.block.grip');
     this.root.append(this.add, this.grip);
     this.indicator.className = 'nops-drop-side';
     this.indicator.hidden = true;
@@ -324,7 +325,7 @@ class BlockHandleView {
     if (multi) {
       const title = document.createElement('div');
       title.className = 'nops-block-menu__title';
-      title.textContent = `블록 ${multi.length}개 선택됨`;
+      title.textContent = t('editor.block.selected', { count: multi.length });
       menu.append(title);
       const runMulti = (fn: (state: EditorState, refs: BlockRef[]) => import('prosemirror-state').Transaction | null) => {
         this.closeMenu();
@@ -335,10 +336,10 @@ class BlockHandleView {
         this.view.focus();
       };
       menu.append(
-        this.menuButton('복제', () => runMulti((s, r) => duplicateBlocks(s, r)), '⌘D'),
-        this.menuButton('위로 이동', () => runMulti((s, r) => moveBlocks(s, r, -1)), '⌘⇧↑'),
-        this.menuButton('아래로 이동', () => runMulti((s, r) => moveBlocks(s, r, 1)), '⌘⇧↓'),
-        this.menuButton('삭제', () => runMulti((s, r) => deleteBlocks(s, r)), '', true),
+        this.menuButton(t('editor.block.duplicate'), () => runMulti((s, r) => duplicateBlocks(s, r)), '⌘D'),
+        this.menuButton(t('editor.block.moveUp'), () => runMulti((s, r) => moveBlocks(s, r, -1)), '⌘⇧↑'),
+        this.menuButton(t('editor.block.moveDown'), () => runMulti((s, r) => moveBlocks(s, r, 1)), '⌘⇧↓'),
+        this.menuButton(t('editor.block.delete'), () => runMulti((s, r) => deleteBlocks(s, r)), '', true),
       );
       this.mountMenu(menu, keyboard ? this.blockRect(ref) : undefined, keyboard);
       return;
@@ -348,12 +349,12 @@ class BlockHandleView {
     if (kinds.length) {
       const title = document.createElement('div');
       title.className = 'nops-block-menu__title';
-      title.textContent = '다른 블록으로 바꾸기';
+      title.textContent = t('editor.block.turnInto');
       menu.append(title);
       const grid = document.createElement('div');
       grid.className = 'nops-block-menu__grid';
       for (const kind of kinds) {
-        const b = this.menuButton(TURN_INTO_LABELS[kind], () => run((s, r) => turnInto(s, r, kind)));
+        const b = this.menuButton(turnIntoLabel(kind), () => run((s, r) => turnInto(s, r, kind)));
         grid.append(b);
       }
       menu.append(grid);
@@ -363,7 +364,7 @@ class BlockHandleView {
     }
     if (this.blockLink) {
       menu.append(
-        this.menuButton('블록 링크 복사', () => {
+        this.menuButton(t('editor.block.copyLink'), () => {
           this.closeMenu();
           const fresh = this.refreshRef(ref);
           if (!fresh) return;
@@ -375,10 +376,10 @@ class BlockHandleView {
       );
     }
     menu.append(
-      this.menuButton('복제', () => run((s, r) => duplicateBlock(s, r)), '⌘D'),
-      this.menuButton('위로 이동', () => run((s, r) => moveBlock(s, r, -1)), '⌘⇧↑'),
-      this.menuButton('아래로 이동', () => run((s, r) => moveBlock(s, r, 1)), '⌘⇧↓'),
-      this.menuButton('삭제', () => run((s, r) => deleteBlock(s, r)), '', true),
+      this.menuButton(t('editor.block.duplicate'), () => run((s, r) => duplicateBlock(s, r)), '⌘D'),
+      this.menuButton(t('editor.block.moveUp'), () => run((s, r) => moveBlock(s, r, -1)), '⌘⇧↑'),
+      this.menuButton(t('editor.block.moveDown'), () => run((s, r) => moveBlock(s, r, 1)), '⌘⇧↓'),
+      this.menuButton(t('editor.block.delete'), () => run((s, r) => deleteBlock(s, r)), '', true),
     );
 
     this.mountMenu(menu, keyboard ? this.blockRect(ref) : undefined, keyboard);

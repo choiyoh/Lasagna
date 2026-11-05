@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import type { Node as PMNode } from 'prosemirror-model';
 import type { EditorView, NodeView } from 'prosemirror-view';
 import { assetKind, parseSizeSpec } from '@nopsidian/core/assets';
@@ -54,7 +55,7 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
         const box = document.createElement('span');
         box.className = 'nops-embed__note';
         box.setAttribute('data-testid', 'note-embed');
-        box.textContent = '불러오는 중…';
+        box.textContent = t('db.loading');
         box.addEventListener('click', (e) => (e.preventDefault(), open()));
         dom.classList.add('is-note');
         dom.append(box);
@@ -62,7 +63,7 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
           if (!box.isConnected) return;
           if (!r) {
             dom.classList.add('is-missing');
-            box.textContent = `⚠ 노트를 찾을 수 없어요: ${target}`;
+            box.textContent = t('editor.embed.noteMissing', { target });
             return;
           }
           box.replaceChildren();
@@ -71,14 +72,16 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
           head.textContent = `📄 ${alias || r.title}${heading ? ` › ${heading}` : block ? ` › ^${block}` : ''}`;
           const body = document.createElement('span');
           body.className = 'nops-embed__note-body';
-          body.textContent = r.found ? r.text || '(내용 없음)' : `(${heading ? '제목' : '블록'}을 찾을 수 없어 노트 앞부분을 보여 줘요)\n${r.text}`;
+          body.textContent = r.found
+            ? r.text || t('editor.embed.empty')
+            : `(${heading ? t('editor.embed.headingNotFound') : t('editor.embed.blockNotFound')})\n${r.text}`;
           box.append(head, body);
           if (block && r.found && peek.source && peek.save) {
             const edit = document.createElement('button');
             edit.type = 'button';
             edit.className = 'nops-embed__note-edit';
-            edit.textContent = '✎ 편집';
-            edit.title = '원본 블록을 여기서 고쳐요 (⌘/Ctrl+Enter 저장, Esc 취소)';
+            edit.textContent = `✎ ${t('editor.embed.edit')}`;
+            edit.title = t('editor.embed.editHint');
             edit.setAttribute('data-testid', 'note-embed-edit');
             edit.addEventListener('mousedown', (e) => e.stopPropagation());
             edit.addEventListener('click', (e) => {
@@ -94,7 +97,7 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
 
       if (kind === 'note') {
         dom.append(
-          chip(FILE_ICON.note!, alias || target, `노트 임베드: ${target}`, () =>
+          chip(FILE_ICON.note!, alias || target, t('editor.embed.noteChip', { target }), () =>
             onOpenLink?.({ target, heading, block, embed: true }),
           ),
         );
@@ -104,7 +107,7 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
       const path = host.resolve(target);
       if (!path) {
         dom.classList.add('is-missing');
-        dom.append(chip('⚠', target, `파일을 찾을 수 없어요: ${target}`, undefined, 'is-missing'));
+        dom.append(chip('⚠', target, t('editor.embed.fileMissing', { target }), undefined, 'is-missing'));
         return;
       }
       const url = host.url(path);
@@ -122,12 +125,12 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
           if (size.height) img.style.height = `${size.height}px`;
         }
         img.addEventListener('error', () => {
-          dom.replaceChildren(chip('⚠', name, `이미지를 불러오지 못했어요: ${path}`, undefined, 'is-missing'));
+          dom.replaceChildren(chip('⚠', name, t('editor.embed.imageFailed', { path }), undefined, 'is-missing'));
         });
         handle = document.createElement('span');
         handle.className = 'nops-embed__resize';
         handle.hidden = true;
-        handle.title = '크기 조절';
+        handle.title = t('editor.embed.resize');
         handle.addEventListener('mousedown', startResize);
         dom.append(img, handle);
       } else if (kind === 'audio' || kind === 'video') {
@@ -146,7 +149,7 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
         const toggle = document.createElement('button');
         toggle.type = 'button';
         toggle.className = 'nops-embed__pdftoggle';
-        toggle.textContent = '▸ 미리보기';
+        toggle.textContent = `▸ ${t('editor.embed.preview')}`;
         toggle.setAttribute('aria-expanded', 'false');
         toggle.setAttribute('data-testid', 'pdf-toggle');
         let frame: HTMLIFrameElement | null = null;
@@ -154,7 +157,7 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
         toggle.addEventListener('click', () => {
           const open = toggle.getAttribute('aria-expanded') !== 'true';
           toggle.setAttribute('aria-expanded', String(open));
-          toggle.textContent = open ? '▾ 접기' : '▸ 미리보기';
+          toggle.textContent = open ? `▾ ${t('editor.embed.collapse')}` : `▸ ${t('editor.embed.preview')}`;
           if (open && !frame) {
             frame = document.createElement('iframe');
             frame.className = 'nops-embed__pdfframe';
@@ -167,10 +170,10 @@ export function createEmbedView(host: NopsAssetHost, onOpenLink?: (link: WikiLin
             frame.hidden = !open;
           }
         });
-        head.append(chip(FILE_ICON.pdf!, name, `${path} — 클릭하면 기본 앱으로 열기`, () => host.open(path)), toggle);
+        head.append(chip(FILE_ICON.pdf!, name, t('editor.embed.openInApp', { path }), () => host.open(path)), toggle);
         dom.append(head);
       } else {
-        dom.append(chip(FILE_ICON[kind] ?? FILE_ICON.file!, name, `${path} — 클릭하면 열기`, () => host.open(path)));
+        dom.append(chip(FILE_ICON[kind] ?? FILE_ICON.file!, name, t('editor.embed.open', { path }), () => host.open(path)));
       }
     };
 

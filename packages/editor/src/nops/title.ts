@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { Plugin } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import type { Node as PMNode } from 'prosemirror-model';
@@ -15,7 +16,7 @@ export function createTitlePlugin() {
       decorations(state) {
         const first = state.doc.firstChild;
         if (!first || first.type.name !== 'heading' || first.attrs.level !== 1 || first.content.size > 0) return null;
-        return DecorationSet.create(state.doc, [Decoration.node(0, first.nodeSize, { class: 'nops-empty-title', 'data-placeholder': '제목 없음' })]);
+        return DecorationSet.create(state.doc, [Decoration.node(0, first.nodeSize, { class: 'nops-empty-title', 'data-placeholder': t('default.untitled') })]);
       },
     },
   });

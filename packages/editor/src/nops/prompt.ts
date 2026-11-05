@@ -1,4 +1,5 @@
 /** Electron에는 `window.prompt`가 없으므로 같은 역할을 하는 작은 입력 대화상자. 취소하면 null. */
+import { t } from '@nopsidian/i18n';
 export function showTextPrompt(message: string, value = ''): Promise<string | null> {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
@@ -16,10 +17,10 @@ export function showTextPrompt(message: string, value = ''): Promise<string | nu
     actions.className = 'nops-prompt__actions';
     const cancel = document.createElement('button');
     cancel.type = 'button';
-    cancel.textContent = '취소';
+    cancel.textContent = t('common.cancel');
     const ok = document.createElement('button');
     ok.type = 'submit';
-    ok.textContent = '확인';
+    ok.textContent = t('editor.ok');
     actions.append(cancel, ok);
     label.append(input);
     box.append(label, actions);

@@ -1,9 +1,8 @@
-import { t } from '@nopsidian/i18n';
-import { compareValues, formulaError, typeLabel, typeOf, valuesEqual, type FValue } from './value.js';
+import { compareValues, formulaError, typeParam, valuesEqual, type ErrorParam, type FValue } from './value.js';
 import type { FunctionDef } from './registry.js';
 
 /** 목록이 아닌 값을 받았을 때의 오류 메시지용 타입 이름(eval.ts 와 같은 표기) */
-const typeName = (v: FValue) => typeLabel(typeOf(v));
+const typeName = (v: FValue) => typeParam(v);
 
 /** 첫 인자를 목록으로. 빈 값(null)은 빈 목록으로 본다. */
 function listArg(v: FValue, fn: string): FValue[] {
@@ -13,14 +12,14 @@ function listArg(v: FValue, fn: string): FValue[] {
 }
 
 /** 숫자 인자. 빈 값(null)은 0 으로 본다(산술 연산과 같은 규칙). */
-function numArg(v: FValue, fn: string, what: string): number {
+function numArg(v: FValue, fn: string, what: ErrorParam): number {
   if (v === null) return 0;
   if (typeof v !== 'number' || !Number.isFinite(v)) throw formulaError('formula.err.argNotNumber', { fn, what });
   return v;
 }
 
 /** 정수 인자. 1.5 처럼 정수가 아니면 FormulaError. */
-function intArg(v: FValue, fn: string, what: string): number {
+function intArg(v: FValue, fn: string, what: ErrorParam): number {
   const n = numArg(v, fn, what);
   if (!Number.isInteger(n)) throw formulaError('formula.err.argNotInteger', { fn, what });
   return n;
@@ -42,7 +41,7 @@ export const LIST_FNS: Record<string, FunctionDef> = {
     max: 2,
     impl: (args) => {
       const list = listArg(args[0]!, 'at');
-      const i = intArg(args[1]!, 'at', t('formula.arg.index'));
+      const i = intArg(args[1]!, 'at', { key: 'formula.arg.index' });
       const idx = i < 0 ? list.length + i : i;
       return idx >= 0 && idx < list.length ? list[idx]! : null;
     },
@@ -103,9 +102,9 @@ export const LIST_FNS: Record<string, FunctionDef> = {
     min: 2,
     max: 3,
     impl: (args) => {
-      const start = numArg(args[0]!, 'range', t('formula.arg.start'));
-      const end = numArg(args[1]!, 'range', t('formula.arg.end'));
-      const step = args.length > 2 ? numArg(args[2]!, 'range', t('formula.arg.step')) : 1;
+      const start = numArg(args[0]!, 'range', { key: 'formula.arg.start' });
+      const end = numArg(args[1]!, 'range', { key: 'formula.arg.end' });
+      const step = args.length > 2 ? numArg(args[2]!, 'range', { key: 'formula.arg.step' }) : 1;
       if (step === 0) throw formulaError('formula.err.rangeStep');
       // 간격의 부호와 끝(포함하지 않음)에 맞는 개수를 먼저 세어 무한 루프를 막는다.
       const count = Math.ceil((end - start) / step);

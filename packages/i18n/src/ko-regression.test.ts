@@ -424,9 +424,19 @@ const cases: Case[] = [
     render: (n) => t('formula.err.unknownNameCallback', { name: `이름${n}` }),
   },
   {
-    name: 'formula.err.arity',
+    name: 'formula.err.arityExact',
+    base: (n) => `round() 는 인자가 ${n}개 필요해요(지금 ${n}개)`,
+    render: (n) => t('formula.err.arityExact', { name: 'round', n, count: n }),
+  },
+  {
+    name: 'formula.err.arityAtLeast',
+    base: (n) => `concat() 는 인자가 ${n}개 이상개 필요해요(지금 ${n}개)`,
+    render: (n) => t('formula.err.arityAtLeast', { name: 'concat', min: n, count: n }),
+  },
+  {
+    name: 'formula.err.arityBetween',
     base: (n) => `round() 는 인자가 1~${n}개 필요해요(지금 ${n}개)`,
-    render: (n) => t('formula.err.arity', { name: 'round', range: `1~${n}`, count: n }),
+    render: (n) => t('formula.err.arityBetween', { name: 'round', min: 1, max: n, count: n }),
   },
   {
     name: 'formula.err.needsNumber',

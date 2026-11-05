@@ -1,13 +1,13 @@
 import type { FunctionDef } from './registry.js';
-import { formulaError, typeLabel, typeOf, type FValue } from './value.js';
+import { formulaError, typeParam, type ErrorParam, type FValue } from './value.js';
 
 /** 함수 라이브러리(math) — 수학·집계. 모든 함수는 순수하고 결정적이다(`random()` 은 없다). */
 export const MATH_FNS: Record<string, FunctionDef> = {};
 
-const typeName = (v: FValue): string => typeLabel(typeOf(v));
+const typeName = (v: FValue) => typeParam(v);
 
 /** 인자를 숫자로. 빈 값은 0, 숫자가 아니면 오류. */
-function num(v: FValue, what: string): number {
+function num(v: FValue, what: ErrorParam): number {
   if (v === null) return 0;
   if (typeof v === 'number') return v;
   throw formulaError('formula.err.needsNumber', { what, type: typeName(v) });

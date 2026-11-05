@@ -1,5 +1,4 @@
-import { t } from '@nopsidian/i18n';
-import { FormulaError, isDate, toDisplayString, typeLabel, typeOf, valuesEqual, type FValue } from './value.js';
+import { formulaError, isDate, toDisplayString, typeParam, valuesEqual, type ErrorParam, type FValue } from './value.js';
 import type { FunctionDef } from './registry.js';
 
 /**
@@ -13,11 +12,11 @@ import type { FunctionDef } from './registry.js';
  */
 
 /** 오류 위치는 평가기가 채운다. */
-const fail = (msg: string): never => {
-  throw new FormulaError(msg);
+const fail = (key: Parameters<typeof formulaError>[0], params: Parameters<typeof formulaError>[1] = {}): never => {
+  throw formulaError(key, params);
 };
 
-const typeName = (v: FValue): string => typeLabel(typeOf(v));
+const typeName = (v: FValue) => typeParam(v);
 
 /**
  * 문자열 인자. null 은 "" 이고, 숫자·불리언·날짜는 표기 문자열로 바꾼다.
@@ -26,29 +25,29 @@ const typeName = (v: FValue): string => typeLabel(typeOf(v));
 function str(v: FValue, fn: string): string {
   if (v === null) return '';
   if (typeof v === 'string') return v;
-  if (Array.isArray(v)) return fail(t('formula.err.needsString', { fn, type: typeName(v) }));
+  if (Array.isArray(v)) return fail('formula.err.needsString', { fn, type: typeName(v) });
   return toDisplayString(v);
 }
 
 /** 목록 인자. null 은 빈 목록. */
 function list(v: FValue, fn: string): FValue[] {
   if (v === null) return [];
-  if (!Array.isArray(v)) return fail(t('formula.err.needsList', { fn, type: typeName(v) }));
+  if (!Array.isArray(v)) return fail('formula.err.needsList', { fn, type: typeName(v) });
   return v;
 }
 
 /** 정수 인자(0~10000). null 은 0. */
-function count(v: FValue, fn: string, what: string): number {
+function count(v: FValue, fn: string, what: ErrorParam): number {
   if (v === null) return 0;
-  if (typeof v !== 'number' || !Number.isInteger(v)) return fail(t('formula.err.argInteger2', { fn, what }));
-  if (v < 0 || v > 10000) return fail(t('formula.err.argRange2', { fn, what }));
+  if (typeof v !== 'number' || !Number.isInteger(v)) return fail('formula.err.argInteger2', { fn, what });
+  if (v < 0 || v > 10000) return fail('formula.err.argRange2', { fn, what });
   return v;
 }
 
 /** 숫자 인자(정수일 필요 없음). null 은 0. */
-function num(v: FValue, fn: string, what: string): number {
+function num(v: FValue, fn: string, what: ErrorParam): number {
   if (v === null) return 0;
-  if (typeof v !== 'number') return fail(t('formula.err.argNumber2', { fn, what }));
+  if (typeof v !== 'number') return fail('formula.err.argNumber2', { fn, what });
   return v;
 }
 
@@ -57,7 +56,7 @@ function regex(pattern: string, flags: string): RegExp {
   try {
     return new RegExp(pattern, flags);
   } catch (e) {
-    return fail(t('formula.err.regex', { message: (e as Error).message }));
+    return fail('formula.err.regex', { message: (e as Error).message });
   }
 }
 
@@ -71,8 +70,8 @@ const clampIndex = (i: number, n: number): number => {
 function cpSlice(s: string, start: FValue, end: FValue | undefined, fn: string): string {
   const cps = [...s];
   const n = cps.length;
-  const a = clampIndex(num(start, fn, t('formula.arg.start')), n);
-  const b = end === undefined || end === null ? n : clampIndex(num(end, fn, t('formula.arg.end')), n);
+  const a = clampIndex(num(start, fn, { key: 'formula.arg.start' }), n);
+  const b = end === undefined || end === null ? n : clampIndex(num(end, fn, { key: 'formula.arg.end' }), n);
   return cps.slice(a, Math.max(a, b)).join('');
 }
 
@@ -99,8 +98,8 @@ const sliceDef = (fn: string): FunctionDef => ({
     const target = args[0]!;
     if (Array.isArray(target)) {
       const n = target.length;
-      const a = clampIndex(num(args[1]!, fn, t('formula.arg.start')), n);
-      const b = args[2] === undefined || args[2] === null ? n : clampIndex(num(args[2]!, fn, t('formula.arg.end')), n);
+      const a = clampIndex(num(args[1]!, fn, { key: 'formula.arg.start' }), n);
+      const b = args[2] === undefined || args[2] === null ? n : clampIndex(num(args[2]!, fn, { key: 'formula.arg.end' }), n);
       return target.slice(a, Math.max(a, b));
     }
     return cpSlice(str(target, fn), args[1]!, args[2], fn);
@@ -134,7 +133,7 @@ export const TEXT_FNS: Record<string, FunctionDef> = {
   repeat: {
     min: 2,
     max: 2,
-    impl: (args) => str(args[0]!, 'repeat').repeat(count(args[1]!, 'repeat', t('formula.arg.count'))),
+    impl: (args) => str(args[0]!, 'repeat').repeat(count(args[1]!, 'repeat', { key: 'formula.arg.count' })),
   },
 
   // ── 길이·대소문자·공백 ──────────────────────────────────────────────
@@ -147,7 +146,7 @@ export const TEXT_FNS: Record<string, FunctionDef> = {
       if (v === null) return 0;
       if (typeof v === 'string') return [...v].length;
       if (Array.isArray(v)) return v.length;
-      return fail(t('formula.err.needsStringOrList', { fn: 'length', type: typeName(v) }));
+      return fail('formula.err.needsStringOrList', { fn: 'length', type: typeName(v) });
     },
   },
 
@@ -162,7 +161,7 @@ export const TEXT_FNS: Record<string, FunctionDef> = {
     impl: (args) =>
       pad(
         str(args[0]!, 'padStart'),
-        count(args[1]!, 'padStart', t('formula.arg.length')),
+        count(args[1]!, 'padStart', { key: 'formula.arg.length' }),
         args[2] === undefined || args[2] === null ? ' ' : str(args[2]!, 'padStart'),
         'start',
       ),
@@ -174,7 +173,7 @@ export const TEXT_FNS: Record<string, FunctionDef> = {
     impl: (args) =>
       pad(
         str(args[0]!, 'padEnd'),
-        count(args[1]!, 'padEnd', t('formula.arg.length')),
+        count(args[1]!, 'padEnd', { key: 'formula.arg.length' }),
         args[2] === undefined || args[2] === null ? ' ' : str(args[2]!, 'padEnd'),
         'end',
       ),
@@ -225,7 +224,7 @@ export const TEXT_FNS: Record<string, FunctionDef> = {
       if (target === null || needle === null) return false;
       if (Array.isArray(target)) return target.some((x) => valuesEqual(x, needle));
       if (typeof target === 'string') return target.includes(str(needle, 'contains'));
-      return fail(t('formula.err.needsStringOrList', { fn: 'contains', type: typeName(target) }));
+      return fail('formula.err.needsStringOrList', { fn: 'contains', type: typeName(target) });
     },
   },
   /** `startsWith(문자열, 접두)`: 대소문자 구분. */

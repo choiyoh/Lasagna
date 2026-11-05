@@ -2,9 +2,9 @@ import type { Node } from './ast.js';
 import { REGISTRY, evaluate, type Env } from './eval.js';
 import { parseFormula } from './parse.js';
 import { isLazy } from './registry.js';
-import { t } from '@nopsidian/i18n';
 import { FormulaError, formulaError, type FValue } from './value.js';
-import type { MessageKey, TranslateParams } from '@nopsidian/i18n';
+import type { MessageKey } from '@nopsidian/i18n';
+import type { ErrorParams } from './value.js';
 
 export interface Compiled {
   source: string;
@@ -19,7 +19,7 @@ export interface FormulaIssue {
   end: number;
   /** 사전 키면 표시 시점에 지금 언어로 다시 만든다(캐시에 문구가 박히지 않게) */
   key?: MessageKey;
-  params?: TranslateParams;
+  params?: ErrorParams;
 }
 export type CompileResult = { ok: true; compiled: Compiled } | { ok: false; error: FormulaIssue };
 
@@ -72,8 +72,11 @@ export function compileFormula(source: string): CompileResult {
           const def = REGISTRY[n.name];
           if (!def) throw formulaError('formula.err.unknownFunction', { name: n.name }, n.pos, n.end);
           if (args.length < def.min || args.length > def.max) {
-            const range = def.min === def.max ? t('formula.arity.exact', { n: def.min }) : def.max === Infinity ? t('formula.arity.atLeast', { min: def.min }) : t('formula.arity.between', { min: def.min, max: def.max });
-            throw formulaError('formula.err.arity', { name: n.name, range, count: args.length }, n.pos, n.end);
+            throw def.min === def.max
+              ? formulaError('formula.err.arityExact', { name: n.name, n: def.min, count: args.length }, n.pos, n.end)
+              : def.max === Infinity
+                ? formulaError('formula.err.arityAtLeast', { name: n.name, min: def.min, count: args.length }, n.pos, n.end)
+                : formulaError('formula.err.arityBetween', { name: n.name, min: def.min, max: def.max, count: args.length }, n.pos, n.end);
           }
           if (!isLazy(def)) return args.forEach((a) => walk(a, names));
           if (n.name === 'let' || n.name === 'lets') return walkLet(args, names, n.name === 'lets', walk);

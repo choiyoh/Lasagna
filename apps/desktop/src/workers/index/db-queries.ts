@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
-import { setLocale, t } from '@nopsidian/i18n';
+import { getLocale, setLocale, t } from '@nopsidian/i18n';
 import { createLinkResolver } from '@nopsidian/core/links';
 import { ComputeContext } from './db-compute';
 import {
@@ -136,7 +136,7 @@ function trimGroups(groups: RowGroup[], limit: number): NonNullable<DbQueryOutpu
 }
 
 /** 질의마다 계산을 다시 하지 않도록 (인덱스 세대, 분) 이 같으면 문맥을 재사용한다 */
-const ctxCache = new WeakMap<Database.Database, { gen: number; minute: number; ctx: ComputeContext }>();
+const ctxCache = new WeakMap<Database.Database, { gen: number; minute: number; locale: string; ctx: ComputeContext }>();
 
 export function queryDatabase(db: Database.Database, root: string, p: DbQueryParams, generation = -1): DbQueryOutput {
   // worker 스레드는 렌더러와 다른 컨텍스트라, 요청마다 지금 앱 언어를 받아 문구를 만든다.
@@ -157,10 +157,11 @@ export function queryDatabase(db: Database.Database, root: string, p: DbQueryPar
   const minute = Math.floor(Date.now() / 60_000);
   const hit = ctxCache.get(db);
   let ctx: ComputeContext;
-  if (hit && generation >= 0 && hit.gen === generation && hit.minute === minute) ctx = hit.ctx;
+  // 언어가 바뀌면 다시 계산한다 — 계산된 오류 문구가 캐시에 남지 않게
+  if (hit && generation >= 0 && hit.gen === generation && hit.minute === minute && hit.locale === getLocale()) ctx = hit.ctx;
   else {
     ctx = computeContext(db, root, folders);
-    if (generation >= 0) ctxCache.set(db, { gen: generation, minute, ctx });
+    if (generation >= 0) ctxCache.set(db, { gen: generation, minute, locale: getLocale(), ctx });
   }
   const computed = ctx.db(p.folder)!;
   const rows = computed.rows;
@@ -260,10 +261,10 @@ export function rowDatabase(db: Database.Database, root: string, notePath: strin
     const minute = Math.floor(Date.now() / 60_000);
     const hit = ctxCache.get(db);
     let ctx: ComputeContext;
-    if (hit && generation >= 0 && hit.gen === generation && hit.minute === minute) ctx = hit.ctx;
+    if (hit && generation >= 0 && hit.gen === generation && hit.minute === minute && hit.locale === getLocale()) ctx = hit.ctx;
     else {
       ctx = computeContext(db, root, dbFolders(db));
-      if (generation >= 0) ctxCache.set(db, { gen: generation, minute, ctx });
+      if (generation >= 0) ctxCache.set(db, { gen: generation, minute, locale: getLocale(), ctx });
     }
     const computed = ctx.db(folder);
     const row = computed?.rows.find((r) => r.path === notePath);

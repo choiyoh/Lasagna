@@ -1,5 +1,5 @@
 import type { Node } from './ast.js';
-import { FormulaError, compareValues, formulaError, isDate, toDisplayString, typeLabel, typeOf, valuesEqual, type FValue } from './value.js';
+import { FormulaError, compareValues, formulaError, isDate, toDisplayString, typeParam, valuesEqual, type ErrorParam, type FValue } from './value.js';
 import { DATE_FNS } from './fn-date.js';
 import { LIST_FNS } from './fn-list.js';
 import { MATH_FNS } from './fn-math.js';
@@ -16,12 +16,12 @@ export const truthy = (v: FValue): boolean => !(v === null || v === false || v =
 
 const err = (n: Node, key: Parameters<typeof formulaError>[0], params: Parameters<typeof formulaError>[1] = {}) => formulaError(key, params, n.pos, n.end);
 
-function num(v: FValue, n: Node, what: string): number {
+function num(v: FValue, n: Node, what: ErrorParam): number {
   if (v === null) return 0; // 빈 값은 산술에서 0
   if (typeof v === 'number') return v;
   throw err(n, 'formula.err.needsNumber', { what, type: typeName(v) });
 }
-const typeName = (v: FValue) => typeLabel(typeOf(v));
+const typeName = (v: FValue) => typeParam(v);
 
 /** 콜백을 쓰는 목록 함수와 제어 함수 */
 const LAZY: Record<string, LazyFunctionDef> = {
@@ -184,7 +184,7 @@ export function evaluate(root: Node, env: Env): FValue {
           try {
             return env.prop(a.value);
           } catch (e) {
-            if (e instanceof FormulaError) throw new FormulaError(e.message, a.pos, a.end);
+            if (e instanceof FormulaError) throw new FormulaError(e.message, a.pos, a.end, { key: e.key!, params: e.params });
             throw e;
           }
         }
@@ -196,7 +196,7 @@ export function evaluate(root: Node, env: Env): FValue {
         try {
           return def.impl(args, ctx);
         } catch (e) {
-          if (e instanceof FormulaError && e.pos === undefined) throw new FormulaError(e.message, node.pos, node.end);
+          if (e instanceof FormulaError && e.pos === undefined) throw new FormulaError(e.message, node.pos, node.end, { key: e.key!, params: e.params });
           throw e;
         }
       }

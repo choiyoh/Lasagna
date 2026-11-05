@@ -931,6 +931,12 @@ export const en: Record<MessageKey, string> = {
   'default.option.done': 'Done',
   'db.groupEmpty': '(Empty)',
   'comments.me': 'Me',
-  'legacy.dailyFolder': '일기',
-  'legacy.templatesFolder': '템플릿',
+
+  // 스키마 문제(diagnostic)
+  'db.issue.yaml': 'YAML error: {message}',
+  'db.issue.reservedTitle': '`title` is reserved for the note title, so it cannot be a property name',
+  'db.issue.propertiesMap': 'Properties must be a map of name: definition',
+  'db.issue.duplicateViewId': 'Duplicate view id: {id}',
+  'db.issue.viewsList': 'Views must be a list',
+  'db.issue.missingProperty': 'Unknown property: {name}',
 }

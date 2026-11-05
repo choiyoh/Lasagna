@@ -932,6 +932,12 @@ export const ko = {
   'default.option.done': '완료',
   'db.groupEmpty': '(없음)',
   'comments.me': '나',
-  'legacy.dailyFolder': '일기',
-  'legacy.templatesFolder': '템플릿',
+
+  // 스키마 문제(diagnostic)
+  'db.issue.yaml': 'YAML 오류: {message}',
+  'db.issue.reservedTitle': '`title` 은 노트 제목에 쓰는 예약어라 속성 이름으로 쓸 수 없어요',
+  'db.issue.propertiesMap': '속성은 이름: 정의 형태의 맵이어야 해요',
+  'db.issue.duplicateViewId': '뷰 id 가 겹쳐요: {id}',
+  'db.issue.viewsList': '뷰는 목록이어야 해요',
+  'db.issue.missingProperty': '없는 속성: {name}',
 } as const

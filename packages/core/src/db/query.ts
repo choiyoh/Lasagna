@@ -25,10 +25,15 @@ export interface DbRow {
   cover?: string;
 }
 
+/** 값이 아니라 화면 문구인 그룹 라벨(빈 값·체크). 렌더 시점에 지금 언어로 그린다. */
+export type GroupLabelKey = 'empty' | 'checked' | 'unchecked';
+
 export interface RowGroup {
   /** 그룹 키. `null` = '비어 있음' 그룹 */
   key: string | null;
   label: string;
+  /** 화면 문구인 라벨이면 그 종류(렌더러가 지금 언어로 번역한다). 값 라벨이면 없다 */
+  labelKey?: GroupLabelKey;
   rows: DbRow[];
   /** 한 단계 아래 그룹(있을 때만). sub 에는 다시 sub 가 없다 */
   sub?: RowGroup[];
@@ -391,8 +396,8 @@ function checkboxGroups(schema: DbSchema, propName: string, rows: DbRow[]): RowG
   const on: DbRow[] = [];
   for (const row of rows) (getCell(schema, row, propName) === true ? on : off).push(row);
   return [
-    { key: 'false', label: t('db.unchecked'), rows: off },
-    { key: 'true', label: t('db.checked'), rows: on },
+    { key: 'false', label: t('db.unchecked'), labelKey: 'unchecked', rows: off },
+    { key: 'true', label: t('db.checked'), labelKey: 'checked', rows: on },
   ];
 }
 
@@ -456,7 +461,7 @@ function selectGroups(prop: Property | undefined, rows: DbRow[], propName: strin
   const out: RowGroup[] = [...known.values(), ...unknown.values()]
     .sort(compareBuckets)
     .map((b) => ({ key: b.key, label: b.label, rows: b.rows }));
-  if (emptyRows.length) out.push({ key: null, label: t('db.groupEmpty'), rows: emptyRows });
+  if (emptyRows.length) out.push({ key: null, label: t('db.groupEmpty'), labelKey: 'empty', rows: emptyRows });
   return out;
 }
 
@@ -481,13 +486,13 @@ function valueGroups(prop: Property | undefined, rows: DbRow[], propName: string
   const out: RowGroup[] = [...buckets.values()]
     .sort((a, b) => compareNonNull(prop, a.value, b.value))
     .map((b) => ({ key: b.key, label: b.key, rows: b.rows }));
-  if (emptyRows.length) out.push({ key: null, label: t('db.groupEmpty'), rows: emptyRows });
+  if (emptyRows.length) out.push({ key: null, label: t('db.groupEmpty'), labelKey: 'empty', rows: emptyRows });
   return out;
 }
 
 function buildGroups(schema: DbSchema, rows: DbRow[], propName: string): RowGroup[] {
   const kind = kindOf(schema, propName);
-  if (kind === undefined) return [{ key: null, label: t('db.groupEmpty'), rows: [...rows] }]; // 모르는 속성은 한 그룹
+  if (kind === undefined) return [{ key: null, label: t('db.groupEmpty'), labelKey: 'empty', rows: [...rows] }]; // 모르는 속성은 한 그룹
   const prop = propName === TITLE_PROP ? undefined : schema.properties[propName];
   if (kind === 'select' || kind === 'status' || kind === 'multi_select') return selectGroups(prop, rows, propName, schema);
   if (kind === 'checkbox') return checkboxGroups(schema, propName, rows);

@@ -4,11 +4,13 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { t } from '@nopsidian/i18n';
 import { CellEditor, CellView, isEditable } from './CellEditor';
 import { COL_MIN, columnWidths } from './column-widths';
-import { calcLabel } from './labels';
+import { calcLabel, groupLabel } from './labels';
 import { movedColumns, movedRows } from './view-edit';
 import { cellOf, TITLE, visibleColumns, type CellValue, type DbData, type DbGroupDto, type DbRowDto } from './types';
 
-type Item = { kind: 'row'; row: DbRowDto } | { kind: 'group'; key: string; label: string; count: number; hidden: number; depth: number };
+type Item =
+  | { kind: 'row'; row: DbRowDto }
+  | { kind: 'group'; key: string; label: string; labelKey?: DbGroupDto['labelKey']; count: number; hidden: number; depth: number };
 
 /** 그룹이 있으면 머리 줄과 행을 한 줄로 펼친다(하위 그룹은 들여쓰기) */
 function flatten(rows: DbRowDto[], groups: DbGroupDto[] | null): Item[] {
@@ -16,7 +18,7 @@ function flatten(rows: DbRowDto[], groups: DbGroupDto[] | null): Item[] {
   const out: Item[] = [];
   const walk = (gs: DbGroupDto[], depth: number, prefix: string) => {
     for (const g of gs) {
-      out.push({ kind: 'group', key: `${prefix}/${g.key ?? '\u0000'}`, label: g.label, count: g.count, hidden: g.hidden, depth });
+      out.push({ kind: 'group', key: `${prefix}/${g.key ?? '\u0000'}`, label: g.label, labelKey: g.labelKey, count: g.count, hidden: g.hidden, depth });
       if (g.sub) walk(g.sub, depth + 1, `${prefix}/${g.key ?? '\u0000'}`);
       else for (const row of g.rows) out.push({ kind: 'row', row });
     }
@@ -318,7 +320,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
             if (item.kind === 'group') {
               return (
                 <div key={item.key} className="dbtable__group" role="row" style={{ transform: `translateY(${vi.start}px)`, height: ROW_H, paddingLeft: 10 + item.depth * 18 }}>
-                  <strong>{item.label}</strong> <span className="count">{item.count}</span>
+                  <strong>{groupLabel(item)}</strong> <span className="count">{item.count}</span>
                   {item.hidden > 0 && <span className="muted small"> · {t('db.groupMore', { count: item.hidden })}</span>}
                 </div>
               );

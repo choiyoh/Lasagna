@@ -1,4 +1,4 @@
-import { t } from '@nopsidian/i18n';
+import { getLocale, t, translate } from '@nopsidian/i18n';
 import { app, dialog, BrowserWindow } from 'electron';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
@@ -130,10 +130,20 @@ export interface VaultConfig {
   templatesFolder: string;
 }
 
+/**
+ * 설정에 폴더가 없을 때 쓸 이름. 지금 언어 이름이 있으면 그것, 없으면 다른 언어(ko/en)의 같은 기본값 이름
+ * (기존 볼트 인식), 둘 다 없으면 지금 언어 기본값으로 새로 만든다 — 언어를 바꿔도 중복 폴더가 생기지 않는다.
+ */
+function existingFolder(root: string, key: 'default.dailyFolder' | 'default.templatesFolder'): string {
+  const names = [t(key), translate(getLocale() === 'ko' ? 'en' : 'ko', key)];
+  return names.find((name) => existsSync(path.join(root, name))) ?? names[0]!;
+}
+
 export function readVaultConfig(root: string): VaultConfig {
-  // 설정이 없으면 지금 앱 언어의 기본 폴더를 쓴다. 예전 한국어 폴더가 이미 있으면 그 폴더를 계속 쓴다(기존 볼트 인식).
-  const dailyName = existsSync(path.join(root, t('legacy.dailyFolder'))) ? t('legacy.dailyFolder') : t('default.dailyFolder');
-  const templatesName = existsSync(path.join(root, t('legacy.templatesFolder'))) ? t('legacy.templatesFolder') : t('default.templatesFolder');
+  // 설정이 없으면 이미 있는 폴더를 먼저 인식한다(앱 언어와 무관): 지금 언어 이름 → 다른 언어 이름 → 없으면 지금 언어 기본값.
+  // 영어로 만든 볼트를 한국어로 열어도 Journal/Templates 를 그대로 쓰고, 중복 폴더를 새로 만들지 않는다.
+  const dailyName = existingFolder(root, 'default.dailyFolder');
+  const templatesName = existingFolder(root, 'default.templatesFolder');
   const fallback: VaultConfig = { version: 1, attachmentFolder: 'attachments', dailyFolder: dailyName, dailyTemplate: null, templatesFolder: templatesName };
   try {
     const raw = JSON.parse(readFileSync(path.join(root, '.nopsidian', 'config.json'), 'utf8')) as Partial<VaultConfig>;

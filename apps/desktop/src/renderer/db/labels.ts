@@ -1,4 +1,5 @@
 import { t, type MessageKey } from '@nopsidian/i18n';
+import type { DbGroupDto } from '@nopsidian/ipc-contract';
 
 const TYPE_KEYS: Record<string, MessageKey> = {
   // CSV 가져오기에서 제목 열을 고를 때도 쓴다.
@@ -61,3 +62,10 @@ export const calcLabel = (fn: string): string => {
   const key = CALC_KEYS[fn];
   return key ? t(key) : fn;
 };
+
+/**
+ * 그룹 라벨. 빈 값·체크 라벨은 worker 가 보낸 문구 대신 지금 언어로 그린다(언어 전환 즉시 반영).
+ * 옵션 이름·날짜 같은 값 라벨은 그대로 쓴다.
+ */
+export const groupLabel = (g: Pick<DbGroupDto, 'label' | 'labelKey'>): string =>
+  g.labelKey === 'empty' ? t('db.groupEmpty') : g.labelKey === 'checked' ? t('db.checked') : g.labelKey === 'unchecked' ? t('db.unchecked') : g.label;

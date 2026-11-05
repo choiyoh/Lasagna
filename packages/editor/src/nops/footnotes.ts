@@ -1,3 +1,5 @@
+import { t } from '@nopsidian/i18n';
+import { lazySlashItem } from './slash-item';
 import type { Node as PMNode } from 'prosemirror-model';
 import { Plugin, TextSelection, type Command } from 'prosemirror-state';
 import type { EditorView, NodeView } from 'prosemirror-view';
@@ -128,14 +130,14 @@ export function footnoteRefView(node: PMNode, view: EditorView, getPos: () => nu
     dom.textContent = number ? String(number) : '?';
     dom.dataset.footnoteRef = id ?? '';
     if (n.attrs.inline) {
-      dom.title = `인라인 각주: ${shortTitle(String(n.attrs.text ?? ''))}`;
+      dom.title = t('editor.footnote.inline', { text: shortTitle(String(n.attrs.text ?? '')) });
       dom.dataset.footnoteInline = '1';
     } else {
       const def = definitionFor(view.state.doc, id);
-      dom.title = def ? `각주: ${shortTitle(definitionParts(String(def.node.attrs.source)).text)}` : '정의가 없는 각주';
+      dom.title = def ? t('editor.footnote.ref', { text: shortTitle(definitionParts(String(def.node.attrs.source)).text) }) : t('editor.footnote.undefined');
       delete dom.dataset.footnoteInline;
     }
-    dom.setAttribute('aria-label', `각주 ${dom.textContent}${dom.title ? ` — ${dom.title}` : ''}`);
+    dom.setAttribute('aria-label', t('editor.footnote.aria', { label: dom.textContent, suffix: dom.title ? ` — ${dom.title}` : '' }));
   };
   draw(node);
 
@@ -219,7 +221,7 @@ function createPanelItem(panel: HTMLElement, view: EditorView, key: string, id: 
   const back = document.createElement('button');
   back.type = 'button';
   back.className = 'nops-footnotes__back';
-  back.textContent = '본문으로';
+  back.textContent = t('editor.footnote.back');
   back.addEventListener('click', (e) => {
     e.preventDefault();
     const def = item.dataset.footnoteKey ? definitionByKey(view.state.doc, item.dataset.footnoteKey, item.dataset.footnoteDef ?? '') : undefined;
@@ -321,7 +323,7 @@ function renderPanel(panel: HTMLElement, title: HTMLElement, items: Map<string, 
     labelEl.textContent = `[^${label}]`;
     back.hidden = backHidden;
     textarea.disabled = disabled;
-    textarea.setAttribute('aria-label', `각주 ${label} 내용`);
+    textarea.setAttribute('aria-label', t('editor.footnote.contentAria', { label }));
 
     const { text } = definitionParts(source);
     // 포커스가 있는 입력창은 사용자가 치던 값을 덮어쓰지 않는다.
@@ -370,7 +372,7 @@ export function createFootnotePlugin(host: HTMLElement): Plugin {
       panel.contentEditable = 'false';
       const title = document.createElement('div');
       title.className = 'nops-footnotes__title';
-      title.textContent = '각주';
+      title.textContent = t('editor.footnote.title');
       panel.append(title);
       host.append(panel);
       const items = new Map<string, PanelItem>();
@@ -420,11 +422,9 @@ export const insertFootnote: Command = (state, dispatch) => {
   return true;
 };
 
-export const footnoteSlashItem: SlashItemSpec = {
-  icon: '¹',
-  label: '각주',
-  description: '각주 참조와 정의를 넣어요',
-  category: 'advanced',
-  keywords: ['footnote', '각주', '주석', 'note'],
-  run: (v) => insertFootnote(v.state, v.dispatch),
-};
+export const footnoteSlashItem = (): SlashItemSpec =>
+  lazySlashItem(
+    { icon: '¹', category: 'advanced', keywords: ['footnote', '각주', '주석', 'note'], run: (v) => insertFootnote(v.state, v.dispatch) },
+    'editor.footnote.title',
+    'editor.footnote.desc',
+  );

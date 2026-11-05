@@ -2,6 +2,8 @@ import { Plugin } from 'prosemirror-state';
 import type { Node as PMNode } from 'prosemirror-model';
 import type { EditorView, NodeView } from 'prosemirror-view';
 import type { SlashItemSpec } from '@oh-new-editor/core';
+import { t } from '@nopsidian/i18n';
+import { lazySlashItem } from './slash-item';
 import { insertMarkdown } from './commands';
 
 /**
@@ -30,10 +32,10 @@ export function createDbViewNodeView(host: NopsDbViewHost) {
     bar.className = 'nops-dbview__bar';
     bar.contentEditable = 'false';
     const label = document.createElement('span');
-    label.textContent = '🗂 데이터베이스 보기';
+    label.textContent = `🗂 ${t('editor.dbview.label')}`;
     const toggle = document.createElement('button');
     toggle.type = 'button';
-    toggle.textContent = '설정 편집';
+    toggle.textContent = t('editor.dbview.edit');
     toggle.setAttribute('aria-expanded', 'false');
     bar.append(label, toggle);
     const embed = document.createElement('div');
@@ -50,7 +52,7 @@ export function createDbViewNodeView(host: NopsDbViewHost) {
       e.preventDefault();
       pre.hidden = !pre.hidden;
       toggle.setAttribute('aria-expanded', String(!pre.hidden));
-      toggle.textContent = pre.hidden ? '설정 편집' : '설정 닫기';
+      toggle.textContent = pre.hidden ? t('editor.dbview.edit') : t('editor.dbview.close');
       if (!pre.hidden) view.focus();
     });
 
@@ -84,33 +86,35 @@ export function createDbViewNodeView(host: NopsDbViewHost) {
 }
 
 export function dbViewSlashItem(host: NopsDbViewHost): SlashItemSpec {
-  return {
+  return lazySlashItem(
+    {
     icon: '🗂',
-    label: '데이터베이스 보기',
-    description: '다른 데이터베이스의 보기를 이 노트에 넣어요',
     category: 'advanced',
     keywords: ['database', 'db', 'dbview', '데이터베이스', '디비', '표', '보드', '링크된 보기'],
     run: (v) => {
       void host.pick().then((src) => {
         if (src) insertMarkdown(v, `\`\`\`${DBVIEW_LANG}\n${src.replace(/\n+$/, '')}\n\`\`\`\n`);
       });
-    },
-  };
+    } },
+    'editor.dbview.label',
+    'editor.dbview.desc',
+  );
 }
 
 export function newDbSlashItem(host: NopsDbViewHost): SlashItemSpec {
-  return {
+  return lazySlashItem(
+    {
     icon: '▦',
-    label: '새 데이터베이스',
-    description: '이 노트 안에 표·보드·캘린더로 볼 수 있는 새 데이터베이스를 만들어요',
     category: 'advanced',
     keywords: ['database', 'db', 'table', 'board', 'new', '데이터베이스', '디비', '표', '테이블', '보드', '칸반', '새'],
     run: (v) => {
       void host.create?.().then((src) => {
         if (src) insertMarkdown(v, `\`\`\`${DBVIEW_LANG}\n${src.replace(/\n+$/, '')}\n\`\`\`\n`);
       });
-    },
-  };
+    } },
+    'editor.newdb.label',
+    'editor.newdb.desc',
+  );
 }
 
 /** 업스트림이 코드 블록 안에 커서가 있으면 띄우는 "언어" 선택 칩은 dbview 에서는 의미가 없어 숨긴다. */

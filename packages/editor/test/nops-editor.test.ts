@@ -210,9 +210,9 @@ describe('flashBlock', () => {
 
 describe('Markdown 호환 슬래시 항목', () => {
   it('다이어그램(Mermaid)과 각주 항목이 있다', () => {
-    const labels = nopsSlashItems.map((i) => i.label);
+    const labels = nopsSlashItems().map((i) => i.label);
     expect(labels).toContain('다이어그램 (Mermaid)');
     expect(labels).toContain('각주');
-    expect(nopsSlashItems.find((i) => i.label === '다이어그램 (Mermaid)')!.keywords).toContain('mermaid');
+    expect(nopsSlashItems().find((i) => i.label === '다이어그램 (Mermaid)')!.keywords).toContain('mermaid');
   });
 });

@@ -278,6 +278,9 @@ importers:
       '@nopsidian/core':
         specifier: workspace:*
         version: link:../core
+      '@nopsidian/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       '@oh-new-editor/core':
         specifier: ^0.2.2
         version: 0.2.2

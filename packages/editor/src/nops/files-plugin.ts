@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { Plugin } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
 import type { NopsAssetHost } from './asset-host';
@@ -19,7 +20,7 @@ export function createFilesPlugin(host: NopsAssetHost): Plugin {
         const path = await host.save(file);
         nodes.push(embed.create({ target: host.embedTarget(path), heading: null, block: null, alias: null }));
       } catch (e) {
-        host.onError?.(`저장하지 못했어요: ${file.name} (${e instanceof Error ? e.message : String(e)})`);
+        host.onError?.(t('editor.file.saveFailed', { name: file.name, message: e instanceof Error ? e.message : String(e) }));
       }
     }
     if (nodes.length === 0 || view.isDestroyed) return;

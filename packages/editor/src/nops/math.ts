@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import katex from 'katex';
 import { Plugin } from 'prosemirror-state';
 import { Decoration, DecorationSet, type EditorView, type NodeView } from 'prosemirror-view';
@@ -10,7 +11,7 @@ function render(el: HTMLElement, src: string, display: boolean): boolean {
     el.innerHTML = katex.renderToString(src, { displayMode: display, output: 'mathml', throwOnError: true });
     return true;
   } catch (e) {
-    el.textContent = e instanceof Error ? e.message.replace(/^KaTeX parse error: /, '') : '수식 오류';
+    el.textContent = e instanceof Error ? e.message.replace(/^KaTeX parse error: /, '') : t('editor.math.error');
     return false;
   }
 }
@@ -24,13 +25,13 @@ export function mathInlineView(node: PMNode, view: EditorView, getPos: () => num
   const draw = () => {
     const ok = render(dom, value, false);
     dom.classList.toggle('is-error', !ok);
-    dom.title = value ? `$${value}$ — 눌러서 고치기` : '눌러서 수식 입력';
-    if (!value) dom.textContent = '∑ 수식';
+    dom.title = value ? `$${value}$ — ${t('editor.math.editHint')}` : t('editor.math.insertHint');
+    if (!value) dom.textContent = `∑ ${t('editor.math.emptyInline')}`;
   };
   draw();
   dom.addEventListener('mousedown', (e) => {
     e.preventDefault();
-    void showTextPrompt('수식 (LaTeX)', value).then((next) => {
+    void showTextPrompt(t('editor.math.prompt'), value).then((next) => {
       const pos = getPos();
       if (next === null || next === undefined || pos === undefined || view.isDestroyed) return;
       const v = next.replace(/\$/g, '').trim();
@@ -69,7 +70,7 @@ export function mathBlockView(node: PMNode): NodeView {
   const draw = (n: PMNode) => {
     const src = n.textContent.trim();
     if (!src) {
-      shown.textContent = '수식을 입력하세요 (LaTeX)';
+      shown.textContent = t('editor.math.blockPlaceholder');
       shown.classList.add('is-empty');
       return;
     }

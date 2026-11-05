@@ -3,6 +3,8 @@ import { Decoration, DecorationSet, type EditorView, type NodeView } from 'prose
 import type { Node as PMNode } from 'prosemirror-model';
 import type { SlashItemSpec } from '@oh-new-editor/core';
 import DOMPurify from 'dompurify';
+import { t } from '@nopsidian/i18n';
+import { lazySlashItem } from './slash-item';
 import { insertMarkdown } from './commands';
 import { isEffectiveDark } from './theme';
 
@@ -39,7 +41,7 @@ async function loadMermaid(): Promise<MermaidApi> {
     mermaidPromise = import('mermaid')
       .then((mod) => {
         const api = (mod.default ?? (mod as unknown as { mermaid: MermaidApi }).mermaid) as MermaidApi;
-        if (!api) throw new Error('mermaid 모듈을 찾지 못했어요');
+        if (!api) throw new Error(t('editor.mermaid.missingModule'));
         return api;
       })
       .catch((e: unknown) => {
@@ -91,7 +93,7 @@ export function mermaidBlockView(node: PMNode, view: EditorView): NodeView {
   const renderNow = (src: string) => {
     lastSource = src;
     const mine = token;
-    shown.textContent = '그리는 중…';
+    shown.textContent = t('editor.mermaid.rendering');
     void renderMermaid(shown, src)
       .then(() => {
         if (mine !== token || view.isDestroyed) return;
@@ -100,7 +102,7 @@ export function mermaidBlockView(node: PMNode, view: EditorView): NodeView {
       .catch((e: unknown) => {
         if (mine !== token || view.isDestroyed) return;
         dom.classList.add('is-error');
-        shown.textContent = e instanceof Error ? e.message.replace(/^Error: /, '') : '다이어그램을 그리지 못했어요';
+        shown.textContent = e instanceof Error ? e.message.replace(/^Error: /, '') : t('editor.mermaid.error');
       });
   };
 
@@ -113,7 +115,7 @@ export function mermaidBlockView(node: PMNode, view: EditorView): NodeView {
       if (timer) clearTimeout(timer);
       timer = null;
       lastSource = '';
-      shown.textContent = 'Mermaid 다이어그램을 입력하세요';
+      shown.textContent = t('editor.mermaid.placeholder');
       shown.classList.remove('is-error');
       return;
     }
@@ -180,11 +182,9 @@ export function createMermaidActivePlugin(): Plugin {
   });
 }
 
-export const mermaidSlashItem: SlashItemSpec = {
-  icon: '◇',
-  label: '다이어그램 (Mermaid)',
-  description: 'Mermaid 다이어그램을 넣어요',
-  category: 'advanced',
-  keywords: ['mermaid', 'diagram', '다이어그램', '차트', '그래프', 'flowchart'],
-  run: (v) => insertMarkdown(v, '```mermaid\nflowchart TD\n  A --> B\n```\n'),
-};
+export const mermaidSlashItem = (): SlashItemSpec =>
+  lazySlashItem(
+    { icon: '◇', category: 'advanced', keywords: ['mermaid', 'diagram', '다이어그램', '차트', '그래프', 'flowchart'], run: (v) => insertMarkdown(v, '```mermaid\nflowchart TD\n  A --> B\n```\n') },
+    'editor.mermaid.label',
+    'editor.mermaid.desc',
+  );

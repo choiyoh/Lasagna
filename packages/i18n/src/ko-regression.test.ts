@@ -366,6 +366,52 @@ const cases: Case[] = [
     base: () => '(없음)',
     render: () => t('db.groupEmpty'),
   },
+  // L3b: 편집기(슬래시·블록·날짜·임베드)
+  {
+    name: 'editor.block.selected',
+    base: (n) => `블록 ${n}개 선택됨`,
+    render: (n) => t('editor.block.selected', { count: n }),
+  },
+  {
+    name: 'editor.date.daysAfter',
+    base: (n) => `${n}일 뒤`,
+    render: (n) => t('editor.date.daysAfter', { n }),
+  },
+  {
+    name: 'editor.date.daysBefore',
+    base: (n) => `${n}일 전`,
+    render: (n) => t('editor.date.daysBefore', { n }),
+  },
+  {
+    name: 'editor.date.thisWeekday',
+    base: () => '이번 월요일',
+    render: () => t('editor.date.thisWeekday', { weekday: '월요일' }),
+  },
+  {
+    name: 'editor.embed.noteMissing',
+    base: (n) => `⚠ 노트를 찾을 수 없어요: 노트${n}`,
+    render: (n) => t('editor.embed.noteMissing', { target: `노트${n}` }),
+  },
+  {
+    name: 'editor.footnote.aria',
+    base: (n) => `각주 ${n} — 각주: 본문`,
+    render: (n) => t('editor.footnote.aria', { label: String(n), suffix: ' — 각주: 본문' }),
+  },
+  {
+    name: 'editor.file.saveFailed',
+    base: (n) => `저장하지 못했어요: 파일${n}.pdf (권한 없음)`,
+    render: (n) => t('editor.file.saveFailed', { name: `파일${n}.pdf`, message: '권한 없음' }),
+  },
+  {
+    name: 'editor.math.blockPlaceholder',
+    base: () => '수식을 입력하세요 (LaTeX)',
+    render: () => t('editor.math.blockPlaceholder'),
+  },
+  {
+    name: 'editor.toc.empty',
+    base: () => '제목(#)을 쓰면 여기에 목차가 생겨요',
+    render: () => t('editor.toc.empty'),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

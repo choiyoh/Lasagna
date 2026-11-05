@@ -20,15 +20,20 @@ properties:
   Status: { type: status, options: [{ name: Todo, group: todo }, { name: Doing, group: doing }, { name: Done, group: done }] }
   Score: { type: number, format: number }
   Due: { type: date }
+  Done: { type: checkbox }
 views:
   - id: v1
     name: All
     type: table
-    columns: [title, Status, Score, Due]
+    columns: [title, Status, Score, Due, Done]
   - id: v2
     name: Board
     type: board
     groupBy: Status
+  - id: v3
+    name: Checks
+    type: board
+    groupBy: Done
 `;
 
 let app: ElectronApplication;
@@ -44,9 +49,17 @@ test.beforeAll(async () => {
   const dbDir = path.join(vaultDir, 'Tasks');
   mkdirSync(dbDir, { recursive: true });
   writeFileSync(path.join(dbDir, '_db.yaml'), DB_YAML);
-  for (const [title, status, score, due] of [['Alpha', 'Todo', 3, '2026-11-05'], ['Beta', 'Doing', 5, '2026-11-06'], ['Gamma', 'Done', 8, '2026-11-07']] as const) {
-    writeFileSync(path.join(path.join(vaultDir, 'Tasks'), `${title}.md`), `---\nStatus: ${status}\nScore: ${score}\nDue: ${due}\ncreated: 2026-11-01T00:00:00.000Z\n---\n${title} note\n`);
+  for (const [title, status, score, due, done] of [
+    ['Alpha', 'Todo', 3, '2026-11-05', 'true'],
+    ['Beta', 'Doing', 5, '2026-11-06', 'false'],
+    ['Gamma', 'Done', 8, '2026-11-07', 'true'],
+  ] as const) {
+    writeFileSync(path.join(path.join(vaultDir, 'Tasks'), `${title}.md`), `---\nStatus: ${status}\nScore: ${score}\nDue: ${due}\nDone: ${done}\ncreated: 2026-11-01T00:00:00.000Z\n---\n${title} note\n`);
   }
+  // _db.yaml 이 깨진 데이터베이스(예약어 title 을 속성 이름으로) — 문제 문구도 앱 언어를 따라야 한다
+  const broken = path.join(vaultDir, 'Broken');
+  mkdirSync(broken, { recursive: true });
+  writeFileSync(path.join(broken, '_db.yaml'), 'version: 1\ntitle: Broken\nproperties:\n  title: { type: text }\nviews:\n  - id: v1\n    name: All\n    type: table\n');
   app = await electron.launch({
     executablePath: packagedExecutable(),
     env: { ...process.env, NOPS_E2E: '1' },
@@ -148,6 +161,33 @@ test('English smoke: database toolbar, filter, properties and templates have no 
   await expect(page.locator('.emptystate')).toContainText('No rows match the filter');
   await page.locator('.emptystate').getByRole('button', { name: 'Clear all filters' }).click();
   await expect(page.getByTestId('db-table')).toContainText('Alpha');
+
+  // 그룹 라벨(빈 값·체크)은 worker 문구가 아니라 렌더 시점 번역이다 — 언어를 바꾸면 바로 따라간다
+  await screen.getByRole('tab', { name: 'Checks' }).click();
+  const board = page.locator('.dbboard');
+  await expect(board).toBeVisible();
+  await expect(board).toContainText('Checked');
+  await expect(board).toContainText('Not checked');
+  expect(await board.innerText()).not.toMatch(HANGUL);
+  await page.getByTestId('settings-btn').click();
+  await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: '한국어' }).click();
+  await page.keyboard.press('Escape');
+  await expect(board).toContainText('체크됨');
+  await expect(board).toContainText('체크 안 됨');
+  await page.getByTestId('settings-btn').click();
+  await page.getByRole('radiogroup', { name: '언어' }).getByRole('radio', { name: 'English' }).click();
+  await page.keyboard.press('Escape');
+  await expect(board).toContainText('Checked');
+  await screen.getByRole('tab', { name: 'All' }).click();
+
+  // 깨진 _db.yaml 의 문제 문구도 영어
+  await page.getByRole('tab', { name: 'DB' }).click();
+  await page.locator('.dblistpanel').getByRole('button', { name: /Broken/ }).first().click();
+  const brokenScreen = page.getByTestId('db-screen');
+  await expect(brokenScreen.locator('.dbissues')).toContainText('reserved for the note title');
+  expect(await brokenScreen.locator('.dbissues').innerText()).not.toMatch(HANGUL);
+  await brokenScreen.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.locator('.dblistpanel').getByRole('button', { name: /Tasks/ }).first().click();
 
   // 속성 관리: 유형 라벨이 영어다
   await screen.getByRole('button', { name: 'Properties', exact: true }).click();

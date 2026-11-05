@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { buildRowNote, csvToRows, guessColumns, newDbYaml, parseCsv, setDbProperty } from '../db/index.js';
 
 export interface ZipEntry {
@@ -189,7 +190,7 @@ export function convertNotionExport(rawEntries: ZipEntry[], opts: { rootFolder?:
         body = convertAsides(split.body.replace(/^\s*#\s+.*\n+/, ''));
         rowOverrides.set(md.path, buildRowNote(r.values, body));
       } else {
-        const rel = `${newFolder}/${r.title.replace(UNSAFE, ' ').trim() || '제목 없음'}.md`;
+        const rel = `${newFolder}/${r.title.replace(UNSAFE, ' ').trim() || t('default.untitled')}.md`;
         let candidate = rel;
         for (let n = 2; taken.has(candidate.toLowerCase()); n++) candidate = rel.replace(/\.md$/, ` (${n}).md`);
         taken.add(candidate.toLowerCase());

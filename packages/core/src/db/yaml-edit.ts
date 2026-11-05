@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { parseDocument, stringify, Pair, Scalar, YAMLMap, YAMLSeq } from 'yaml';
 import type { Document } from 'yaml';
 import { splitFrontmatter } from '../markdown/frontmatter.js';
@@ -621,7 +622,7 @@ export function newDbYaml(title: string): string {
     title,
     rowsFolder: '.',
     properties: {},
-    views: [{ id: 'v1', name: '표', type: 'table', sort: [] }],
+    views: [{ id: 'v1', name: t('db.view.table'), type: 'table', sort: [] }],
     templates: [],
   };
   return stringify(schema, { lineWidth: 0 });

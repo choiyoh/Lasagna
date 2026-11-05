@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 
@@ -128,7 +129,7 @@ export interface DbParseResult {
 
 /** 스키마가 없거나 깨졌을 때도 열 수 있는 기본값: 속성 없음, 표 뷰 하나 */
 export function defaultSchema(title?: string): DbSchema {
-  return { version: 1, title, rowsFolder: '.', properties: {}, views: [{ id: 'v1', name: '표', type: 'table', sort: [] }], templates: [] };
+  return { version: 1, title, rowsFolder: '.', properties: {}, views: [{ id: 'v1', name: t('db.view.table'), type: 'table', sort: [] }], templates: [] };
 }
 
 /**
@@ -141,7 +142,7 @@ export function parseDbSchema(yamlText: string, fallbackTitle?: string): DbParse
   try {
     raw = parseYaml(yamlText);
   } catch (e) {
-    return { schema: defaultSchema(fallbackTitle), issues: [{ path: '', message: `YAML 오류: ${e instanceof Error ? e.message : String(e)}` }] };
+    return { schema: defaultSchema(fallbackTitle), issues: [{ path: '', message: t('db.issue.yaml', { message: e instanceof Error ? e.message : String(e) }) }] };
   }
   const doc = raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const out = defaultSchema(fallbackTitle);
@@ -156,7 +157,7 @@ export function parseDbSchema(yamlText: string, fallbackTitle?: string): DbParse
   if (props && typeof props === 'object' && !Array.isArray(props)) {
     for (const [name, def] of Object.entries(props as Record<string, unknown>)) {
       if (name === TITLE_PROP) {
-        issues.push({ path: `properties.${name}`, message: '`title` 은 노트 제목에 쓰는 예약어라 속성 이름으로 쓸 수 없어요' });
+        issues.push({ path: `properties.${name}`, message: t('db.issue.reservedTitle') });
         continue;
       }
       const r = property.safeParse(def);
@@ -164,7 +165,7 @@ export function parseDbSchema(yamlText: string, fallbackTitle?: string): DbParse
       else issues.push({ path: `properties.${name}`, message: describe(r.error) });
     }
   } else if (props !== undefined) {
-    issues.push({ path: 'properties', message: '속성은 이름: 정의 형태의 맵이어야 해요' });
+    issues.push({ path: 'properties', message: t('db.issue.propertiesMap') });
   }
 
   const views = doc.views;
@@ -173,12 +174,12 @@ export function parseDbSchema(yamlText: string, fallbackTitle?: string): DbParse
     views.forEach((v, i) => {
       const r = view.safeParse(v);
       if (!r.success) return void issues.push({ path: `views[${i}]`, message: describe(r.error) });
-      if (seen.has(r.data.id)) return void issues.push({ path: `views[${i}].id`, message: `뷰 id 가 겹쳐요: ${r.data.id}` });
+      if (seen.has(r.data.id)) return void issues.push({ path: `views[${i}].id`, message: t('db.issue.duplicateViewId', { id: r.data.id }) });
       seen.add(r.data.id);
       out.views.push(r.data);
     });
   } else if (views !== undefined) {
-    issues.push({ path: 'views', message: '뷰는 목록이어야 해요' });
+    issues.push({ path: 'views', message: t('db.issue.viewsList') });
   }
   if (out.views.length === 0) out.views = defaultSchema().views;
 
@@ -186,9 +187,9 @@ export function parseDbSchema(yamlText: string, fallbackTitle?: string): DbParse
   const known = new Set([TITLE_PROP, ...Object.keys(out.properties)]);
   for (const v of out.views) {
     for (const [field, name] of [['groupBy', v.groupBy], ['subGroupBy', v.subGroupBy], ['dateProp', v.dateProp], ['cover', v.cover]] as const) {
-      if (name && !known.has(name)) issues.push({ path: `views.${v.id}.${field}`, message: `없는 속성: ${name}` });
+      if (name && !known.has(name)) issues.push({ path: `views.${v.id}.${field}`, message: t('db.issue.missingProperty', { name }) });
     }
-    for (const c of v.columns ?? []) if (!known.has(c)) issues.push({ path: `views.${v.id}.columns`, message: `없는 속성: ${c}` });
+    for (const c of v.columns ?? []) if (!known.has(c)) issues.push({ path: `views.${v.id}.columns`, message: t('db.issue.missingProperty', { name: c }) });
   }
   return { schema: out, issues };
 }

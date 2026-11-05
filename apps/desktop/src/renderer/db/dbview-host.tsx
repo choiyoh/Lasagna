@@ -5,6 +5,7 @@ import { dbEmbedSource } from '@nopsidian/core/db/embed';
 import { showTextPrompt } from '@nopsidian/editor/nops';
 import type { NopsDbViewHost } from '@nopsidian/editor/nops';
 import { EmbeddedDb, type DbEmbedHost } from './EmbeddedDb';
+import { defaultDb, defaultDbName } from './default-db';
 
 type DbInfo = Awaited<ReturnType<typeof window.nops.db.list>>[number];
 
@@ -74,7 +75,7 @@ export function createDbViewHost(host: DbEmbedHost): NopsDbViewHost {
       };
     },
     async create() {
-      const raw = await showTextPrompt(t('db.newDbName'), '할 일');
+      const raw = await showTextPrompt(t('db.newDbName'), defaultDbName());
       const name = raw?.trim().replace(/[\\/:*?"<>|]/g, ' ').trim();
       if (!name) return null;
       // 이름이 겹치면 번호를 붙인다(폴더 = 데이터베이스)
@@ -83,15 +84,11 @@ export function createDbViewHost(host: DbEmbedHost): NopsDbViewHost {
       for (let n = 2; taken.has(folder); n++) folder = `${name} ${n}`;
       await window.nops.db.create({ folder, title: folder });
       const edit = (op: Parameters<typeof window.nops.db.editSchema>[0]['op']) => window.nops.db.editSchema({ folder, op });
-      // 노션처럼 바로 쓸 수 있게 기본 속성과 보기를 둔다.
-      // 속성·옵션·보기 이름은 _db.yaml 에 쓰이는 데이터 기본값이라 L3(새 기본값의 언어 대응) 전까지 한국어 그대로 둔다.
-      await edit({ kind: 'setProperty', name: '상태', def: { type: 'select', options: [{ name: '할 일', color: 'gray' }, { name: '진행 중', color: 'blue' }, { name: '완료', color: 'green' }] } });
-      await edit({ kind: 'setProperty', name: '날짜', def: { type: 'date' } });
-      await edit({ kind: 'setProperty', name: '태그', def: { type: 'multi_select', options: [] } });
-      await edit({ kind: 'upsertView', view: { id: 'v1', name: '표', type: 'table', sort: [] } });
-      await edit({ kind: 'upsertView', view: { id: 'v2', name: '보드', type: 'board', groupBy: '상태', sort: [] } });
-      await edit({ kind: 'upsertView', view: { id: 'v3', name: '캘린더', type: 'calendar', dateProp: '날짜', sort: [] } });
-      return dbEmbedSource(folder, '표');
+      // 노션처럼 바로 쓸 수 있게 기본 속성과 보기를 둔다. 이름은 만드는 시점의 앱 언어를 따른다(저장되면 바꾸지 않는다).
+      const preset = defaultDb();
+      for (const [prop, def] of preset.properties) await edit({ kind: 'setProperty', name: prop, def });
+      for (const view of preset.views) await edit({ kind: 'upsertView', view });
+      return dbEmbedSource(folder, preset.views[0]!.name);
     },
     pick() {
       return new Promise((resolve) => {

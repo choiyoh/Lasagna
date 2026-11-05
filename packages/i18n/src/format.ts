@@ -82,3 +82,8 @@ export function formatWeekdayShort(date: Date, locale: Locale = getLocale()): st
 export function formatMonthTitle(date: Date, locale: Locale = getLocale()): string {
   return new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', { month: 'long', year: 'numeric' }).format(date)
 }
+
+/** 긴 요일 이름. ko `월요일`, en `Monday`. 템플릿 `{{date:dddd}}` 에 쓰인다. */
+export function formatWeekdayLong(date: Date, locale: Locale = getLocale()): string {
+  return new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', { weekday: 'long' }).format(date)
+}

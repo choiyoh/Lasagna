@@ -914,4 +914,30 @@ export const ko = {
   'empty.suggestionCount.rows.one': '{n}개',
   'empty.suggestionCount.rows.other': '{n}개',
   'datepicker.rangeLabel': '끝 날짜',
+
+  // 데이터 기본값 — 만드는 시점의 앱 언어를 따른다(저장된 뒤에는 바꾸지 않는다)
+  'default.untitled': '제목 없음',
+  'default.untitledN': '제목 없음 {n}',
+  'default.csvColumn': '열{n}',
+  'default.dbView': '보기 {n}',
+  'default.dailyFolder': '일기',
+  'default.templatesFolder': '템플릿',
+  'default.conflictName': '{stem} (충돌 {date}){ext}',
+  'default.conflictNameN': '{stem} (충돌 {date} {n}){ext}',
+  'default.prop.status': '상태',
+  'default.prop.date': '날짜',
+  'default.prop.tags': '태그',
+  'default.option.todo': '할 일',
+  'default.option.doing': '진행 중',
+  'default.option.done': '완료',
+  'db.groupEmpty': '(없음)',
+  'comments.me': '나',
+
+  // 스키마 문제(diagnostic)
+  'db.issue.yaml': 'YAML 오류: {message}',
+  'db.issue.reservedTitle': '`title` 은 노트 제목에 쓰는 예약어라 속성 이름으로 쓸 수 없어요',
+  'db.issue.propertiesMap': '속성은 이름: 정의 형태의 맵이어야 해요',
+  'db.issue.duplicateViewId': '뷰 id 가 겹쳐요: {id}',
+  'db.issue.viewsList': '뷰는 목록이어야 해요',
+  'db.issue.missingProperty': '없는 속성: {name}',
 } as const

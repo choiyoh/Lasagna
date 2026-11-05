@@ -173,6 +173,7 @@ const dbGroup: z.ZodType<DbGroupDto> = z.lazy(() =>
   z.object({
     key: z.string().nullable(),
     label: z.string(),
+    labelKey: z.enum(['empty', 'checked', 'unchecked']).optional(),
     count: z.number(),
     hidden: z.number(),
     rows: z.array(dbRowSchema),
@@ -182,6 +183,8 @@ const dbGroup: z.ZodType<DbGroupDto> = z.lazy(() =>
 export interface DbGroupDto {
   key: string | null;
   label: string;
+  /** 화면 문구 라벨이면 그 종류 — 렌더러가 지금 언어로 번역한다 */
+  labelKey?: 'empty' | 'checked' | 'unchecked';
   count: number;
   hidden: number;
   rows: DbRowDto[];

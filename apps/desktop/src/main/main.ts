@@ -31,7 +31,7 @@ import { readAudit } from '@nopsidian/mcp/audit';
 import { RevertError, applyRestore, logRevert, planRevert } from '@nopsidian/mcp/revert';
 import { readPolicyFile, writePolicyFile } from '@nopsidian/mcp/policy-file';
 import { events, graphLayout, graphSettings, workspaceLayout, type AppLanguage, type EventName } from '@nopsidian/ipc-contract';
-import { resolveLocale } from '@nopsidian/i18n';
+import { resolveLocale, setLocale } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
@@ -571,7 +571,8 @@ function registerHandlers() {
   handle('db.query', async (input) => {
     const v = requireVault();
     await v.index.ready;
-    return v.index.query('queryDatabase', input) as never;
+    // index worker 는 별도 스레드라, 그 스레드가 만드는 문구(스키마 문제·기본 제목)도 앱 언어를 따르게 넘긴다.
+    return v.index.query('queryDatabase', { ...input, locale: currentLanguage().locale }) as never;
   });
   handle('db.updateCell', async ({ path: rel, prop, value }) => {
     await updateCell(requireVault(), rel, prop, value);
@@ -658,6 +659,8 @@ function registerHandlers() {
   handle('settings.setLanguage', ({ language }) => {
     settingsStore().setLanguage(language);
     const current = currentLanguage();
+    // 메인에서 만드는 기본값(새 행 제목·볼트 기본 폴더 등)도 앱 언어를 따르게 한다.
+    setLocale(current.locale);
     broadcast('language.changed', current);
     return current;
   });
@@ -689,6 +692,8 @@ function currentLanguage(): AppLanguage {
 
 app.whenReady().then(() => {
   if (mcpStdio) return; // MCP 서버 모드: 창·프로토콜·IPC를 만들지 않는다
+  // 이 프로세스에서 만드는 기본값도 앱 언어를 따른다(렌더러와 별개 컨텍스트).
+  setLocale(currentLanguage().locale);
   installSessionPolicy(devServerUrl);
   if (devServerUrl) {
     // 개발 서버는 HMR 때문에 완화된 CSP를 쓴다. 운영 CSP는 app:// 응답 헤더로 강제된다.

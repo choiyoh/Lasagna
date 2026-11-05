@@ -505,7 +505,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         <button
           onClick={() => {
             flushDraft();
-            const nv: View = { id: uid(), name: `보기 ${tabs.length + 1}`, type: 'table', sort: [] };
+            const nv: View = { id: uid(), name: t('default.dbView', { n: tabs.length + 1 }), type: 'table', sort: [] };
             void window.nops.db.editSchema({ folder, op: { kind: 'upsertView', view: nv } }).then(() => {
               setDraft(null);
               setViewId(nv.id);

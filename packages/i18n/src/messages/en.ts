@@ -913,4 +913,30 @@ export const en: Record<MessageKey, string> = {
   'empty.suggestionCount.rows.one': '{n} row',
   'empty.suggestionCount.rows.other': '{n} rows',
   'datepicker.rangeLabel': 'Date range',
+
+  // Data defaults — they follow the app language when created (and are never rewritten afterwards)
+  'default.untitled': 'Untitled',
+  'default.untitledN': 'Untitled {n}',
+  'default.csvColumn': 'Column {n}',
+  'default.dbView': 'View {n}',
+  'default.dailyFolder': 'Journal',
+  'default.templatesFolder': 'Templates',
+  'default.conflictName': '{stem} (conflict {date}){ext}',
+  'default.conflictNameN': '{stem} (conflict {date} {n}){ext}',
+  'default.prop.status': 'Status',
+  'default.prop.date': 'Date',
+  'default.prop.tags': 'Tags',
+  'default.option.todo': 'To do',
+  'default.option.doing': 'In progress',
+  'default.option.done': 'Done',
+  'db.groupEmpty': '(Empty)',
+  'comments.me': 'Me',
+
+  // 스키마 문제(diagnostic)
+  'db.issue.yaml': 'YAML error: {message}',
+  'db.issue.reservedTitle': '`title` is reserved for the note title, so it cannot be a property name',
+  'db.issue.propertiesMap': 'Properties must be a map of name: definition',
+  'db.issue.duplicateViewId': 'Duplicate view id: {id}',
+  'db.issue.viewsList': 'Views must be a list',
+  'db.issue.missingProperty': 'Unknown property: {name}',
 }

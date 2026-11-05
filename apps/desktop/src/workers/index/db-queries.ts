@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
+import { setLocale, t } from '@nopsidian/i18n';
 import { createLinkResolver } from '@nopsidian/core/links';
 import { ComputeContext } from './db-compute';
 import {
@@ -27,7 +28,7 @@ const yamlPath = (root: string, folder: string) => path.join(root, folder, DB_FI
 
 function readSchema(root: string, folder: string): { schema: DbSchema; issues: DbParseIssue[] } | null {
   try {
-    return parseDbSchema(readFileSync(yamlPath(root, folder), 'utf8'), path.posix.basename(folder) || '데이터베이스');
+    return parseDbSchema(readFileSync(yamlPath(root, folder), 'utf8'), path.posix.basename(folder) || t('db.database'));
   } catch {
     return null;
   }
@@ -86,7 +87,7 @@ export function listDatabases(db: Database.Database, root: string): DatabaseInfo
     const recursive = parsed.schema.rowsFolder === '**';
     out.push({
       folder,
-      title: parsed.schema.title ?? (path.posix.basename(folder) || '데이터베이스'),
+      title: parsed.schema.title ?? (path.posix.basename(folder) || t('db.database')),
       rowCount: rawRows(db, folder, recursive, folders).length,
       issues: parsed.issues.length,
     });
@@ -104,6 +105,8 @@ export interface DbQueryParams {
   limit?: number;
   /** 그룹마다 최대 몇 행을 돌려줄지(보드·갤러리). 나머지는 `hidden` 으로 센다 */
   groupLimit?: number;
+  /** 이 질의를 요청한 앱 언어 — 스키마 문제 문구·기본 제목에 쓴다 */
+  locale?: 'ko' | 'en';
 }
 
 export interface DbQueryOutput {
@@ -124,6 +127,7 @@ function trimGroups(groups: RowGroup[], limit: number): NonNullable<DbQueryOutpu
   return groups.map((g) => ({
     key: g.key,
     label: g.label,
+    labelKey: g.labelKey,
     count: g.rows.length,
     rows: g.rows.slice(0, limit),
     hidden: Math.max(0, g.rows.length - limit),
@@ -135,6 +139,8 @@ function trimGroups(groups: RowGroup[], limit: number): NonNullable<DbQueryOutpu
 const ctxCache = new WeakMap<Database.Database, { gen: number; minute: number; ctx: ComputeContext }>();
 
 export function queryDatabase(db: Database.Database, root: string, p: DbQueryParams, generation = -1): DbQueryOutput {
+  // worker 스레드는 렌더러와 다른 컨텍스트라, 요청마다 지금 앱 언어를 받아 문구를 만든다.
+  if (p.locale) setLocale(p.locale);
   const parsed = readSchema(root, p.folder);
   if (!parsed) throw new Error(`데이터베이스를 찾을 수 없어요: ${p.folder || '(루트)'}`);
   const { schema, issues } = parsed;

@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLocale } from '@nopsidian/i18n';
 import { safeName, titleInSync, titleRenameTarget, untitledPath } from './note-title';
+
+afterEach(() => setLocale('ko'));
 
 describe('note-title', () => {
   it('제목과 파일 이름이 같거나 제목이 비었을 때만 동기화한다', () => {
@@ -22,5 +25,10 @@ describe('note-title', () => {
   it('겹치지 않는 제목 없음 경로', () => {
     expect(untitledPath('', [])).toBe('제목 없음.md');
     expect(untitledPath('f', ['f/제목 없음.md', 'f/제목 없음 2.md'])).toBe('f/제목 없음 3.md');
+  });
+  it('영어에서는 Untitled 로 만들고, 겹치면 번호를 붙인다', () => {
+    setLocale('en');
+    expect(untitledPath('', [])).toBe('Untitled.md');
+    expect(untitledPath('f', ['f/Untitled.md'])).toBe('f/Untitled 2.md');
   });
 });

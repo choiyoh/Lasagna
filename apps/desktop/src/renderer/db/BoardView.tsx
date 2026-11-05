@@ -3,6 +3,7 @@ import { t } from '@nopsidian/i18n';
 import { optionsOf } from '@nopsidian/core/db/values';
 import { coverOf } from './ListGalleryViews';import { CellView } from './CellEditor';
 import { chipBorderColor } from './chip-color';
+import { groupLabel } from './labels';
 import { cellOf, TITLE, visibleColumns, type CellValue, type DbData, type DbRowDto } from './types';
 
 interface Props {
@@ -59,7 +60,7 @@ export function BoardView({ data, onOpen, onMove, onAdd, onReorder, vaultId, emp
           }}
         >
           <h4 style={{ borderTopColor: chipBorderColor(colorOf(g.key)) }}>
-            {g.label} <span className="count">{g.count}</span>
+            {groupLabel(g)} <span className="count">{g.count}</span>
           </h4>
           {!isEmpty && (
             <div className="dbboard__cards">

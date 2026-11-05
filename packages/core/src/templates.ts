@@ -4,6 +4,7 @@
  * 템플릿 노트(데일리 노트, "템플릿 삽입")의 `{{date}}`·`{{time}}`·`{{title}}` 을 채운다.
  * 예전 main 프로세스의 단순 치환(`{{date}}`·`{{title}}`)을 대신하는 순수 함수다.
  */
+import { formatWeekdayLong, formatWeekdayShort } from '@nopsidian/i18n';
 
 export interface TemplateContext {
   /** "지금" — 테스트에서 고정할 수 있게 주입한다 */
@@ -12,8 +13,7 @@ export interface TemplateContext {
   title: string;
 }
 
-const WEEKDAY_SHORT = ['일', '월', '화', '수', '목', '금', '토'];
-const WEEKDAY_LONG = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+
 
 /** 긴 토큰이 먼저 오도록 나열한다(YYYY > YY, MM > M, dddd > ddd). 현재 위치에서만(sticky) 본다. */
 const TOKEN = /dddd|ddd|YYYY|YY|MM|DD|HH|mm|ss|M|D|H|m|s/y;
@@ -48,9 +48,9 @@ function tokenValue(date: Date, token: string): string {
     case 's':
       return String(date.getSeconds());
     case 'ddd':
-      return WEEKDAY_SHORT[date.getDay()]!;
+      return formatWeekdayShort(date);
     case 'dddd':
-      return WEEKDAY_LONG[date.getDay()]!;
+      return formatWeekdayLong(date);
     default:
       // 정규식이 위 토큰만 통과시키므로 도달하지 않는다.
       return token;

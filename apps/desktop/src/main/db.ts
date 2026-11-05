@@ -1,6 +1,7 @@
 import { dialog, BrowserWindow } from 'electron';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { t } from '@nopsidian/i18n';
 import path from 'node:path';
 import { atomicWrite, expandTemplate, resolveInVault, saveNote, splitFrontmatter } from '@nopsidian/core';
 import { createLinkResolver, linkNameFor } from '@nopsidian/core/links';
@@ -125,7 +126,7 @@ const unsafeName = /[\\/:*?"<>|]/g;
 
 /** `폴더/이름.md` — 이미 있으면 ` 2`, ` 3` … */
 function freeNotePath(root: string, folder: string, title: string): string {
-  const base = [...title].filter((c) => c.charCodeAt(0) >= 32).join('').replace(unsafeName, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || '제목 없음';
+  const base = [...title].filter((c) => c.charCodeAt(0) >= 32).join('').replace(unsafeName, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || t('default.untitled');
   for (let n = 1; ; n++) {
     const rel = path.posix.join(folder, `${base}${n > 1 ? ` ${n}` : ''}.md`);
     if (!existsSync(resolveInVault(root, rel))) return rel;

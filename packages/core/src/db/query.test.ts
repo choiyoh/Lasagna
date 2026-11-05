@@ -367,8 +367,8 @@ describe('groupRows', () => {
     const rs = [row('a', 'a', { 체크: true }), row('b', 'b', { 체크: false })];
     const groups = groupRows(schema, rs, '체크');
     expect(groups).toEqual([
-      { key: 'false', label: '체크 안 됨', rows: [rs[1]] },
-      { key: 'true', label: '체크됨', rows: [rs[0]] },
+      { key: 'false', label: '체크 안 됨', labelKey: 'unchecked', rows: [rs[1]] },
+      { key: 'true', label: '체크됨', labelKey: 'checked', rows: [rs[0]] },
     ]);
   });
 
@@ -397,7 +397,7 @@ describe('groupRows', () => {
 
   it('모르는 속성이면 모든 행을 한 그룹으로', () => {
     const rs = [row('a', 'a'), row('b', 'b')];
-    expect(groupRows(schema, rs, '없는속성')).toEqual([{ key: null, label: '(없음)', rows: rs }]);
+    expect(groupRows(schema, rs, '없는속성')).toEqual([{ key: null, label: '(없음)', labelKey: 'empty', rows: rs }]);
   });
 });
 

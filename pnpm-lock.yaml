@@ -181,6 +181,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@nopsidian/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       katex:
         specifier: ^0.19.0
         version: 0.19.0

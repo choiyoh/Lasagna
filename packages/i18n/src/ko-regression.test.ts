@@ -325,6 +325,47 @@ const cases: Case[] = [
     base: (n) => `${n}개`,
     render: (n) => tPlural('empty.suggestionCount.rows', n),
   },
+  // L3a: 데이터 기본값·댓글 작성자
+  {
+    name: 'default.untitled',
+    base: () => '제목 없음',
+    render: () => t('default.untitled'),
+  },
+  {
+    name: 'default.untitledN',
+    base: (n) => `제목 없음 ${n}`,
+    render: (n) => t('default.untitledN', { n }),
+  },
+  {
+    name: 'default.csvColumn',
+    base: (n) => `열${n}`,
+    render: (n) => t('default.csvColumn', { n }),
+  },
+  {
+    name: 'default.dbView',
+    base: (n) => `보기 ${n}`,
+    render: (n) => t('default.dbView', { n }),
+  },
+  {
+    name: 'default.conflictName',
+    base: (n) => `메모 (충돌 2026-11-0${n}).md`,
+    render: (n) => t('default.conflictName', { stem: '메모', date: `2026-11-0${n}`, ext: '.md' }),
+  },
+  {
+    name: 'default.conflictNameN',
+    base: (n) => `메모 (충돌 2026-11-05 ${n}).md`,
+    render: (n) => t('default.conflictNameN', { stem: '메모', date: '2026-11-05', n, ext: '.md' }),
+  },
+  {
+    name: 'comments.me',
+    base: () => '나',
+    render: () => t('comments.me'),
+  },
+  {
+    name: 'db.groupEmpty',
+    base: () => '(없음)',
+    render: () => t('db.groupEmpty'),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

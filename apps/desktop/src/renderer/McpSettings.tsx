@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { t, type MessageKey } from '@nopsidian/i18n';
 import { defaultServerName, folderContains, folderError, isValidServerName, mcpSnippet, type McpInfo } from './mcp-snippet';
 import { configFromPolicy, loadMcpSettings, policyFolders, saveMcpSettings, serverNameConflict, type McpSettingsConfig } from './mcp-settings';
 
@@ -11,7 +12,14 @@ interface AuditRow {
   note?: string;
 }
 
-const ACTION_LABEL: Record<AuditRow['action'], string> = { create: '새로 만듦', append: '덧붙임', update: '고침', denied: '거부됨', revert: '되돌림', comment: '댓글' };
+const ACTION_LABEL: Record<AuditRow['action'], string> = {
+  create: 'mcp.action.create',
+  append: 'mcp.action.append',
+  update: 'mcp.action.update',
+  denied: 'mcp.action.denied',
+  revert: 'mcp.action.revert',
+  comment: 'mcp.action.comment',
+};
 
 /** 설정 화면의 "AI 에이전트 연결(MCP)": 클라이언트별 연결 방법 복사와 에이전트가 한 일 보기 */
 export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: string) => void; onReverted: (path: string, kind: 'restored' | 'trashed') => void }) {
@@ -29,7 +37,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   const revert = async (a: AuditRow) => {
     try {
       const r = await window.nops.mcp.revert({ t: a.t, path: a.path });
-      setMessage(r.kind === 'trashed' ? `휴지통으로 옮겼어요: ${a.path}` : `이전 내용으로 되돌렸어요: ${a.path}`);
+      setMessage(r.kind === 'trashed' ? t('mcp.reverted.trashed', { path: a.path }) : t('mcp.reverted.restored', { path: a.path }));
       onReverted(a.path, r.kind);
     } catch (e) {
       setMessage(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
@@ -74,7 +82,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   const initial: McpSettingsConfig = { write: false, folder: 'AI', allowDailyFolder: false, maxWritesPerMinute: 30, name: defaultServerName(info), client: 'claude-code' };
   const current = cfg ?? initial;
   /** 빈 폴더는 입력 중일 수 있으므로 정책 파일에 쓰지 않는다(볼트 전체는 `.`). */
-  const folderProblem = (folder: string) => (folder.trim() === '' ? '쓸 폴더를 입력하세요. 볼트 전체는 .(점)으로 적어요.' : folderError(folder));
+  const folderProblem = (folder: string) => (folder.trim() === '' ? t('mcp.needFolder') : folderError(folder));
   /** 바뀐 정책 값을 파일(정본)에 쓴다. 파일이 없으면 서버는 기존 인자 동작을 유지한다. */
   const savePolicy = (next: McpSettingsConfig) => {
     const folderIssue = folderProblem(next.folder);
@@ -82,10 +90,10 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
     let folders: string[];
     if (folderIssue || dailyIssue) {
       if (next.write) {
-        setPolicyError(`${folderIssue ?? dailyIssue} 폴더를 고친 뒤 다시 켜 주세요.`);
+        setPolicyError(t('mcp.fixFolderFirst', { issue: folderIssue ?? dailyIssue ?? '' }));
         return; // 켠 상태의 잘못된 폴더는 저장하지 않는다
       }
-      folders = ['AI']; // 끈 상태는 폴더와 무관하므로 정책 파일을 유효하게 남긴다
+      folders = [t('mcp.defaultFolder')]; // 끈 상태는 폴더와 무관하므로 정책 파일을 유효하게 남긴다
     } else {
       try {
         folders = policyFolders(next.folder, next.allowDailyFolder, info.dailyFolder);
@@ -128,37 +136,37 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
 
   return (
     <section data-testid="mcp-settings">
-      <h3>AI 에이전트 연결 (MCP)</h3>
+      <h3>{t('mcp.title')}</h3>
       <p className="muted small">
-        Claude 같은 AI 에이전트가 이 볼트의 노트를 찾아 읽고(기본), 허용하면 새 노트를 쓰게 해요. 앱이 꺼져 있어도 동작해요.{' '}
-        {info.packaged ? 'Node.js 없이 이 앱 실행 파일이 MCP 서버로 동작해요.' : '개발 빌드라 Node.js 22 이상이 필요해요.'}
+        {t('mcp.intro')}{' '}
+        {info.packaged ? t('mcp.packagedServer') : t('mcp.devServer')}
       </p>
       <label className="settings__row">
         <span>
-          에이전트가 노트 쓰기 허용
-          <small className="muted">끄면 읽기만 가능해요. 쓰기는 아래 폴더 안에서만, 기존 노트는 덧붙이기·해시 확인 후 고치기만 돼요.</small>
+          {t('mcp.writeLabel')}
+          <small className="muted">{t('mcp.writeHint')}</small>
         </span>
-        <input type="checkbox" checked={current.write} onChange={(e) => update({ write: e.target.checked })} aria-label="에이전트가 노트 쓰기 허용" />
+        <input type="checkbox" checked={current.write} onChange={(e) => update({ write: e.target.checked })} aria-label={t('mcp.writeLabel')} />
       </label>
       <p className="muted small" data-testid="mcp-policy-note">
-        이 설정을 바꾸면 볼트의 <code>.nopsidian/mcp-policy.json</code> 에 저장돼 이미 연결된 에이전트에도 다음 쓰기부터 바로 적용돼요. 쓰기 도구 없이 연결한 에이전트는 다시 연결해야 해요.
+        {t('mcp.policySaved', { file: '.nopsidian/mcp-policy.json' })}
       </p>
       <p className="muted small" data-testid="mcp-policy-device-note">
-        이 파일은 기기별이라 같은 볼트를 다른 기기에서 열어도 자동으로 적용되지 않아요. 다른 기기에서도 막으려면 그 기기의 앱에서 쓰기를 끄거나, 그 기기의 에이전트 설정을 읽기 전용으로 바꾸세요.
+        {t('mcp.policyDevice')}
       </p>
       {policyError && (
         <p className="warn small" data-testid="mcp-policy-warning">
-          {policyError} 설정을 바꾸면 새 정책으로 저장을 다시 시도해요.
+          {t('mcp.policyErrorRetry', { error: policyError })}
         </p>
       )}
       {policyExists === false && (
         <div className="settings__row" data-testid="mcp-policy-missing">
           <span>
-            앱 정책 파일이 아직 없어요. 지금은 에이전트 연결 인자(<code>--write</code>, <code>--write-folder</code>)대로 동작해요.
-            <small className="muted">아래 버튼을 누르면 현재 화면 값으로 정책을 만들어 앱 설정이 정본이 돼요.</small>
+            {t('mcp.policyMissing', { write: '--write', folder: '--write-folder' })}
+            <small className="muted">{t('mcp.policyMissingHint')}</small>
           </span>
           <button type="button" data-testid="mcp-policy-create" onClick={() => savePolicy(current)}>
-            현재 값으로 정책 저장
+            {t('mcp.savePolicy')}
           </button>
         </div>
       )}
@@ -166,68 +174,66 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
         <>
           <label className="settings__row">
             <span>
-              쓸 수 있는 폴더
-              <small className="muted">볼트 전체는 .(점)으로 적어요.</small>
+              {t('mcp.folderLabel')}
+              <small className="muted">{t('mcp.folderHint')}</small>
             </span>
-            <input className="settings__text" value={current.folder} onChange={(e) => update({ folder: e.target.value })} aria-label="쓸 수 있는 폴더" />
+            <input className="settings__text" value={current.folder} onChange={(e) => update({ folder: e.target.value })} aria-label={t('mcp.folderLabel')} />
           </label>
           {folderIssue && (
             <p className="warn small" data-testid="mcp-folder-warning">
-              {folderIssue} 폴더를 고치기 전에는 붙여 넣을 스니펫을 만들지 않아요.
+              {t('mcp.folderBlocked', { issue: folderIssue })}
             </p>
           )}
           <label className="settings__row">
             <span>
-              오늘의 노트 폴더도 허용
-              <small className="muted">
-                켜면 {info.dailyFolder}/ 도 쓰기 허용 폴더에 넣어요. 끄면 append_to_daily_note 가 forbidden-folder 로 거부돼요.
-              </small>
+              {t('mcp.dailyAllow')}
+              <small className="muted">{t('mcp.dailyAllowHint', { folder: info.dailyFolder })}</small>
             </span>
             <input
               type="checkbox"
               checked={current.allowDailyFolder}
               onChange={(e) => update({ allowDailyFolder: e.target.checked })}
-              aria-label="오늘의 노트 폴더도 허용"
+              aria-label={t('mcp.dailyAllow')}
             />
           </label>
           {dailyIssue && (
             <p className="warn small" data-testid="mcp-folder-warning">
-              {dailyIssue} 오늘의 노트 폴더 설정을 앱에서 고쳐 주세요.
+              {t('mcp.dailyFix', { issue: dailyIssue })}
             </p>
           )}
           {!current.allowDailyFolder && !folderIssue && !dailyCovered && (
             <p className="warn small" data-testid="mcp-daily-warning">
-              오늘의 노트 폴더({info.dailyFolder}/)가 허용 폴더에 없어요. 이대로면 오늘의 노트에 쓰기는 forbidden-folder 로 실패해요.
+              {t('mcp.dailyNotCovered', { folder: info.dailyFolder })}
             </p>
           )}
         </>
       )}
       <label className="settings__row">
         <span>
-          서버 이름
-          <small className="muted">클라이언트 설정 파일의 키예요. 두 볼트를 함께 등록해도 겹치지 않게 볼트 이름이 붙어요.</small>
+          {t('mcp.serverName')}
+          <small className="muted">{t('mcp.serverNameHint')}</small>
         </span>
         <input
           className="settings__text"
           value={current.name}
           placeholder={defaultServerName(info)}
           onChange={(e) => update({ name: e.target.value })}
-          aria-label="MCP 서버 이름"
+          aria-label={t('mcp.serverNameAria')}
         />
       </label>
       {!nameOk && (
         <p className="warn small" data-testid="mcp-name-warning">
-          이름에는 공백 없이 글자·숫자와 . _ - 만 쓸 수 있어요. 고치기 전에는 붙여 넣을 스니펫을 만들지 않아요.
+          {t('mcp.serverNameInvalid')}
         </p>
       )}
       {conflict && (
         <p className="warn small" data-testid="mcp-name-conflict">
-          같은 이름을 쓰는 다른 볼트 설정이 있어요. 두 볼트를 함께 등록하면 나중에 등록한 쪽이 앞의 것을 덮어써요.
+          {t('mcp.serverNameTaken')}
         </p>
       )}
       {invalidFolder || !nameOk ? null : snippet && active ? (
         <div className="mcp__snippets">
-          <div className="mcp__tabs" role="tablist" aria-label="MCP 클라이언트">
+          <div className="mcp__tabs" role="tablist" aria-label={t('mcp.clientsTab')}>
             {snippet.clients.map((c) => (
               <button key={c.id} role="tab" aria-selected={c.id === active.id} className={c.id === active.id ? 'on' : ''} onClick={() => update({ client: c.id })}>
                 {c.label}
@@ -238,7 +244,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
             <div className="mcp__label">
               <strong>{active.label}</strong>
               <span className="muted small">{active.target}</span>
-              <button onClick={() => copy(active.id, active.code)}>{copied === active.id ? '복사했어요' : '복사'}</button>
+              <button onClick={() => copy(active.id, active.code)}>{copied === active.id ? t('mcp.copied') : t('mcp.copy')}</button>
             </div>
             <pre
               className="mcp__code"
@@ -250,25 +256,25 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
           </div>
         </div>
       ) : (
-        <p className="warn small">이 빌드에는 MCP 서버 파일이 없어요. 앱을 다시 설치하거나 개발 중이면 <code>pnpm --filter @nopsidian/mcp build</code> 를 실행하세요.</p>
+        <p className="warn small">{t('mcp.noServer', { command: 'pnpm --filter @nopsidian/mcp build' })}</p>
       )}
       <div className="mcp__audit">
         <div className="mcp__label">
-          <strong>최근 에이전트 작업</strong>
-          <button onClick={refresh}>새로고침</button>
+          <strong>{t('mcp.recent')}</strong>
+          <button onClick={refresh}>{t('mcp.refresh')}</button>
         </div>
         {audit.length === 0 ? (
-          <p className="muted small">아직 에이전트가 쓴 기록이 없어요.</p>
+          <p className="muted small">{t('mcp.noHistory')}</p>
         ) : (
           <ul data-testid="mcp-audit">
             {audit.map((a, i) => (
               <li key={`${a.t}-${i}`} className={`${a.action === 'denied' ? 'denied' : ''}${reverted.has(`${a.t}|${a.path}`) ? ' reverted' : ''}`.trim()}>
                 <span className="muted small">{new Date(a.t).toLocaleString()}</span>
-                <span className="mcp__act">{ACTION_LABEL[a.action]}</span>
+                <span className="mcp__act">{t(ACTION_LABEL[a.action] as MessageKey)}</span>
                 {a.action === 'denied' ? (
                   <span title={a.note}>{a.path}</span>
                 ) : (
-                  <button className="link" onClick={() => onOpenNote(a.path)} title="노트 열기">
+                  <button className="link" onClick={() => onOpenNote(a.path)} title={t('mcp.openNote')}>
                     {a.path}
                   </button>
                 )}
@@ -276,12 +282,17 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
                 {(a.action === 'create' || a.action === 'append' || a.action === 'update') && !reverted.has(`${a.t}|${a.path}`) && (
                   confirming === `${a.t}|${a.path}` ? (
                     <span className="mcp__confirm">
-                      <button className="danger" onClick={() => void revert(a)} data-testid="mcp-revert-confirm">정말 되돌리기</button>
-                      <button onClick={() => setConfirming(null)}>취소</button>
+                      <button className="danger" onClick={() => void revert(a)} data-testid="mcp-revert-confirm">{t('mcp.confirmRevert')}</button>
+                      <button onClick={() => setConfirming(null)}>{t('common.cancel')}</button>
                     </span>
                   ) : (
-                    <button className="mcp__undo" onClick={() => setConfirming(`${a.t}|${a.path}`)} data-testid="mcp-revert" title={a.action === 'create' ? '이 노트를 휴지통으로' : '이 작업 전 내용으로 복원'}>
-                      되돌리기
+                    <button
+                      className="mcp__undo"
+                      onClick={() => setConfirming(`${a.t}|${a.path}`)}
+                      data-testid="mcp-revert"
+                      title={a.action === 'create' ? t('mcp.revertCreate') : t('mcp.revertUpdate')}
+                    >
+                      {t('mcp.revert')}
                     </button>
                   )
                 )}
@@ -290,7 +301,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
           </ul>
         )}
         {message && <p className="small" role="status" data-testid="mcp-revert-msg">{message}</p>}
-        <p className="muted small">“되돌리기”는 그 뒤로 노트가 바뀌지 않았을 때만 돼요(더 최근 작업부터). 그 밖에는 노트의 “버전 기록”에서 복원하세요.</p>
+        <p className="muted small">{t('mcp.revertHint')}</p>
       </div>
     </section>
   );

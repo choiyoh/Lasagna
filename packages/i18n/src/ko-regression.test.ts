@@ -453,6 +453,37 @@ const cases: Case[] = [
     base: (n) => `sort${n}: 목록이 필요한데 날짜 이에요`,
     render: (n) => t('formula.err.needsList', { fn: `sort${n}`, type: t('formula.type.date') }),
   },
+  // L4a: MCP 설정
+  {
+    name: 'mcp.policySaved',
+    base: () => '이 설정을 바꾸면 볼트의 .nopsidian/mcp-policy.json 에 저장돼 이미 연결된 에이전트에도 다음 쓰기부터 바로 적용돼요. 쓰기 도구 없이 연결한 에이전트는 다시 연결해야 해요.',
+    render: () => t('mcp.policySaved', { file: '.nopsidian/mcp-policy.json' }),
+  },
+  {
+    name: 'mcp.fixFolderFirst',
+    base: (n) => `문제${n} 폴더를 고친 뒤 다시 켜 주세요.`,
+    render: (n) => t('mcp.fixFolderFirst', { issue: `문제${n}` }),
+  },
+  {
+    name: 'mcp.dailyAllowHint',
+    base: (n) => `켜면 일기${n}/ 도 쓰기 허용 폴더에 넣어요. 끄면 append_to_daily_note 가 forbidden-folder 로 거부돼요.`,
+    render: (n) => t('mcp.dailyAllowHint', { folder: `일기${n}` }),
+  },
+  {
+    name: 'mcp.dailyNotCovered',
+    base: (n) => `오늘의 노트 폴더(일기${n}/)가 허용 폴더에 없어요. 이대로면 오늘의 노트에 쓰기는 forbidden-folder 로 실패해요.`,
+    render: (n) => t('mcp.dailyNotCovered', { folder: `일기${n}` }),
+  },
+  {
+    name: 'mcp.reverted.trashed',
+    base: (n) => `휴지통으로 옮겼어요: a${n}.md`,
+    render: (n) => t('mcp.reverted.trashed', { path: `a${n}.md` }),
+  },
+  {
+    name: 'mcp.noServer',
+    base: () => '이 빌드에는 MCP 서버 파일이 없어요. 앱을 다시 설치하거나 개발 중이면 pnpm --filter @nopsidian/mcp build 를 실행하세요.',
+    render: () => t('mcp.noServer', { command: 'pnpm --filter @nopsidian/mcp build' }),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

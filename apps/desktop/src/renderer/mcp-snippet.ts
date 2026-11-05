@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { folderCovers, normalizeFolder } from '@nopsidian/mcp/folders';
 
 /** `mcp.info` IPC 가 돌려주는 것: 번들된 서버 경로·볼트·앱 실행 파일·패키징 여부 */
@@ -164,10 +165,10 @@ export function mcpSnippet(info: McpInfo, opts: McpSnippetOptions): McpSnippet |
       {
         id: 'claude-code',
         label: 'Claude Code',
-        target: '터미널에서 한 번 실행',
+        target: t('mcp.codeTarget'),
         format: 'bash',
         code: cli,
-        hint: '사용자 범위(-s user)로 등록돼 어느 폴더에서 연 Claude Code 에서도 보여요. 등록 확인: claude mcp list',
+        hint: t('mcp.codeHint'),
       },
       {
         id: 'claude-desktop',
@@ -175,7 +176,7 @@ export function mcpSnippet(info: McpInfo, opts: McpSnippetOptions): McpSnippet |
         target: '~/Library/Application Support/Claude/claude_desktop_config.json',
         format: 'json',
         code: json,
-        hint: '파일이 없으면 새로 만들고, 이미 있으면 mcpServers 안에 이 항목을 더해요. 저장한 뒤 Claude Desktop 을 다시 시작하세요.',
+        hint: t('mcp.desktopHint'),
       },
       {
         id: 'codex',
@@ -183,7 +184,7 @@ export function mcpSnippet(info: McpInfo, opts: McpSnippetOptions): McpSnippet |
         target: '~/.codex/config.toml',
         format: 'toml',
         code: toml,
-        hint: '기존 파일의 [mcp_servers] 항목에 이 표를 더해요. 또는 codex mcp add <이름> -- <명령> <인자…> 로도 등록할 수 있어요.',
+        hint: t('mcp.codexHint'),
       },
       {
         id: 'cursor',
@@ -191,7 +192,7 @@ export function mcpSnippet(info: McpInfo, opts: McpSnippetOptions): McpSnippet |
         target: '~/.cursor/mcp.json',
         format: 'json',
         code: mcpServers(),
-        hint: 'Cursor 설정 → MCP 에서도 같은 JSON 을 붙여 넣을 수 있어요. 프로젝트마다 쓰려면 .cursor/mcp.json 에 넣으세요.',
+        hint: t('mcp.cursorHint'),
       },
       {
         id: 'vscode',
@@ -199,7 +200,7 @@ export function mcpSnippet(info: McpInfo, opts: McpSnippetOptions): McpSnippet |
         target: '.vscode/mcp.json (워크스페이스)',
         format: 'json',
         code: vscode,
-        hint: 'VS Code 의 MCP 설정은 mcpServers 가 아니라 servers 이고 "type": "stdio" 가 필요해요. 모든 워크스페이스에서 쓰려면 명령 팔레트 → “MCP: Open User Configuration”.',
+        hint: t('mcp.vscodeHint'),
       },
       {
         id: 'gemini-cli',
@@ -207,7 +208,7 @@ export function mcpSnippet(info: McpInfo, opts: McpSnippetOptions): McpSnippet |
         target: '~/.gemini/settings.json',
         format: 'json',
         code: mcpServers(),
-        hint: '설정 파일을 저장한 뒤 Gemini CLI 를 다시 시작하세요.',
+        hint: t('mcp.geminiHint'),
       },
     ],
   };

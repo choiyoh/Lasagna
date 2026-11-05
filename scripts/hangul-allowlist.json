@@ -14,7 +14,6 @@
   "apps/desktop/src/preload/preload.ts": 1,
   "apps/desktop/src/renderer/App.tsx": 33,
   "apps/desktop/src/renderer/db/CsvImportDialog.tsx": 2,
-  "apps/desktop/src/renderer/db/dbview-host.tsx": 1,
   "apps/desktop/src/renderer/ErrorBoundary.tsx": 1,
   "apps/desktop/src/renderer/graph/node-glow.ts": 4,
   "apps/desktop/src/renderer/mcp-snippet.ts": 8,

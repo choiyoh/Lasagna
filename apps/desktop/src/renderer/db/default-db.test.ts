@@ -1,10 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '@nopsidian/i18n';
-import { defaultDb } from './default-db';
+import { defaultDb, defaultDbName } from './default-db';
 
 afterEach(() => setLocale('ko'));
 
 describe('defaultDb', () => {
+  it('새 DB 프롬프트의 기본 이름도 만드는 시점 언어를 따른다', () => {
+    setLocale('ko');
+    expect(defaultDbName()).toBe('할 일');
+    setLocale('en');
+    expect(defaultDbName()).toBe('To do');
+  });
+
   it('한국어에서는 지금까지의 기본 이름 그대로', () => {
     setLocale('ko');
     const db = defaultDb();

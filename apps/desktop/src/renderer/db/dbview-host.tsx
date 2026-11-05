@@ -5,7 +5,7 @@ import { dbEmbedSource } from '@nopsidian/core/db/embed';
 import { showTextPrompt } from '@nopsidian/editor/nops';
 import type { NopsDbViewHost } from '@nopsidian/editor/nops';
 import { EmbeddedDb, type DbEmbedHost } from './EmbeddedDb';
-import { defaultDb } from './default-db';
+import { defaultDb, defaultDbName } from './default-db';
 
 type DbInfo = Awaited<ReturnType<typeof window.nops.db.list>>[number];
 
@@ -75,7 +75,7 @@ export function createDbViewHost(host: DbEmbedHost): NopsDbViewHost {
       };
     },
     async create() {
-      const raw = await showTextPrompt(t('db.newDbName'), '할 일');
+      const raw = await showTextPrompt(t('db.newDbName'), defaultDbName());
       const name = raw?.trim().replace(/[\\/:*?"<>|]/g, ' ').trim();
       if (!name) return null;
       // 이름이 겹치면 번호를 붙인다(폴더 = 데이터베이스)

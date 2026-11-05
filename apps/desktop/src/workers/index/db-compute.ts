@@ -1,4 +1,4 @@
-import { compileFormula, evalFormula, FormulaError, type Compiled, type FDate, type FValue } from '@nopsidian/formula';
+import { compileFormula, evalFormula, formulaError, formulaErrorText, FormulaError, type Compiled, type FDate, type FValue } from '@nopsidian/formula';
 import { isRollupFn, rollupValues, type CellValue, type DateValue, type DbRow, type DbSchema, type Property } from '@nopsidian/core/db';
 
 /** 한 번의 질의 동안 쓰는 계산 문맥. 데이터베이스마다 한 번만 계산하고 결과를 나눠 쓴다. */
@@ -97,7 +97,7 @@ export class ComputeContext {
     let c = this.compiled.get(expr);
     if (!c) {
       const r = compileFormula(expr);
-      c = r.ok ? r.compiled : { error: r.error.message };
+      c = r.ok ? r.compiled : { error: formulaErrorText(r.error) };
       this.compiled.set(expr, c);
     }
     return c;
@@ -149,7 +149,7 @@ export class ComputeContext {
         row.values[name] = prop.type === 'formula' ? this.runFormula(prop.expr, out, row) : prop.type === 'rollup' ? this.runRollup(prop, out, row) : null;
       } catch (e) {
         row.values[name] = null;
-        this.fail(out, name, e instanceof FormulaError ? e.message : e instanceof Error ? e.message : String(e), row.path);
+        this.fail(out, name, formulaErrorText(e), row.path);
       }
     }
   }
@@ -163,7 +163,7 @@ export class ComputeContext {
         prop: (n) => {
           if (n === 'title') return row.title;
           const p = out.schema.properties[n];
-          if (!p) throw new FormulaError(`없는 속성: ${n}`);
+          if (!p) throw formulaError('formula.err.missingProperty', { name: n });
           return cellToFormula(p, row.values[n] ?? null);
         },
       }),
@@ -172,8 +172,8 @@ export class ComputeContext {
 
   private runRollup(p: Extract<Property, { type: 'rollup' }>, out: ComputedDb, row: DbRow): CellValue {
     const rel = out.schema.properties[p.relation];
-    if (!rel || rel.type !== 'relation') throw new FormulaError(`관계 속성이 아니에요: ${p.relation}`);
-    if (!isRollupFn(p.fn)) throw new FormulaError(`지원하지 않는 집계: ${p.fn}`);
+    if (!rel || rel.type !== 'relation') throw formulaError('formula.err.notRelation', { name: p.relation });
+    if (!isRollupFn(p.fn)) throw formulaError('formula.err.unsupportedRollup', { fn: p.fn });
     const raws = (row.values[p.relation] as string[] | null) ?? [];
     const values: CellValue[] = [];
     for (const raw of raws) {

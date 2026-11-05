@@ -202,6 +202,23 @@ test('English smoke: database toolbar, filter, properties and templates have no 
   expect(await props.innerText()).not.toMatch(HANGUL);
   await props.getByRole('button', { name: 'Close properties' }).click();
 
+  // 수식 속성: 오류·속성 표시가 영어다(문구는 표시 시점 번역)
+  await screen.getByRole('button', { name: 'Properties', exact: true }).click();
+  const props2 = page.getByRole('dialog', { name: 'Properties' });
+  await props2.getByLabel('New property name').fill('Calc');
+  await props2.getByLabel('New property type').selectOption('formula');
+  await props2.getByRole('button', { name: 'Add', exact: true }).click();
+  const formula = props2.getByLabel('Calc formula');
+  await expect(formula).toBeVisible();
+  await formula.fill('1 +');
+  const details = props2.locator('.dbprops__details');
+  await expect(details).toContainText('The formula ended unexpectedly');
+  expect(await details.innerText()).not.toMatch(HANGUL);
+  await formula.fill('prop("Score") * 2');
+  await expect(details).toContainText('Uses: Score');
+  expect(await details.innerText()).not.toMatch(HANGUL);
+  await props2.getByRole('button', { name: 'Close properties' }).click();
+
   // 템플릿: 제목·안내 문구가 영어다
   await screen.getByRole('button', { name: 'Templates', exact: true }).click();
   const templates = page.getByRole('dialog', { name: 'Templates' });

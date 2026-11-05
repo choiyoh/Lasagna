@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { REGISTRY } from './eval.js';
 
 export interface Suggestion {
@@ -18,7 +19,12 @@ export interface SuggestResult {
 
 const WORD = /[\p{L}\p{N}_$]*$/u;
 
-const arity = (min: number, max: number) => (min === max ? `${min}개` : max === Infinity ? `${min}개 이상` : `${min}~${max}개`);
+const arity = (min: number, max: number) =>
+  min === max
+    ? t('formula.suggest.arity', { n: min })
+    : max === Infinity
+      ? t('formula.suggest.arityAtLeast', { min })
+      : t('formula.suggest.arityBetween', { min, max });
 
 /**
  * 커서 위치에서 쓸 만한 자동 완성 후보.
@@ -36,7 +42,7 @@ export function suggestAt(src: string, caret: number, props: string[], limit = 8
     const items = props
       .filter((p) => p.toLowerCase().includes(typed.toLowerCase()))
       .slice(0, limit)
-      .map((p) => ({ label: p, insert: closing ? `${p}${inProp[1]})` : p, detail: '속성', kind: 'property' as const }));
+      .map((p) => ({ label: p, insert: closing ? `${p}${inProp[1]})` : p, detail: t('formula.suggest.property'), kind: 'property' as const }));
     return items.length ? { from, to: caret, items } : null;
   }
   const word = WORD.exec(before)![0];

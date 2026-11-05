@@ -412,6 +412,37 @@ const cases: Case[] = [
     base: () => '제목(#)을 쓰면 여기에 목차가 생겨요',
     render: () => t('editor.toc.empty'),
   },
+  // L3b: 수식
+  {
+    name: 'formula.err.unknownName',
+    base: (n) => `알 수 없는 이름: 이름${n}`,
+    render: (n) => t('formula.err.unknownName', { name: `이름${n}` }),
+  },
+  {
+    name: 'formula.err.unknownNameCallback',
+    base: (n) => `알 수 없는 이름: 이름${n} (map·filter 같은 함수 안에서만 쓸 수 있어요)`,
+    render: (n) => t('formula.err.unknownNameCallback', { name: `이름${n}` }),
+  },
+  {
+    name: 'formula.err.arity',
+    base: (n) => `round() 는 인자가 1~${n}개 필요해요(지금 ${n}개)`,
+    render: (n) => t('formula.err.arity', { name: 'round', range: `1~${n}`, count: n }),
+  },
+  {
+    name: 'formula.err.needsNumber',
+    base: (n) => `${n}: 숫자가 필요한데 문자열 이에요`,
+    render: (n) => t('formula.err.needsNumber', { what: String(n), type: t('formula.type.string') }),
+  },
+  {
+    name: 'formula.parse.dotCall',
+    base: (n) => `\`fn${n}\` 뒤에 ( 가 필요해요 — 속성 접근은 지원하지 않아요`,
+    render: (n) => t('formula.parse.dotCall', { name: `fn${n}` }),
+  },
+  {
+    name: 'formula.err.needsList',
+    base: (n) => `sort${n}: 목록이 필요한데 날짜 이에요`,
+    render: (n) => t('formula.err.needsList', { fn: `sort${n}`, type: t('formula.type.date') }),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

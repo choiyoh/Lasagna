@@ -1,5 +1,5 @@
 import type { BinaryOp, Node } from './ast.js';
-import { FormulaError } from './value.js';
+import { formulaError } from './value.js';
 
 type Tok =
   | { t: 'num'; v: number; pos: number; end: number }
@@ -35,7 +35,7 @@ function lex(src: string): Tok[] {
       let s = '';
       i++;
       for (;;) {
-        if (i >= src.length) throw new FormulaError('문자열이 닫히지 않았어요', pos, src.length);
+        if (i >= src.length) throw formulaError('formula.parse.unclosedString', {}, pos, src.length);
         const ch = src[i]!;
         if (ch === c) {
           i++;
@@ -43,7 +43,7 @@ function lex(src: string): Tok[] {
         }
         if (ch === '\\') {
           const e = src[i + 1];
-          if (e === undefined) throw new FormulaError('문자열이 닫히지 않았어요', pos, src.length);
+          if (e === undefined) throw formulaError('formula.parse.unclosedString', {}, pos, src.length);
           s += ESCAPES[e] ?? e;
           i += 2;
         } else {
@@ -72,7 +72,7 @@ function lex(src: string): Tok[] {
       i++;
       continue;
     }
-    throw new FormulaError(`알 수 없는 문자: ${c}`, pos, pos + 1);
+    throw formulaError('formula.parse.unknownChar', { char: c }, pos, pos + 1);
   }
   out.push({ t: 'eof', pos: src.length, end: src.length });
   return out;
@@ -114,16 +114,17 @@ class Parser {
   private isOp(v: string): boolean {
     return this.cur.t === 'op' && this.cur.v === v;
   }
-  private expectOp(v: string, what: string): Tok {
-    if (!this.isOp(v)) throw new FormulaError(`${what}`, this.cur.pos, Math.max(this.cur.end, this.cur.pos + 1));
+  private expectOp(v: string, key: Parameters<typeof formulaError>[0]): Tok {
+    if (!this.isOp(v)) throw formulaError(key, {}, this.cur.pos, Math.max(this.cur.end, this.cur.pos + 1));
     return this.next();
   }
 
   parseAll(): Node {
-    if ((this.cur as Tok).t === 'eof') throw new FormulaError('수식이 비어 있어요', 0, 0);
+    if ((this.cur as Tok).t === 'eof') throw formulaError('formula.parse.empty', {}, 0, 0);
     const n = this.expr(0);
     const rest = this.cur as Tok;
-    if (rest.t !== 'eof') throw new FormulaError(rest.t === 'op' && rest.v === ')' ? '짝이 맞지 않는 )' : '여기서는 수식이 끝나야 해요', rest.pos, rest.end);
+    if (rest.t !== 'eof')
+      throw formulaError(rest.t === 'op' && rest.v === ')' ? 'formula.parse.unmatchedParen' : 'formula.parse.mustEnd', {}, rest.pos, rest.end);
     return n;
   }
 
@@ -145,7 +146,7 @@ class Parser {
     if (minPrec === 0 && this.isOp('?')) {
       this.next();
       const then = this.expr(0);
-      this.expectOp(':', '`?` 뒤에는 `:` 로 나뉜 두 번째 값이 필요해요');
+      this.expectOp(':', 'formula.parse.ternaryColon');
       const otherwise = this.expr(0);
       return { kind: 'cond', test: left, then, otherwise, pos: left.pos, end: otherwise.end };
     }
@@ -167,9 +168,9 @@ class Parser {
     while (this.isOp('.')) {
       this.next();
       const id = this.cur;
-      if (id.t !== 'id') throw new FormulaError('`.` 뒤에는 함수 이름이 필요해요', id.pos, Math.max(id.end, id.pos + 1));
+      if (id.t !== 'id') throw formulaError('formula.parse.dotName', {}, id.pos, Math.max(id.end, id.pos + 1));
       this.next();
-      if (!this.isOp('(')) throw new FormulaError(`\`${id.v}\` 뒤에 ( 가 필요해요 — 속성 접근은 지원하지 않아요`, id.pos, id.end);
+      if (!this.isOp('(')) throw formulaError('formula.parse.dotCall', { name: id.v }, id.pos, id.end);
       const { args, end } = this.args();
       n = { kind: 'method', target: n, name: id.v, args, pos: n.pos, end };
     }
@@ -177,7 +178,7 @@ class Parser {
   }
 
   private args(): { args: Node[]; end: number } {
-    this.expectOp('(', '( 가 필요해요');
+    this.expectOp('(', 'formula.parse.needParen');
     const args: Node[] = [];
     if (!this.isOp(')')) {
       for (;;) {
@@ -189,7 +190,7 @@ class Parser {
         break;
       }
     }
-    const close = this.expectOp(')', '인자 목록은 ) 로 닫아야 해요');
+    const close = this.expectOp(')', 'formula.parse.closeArgs');
     return { args, end: close.end };
   }
 
@@ -212,7 +213,7 @@ class Parser {
       case 'op': {
         if (t.v === '(') {
           const inner = this.expr(0);
-          this.expectOp(')', '( 를 ) 로 닫아야 해요');
+          this.expectOp(')', 'formula.parse.closeParen');
           return inner;
         }
         if (t.v === '[') {
@@ -227,13 +228,13 @@ class Parser {
               break;
             }
           }
-          const close = this.expectOp(']', '목록은 ] 로 닫아야 해요');
+          const close = this.expectOp(']', 'formula.parse.closeList');
           return { kind: 'list', items, pos: t.pos, end: close.end };
         }
-        throw new FormulaError(`여기에는 값이 와야 해요: ${t.v}`, t.pos, t.end);
+        throw formulaError('formula.parse.valueExpected', { value: t.v }, t.pos, t.end);
       }
       case 'eof':
-        throw new FormulaError('수식이 갑자기 끝났어요', this.src.length, this.src.length);
+        throw formulaError('formula.parse.unexpectedEnd', {}, this.src.length, this.src.length);
     }
   }
 }

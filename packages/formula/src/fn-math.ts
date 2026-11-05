@@ -1,17 +1,16 @@
 import type { FunctionDef } from './registry.js';
-import { FormulaError, typeOf, type FValue } from './value.js';
+import { formulaError, typeLabel, typeOf, type FValue } from './value.js';
 
 /** 함수 라이브러리(math) — 수학·집계. 모든 함수는 순수하고 결정적이다(`random()` 은 없다). */
 export const MATH_FNS: Record<string, FunctionDef> = {};
 
-const typeName = (v: FValue): string =>
-  ({ null: '빈 값', number: '숫자', string: '문자열', boolean: '불리언', date: '날짜', list: '목록' })[typeOf(v)];
+const typeName = (v: FValue): string => typeLabel(typeOf(v));
 
 /** 인자를 숫자로. 빈 값은 0, 숫자가 아니면 오류. */
 function num(v: FValue, what: string): number {
   if (v === null) return 0;
   if (typeof v === 'number') return v;
-  throw new FormulaError(`${what}: 숫자가 필요한데 ${typeName(v)} 이에요`);
+  throw formulaError('formula.err.needsNumber', { what, type: typeName(v) });
 }
 
 /** 인자 하나짜리 숫자 함수. */
@@ -32,7 +31,7 @@ function collect(args: FValue[], name: string): number[] {
       out.push(v);
       return;
     }
-    throw new FormulaError(`${name}: 숫자가 아닌 ${typeName(v)} 이 있어요`);
+    throw formulaError('formula.err.nonNumericItem', { name, type: typeName(v) });
   };
   for (const a of args) walk(a);
   return out;
@@ -59,19 +58,19 @@ Object.assign(MATH_FNS, {
   exp: unaryFn('exp', Math.exp),
   sign: unaryFn('sign', Math.sign),
   sqrt: unaryFn('sqrt', (x) => {
-    if (x < 0) throw new FormulaError('sqrt: 음수의 제곱근은 정의되지 않아요');
+    if (x < 0) throw formulaError('formula.err.sqrtDomain');
     return Math.sqrt(x);
   }),
   ln: unaryFn('ln', (x) => {
-    if (x <= 0) throw new FormulaError('ln: 0 이하의 로그는 정의되지 않아요');
+    if (x <= 0) throw formulaError('formula.err.lnDomain');
     return Math.log(x);
   }),
   log10: unaryFn('log10', (x) => {
-    if (x <= 0) throw new FormulaError('log10: 0 이하의 로그는 정의되지 않아요');
+    if (x <= 0) throw formulaError('formula.err.log10Domain');
     return Math.log10(x);
   }),
   log2: unaryFn('log2', (x) => {
-    if (x <= 0) throw new FormulaError('log2: 0 이하의 로그는 정의되지 않아요');
+    if (x <= 0) throw formulaError('formula.err.log2Domain');
     return Math.log2(x);
   }),
 
@@ -82,7 +81,7 @@ Object.assign(MATH_FNS, {
     impl: (args) => {
       const x = num(args[0]!, 'round');
       const d = args.length > 1 ? num(args[1]!, 'round') : 0;
-      if (!Number.isInteger(d)) throw new FormulaError('round: 자릿수는 정수여야 해요');
+      if (!Number.isInteger(d)) throw formulaError('formula.err.roundDigits');
       return roundHalfAway(x, d);
     },
   },
@@ -92,7 +91,7 @@ Object.assign(MATH_FNS, {
     max: 2,
     impl: (args) => {
       const v = num(args[0]!, 'pow') ** num(args[1]!, 'pow');
-      if (!Number.isFinite(v)) throw new FormulaError('pow: 계산 결과가 숫자가 아니에요');
+      if (!Number.isFinite(v)) throw formulaError('formula.err.powResult');
       return v;
     },
   },
@@ -104,7 +103,7 @@ Object.assign(MATH_FNS, {
     impl: (args) => {
       const a = num(args[0]!, 'mod');
       const b = num(args[1]!, 'mod');
-      if (b === 0) throw new FormulaError('0으로 나눌 수 없어요');
+      if (b === 0) throw formulaError('formula.err.divideByZero');
       return a % b;
     },
   },
@@ -131,7 +130,7 @@ Object.assign(MATH_FNS, {
       const x = num(args[0]!, 'clamp');
       const lo = num(args[1]!, 'clamp');
       const hi = num(args[2]!, 'clamp');
-      if (lo > hi) throw new FormulaError('clamp: 최소값이 최대값보다 클 수 없어요');
+      if (lo > hi) throw formulaError('formula.err.clampOrder');
       return Math.min(Math.max(x, lo), hi);
     },
   },

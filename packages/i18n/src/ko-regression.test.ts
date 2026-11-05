@@ -299,6 +299,32 @@ const cases: Case[] = [
     base: (n) => `템플릿${n} 기본 템플릿`,
     render: (n) => t('dbtemplate.defaultAria', { title: `템플릿${n}` }),
   },
+  // L2b-graph: 그래프 통계·제안 개수 단위
+  {
+    name: 'graph.stats.nodes',
+    base: (n) => `${n}개 노드`,
+    render: (n) => tPlural('graph.stats.nodes', n),
+  },
+  {
+    name: 'graph.stats.nodesOf',
+    base: (n, m) => `${m} / ${n}개 노드`,
+    render: (n, m) => tPlural('graph.stats.nodesOf', n, { matched: m }),
+  },
+  {
+    name: 'graph.stats.links',
+    base: (n) => `${n}개 링크`,
+    render: (n) => tPlural('graph.stats.links', n),
+  },
+  {
+    name: 'graph.stats.layouting',
+    base: () => ' · 배치 중…',
+    render: () => t('graph.stats.layouting'),
+  },
+  {
+    name: 'empty.suggestionCount.rows',
+    base: (n) => `${n}개`,
+    render: (n) => tPlural('empty.suggestionCount.rows', n),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

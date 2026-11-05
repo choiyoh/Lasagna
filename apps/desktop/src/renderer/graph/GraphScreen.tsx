@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '@nopsidian/i18n';
 import type { GraphSettings } from '@nopsidian/ipc-contract';
 import { useGraphData } from './graph-data';
 import { GraphView } from './GraphView';
@@ -89,19 +90,19 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
   return (
     <div className="graphscreen" data-testid="graph-screen">
       <div className="graphscreen__bar">
-        <strong>그래프</strong>
+        <strong>{t('graph.title')}</strong>
         <input
           className="graphscreen__filter"
-          placeholder={filterFocused ? '필터: 단어 tag:#x path:폴더 -제외' : '필터 없음'}
+          placeholder={filterFocused ? t('graph.filterPlaceholderOn') : t('graph.filterPlaceholder')}
           value={settings.filter}
           onChange={(e) => patch({ filter: e.target.value })}
           onFocus={() => setFilterFocused(true)}
           onBlur={() => setFilterFocused(false)}
-          aria-label="그래프 필터"
+          aria-label={t('graph.filterAria')}
         />
         <div className="graphscreen__find">
           <input
-            placeholder="노드 찾기"
+            placeholder={t('graph.findPlaceholder')}
             value={find}
             onChange={(e) => setFind(e.target.value)}
             onKeyDown={(e) => {
@@ -112,10 +113,10 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
                 setFind('');
               }
             }}
-            aria-label="노드 찾기"
+            aria-label={t('graph.findPlaceholder')}
           />
           {matches.length > 0 && (
-            <ul className="graphscreen__matches" role="listbox" aria-label="찾은 노드">
+            <ul className="graphscreen__matches" role="listbox" aria-label={t('graph.matches')}>
               {matches.map((n) => (
                 <li key={n.id}>
                   <button role="option" aria-selected={false} onMouseDown={(e) => e.preventDefault()} onClick={() => goTo(n.id)}>
@@ -126,30 +127,30 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
             </ul>
           )}
         </div>
-        <button onClick={onClose} title="노트로 돌아가기 (Esc)">
-          닫기
+        <button onClick={onClose} title={t('graph.backHint')}>
+          {t('db.close')}
         </button>
       </div>
       <div className="graphscreen__body">
         <aside className="graphscreen__side">
           <label>
-            <input type="checkbox" checked={includeTags} onChange={(e) => patch({ includeTags: e.target.checked })} /> 태그
+            <input type="checkbox" checked={includeTags} onChange={(e) => patch({ includeTags: e.target.checked })} /> {t('graph.tags')}
           </label>
           <label>
-            <input type="checkbox" checked={includeUnresolved} onChange={(e) => patch({ includeUnresolved: e.target.checked })} /> 미해결 링크
+            <input type="checkbox" checked={includeUnresolved} onChange={(e) => patch({ includeUnresolved: e.target.checked })} /> {t('graph.unresolved')}
           </label>
           <label>
-            <input type="checkbox" checked={includeOrphans} onChange={(e) => patch({ includeOrphans: e.target.checked })} /> 연결 없는 노트
+            <input type="checkbox" checked={includeOrphans} onChange={(e) => patch({ includeOrphans: e.target.checked })} /> {t('graph.orphans')}
           </label>
           <label>
-            <input type="checkbox" checked={settings.arrows} onChange={(e) => patch({ arrows: e.target.checked })} /> 화살표
+            <input type="checkbox" checked={settings.arrows} onChange={(e) => patch({ arrows: e.target.checked })} /> {t('graph.arrows')}
           </label>
-          <h4>힘</h4>
+          <h4>{t('graph.forces')}</h4>
           {(
             [
-              ['gravity', '중심력'],
-              ['repulsion', '반발력'],
-              ['linkDistance', '링크 거리'],
+              ['gravity', t('graph.force.gravity')],
+              ['repulsion', t('graph.force.repulsion')],
+              ['linkDistance', t('graph.force.linkDistance')],
             ] as const
           ).map(([k, label]) => (
             <label key={k} className="graphscreen__slider">
@@ -157,7 +158,7 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
               <input type="range" min={0} max={1} step={0.05} value={settings.forces[k]} onChange={(e) => force(k, Number(e.target.value))} aria-label={label} />
             </label>
           ))}
-          <h4>색 그룹</h4>
+          <h4>{t('graph.colorGroups')}</h4>
           {settings.groups.map((g, i) => (
             <div key={i} className="graphscreen__groupwrap">
               <div className="graphscreen__group">
@@ -166,25 +167,25 @@ export function GraphScreen({ vaultId, current, onOpen, onClose }: ScreenProps) 
                   value={g.color}
                   disabled={!g.query.trim()}
                   onChange={(e) => patch({ groups: settings.groups.map((x, j) => (j === i ? { ...x, color: e.target.value } : x)) })}
-                  aria-label="그룹 색"
+                  aria-label={t('graph.groupColor')}
                 />
                 <input
                   value={g.query}
                   placeholder="tag:#x"
                   onChange={(e) => patch({ groups: settings.groups.map((x, j) => (j === i ? { ...x, query: e.target.value } : x)) })}
-                  aria-label="그룹 질의"
+                  aria-label={t('graph.groupQuery')}
                 />
-                <button onClick={() => patch({ groups: settings.groups.filter((_, j) => j !== i) })} aria-label="그룹 삭제">
+                <button onClick={() => patch({ groups: settings.groups.filter((_, j) => j !== i) })} aria-label={t('graph.groupDelete')}>
                   ×
                 </button>
               </div>
-              {!g.query.trim() && <p className="muted graphscreen__grouphint">조건을 입력하면 이 색이 적용돼요</p>}
+              {!g.query.trim() && <p className="muted graphscreen__grouphint">{t('graph.groupHint')}</p>}
             </div>
           ))}
           <button
             onClick={() => patch({ groups: [...settings.groups, { query: '', color: GROUP_PALETTE[settings.groups.length % GROUP_PALETTE.length]! }].slice(0, 20) })}
           >
-            + 그룹 추가
+            {t('graph.addGroup')}
           </button>
         </aside>
         {settingsReady && layoutLoaded && <GraphView data={data} settings={settings} current={current} onOpen={onOpen} testId="graph-global" cacheKey={cacheKey} focus={focus} onClearFilter={() => patch({ filter: '' })} />}
@@ -207,17 +208,17 @@ export function LocalGraph({ path, onOpen }: LocalProps) {
     <div className="localgraph" data-testid="local-graph">
       <div className="localgraph__bar">
         <label>
-          깊이{' '}
-          <select value={depth} onChange={(e) => setDepth(Number(e.target.value))} aria-label="깊이">
+          {t('graph.depth')}{' '}
+          <select value={depth} onChange={(e) => setDepth(Number(e.target.value))} aria-label={t('graph.depth')}>
             {[1, 2, 3, 4, 5].map((d) => (
               <option key={d}>{d}</option>
             ))}
           </select>
         </label>
-        <select value={direction} onChange={(e) => setDirection(e.target.value as typeof direction)} aria-label="방향">
-          <option value="both">양방향</option>
-          <option value="out">나가는</option>
-          <option value="in">들어오는</option>
+        <select value={direction} onChange={(e) => setDirection(e.target.value as typeof direction)} aria-label={t('graph.direction')}>
+          <option value="both">{t('graph.dirBoth')}</option>
+          <option value="out">{t('graph.dirOut')}</option>
+          <option value="in">{t('graph.dirIn')}</option>
         </select>
       </div>
       <GraphView data={data} settings={DEFAULT_GRAPH_SETTINGS} current={path} onOpen={onOpen} testId="graph-local" />

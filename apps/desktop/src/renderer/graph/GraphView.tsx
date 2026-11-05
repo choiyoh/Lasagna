@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '@nopsidian/i18n';
 import Graph from 'graphology';
 import Sigma from 'sigma';
 import { EdgeArrowProgram, EdgeRectangleProgram } from 'sigma/rendering';
@@ -516,8 +517,8 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     <div className="graphview" data-testid={testId}>
       {glFailure ? (
         <div className="graphview__fallback" role="status" data-testid={`${testId}-fallback`}>
-          <strong>WebGL을 사용할 수 없어요</strong>
-          <p className="muted small">이 컴퓨터(또는 원격·가상 환경)에서는 그래프를 그릴 수 없어요. 노트와 링크 기능은 그대로 쓸 수 있어요.</p>
+          <strong>{t('graph.webglUnavailable')}</strong>
+          <p className="muted small">{t('graph.webglHint')}</p>
           {glFailure.message && (
             <pre className="graphview__error muted small">
               <code>{glFailure.message}</code>
@@ -530,15 +531,15 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
           {filteredOut && (
             <div className="graphview__empty">
               <EmptyState
-                title="조건에 맞는 노드가 없어요"
-                description="필터를 지우거나 조건을 바꿔 보세요."
+                title={t('graph.noMatchNodes')}
+                description={t('graph.noMatchHint')}
                 onReset={onClearFilter}
-                resetLabel="필터 지우기"
+                resetLabel={t('db.clearFilter')}
               />
             </div>
           )}
           <span className="graphview__stats muted small" data-testid={`${testId}-stats`}>
-            {slow && <i className="graphview__spin" role="img" aria-label="배치 중" />}
+            {slow && <i className="graphview__spin" role="img" aria-label={t('graph.settling')} />}
             {stats}
           </span>
         </>

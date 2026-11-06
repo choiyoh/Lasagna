@@ -603,7 +603,17 @@ export class SyncController {
         const call = this.calls.get(m.id);
         if (!call) return;
         this.calls.delete(m.id);
-        if ('error' in m) call.reject(Object.assign(new Error(m.error), { kind: m.kind, key: m.key, code: m.code, status: m.status, reason: m.reason }));
+        if ('error' in m)
+          call.reject(
+            Object.assign(new Error(m.messageKey ? t(m.messageKey as never, m.messageParams ?? {}) : m.error), {
+              kind: m.kind,
+              key: m.key,
+              code: m.code,
+              status: m.status,
+              reason: m.reason,
+              ...(m.messageKey ? { messageKey: m.messageKey, messageParams: m.messageParams } : {}),
+            }),
+          );
         else call.resolve(m.result as never);
       } else if (m.type === 'tokenError') {
         this.device.lastRefreshFailure = syncFailureFor({ key: m.key, code: m.code, kind: m.kind, status: m.status, reason: m.reason, message: m.error }, m.at);

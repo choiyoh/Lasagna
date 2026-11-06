@@ -4,13 +4,14 @@ import path from 'node:path';
 import { setLocale } from '@nopsidian/i18n';
 import { afterEach, describe, expect, it } from 'vitest';
 import { addComment } from './comments.js';
+import { errorText } from './errors.js';
 import { csvToRows, guessColumns } from './db/csv.js';
 import { parseDbEmbed } from './db/embed.js';
 import { renameFrontmatterKey, setFrontmatter } from './db/yaml-edit.js';
 import { readHistory } from './history.js';
 import { parseNote, replaceBlock } from './markdown/parse.js';
 import { applyEdits } from './markdown/link-spans.js';
-import { resolveInVault } from './vault-path.js';
+import { PathEscapeError, resolveInVault } from './vault-path.js';
 
 // 코어 오류 문구가 지금 언어로 나오는지 **실제 throw 경로**로 확인한다(ko 문구는 base 그대로).
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
@@ -25,11 +26,12 @@ afterEach(() => {
   dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true }));
 });
 
+/** 던진 오류를 **표시 시점**에 번역한다(던질 때는 언어를 모른다). */
 const message = (fn: () => unknown): string => {
   try {
     fn();
   } catch (e) {
-    return e instanceof Error ? e.message : String(e);
+    return errorText(e);
   }
   throw new Error('threw nothing');
 };
@@ -74,6 +76,28 @@ const CASES: { name: string; run: () => string; ko: string; en: string }[] = [
 ];
 
 describe('core 오류 문구의 언어', () => {
+  it('던진 오류는 표시 시점 언어를 따른다(ko 로 던져 en 에서 표시)', () => {
+    setLocale('ko');
+    const err = (() => {
+      try {
+        addComment(vault(), 'a.md', { author: 'me', text: ' ' });
+      } catch (e) {
+        return e;
+      }
+      throw new Error('threw nothing');
+    })();
+    // 던질 때 문구를 만들지 않는다(코드만)
+    expect((err as { message: string }).message).toBe('core.err.commentEmpty');
+    setLocale('en');
+    expect(errorText(err)).toBe('The comment is empty');
+    setLocale('ko');
+    expect(errorText(err)).toBe('댓글 내용이 비어 있어요');
+    setLocale('en');
+    expect(errorText(new PathEscapeError('../x'))).toBe('Path outside the vault: ../x');
+    setLocale('ko');
+    expect(errorText(new PathEscapeError('../x'))).toBe('볼트 밖으로 벗어나는 경로: ../x');
+  });
+
   it('ko 는 base 와 같고 en 에는 한글이 없다', () => {
     for (const c of CASES) {
       setLocale('ko');

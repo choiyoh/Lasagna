@@ -916,6 +916,7 @@ export const ko = {
   'datepicker.rangeLabel': '끝 날짜',
 
   // 데이터 기본값 — 만드는 시점의 앱 언어를 따른다(저장된 뒤에는 바꾸지 않는다)
+  'default.dbViewName': '보기',
   'default.untitled': '제목 없음',
   'default.untitledN': '제목 없음 {n}',
   'default.csvColumn': '열{n}',

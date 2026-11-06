@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { errorText } from './errors.js';
 import { COMMENTS_DIR, addComment, listComments, relocateComments, removeComment, setCommentResolved } from './comments.js';
 
 const dirs: string[] = [];
@@ -29,7 +30,13 @@ describe('comments', () => {
   it('빈 댓글·너무 긴 댓글은 거부한다', () => {
     const root = vault();
     expect(() => addComment(root, 'a.md', { author: '나', text: '   ' })).toThrow();
-    expect(() => addComment(root, 'a.md', { author: '나', text: 'x'.repeat(5001) })).toThrow(/너무 길어요/);
+    // 코드+params 로 던지고, 문구는 표시 시점에 만든다
+    try {
+      addComment(root, 'a.md', { author: '나', text: 'x'.repeat(5001) });
+    } catch (e) {
+      expect(e).toMatchObject({ key: 'core.err.commentTooLong', params: { max: 5000 } });
+      expect(errorText(e)).toMatch(/너무 길어요/);
+    }
   });
   it('해결·다시 열기·삭제, 마지막 댓글을 지우면 파일도 없어진다', () => {
     const root = vault();

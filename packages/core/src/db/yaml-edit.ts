@@ -1,4 +1,5 @@
 import { t } from '@nopsidian/i18n';
+import { CodedError } from '../errors.js';
 import { parseDocument, stringify, Pair, Scalar, YAMLMap, YAMLSeq } from 'yaml';
 import type { Document } from 'yaml';
 import { splitFrontmatter } from '../markdown/frontmatter.js';
@@ -54,8 +55,10 @@ function deepEq(a: unknown, b: unknown): boolean {
   return false;
 }
 
-function yamlErrorMessage(doc: Document): string {
-  return t('db.issue.yaml', { message: doc.errors[0]?.message ?? t('core.err.unknown') });
+/** YAML 이 깨졌다는 오류(코드+params). 파서 메시지 자체는 데이터라 그대로 넣는다. */
+function yamlError(doc: Document): CodedError {
+  const message = doc.errors[0]?.message;
+  return message === undefined ? new CodedError('core.err.unknown') : new CodedError('db.issue.yaml', { message });
 }
 
 /**
@@ -78,11 +81,11 @@ function rootMap(doc: Doc): ParsedNodeMap {
 /** YAML 텍스트를 읽어 최상위 맵 + 골격으로 나눈다. 비었으면 빈 문서, YAML 이 깨졌으면 Error. */
 function openDb(yamlText: string): DbDoc {
   const headDoc = parseDocument(yamlText);
-  if (headDoc.errors.length > 0) throw new Error(yamlErrorMessage(headDoc));
+  if (headDoc.errors.length > 0) throw yamlError(headDoc);
 
   const yamlPart = sliceTopMap(yamlText);
   const doc = parseDocument(yamlPart) as Doc;
-  if (doc.errors.length > 0) throw new Error(yamlErrorMessage(doc));
+  if (doc.errors.length > 0) throw yamlError(doc);
   rootMap(doc); // 빈 문서(빈 문자열·주석만·`---` 만)는 빈 맵으로 시작한다.
 
   const headLen = yamlPart ? yamlText.indexOf(yamlPart) : yamlText.length;
@@ -413,7 +416,7 @@ function viewsOf(doc: Doc): YAMLSeq<unknown> {
  */
 export function setFrontmatter(content: string, changes: Record<string, unknown>): string {
   const parts = splitFrontmatter(content);
-  if (parts?.error) throw new Error(t('db.issue.yaml', { message: parts.error }));
+  if (parts?.error) throw new CodedError('db.issue.yaml', { message: parts.error });
 
   const closing = parts ? parts.raw.lastIndexOf('---') : 0;
   const eol = parts ? (parts.raw.startsWith('---\r\n') ? '\r\n' : '\n') : detectEol(content);
@@ -423,7 +426,7 @@ export function setFrontmatter(content: string, changes: Record<string, unknown>
   const yamlPart = parts ? sliceTopMap(oldYaml) : '';
   const headText = oldYaml.slice(0, yamlPart ? oldYaml.indexOf(yamlPart) : 0);
   const doc = parseDocument(yamlPart) as Doc;
-  if (doc.errors.length > 0) throw new Error(yamlErrorMessage(doc));
+  if (doc.errors.length > 0) throw yamlError(doc);
   const map = rootMap(doc);
 
   let changed = false;
@@ -455,19 +458,19 @@ export function setFrontmatter(content: string, changes: Record<string, unknown>
 export function renameFrontmatterKey(content: string, from: string, to: string): string {
   if (from === to) return content;
   const parts = splitFrontmatter(content);
-  if (parts?.error) throw new Error(t('db.issue.yaml', { message: parts.error }));
+  if (parts?.error) throw new CodedError('db.issue.yaml', { message: parts.error });
   if (!parts) return content;
 
   const oldYaml = parts.raw.slice(parts.raw.indexOf('\n') + 1, parts.raw.lastIndexOf('---'));
   const yamlPart = sliceTopMap(oldYaml);
   const doc = parseDocument(yamlPart);
-  if (doc.errors.length > 0) throw new Error(yamlErrorMessage(doc));
+  if (doc.errors.length > 0) throw yamlError(doc);
   if (!doc.contents) return content;
   const map = doc.contents as ParsedNodeMap;
 
   const pair = map.items.find((it) => keyOf(it) === from);
   if (!pair) return content;
-  if (map.items.some((it) => keyOf(it) === to)) throw new Error(t('core.err.keyExists', { key: to }));
+  if (map.items.some((it) => keyOf(it) === to)) throw new CodedError('core.err.keyExists', { key: to });
   pair.key = sc(to);
 
   const eol = parts.raw.startsWith('---\r\n') ? '\r\n' : '\n';
@@ -622,7 +625,7 @@ export function newDbYaml(title: string): string {
     title,
     rowsFolder: '.',
     properties: {},
-    views: [{ id: 'v1', name: t('db.view.table'), type: 'table', sort: [] }],
+    views: [{ id: 'v1', name: t('default.dbViewName'), type: 'table', sort: [] }],
     templates: [],
   };
   return stringify(schema, { lineWidth: 0 });

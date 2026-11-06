@@ -111,7 +111,7 @@ export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost
     }
   };
 
-  if (!parsed.ok) return <p className="warn small pad" role="alert">⚠ {parsed.error}</p>;
+  if (!parsed.ok) return <p className="warn small pad" role="alert">⚠ {parsed.key ? t(parsed.key, parsed.params ?? {}) : parsed.error}</p>;
   if (!data) return <p className={error ? 'warn small pad' : 'muted small pad'} role={error ? 'alert' : undefined}>{error ? `⚠ ${error}` : t('db.loading')}</p>;
 
   const flat = data.groups ? data.groups.flatMap((g) => g.rows) : data.rows;

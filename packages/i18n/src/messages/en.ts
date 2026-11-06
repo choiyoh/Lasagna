@@ -915,6 +915,7 @@ export const en: Record<MessageKey, string> = {
   'datepicker.rangeLabel': 'Date range',
 
   // Data defaults — they follow the app language when created (and are never rewritten afterwards)
+  'default.dbViewName': 'View',
   'default.untitled': 'Untitled',
   'default.untitledN': 'Untitled {n}',
   'default.csvColumn': 'Column {n}',

@@ -10,7 +10,7 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
-import { t } from '@nopsidian/i18n';
+import { t, type MessageKey } from '@nopsidian/i18n';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 /** Drive 앱이 쓰는 최소 권한 — 앱이 직접 만들거나 연 파일만 접근할 수 있다. */
@@ -73,18 +73,22 @@ export function buildAuthUrl(a: {
 /** 인증 흐름이 실패했을 때(OAuth 오류 응답 포함). `code` 는 Google 이 준 `error` 값. */
 export class OAuthError extends Error {
   constructor(
-    message: string,
+    /** 번역 전 코드(사전 키). 표시하는 쪽이 지금 언어로 번역한다. */
+    public readonly key: MessageKey,
     public readonly code?: string,
+    public readonly params: Record<string, string | number> = {},
   ) {
-    super(message);
+    super(key);
     this.name = 'OAuthError';
   }
 }
 
 /** refresh_token 이 더 이상 유효하지 않을 때(invalid_grant) — 사용자가 연결을 해제했다. */
 export class AuthRevokedError extends Error {
-  constructor(message = t('sync.err.revoked')) {
-    super(message);
+  readonly key: MessageKey = 'sync.err.revoked';
+  readonly params: Record<string, string | number> = {};
+  constructor() {
+    super('sync.err.revoked');
     this.name = 'AuthRevokedError';
   }
 }
@@ -141,13 +145,13 @@ async function postToken(
   const error = typeof json?.error === 'string' ? json.error : undefined;
   if (error !== undefined || res.ok === false) {
     // 메시지에 code·토큰 값을 넣지 않는다.
-    throw new OAuthError(t('sync.err.tokenRejected'), error);
+    throw new OAuthError('sync.err.tokenRejected', error);
   }
 
   const accessToken = json?.access_token;
   const expiresIn = Number(json?.expires_in);
   if (typeof accessToken !== 'string' || accessToken === '' || !Number.isFinite(expiresIn)) {
-    throw new OAuthError(t('sync.err.tokenBadResponse'));
+    throw new OAuthError('sync.err.tokenBadResponse');
   }
 
   const refreshToken =
@@ -375,7 +379,7 @@ export async function startLoopback(a: {
     const error = url.searchParams.get('error');
     if (error !== null) {
       sendPage(res, 200, page(t('sync.page.failTitle'), t('sync.page.failBody')), () => {
-        finish(() => rejectResult(new OAuthError(t('sync.err.denied'), error)));
+        finish(() => rejectResult(new OAuthError('sync.err.denied', error)));
       });
       return;
     }
@@ -383,7 +387,7 @@ export async function startLoopback(a: {
     const code = url.searchParams.get('code');
     if (code === null || code === '') {
       sendPage(res, 200, page(t('sync.page.failTitle'), t('sync.page.failBody')), () => {
-        finish(() => rejectResult(new OAuthError(t('sync.err.noCode'))));
+        finish(() => rejectResult(new OAuthError('sync.err.noCode')));
       });
       return;
     }
@@ -403,11 +407,11 @@ export async function startLoopback(a: {
 
   // 대기 중 서버 오류(포트 회수 등)는 조용히 매달리지 말고 알린다.
   server.on('error', () => {
-    finish(() => rejectResult(new OAuthError(t('sync.err.serverError'))));
+    finish(() => rejectResult(new OAuthError('sync.err.serverError')));
   });
 
   timer = setTimeout(() => {
-    finish(() => rejectResult(new OAuthError(t('sync.err.timeout'))));
+    finish(() => rejectResult(new OAuthError('sync.err.timeout')));
   }, timeoutMs);
 
   const address = server.address();
@@ -417,7 +421,7 @@ export async function startLoopback(a: {
     redirectUri: `http://127.0.0.1:${port}${CALLBACK_PATH}`,
     result,
     close: () => {
-      finish(() => rejectResult(new OAuthError(t('sync.err.cancelled'))));
+      finish(() => rejectResult(new OAuthError('sync.err.cancelled')));
     },
   };
 }

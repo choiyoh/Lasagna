@@ -1,4 +1,4 @@
-import { t } from '@nopsidian/i18n';
+import { CodedError } from './errors.js';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
@@ -38,7 +38,7 @@ export function listHistory(root: string, rel: string): HistoryEntry[] {
 }
 
 export function readHistory(root: string, rel: string, id: string): string {
-  if (!ID_RE.test(id)) throw new Error(t('core.err.badHistoryName'));
+  if (!ID_RE.test(id)) throw new CodedError('core.err.badHistoryName');
   return readFileSync(path.join(historyDir(root, rel), id), 'utf8');
 }
 

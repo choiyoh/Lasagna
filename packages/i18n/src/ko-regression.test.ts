@@ -610,6 +610,11 @@ const cases: Case[] = [
     render: (n) => t('db.csv.unreadable', { row: n, column: '점수', value: 'x' }),
   },
   {
+    name: 'default.dbViewName',
+    base: () => '보기',
+    render: () => t('default.dbViewName'),
+  },
+  {
     name: 'preload.err.unknownEvent',
     base: (n) => `알 수 없는 이벤트: e${n}`,
     render: (n) => t('preload.err.unknownEvent', { event: `e${n}` }),

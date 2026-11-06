@@ -1,4 +1,5 @@
 import { t } from '@nopsidian/i18n';
+import { errorCode } from '@nopsidian/core';
 import { ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { contract, type Channel, type ChannelInput, type ChannelOutput } from '@nopsidian/ipc-contract';
 import { isTrustedUrl } from './security';
@@ -32,7 +33,15 @@ export function handle<C extends Channel>(
   ipcMain.handle(channel, async (e, raw) => {
     assertTrustedSender(e);
     const input = def.input.parse(raw) as ChannelInput<C>;
-    const result = await fn(input, e);
-    return def.output.parse(result);
+    try {
+      const result = await fn(input, e);
+      return def.output.parse(result);
+    } catch (error) {
+      // 코어는 코드+params 로 던진다 — 렌더러로 넘길 때(표시 경계) 지금 언어로 만들고,
+      // 언어를 바꿔 다시 그릴 수 있게 코드도 함께 붙인다.
+      const coded = errorCode(error);
+      if (!coded) throw error;
+      throw Object.assign(new Error(t(coded.key, coded.params)), { key: coded.key, params: coded.params });
+    }
   });
 }

@@ -1,6 +1,7 @@
 import { sha256Hex, text, utf8 } from './hash.js';
 import { planSync, type PlanInput } from './planner.js';
 import { t } from '@nopsidian/i18n';
+import { errorCode, errorText } from './errors.js';
 import {
   RevisionConflictError,
   type DriveClient,
@@ -174,8 +175,10 @@ export async function executePlan(plan: SyncPlan, deps: SyncDeps, opts: { force?
       results.push({ op, status: 'done', ...(await run(op)) });
     } catch (e) {
       if (isFatal(e)) throw e;
-      if (e instanceof RevisionConflictError) results.push({ op, status: 'skipped', error: e.message });
-      else results.push({ op, status: 'failed', error: e instanceof Error ? e.message : String(e) });
+      const coded = errorCode(e);
+      const extra = coded ? { errorKey: coded.key, errorParams: coded.params } : {};
+      if (e instanceof RevisionConflictError) results.push({ op, status: 'skipped', error: errorText(e), ...extra });
+      else results.push({ op, status: 'failed', error: errorText(e), ...extra });
     }
   }
 

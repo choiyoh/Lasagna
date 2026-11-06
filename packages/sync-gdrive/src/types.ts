@@ -1,4 +1,4 @@
-import { t } from '@nopsidian/i18n';
+import type { MessageKey } from '@nopsidian/i18n';
 /**
  * Drive 동기화 엔진의 경계 타입. 엔진은 Drive·파일시스템·상태 저장소를 이 인터페이스로만 만나므로
  * 순수 TS로 테스트할 수 있고(메모리 가짜 구현), 실제 구현은 Main/SyncWorker 쪽에서 끼워 넣는다.
@@ -39,8 +39,11 @@ export interface SyncEntry {
 
 /** 업로드 중 Drive 쪽이 이미 바뀌었을 때 던진다. 엔진은 이 작업을 건너뛰고 다음 동기화에 다시 계획한다. */
 export class RevisionConflictError extends Error {
+  readonly key: MessageKey = 'sync.err.remoteAhead';
+  readonly params: Record<string, string | number>;
   constructor(public readonly path: SyncPath) {
-    super(t('sync.err.remoteAhead', { path }));
+    super('sync.err.remoteAhead');
+    this.params = { path };
     this.name = 'RevisionConflictError';
   }
 }
@@ -115,7 +118,10 @@ export interface SyncPlan {
   /** 삭제(휴지통 이동) 작업 수 / 기록된 파일 수 — 안전장치 판단용 */
   deletes: number;
   tracked: number;
-  /** 삭제가 너무 많아 멈춘 사유. 있으면 `execute` 는 `force` 없이 실행을 거부한다. */
+  /**
+   * 삭제가 너무 많아 멈춘 사유. 있으면 `execute` 는 `force` 없이 실행을 거부한다.
+   * @deprecated 화면 표시용 문자열(계획 시점 언어로 고정). 새 코드는 `blockedCode`+`blockedParams` 로 그린다.
+   */
   blocked: string | null;
   /** 위 사유의 코드와 값 — 화면에서는 이 값으로 그때그때 번역해 그린다(추가 필드, 구버전은 `blocked` 만 읽는다). */
   blockedCode?: 'deleteRatio';
@@ -131,7 +137,11 @@ export interface OpResult {
   conflict?: boolean;
   /** 충돌 사본을 만든 경우 그 경로 */
   copyPath?: SyncPath;
+  /** 지금 언어로 만든 문구(레거시·복사용). 화면은 `errorKey` 가 있으면 그때그때 번역한다. */
   error?: string;
+  /** 오류 코드+params(추가 필드) */
+  errorKey?: string;
+  errorParams?: Record<string, string | number>;
 }
 
 export interface SyncReport {

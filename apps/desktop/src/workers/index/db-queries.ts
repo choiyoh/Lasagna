@@ -143,7 +143,9 @@ export function queryDatabase(db: Database.Database, root: string, p: DbQueryPar
   if (p.locale) setLocale(p.locale);
   const parsed = readSchema(root, p.folder);
   if (!parsed) throw new Error(t('main.err.dbNotFound', { name: p.folder || t('main.root') }));
-  const { schema, issues } = parsed;
+  // 이슈 문구는 코드+params 로 저장돼 있으니 매 요청(표시 시점) 지금 언어로 다시 만든다.
+  const issues = parsed.issues.map((i) => (i.key ? { ...i, message: t(i.key, i.params ?? {}) } : i));
+  const { schema } = parsed;
   let view: View | undefined;
   if (p.view !== undefined) {
     const r = viewSchema.safeParse(p.view);

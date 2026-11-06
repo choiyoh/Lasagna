@@ -1,5 +1,5 @@
 import { formatShortDateTime, t } from '@nopsidian/i18n';
-import { commentAuthorName } from './comments-author';
+import { commentAuthorName, commentLengthError } from './comments-author';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CommentItem } from '@nopsidian/ipc-contract';
 import { keys } from './keys';
@@ -38,6 +38,12 @@ export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: (
 
   const submit = async () => {
     if (!text.trim()) return;
+    // IPC 입력 스키마(max 5000)가 먼저 막아 raw 검증 오류가 화면에 뜨지 않게, 길이는 여기서 먼저 확인한다.
+    const tooLong = commentLengthError(text);
+    if (tooLong) {
+      setError(tooLong);
+      return;
+    }
     try {
       await window.nops.comment.add({ path, text: text.trim(), ...(quote ? { quote } : {}) });
       setText('');

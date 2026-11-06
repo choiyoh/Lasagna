@@ -73,6 +73,9 @@ export interface SyncErrorDetails {
   code: string;
   status?: number;
   reason?: string;
+  /** 화면 문구용 코드+params — 있으면 표시 시점에 번역한다(추가 필드). */
+  messageKey?: string;
+  messageParams?: Record<string, string | number>;
 }
 
 export type SyncRequest =

@@ -60,7 +60,9 @@ describe('setFrontmatter', () => {
   });
 
   it('깨진 YAML 은 Error 를 던진다', () => {
-    expect(() => setFrontmatter('---\na: [\n---\n본문', { b: 1 })).toThrow(/YAML/);
+    expect(() => setFrontmatter('---\na: [\n---\n본문', { b: 1 })).toThrow(
+      expect.objectContaining({ key: 'db.issue.yaml' }) as never,
+    );
   });
 
   it('값 타입별로 쓰고 다시 읽으면 같은 값이다', () => {
@@ -95,7 +97,7 @@ describe('renameFrontmatterKey', () => {
   it('없는 키는 그대로, 이미 있는 이름이면 Error', () => {
     const src = '---\na: 1\nb: 2\n---\n본문';
     expect(renameFrontmatterKey(src, 'z', 'c')).toBe(src);
-    expect(() => renameFrontmatterKey(src, 'a', 'b')).toThrow(/이미 있는/);
+    expect(() => renameFrontmatterKey(src, 'a', 'b')).toThrow(expect.objectContaining({ key: 'core.err.keyExists' }) as never);
   });
 });
 
@@ -273,18 +275,20 @@ describe('_db.yaml 편집', () => {
     expect(schema.title).toBe('독서 목록');
     expect(schema.properties).toEqual({});
     expect(schema.views).toHaveLength(1);
-    expect(schema.views[0]).toMatchObject({ id: 'v1', name: '표', type: 'table' });
+    expect(schema.views[0]).toMatchObject({ id: 'v1', name: '보기', type: 'table' });
   });
 
   it('깨진 YAML 은 편집 함수 모두 Error', () => {
     const broken = 'a: [\n';
-    expect(() => setDbProperty(broken, 'a', { type: 'text' })).toThrow(/YAML/);
-    expect(() => removeDbProperty(broken, 'a')).toThrow(/YAML/);
-    expect(() => renameDbProperty(broken, 'a', 'b')).toThrow(/YAML/);
-    expect(() => upsertDbView(broken, { id: 'v1', name: '표', type: 'table', sort: [] })).toThrow(/YAML/);
-    expect(() => removeDbView(broken, 'v1')).toThrow(/YAML/);
-    expect(() => moveDbView(broken, 'v1', 0)).toThrow(/YAML/);
-    expect(() => setDbMeta(broken, { title: 'X' })).toThrow(/YAML/);
+    // 예전 정규식 → 코드+params 로 던진다
+    const throws = (fn: () => unknown) => expect(fn).toThrow(/db\.issue\.yaml|YAML/);
+    throws(() => setDbProperty(broken, 'a', { type: 'text' }));
+    throws(() => removeDbProperty(broken, 'a'));
+    throws(() => renameDbProperty(broken, 'a', 'b'));
+    throws(() => upsertDbView(broken, { id: 'v1', name: '표', type: 'table', sort: [] }));
+    throws(() => removeDbView(broken, 'v1'));
+    throws(() => moveDbView(broken, 'v1', 0));
+    throws(() => setDbMeta(broken, { title: 'x' }));
   });
 
   it('빈 입력은 빈 문서로 시작한다', () => {

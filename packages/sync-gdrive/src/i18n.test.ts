@@ -2,6 +2,7 @@ import { setLocale } from '@nopsidian/i18n';
 import { afterEach, describe, expect, it } from 'vitest';
 import { conflictCopyPath, executePlan } from './executor.js';
 import { planSync } from './planner.js';
+import { errorText } from './errors.js';
 import { AuthRevokedError, OAuthError } from './oauth.js';
 import { RevisionConflictError } from './types.js';
 import type { SyncEntry, SyncPlan } from './types.js';
@@ -17,13 +18,27 @@ const deps = {
 } as never;
 
 describe('sync-gdrive 문구의 언어', () => {
-  it('OAuth 오류는 지금 언어로 나온다', () => {
+  it('오류는 코드+params 로 던지고, 표시 시점에 지금 언어로 번역한다(ko→en→ko)', () => {
+    // 던질 때는 언어를 모른다(문구를 만들지 않는다)
+    const err = new AuthRevokedError();
+    expect(err.message).toBe('sync.err.revoked');
     setLocale('ko');
-    expect(new AuthRevokedError().message).toBe('연결이 해제됐어요. 다시 로그인해 주세요.');
-    expect(new OAuthError('토큰 요청이 거부됐어요').message).toBe('토큰 요청이 거부됐어요');
+    expect(errorText(err)).toBe('연결이 해제됐어요. 다시 로그인해 주세요.');
     setLocale('en');
-    expect(new AuthRevokedError().message).not.toMatch(HANGUL);
-    expect(new RevisionConflictError('a.md').message).toBe('The file changed on Drive first: a.md');
+    expect(errorText(err)).not.toMatch(HANGUL);
+
+    const conflict = new RevisionConflictError('a.md');
+    setLocale('en');
+    expect(errorText(conflict)).toBe('The file changed on Drive first: a.md');
+    setLocale('ko');
+    expect(errorText(conflict)).toBe('원격이 먼저 바뀌었어요: a.md');
+
+    // 같은 오류를 나중에(비동기 표시) 다시 그려도 그때 언어를 따른다
+    const oauth = new OAuthError('sync.err.tokenRejected', 'invalid_grant');
+    setLocale('en');
+    expect(errorText(oauth)).toBe('The token request was rejected');
+    setLocale('ko');
+    expect(errorText(oauth)).toBe('토큰 요청이 거부됐어요');
   });
 
   it('차단 안내는 코드+params 로 만들어 두 언어 모두 자연스럽다', () => {

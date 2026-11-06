@@ -3,6 +3,7 @@ import type { SyncDiagnostics, SyncStatus } from '@nopsidian/ipc-contract';
 import { formatDateTime, formatRelativeTime, t, tPlural, type MessageKey } from '@nopsidian/i18n';
 import { useLocale } from './useLocale';
 import { formatSyncDiagnostics } from './sync-diagnostics';
+import { blockedPlanText } from './sync-blocked';
 
 type Plan = Awaited<ReturnType<typeof window.nops.sync.plan>>;
 type Run = Awaited<ReturnType<typeof window.nops.sync.run>>;
@@ -313,7 +314,7 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
           <section data-testid="sync-plan">
             <h3>{plan.firstSync ? t('sync.firstPlan') : t('sync.plan')}</h3>
             <p className="small">{Object.entries(plan.counts).map(([k, n]) => `${opLabel(k)} ${n}`).join(' · ') || t('sync.noChanges')}</p>
-            {plan.blocked && <p className="small warn">{plan.blockedCode ? t('sync.blocked.deleteRatio', plan.blockedParams ?? {}) : plan.blocked}</p>}
+            {plan.blocked && <p className="small warn">{blockedPlanText(plan)}</p>}
             <ul className="syncdialog__ops">
               {plan.ops.slice(0, 60).map((o, i) => (
                 <li key={i}>

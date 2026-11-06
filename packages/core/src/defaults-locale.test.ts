@@ -23,12 +23,13 @@ describe('data defaults follow the app language when they are created', () => {
   });
 
   it('names a new database view', () => {
+    // base 값은 '보기'(표는 타입 라벨이라 재사용하면 안 된다)
     setLocale('ko');
-    expect(defaultSchema('x').views[0]!.name).toBe('표');
-    expect(parseDbSchema(newDbYaml('x')).schema.views[0]!.name).toBe('표');
+    expect(defaultSchema('x').views[0]!.name).toBe('보기');
+    expect(parseDbSchema(newDbYaml('x')).schema.views[0]!.name).toBe('보기');
     setLocale('en');
-    expect(defaultSchema('x').views[0]!.name).toBe('Table');
-    expect(parseDbSchema(newDbYaml('x')).schema.views[0]!.name).toBe('Table');
+    expect(defaultSchema('x').views[0]!.name).toBe('View');
+    expect(parseDbSchema(newDbYaml('x')).schema.views[0]!.name).toBe('View');
   });
 
   it('names a conflict copy', () => {

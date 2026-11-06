@@ -10,3 +10,4 @@ export * from './history.js';
 export * from './diff.js';
 export * from './templates.js';
 export * from './comments.js';
+export * from './errors.js';

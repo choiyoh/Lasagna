@@ -56,7 +56,7 @@ NOPS_GDRIVE_CLIENT_ID='…' NOPS_GDRIVE_CLIENT_SECRET='…' pnpm package
 
 ### First run
 1. Open a vault in the app.
-2. Open **☁ Sync** in the sidebar.
+2. Open **☁ Google Drive sync…** in the sidebar.
 3. With a built-in client, just press **Sign in with Google**. The browser asks you to sign in and allow access, then
    returns to the app.
 4. Right after signing in, the first sync preview opens. Turn on **Sync this vault with Drive**, review the plan, then
@@ -92,7 +92,7 @@ place. **Check now** reads only the token and the `Nopsidian/<vault name>/` fold
 | No permission to access Drive (`HTTP 403`) | Check the Google account permissions and the client settings. |
 | Google had a temporary error (`HTTP 5xx`) | Try again in a moment. |
 | Drive file or folder not found (`HTTP 404`) | Check again or run the sync again. |
-| Could not find this vault's folder in Drive (`FOLDER_MISSING`) | On a second device, check that you opened a vault with the same name. Having no folder before the first sync is normal. |
+| Could not find this vault’s folder in Drive (`FOLDER_MISSING`) | On a second device, check that you opened a vault with the same name. Having no folder before the first sync is normal. |
 
 **Copy diagnostics** copies only the client source (built in or custom), the last four characters of the client ID,
 whether a client secret is set, whether an account is connected, whether the folder exists, and error codes.

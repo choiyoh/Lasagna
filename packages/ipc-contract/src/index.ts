@@ -110,7 +110,7 @@ export const syncFailure = z.object({
   code: z.string(),
   title: z.string(),
   action: z.string(),
-  /** docs/sync-setup.md 의 해당 단계 */
+  /** 단계별 안내 문서의 앵커 주소 — 앱 언어에 따라 docs/sync-setup.md 또는 docs/sync-setup.en.md 로 간다(L5). */
   docs: z.string(),
   /** 실패 종류 키 — 있으면 화면·저장본이 지금 언어로 제목·행동을 다시 만든다 */
   kind: z.string().optional(),

@@ -10,8 +10,9 @@ the app is open, notes an agent writes show up in the sidebar and in open editor
 1. In the app open **Settings (⌘,) → Connect an AI agent (MCP)**.
 2. If you need it, turn on **Let agents write notes** and pick the folders they may write to (default `AI`). When it is
    off, agents are read-only. To allow the daily note too, turn on **Allow the daily note folder too**. If that is off,
-   `append_to_daily_note` is denied with `forbidden-folder` because the daily folder (default `일기/`) is not in the
-   allowed folders, and the settings screen shows that reason as well.
+   `append_to_daily_note` is denied with `forbidden-folder` because the daily folder is not in the allowed folders, and the
+   settings screen shows that reason as well. In the English app the daily note folder is `Journal/` by default (or `일기/`
+   when your vault already has one).
 3. Pick a client tab (Claude Code / Claude Desktop / Codex / Cursor / VS Code / Gemini CLI) and **copy** the command or
    settings it shows into the right place.
 4. The server name defaults to **`lasagna-<vault slug>-<vault id hash>`**. Two vaults registered with the same name
@@ -122,7 +123,7 @@ There are no delete, move, or rename tools.
 ## Safety
 - **Read-only by default.** Writing must be turned on with `--write`, and **anything outside the allowed folders (default
   `AI/`) is refused**. For the whole vault use `--write-folder .`. You can repeat the allowed folder (`--write
-  --write-folder AI --write-folder 일기`). If the daily note folder is not allowed, `append_to_daily_note` is refused
+  --write-folder AI --write-folder Journal`). If the daily note folder is not allowed, `append_to_daily_note` is refused
   with `forbidden-folder`. The settings screen validates folders with the same rules as the server, and when a folder
   contains `..`, starts with a dot, or has an empty segment it does not make a snippet and shows the reason (registering it
   anyway would make the server fail at start with `PolicyError`, hiding even the read tools).

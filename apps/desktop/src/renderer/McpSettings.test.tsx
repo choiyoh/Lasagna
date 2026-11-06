@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { setLocale } from '@nopsidian/i18n';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { McpSettings } from './McpSettings';
@@ -124,6 +125,8 @@ describe('McpSettings', () => {
     expect(input('쓸 수 있는 폴더').value).toBe('메모');
     expect(input('오늘의 노트 폴더도 허용').checked).toBe(true);
     expect(container.querySelector('[data-testid="mcp-policy-note"]')?.textContent).toContain('이미 연결된 에이전트');
+    // 파일 경로는 base 처럼 <code> 로 강조한다(문구만 사전으로 옮겼다)
+    expect(container.querySelector('[data-testid="mcp-policy-note"] code')?.textContent).toBe('.nopsidian/mcp-policy.json');
     expect(container.querySelector('[data-testid="mcp-policy-missing"]')).toBeNull();
     expect(container.querySelector('[data-testid="mcp-policy-device-note"]')?.textContent).toContain('다른 기기');
     expect(container.querySelector('[data-testid="mcp-cli"]')?.textContent).toContain('--write-folder "메모" --write-folder "일기"');
@@ -192,5 +195,73 @@ describe('McpSettings', () => {
     const cli = container.querySelector('[data-testid="mcp-cli"]')?.textContent ?? '';
     expect(cli).toContain('--write-folder "일기"');
     expect(cli).not.toContain('--write-folder "일기/2026"');
+  });
+});
+
+describe('되돌리기 오류의 로캘', () => {
+  it('알려진 실패 코드는 화면 언어로 보여 주고, 언어를 바꾸면 다시 번역한다', async () => {
+    const audit = [
+      { t: '2026-11-05T00:00:00.000Z', client: 'claude', action: 'update' as const, tool: 'write_note', path: 'a.md' },
+    ];
+    (window.nops.mcp.audit as ReturnType<typeof vi.fn>).mockImplementation(async () => audit);
+    (window.nops.mcp.revert as ReturnType<typeof vi.fn>).mockImplementation(async () => ({ kind: 'failed', code: 'changed' }));
+    await render();
+
+    const undo = container.querySelector<HTMLButtonElement>('[data-testid="mcp-revert"]')!;
+    await act(async () => undo.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="mcp-revert-confirm"]')!.click());
+    await flush();
+    const msg = () => container.querySelector('[data-testid="mcp-revert-msg"]')?.textContent ?? '';
+    expect(msg()).toContain('버전 기록에서 복원');
+
+    setLocale('en');
+    await act(async () => root!.render(<McpSettings onOpenNote={() => {}} onReverted={() => {}} />));
+    expect(msg()).toContain('version history');
+    expect(msg()).not.toMatch(/[가-힣]/);
+    setLocale('ko');
+  });
+});
+
+describe('오류 문구에 자리표시자가 새지 않는다', () => {
+  it('savePolicy 경로 전수: ko/en 모두 {…} 리터럴이 없다', async () => {
+    // 정책 파일 읽기/스키마 오류
+    for (const err of [
+      { exists: true, policy: null, error: '깨짐', errorCode: 'invalidJson' },
+      { exists: true, policy: null, error: '형식', errorCode: 'invalidSchema', errorParams: { path: 'write', message: 'bad' } },
+      { exists: true, policy: null, error: '읽기', errorCode: 'unreadable', errorParams: { message: 'EACCES' } },
+    ]) {
+      policyGet.mockImplementation(async () => err);
+      await render();
+      const warn = container.querySelector('[data-testid="mcp-policy-warning"]')?.textContent ?? '';
+      expect(warn).not.toMatch(/[{}]/);
+      setLocale('en');
+      await act(async () => root!.render(<McpSettings onOpenNote={() => {}} onReverted={() => {}} />));
+      expect(container.querySelector('[data-testid="mcp-policy-warning"]')?.textContent ?? '').not.toMatch(/[{}]/);
+      setLocale('ko');
+      act(() => root!.unmount());
+      root = null;
+      container.remove();
+      container = document.createElement('div');
+      document.body.append(container);
+    }
+  });
+
+  it('쓰기를 켠 채 폴더를 비우면 폴더 이름이 문장에 채워진다(리터럴 없음)', async () => {
+    await render();
+    const write = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    await act(async () => write.click());
+    await typeInto(input('쓸 수 있는 폴더'), '');
+    // 저장 버튼(정책 만들기)이 없으면 토글에서 저장 경로를 타지 않으므로, 안내 문구로 대체 확인
+    // 저장 경로(savePolicy)를 실제로 타도록 토글을 껐다 켠다
+    await act(async () => write.click());
+    await act(async () => write.click());
+    const koText = container.textContent ?? '';
+    expect(koText).not.toMatch(/[{}]/);
+    setLocale('en');
+    await act(async () => root!.render(<McpSettings onOpenNote={() => {}} onReverted={() => {}} />));
+    const enText = container.textContent ?? '';
+    expect(enText).not.toMatch(/[{}]/);
+    expect(enText).not.toMatch(/\{issue\}/);
+    setLocale('ko');
   });
 });

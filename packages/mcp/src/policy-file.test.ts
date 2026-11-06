@@ -81,7 +81,7 @@ describe('인자와 정책 파일의 교집합', () => {
     const p = args();
     const off = effectivePolicy(p, { kind: 'ok', policy: file({ write: false }) });
     expect(off).toMatchObject({ write: false, reason: 'policy-disabled', source: 'file' });
-    const bad = effectivePolicy(p, { kind: 'invalid', error: '깨짐' });
+    const bad = effectivePolicy(p, { kind: 'invalid', error: '깨짐', code: 'invalidJson' });
     expect(bad).toMatchObject({ write: false, reason: 'policy-invalid', message: '깨짐', source: 'file' });
   });
 

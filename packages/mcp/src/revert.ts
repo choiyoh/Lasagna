@@ -1,3 +1,4 @@
+import { t as tr } from '@nopsidian/i18n';
 import { existsSync, readFileSync } from 'node:fs';
 import { listHistory, readHistory, resolveInVault, saveNote, sha256 } from '@nopsidian/core';
 import { appendAudit, readAudit, type AuditEntry } from './audit.js';
@@ -19,19 +20,19 @@ export type RevertPlan = { action: 'restore'; content: string } | { action: 'tra
 export function planRevert(root: string, t: string, notePath: string): { entry: AuditEntry; plan: RevertPlan } {
   const all = readAudit(root, 1000);
   const entry = all.find((e) => e.t === t && e.path === notePath);
-  if (!entry) throw new RevertError('not-found', '그 기록을 찾을 수 없어요');
-  if (entry.action === 'denied' || entry.action === 'revert') throw new RevertError('not-revertable', '되돌릴 수 있는 작업이 아니에요');
-  if (all.some((e) => e.action === 'revert' && e.note === `revert:${entry.t}` && e.path === entry.path)) throw new RevertError('already', '이미 되돌린 작업이에요');
+  if (!entry) throw new RevertError('not-found', tr('mcp.revertErr.not-found'));
+  if (entry.action === 'denied' || entry.action === 'revert') throw new RevertError('not-revertable', tr('mcp.revertErr.not-revertable'));
+  if (all.some((e) => e.action === 'revert' && e.note === `revert:${entry.t}` && e.path === entry.path)) throw new RevertError('already', tr('mcp.revertErr.already'));
   const full = resolveInVault(root, entry.path);
-  if (!existsSync(full)) throw new RevertError('missing', '노트가 지금은 없어요(지웠거나 이름을 바꿨어요)');
+  if (!existsSync(full)) throw new RevertError('missing', tr('mcp.revertErr.missing'));
   const disk = readFileSync(full, 'utf8');
   if (entry.hashAfter && sha256(disk) !== entry.hashAfter) {
-    throw new RevertError('changed', '그 뒤로 노트가 또 바뀌었어요. 더 최근 작업부터 되돌리거나 노트의 버전 기록에서 복원해 주세요');
+    throw new RevertError('changed', tr('mcp.revertErr.changed'));
   }
   if (entry.action === 'create') return { entry, plan: { action: 'trash' } };
   const want = entry.hashBefore?.slice(0, 8);
   const snap = want ? listHistory(root, entry.path).find((h) => h.id.endsWith(`-${want}.md`)) : undefined;
-  if (!snap) throw new RevertError('no-snapshot', '이전 내용의 버전 기록이 없어요(오래돼 정리됐을 수 있어요)');
+  if (!snap) throw new RevertError('no-snapshot', tr('mcp.revertErr.no-snapshot'));
   return { entry, plan: { action: 'restore', content: readHistory(root, entry.path, snap.id) } };
 }
 

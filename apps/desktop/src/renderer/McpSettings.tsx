@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { getLocale, t, type MessageKey } from '@nopsidian/i18n';
 import { defaultServerName, folderContains, folderError, isValidServerName, mcpSnippet, type McpInfo } from './mcp-snippet';
 import { configFromPolicy, loadMcpSettings, policyFolders, saveMcpSettings, serverNameConflict, type McpSettingsConfig } from './mcp-settings';
 
@@ -11,7 +12,90 @@ interface AuditRow {
   note?: string;
 }
 
-const ACTION_LABEL: Record<AuditRow['action'], string> = { create: '새로 만듦', append: '덧붙임', update: '고침', denied: '거부됨', revert: '되돌림', comment: '댓글' };
+/** 화면에 보일 문구: 사전 키(또는 정책 오류 코드)를 들고 있다가 그릴 때 지금 언어로 만든다. */
+interface LocalizedText {
+  key?: MessageKey;
+  /** 오류 코드: 정책은 `mcp.policyErr.<code>`, 되돌리기는 `mcp.revertErr.<code>` */
+  code?: string;
+  kind?: 'policy' | 'revert';
+  params?: Record<string, string>;
+  message?: string;
+  /** 폴더 문제를 문장 틀에 넣을 때: 번역된 문장 대신 코드·경로만 저장한다 */
+  folderCode?: string;
+  folderPath?: string;
+}
+
+/** 정책 오류 문구. 코드가 있으면 지금 언어로, 없으면 원문. */
+function policyErrorText(error: LocalizedText | null): string {
+  if (!error) return '';
+  // 폴더 문제는 코드·경로만 저장해 두고 여기서 지금 언어로 문장을 만든다.
+  if (error.key && error.folderCode) {
+    return noPlaceholders(t(error.key, folderIssueParams({ code: error.folderCode, params: { path: error.folderPath ?? '' } })));
+  }
+  if (error.code) {
+    // 정책/되돌리기 오류 코드마다 사전 키가 있다(모르는 코드는 사유 원문을 그대로).
+    const prefixed = error.kind === 'revert' ? `mcp.revertErr.${error.code}` : `mcp.policyErr.${error.code}`;
+    const key = (error.code === 'invalidSchema' && !error.params?.message ? 'mcp.policyErr.invalidSchemaNoIssue' : prefixed) as MessageKey;
+    const text = t(key, error.params as never);
+    if (!text.startsWith('mcp.policyErr.')) return text;
+  }
+  return noPlaceholders(text(error));
+}
+
+/** 채워지지 않은 `{자리}` 가 화면에 그대로 나오지 않게 마지막으로 막는다. */
+function noPlaceholders(value: string): string {
+  return /\{[a-zA-Z_]+\}/.test(value) ? t('mcp.genericError') : value;
+}
+
+/**
+ * 폴더 문제를 문장 틀에 넣을 파라미터로. 한국어는 완전한 문장(`issue`)을, 영어는 경로(`path`)를 쓴다.
+ * 번역은 그리는 시점에 하므로 언어를 바꿔도 옛 문장이 남지 않는다.
+ */
+function folderIssueParams(issue: LocalizedText | null | undefined): Record<string, string> {
+  if (!issue) return { issue: '', path: '' };
+  const path = issue.params?.path ?? '';
+  // 한국어는 base 처럼 완전한 문장을, 영어는 문장 틀에 맞는 명사구를 넣는다.
+  const issueText =
+    getLocale() === 'ko'
+      ? issue.code
+        ? t(`mcp.policyErr.${issue.code}` as MessageKey, issue.params as never)
+        : text(issue)
+      : path
+        ? t('mcp.folderIssueNoun', { path })
+        : t('mcp.folderIssueNounEmpty');
+  return { issue: issueText, path };
+}
+
+/** 키가 있으면 지금 언어로, 없으면 원문(서버·IPC 오류 문자열). */
+function text(value: LocalizedText | null | undefined): string {
+  if (!value) return '';
+  return value.key ? t(value.key, value.params as never) : (value.message ?? '');
+}
+
+/** 문장 안의 `{name}` 자리들을 <code> 로 그린다(강조 위치는 그대로 두고 문구만 번역). */
+function withCodes(key: MessageKey, parts: [string, string][]) {
+  // 자리표시자를 지우지 않고 그대로 둔 문장에서 {name} 을 찾아 쪼갠다.
+  let rest = t(key);
+  const out: React.ReactNode[] = [];
+  parts.forEach(([name, value], i) => {
+    const token = `{${name}}`;
+    const at = rest.indexOf(token);
+    if (at < 0) return;
+    out.push(rest.slice(0, at), <code key={`${name}-${i}`}>{value}</code>);
+    rest = rest.slice(at + token.length);
+  });
+  out.push(rest);
+  return <>{out}</>;
+}
+
+const ACTION_LABEL: Record<AuditRow['action'], string> = {
+  create: 'mcp.action.create',
+  append: 'mcp.action.append',
+  update: 'mcp.action.update',
+  denied: 'mcp.action.denied',
+  revert: 'mcp.action.revert',
+  comment: 'mcp.action.comment',
+};
 
 /** 설정 화면의 "AI 에이전트 연결(MCP)": 클라이언트별 연결 방법 복사와 에이전트가 한 일 보기 */
 export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: string) => void; onReverted: (path: string, kind: 'restored' | 'trashed') => void }) {
@@ -21,18 +105,25 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   const [copied, setCopied] = useState('');
   /** 되돌리기 확인 중인 기록과 결과 문구 */
   const [confirming, setConfirming] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<LocalizedText | null>(null);
   /** 앱 정책 파일을 읽거나 쓰지 못한 이유. 있으면 쓰기는 서버에서 차단된다. */
-  const [policyError, setPolicyError] = useState('');
+  /** 정책 오류: 코드가 있으면 표시 시점에 지금 언어로 만든다(파일 안 문구는 옛 언어로 굳지 않게). */
+  const [policyError, setPolicyError] = useState<LocalizedText | null>(null);
   /** 정책 파일이 실제로 있는가. false 면 지금은 에이전트 인자만 적용된다. */
   const [policyExists, setPolicyExists] = useState<boolean | null>(null);
   const revert = async (a: AuditRow) => {
     try {
       const r = await window.nops.mcp.revert({ t: a.t, path: a.path });
-      setMessage(r.kind === 'trashed' ? `휴지통으로 옮겼어요: ${a.path}` : `이전 내용으로 되돌렸어요: ${a.path}`);
+      if (r.kind === 'failed') {
+        const known = ['not-found', 'not-revertable', 'already', 'missing', 'changed', 'no-snapshot'].includes(r.code ?? '');
+        setMessage(known ? { code: r.code, kind: 'revert' } : { message: r.message ?? '' });
+        setConfirming(null);
+        return;
+      }
+      setMessage({ key: r.kind === 'trashed' ? 'mcp.reverted.trashed' : 'mcp.reverted.restored', params: { path: a.path } });
       onReverted(a.path, r.kind);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      setMessage({ message: e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e) });
     }
     setConfirming(null);
     refresh();
@@ -52,18 +143,18 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
             setCfg(merged);
             setPolicyExists(true);
             saveMcpSettings(next.vaultId, merged);
-            setPolicyError(read.error ?? '');
+            setPolicyError(read.error ? { code: read.errorCode ?? undefined, params: read.errorParams, message: read.error } : null);
             return;
           }
           setPolicyExists(read.exists);
           // 파일이 깨졌으면 서버가 쓰기를 막으므로 화면도 안전한 쪽(꺼짐)으로 보여 준다.
           setCfg(read.error ? { ...local, write: false } : local);
-          setPolicyError(read.error ?? '');
+          setPolicyError(read.error ? { code: read.errorCode ?? undefined, params: read.errorParams, message: read.error } : null);
         })
         .catch((e) => {
           setPolicyExists(null);
           setCfg({ ...local, write: false });
-          setPolicyError(e instanceof Error ? e.message : String(e));
+          setPolicyError({ message: e instanceof Error ? e.message : String(e) });
         });
     });
     refresh();
@@ -74,7 +165,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   const initial: McpSettingsConfig = { write: false, folder: 'AI', allowDailyFolder: false, maxWritesPerMinute: 30, name: defaultServerName(info), client: 'claude-code' };
   const current = cfg ?? initial;
   /** 빈 폴더는 입력 중일 수 있으므로 정책 파일에 쓰지 않는다(볼트 전체는 `.`). */
-  const folderProblem = (folder: string) => (folder.trim() === '' ? '쓸 폴더를 입력하세요. 볼트 전체는 .(점)으로 적어요.' : folderError(folder));
+  const folderProblem = (folder: string): LocalizedText | null => (folder.trim() === '' ? { key: 'mcp.needFolder' } : folderError(folder));
   /** 바뀐 정책 값을 파일(정본)에 쓴다. 파일이 없으면 서버는 기존 인자 동작을 유지한다. */
   const savePolicy = (next: McpSettingsConfig) => {
     const folderIssue = folderProblem(next.folder);
@@ -82,10 +173,11 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
     let folders: string[];
     if (folderIssue || dailyIssue) {
       if (next.write) {
-        setPolicyError(`${folderIssue ?? dailyIssue} 폴더를 고친 뒤 다시 켜 주세요.`);
+        const issue = folderIssue ?? dailyIssue!;
+        setPolicyError({ key: 'mcp.fixFolderFirst', folderCode: issue.code ?? 'needFolder', folderPath: issue.params?.path ?? '' });
         return; // 켠 상태의 잘못된 폴더는 저장하지 않는다
       }
-      folders = ['AI']; // 끈 상태는 폴더와 무관하므로 정책 파일을 유효하게 남긴다
+      folders = [t('mcp.defaultFolder')]; // 끈 상태는 폴더와 무관하므로 정책 파일을 유효하게 남긴다
     } else {
       try {
         folders = policyFolders(next.folder, next.allowDailyFolder, info.dailyFolder);
@@ -95,12 +187,12 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
     }
     void window.nops.mcp.policySet({ write: next.write, writeFolders: folders, maxWritesPerMinute: next.maxWritesPerMinute })
       .then((saved) => {
-        setPolicyError('');
+        setPolicyError(null);
         setPolicyExists(true);
         // 응답이 늦게 와도 그 사이 친 폴더·이름을 되돌리지 않는다.
         setCfg((prev) => (prev ? { ...prev, maxWritesPerMinute: saved.maxWritesPerMinute } : prev));
       })
-      .catch((e) => setPolicyError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)));
+      .catch((e) => setPolicyError({ message: e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e) }));
   };
   const update = (patch: Partial<McpSettingsConfig>) => {
     const next = { ...current, ...patch };
@@ -128,37 +220,40 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
 
   return (
     <section data-testid="mcp-settings">
-      <h3>AI 에이전트 연결 (MCP)</h3>
+      <h3>{t('mcp.title')}</h3>
       <p className="muted small">
-        Claude 같은 AI 에이전트가 이 볼트의 노트를 찾아 읽고(기본), 허용하면 새 노트를 쓰게 해요. 앱이 꺼져 있어도 동작해요.{' '}
-        {info.packaged ? 'Node.js 없이 이 앱 실행 파일이 MCP 서버로 동작해요.' : '개발 빌드라 Node.js 22 이상이 필요해요.'}
+        {t('mcp.intro')}{' '}
+        {info.packaged ? t('mcp.packagedServer') : t('mcp.devServer')}
       </p>
       <label className="settings__row">
         <span>
-          에이전트가 노트 쓰기 허용
-          <small className="muted">끄면 읽기만 가능해요. 쓰기는 아래 폴더 안에서만, 기존 노트는 덧붙이기·해시 확인 후 고치기만 돼요.</small>
+          {t('mcp.writeLabel')}
+          <small className="muted">{t('mcp.writeHint')}</small>
         </span>
-        <input type="checkbox" checked={current.write} onChange={(e) => update({ write: e.target.checked })} aria-label="에이전트가 노트 쓰기 허용" />
+        <input type="checkbox" checked={current.write} onChange={(e) => update({ write: e.target.checked })} aria-label={t('mcp.writeLabel')} />
       </label>
       <p className="muted small" data-testid="mcp-policy-note">
-        이 설정을 바꾸면 볼트의 <code>.nopsidian/mcp-policy.json</code> 에 저장돼 이미 연결된 에이전트에도 다음 쓰기부터 바로 적용돼요. 쓰기 도구 없이 연결한 에이전트는 다시 연결해야 해요.
+        {withCodes('mcp.policySaved', [['file', '.nopsidian/mcp-policy.json']])}
       </p>
       <p className="muted small" data-testid="mcp-policy-device-note">
-        이 파일은 기기별이라 같은 볼트를 다른 기기에서 열어도 자동으로 적용되지 않아요. 다른 기기에서도 막으려면 그 기기의 앱에서 쓰기를 끄거나, 그 기기의 에이전트 설정을 읽기 전용으로 바꾸세요.
+        {t('mcp.policyDevice')}
       </p>
       {policyError && (
         <p className="warn small" data-testid="mcp-policy-warning">
-          {policyError} 설정을 바꾸면 새 정책으로 저장을 다시 시도해요.
+          {t('mcp.policyErrorRetry', { error: policyErrorText(policyError) })}
         </p>
       )}
       {policyExists === false && (
         <div className="settings__row" data-testid="mcp-policy-missing">
           <span>
-            앱 정책 파일이 아직 없어요. 지금은 에이전트 연결 인자(<code>--write</code>, <code>--write-folder</code>)대로 동작해요.
-            <small className="muted">아래 버튼을 누르면 현재 화면 값으로 정책을 만들어 앱 설정이 정본이 돼요.</small>
+            {withCodes('mcp.policyMissing', [
+              ['write', '--write'],
+              ['folder', '--write-folder'],
+            ])}
+            <small className="muted">{t('mcp.policyMissingHint')}</small>
           </span>
           <button type="button" data-testid="mcp-policy-create" onClick={() => savePolicy(current)}>
-            현재 값으로 정책 저장
+            {t('mcp.savePolicy')}
           </button>
         </div>
       )}
@@ -166,68 +261,66 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
         <>
           <label className="settings__row">
             <span>
-              쓸 수 있는 폴더
-              <small className="muted">볼트 전체는 .(점)으로 적어요.</small>
+              {t('mcp.folderLabel')}
+              <small className="muted">{t('mcp.folderHint')}</small>
             </span>
-            <input className="settings__text" value={current.folder} onChange={(e) => update({ folder: e.target.value })} aria-label="쓸 수 있는 폴더" />
+            <input className="settings__text" value={current.folder} onChange={(e) => update({ folder: e.target.value })} aria-label={t('mcp.folderLabel')} />
           </label>
           {folderIssue && (
             <p className="warn small" data-testid="mcp-folder-warning">
-              {folderIssue} 폴더를 고치기 전에는 붙여 넣을 스니펫을 만들지 않아요.
+              {t('mcp.folderBlocked', folderIssueParams(folderIssue))}
             </p>
           )}
           <label className="settings__row">
             <span>
-              오늘의 노트 폴더도 허용
-              <small className="muted">
-                켜면 {info.dailyFolder}/ 도 쓰기 허용 폴더에 넣어요. 끄면 append_to_daily_note 가 forbidden-folder 로 거부돼요.
-              </small>
+              {t('mcp.dailyAllow')}
+              <small className="muted">{t('mcp.dailyAllowHint', { folder: info.dailyFolder })}</small>
             </span>
             <input
               type="checkbox"
               checked={current.allowDailyFolder}
               onChange={(e) => update({ allowDailyFolder: e.target.checked })}
-              aria-label="오늘의 노트 폴더도 허용"
+              aria-label={t('mcp.dailyAllow')}
             />
           </label>
           {dailyIssue && (
             <p className="warn small" data-testid="mcp-folder-warning">
-              {dailyIssue} 오늘의 노트 폴더 설정을 앱에서 고쳐 주세요.
+              {t('mcp.dailyFix', folderIssueParams(dailyIssue))}
             </p>
           )}
           {!current.allowDailyFolder && !folderIssue && !dailyCovered && (
             <p className="warn small" data-testid="mcp-daily-warning">
-              오늘의 노트 폴더({info.dailyFolder}/)가 허용 폴더에 없어요. 이대로면 오늘의 노트에 쓰기는 forbidden-folder 로 실패해요.
+              {t('mcp.dailyNotCovered', { folder: info.dailyFolder })}
             </p>
           )}
         </>
       )}
       <label className="settings__row">
         <span>
-          서버 이름
-          <small className="muted">클라이언트 설정 파일의 키예요. 두 볼트를 함께 등록해도 겹치지 않게 볼트 이름이 붙어요.</small>
+          {t('mcp.serverName')}
+          <small className="muted">{t('mcp.serverNameHint')}</small>
         </span>
         <input
           className="settings__text"
           value={current.name}
           placeholder={defaultServerName(info)}
           onChange={(e) => update({ name: e.target.value })}
-          aria-label="MCP 서버 이름"
+          aria-label={t('mcp.serverNameAria')}
         />
       </label>
       {!nameOk && (
         <p className="warn small" data-testid="mcp-name-warning">
-          이름에는 공백 없이 글자·숫자와 . _ - 만 쓸 수 있어요. 고치기 전에는 붙여 넣을 스니펫을 만들지 않아요.
+          {t('mcp.serverNameInvalid')}
         </p>
       )}
       {conflict && (
         <p className="warn small" data-testid="mcp-name-conflict">
-          같은 이름을 쓰는 다른 볼트 설정이 있어요. 두 볼트를 함께 등록하면 나중에 등록한 쪽이 앞의 것을 덮어써요.
+          {t('mcp.serverNameTaken')}
         </p>
       )}
       {invalidFolder || !nameOk ? null : snippet && active ? (
         <div className="mcp__snippets">
-          <div className="mcp__tabs" role="tablist" aria-label="MCP 클라이언트">
+          <div className="mcp__tabs" role="tablist" aria-label={t('mcp.clientsTab')}>
             {snippet.clients.map((c) => (
               <button key={c.id} role="tab" aria-selected={c.id === active.id} className={c.id === active.id ? 'on' : ''} onClick={() => update({ client: c.id })}>
                 {c.label}
@@ -238,7 +331,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
             <div className="mcp__label">
               <strong>{active.label}</strong>
               <span className="muted small">{active.target}</span>
-              <button onClick={() => copy(active.id, active.code)}>{copied === active.id ? '복사했어요' : '복사'}</button>
+              <button onClick={() => copy(active.id, active.code)}>{copied === active.id ? t('mcp.copied') : t('mcp.copy')}</button>
             </div>
             <pre
               className="mcp__code"
@@ -250,25 +343,25 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
           </div>
         </div>
       ) : (
-        <p className="warn small">이 빌드에는 MCP 서버 파일이 없어요. 앱을 다시 설치하거나 개발 중이면 <code>pnpm --filter @nopsidian/mcp build</code> 를 실행하세요.</p>
+        <p className="warn small">{withCodes('mcp.noServer', [['command', 'pnpm --filter @nopsidian/mcp build']])}</p>
       )}
       <div className="mcp__audit">
         <div className="mcp__label">
-          <strong>최근 에이전트 작업</strong>
-          <button onClick={refresh}>새로고침</button>
+          <strong>{t('mcp.recent')}</strong>
+          <button onClick={refresh}>{t('mcp.refresh')}</button>
         </div>
         {audit.length === 0 ? (
-          <p className="muted small">아직 에이전트가 쓴 기록이 없어요.</p>
+          <p className="muted small">{t('mcp.noHistory')}</p>
         ) : (
           <ul data-testid="mcp-audit">
             {audit.map((a, i) => (
               <li key={`${a.t}-${i}`} className={`${a.action === 'denied' ? 'denied' : ''}${reverted.has(`${a.t}|${a.path}`) ? ' reverted' : ''}`.trim()}>
                 <span className="muted small">{new Date(a.t).toLocaleString()}</span>
-                <span className="mcp__act">{ACTION_LABEL[a.action]}</span>
+                <span className="mcp__act">{t(ACTION_LABEL[a.action] as MessageKey)}</span>
                 {a.action === 'denied' ? (
                   <span title={a.note}>{a.path}</span>
                 ) : (
-                  <button className="link" onClick={() => onOpenNote(a.path)} title="노트 열기">
+                  <button className="link" onClick={() => onOpenNote(a.path)} title={t('mcp.openNote')}>
                     {a.path}
                   </button>
                 )}
@@ -276,12 +369,17 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
                 {(a.action === 'create' || a.action === 'append' || a.action === 'update') && !reverted.has(`${a.t}|${a.path}`) && (
                   confirming === `${a.t}|${a.path}` ? (
                     <span className="mcp__confirm">
-                      <button className="danger" onClick={() => void revert(a)} data-testid="mcp-revert-confirm">정말 되돌리기</button>
-                      <button onClick={() => setConfirming(null)}>취소</button>
+                      <button className="danger" onClick={() => void revert(a)} data-testid="mcp-revert-confirm">{t('mcp.confirmRevert')}</button>
+                      <button onClick={() => setConfirming(null)}>{t('common.cancel')}</button>
                     </span>
                   ) : (
-                    <button className="mcp__undo" onClick={() => setConfirming(`${a.t}|${a.path}`)} data-testid="mcp-revert" title={a.action === 'create' ? '이 노트를 휴지통으로' : '이 작업 전 내용으로 복원'}>
-                      되돌리기
+                    <button
+                      className="mcp__undo"
+                      onClick={() => setConfirming(`${a.t}|${a.path}`)}
+                      data-testid="mcp-revert"
+                      title={a.action === 'create' ? t('mcp.revertCreate') : t('mcp.revertUpdate')}
+                    >
+                      {t('mcp.revert')}
                     </button>
                   )
                 )}
@@ -289,8 +387,8 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
             ))}
           </ul>
         )}
-        {message && <p className="small" role="status" data-testid="mcp-revert-msg">{message}</p>}
-        <p className="muted small">“되돌리기”는 그 뒤로 노트가 바뀌지 않았을 때만 돼요(더 최근 작업부터). 그 밖에는 노트의 “버전 기록”에서 복원하세요.</p>
+        {message && <p className="small" role="status" data-testid="mcp-revert-msg">{policyErrorText(message)}</p>}
+        <p className="muted small">{t('mcp.revertHint')}</p>
       </div>
     </section>
   );

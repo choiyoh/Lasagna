@@ -17,6 +17,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
     "@nopsidian/core": "workspace:*",
+    "@nopsidian/i18n": "workspace:*",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
   },

@@ -552,7 +552,14 @@ export const contract = {
   /** 앱이 정본으로 쓰는 MCP 쓰기 정책 파일. 없으면 exists=false, 깨졌으면 policy=null + error */
   'mcp.policyGet': {
     input: z.undefined(),
-    output: z.object({ exists: z.boolean(), policy: mcpPolicyFile.nullable(), error: z.string().nullable() }),
+    output: z.object({
+      exists: z.boolean(),
+      policy: mcpPolicyFile.nullable(),
+      error: z.string().nullable(),
+      /** 화면이 지금 언어로 다시 만들 오류 종류(있으면 error 대신 이걸로 표시) */
+      errorCode: z.enum(['unreadable', 'invalidJson', 'invalidSchema', 'noFolders', 'badFolder']).nullable().optional(),
+      errorParams: z.record(z.string(), z.string()).optional(),
+    }),
   },
   /** 앱 설정 변경을 정책 파일에 원자적으로 저장한다. 폴더는 서버와 같은 규칙으로 검증된다. */
   'mcp.policySet': {
@@ -581,7 +588,16 @@ export const contract = {
     ),
   },
   /** 에이전트가 한 작업 되돌리기: 덧붙이기·고치기는 이전 내용으로 복원, 새로 만든 노트는 휴지통으로. 그 뒤 바뀌었으면 거부 */
-  'mcp.revert': { input: z.object({ t: z.string().max(40), path: relPath }), output: z.object({ kind: z.enum(['restored', 'trashed']), trashId: z.string().optional() }) },
+  'mcp.revert': {
+    input: z.object({ t: z.string().max(40), path: relPath }),
+    output: z.object({
+      kind: z.enum(['restored', 'trashed', 'failed']),
+      trashId: z.string().optional(),
+      /** 되돌릴 수 없는 이유(화면이 지금 언어로 만든다) */
+      code: z.enum(['not-found', 'not-revertable', 'already', 'missing', 'changed', 'no-snapshot']).optional(),
+      message: z.string().optional(),
+    }),
+  },
   /** 노트 댓글(`.nopsidian/comments/`, 동기화 대상) */
   'comment.list': { input: z.object({ path: relPath }), output: z.array(commentItem) },
   'comment.add': { input: z.object({ path: relPath, text: z.string().min(1).max(5000), quote: z.string().max(300).optional() }), output: commentItem },

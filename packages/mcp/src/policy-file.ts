@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { t } from '@nopsidian/i18n';
 import path from 'node:path';
 import { z } from 'zod';
 import { atomicWrite } from '@nopsidian/core';
@@ -20,7 +21,18 @@ export const policyFileSchema = z
 
 export type PolicyFile = z.infer<typeof policyFileSchema>;
 
-export type PolicyFileRead = { kind: 'missing' } | { kind: 'ok'; policy: PolicyFile } | { kind: 'invalid'; error: string };
+/** 정책 파일 오류의 종류 — 화면은 이 코드로 지금 언어의 문구를 만든다(문구 자체는 사람이 읽는 용도). */
+export type PolicyErrorCode = 'unreadable' | 'invalidJson' | 'invalidSchema' | 'noFolders' | 'badFolder';
+
+export interface PolicyError {
+  code: PolicyErrorCode;
+  params?: Record<string, string>;
+}
+
+export type PolicyFileRead =
+  | { kind: 'missing' }
+  | { kind: 'ok'; policy: PolicyFile }
+  | { kind: 'invalid'; error: string; code: PolicyErrorCode; params?: Record<string, string> };
 
 export type EffectivePolicy = McpPolicy & {
   source: 'args' | 'file';
@@ -41,27 +53,44 @@ export function readPolicyFile(root: string): PolicyFileRead {
     raw = readFileSync(file, 'utf8');
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'missing' };
-    return { kind: 'invalid', error: `정책 파일을 읽을 수 없어요: ${e instanceof Error ? e.message : String(e)}` };
+    return {
+      kind: 'invalid',
+      error: t('mcp.policyErr.unreadable', { message: e instanceof Error ? e.message : String(e) }),
+      code: 'unreadable',
+      params: { message: e instanceof Error ? e.message : String(e) },
+    };
   }
   let data: unknown;
   try {
     data = JSON.parse(raw);
   } catch {
-    return { kind: 'invalid', error: '정책 파일이 올바른 JSON 이 아니에요' };
+    return { kind: 'invalid', error: t('mcp.policyErr.invalidJson'), code: 'invalidJson' };
   }
   const parsed = policyFileSchema.safeParse(data);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    return { kind: 'invalid', error: `정책 파일 형식이 올바르지 않아요${issue ? `: ${issue.path.join('.')} ${issue.message}` : ''}` };
+    return {
+      kind: 'invalid',
+      error: issue
+        ? t('mcp.policyErr.invalidSchema', { path: issue.path.join('.'), message: issue.message })
+        : t('mcp.policyErr.invalidSchemaNoIssue'),
+      code: 'invalidSchema',
+      ...(issue ? { params: { path: issue.path.join('.'), message: issue.message } } : {}),
+    };
   }
   try {
     const writeFolders = [...new Set(parsed.data.writeFolders.map((f) => normalizeFolder(f)))];
     if (parsed.data.write && writeFolders.length === 0) {
-      return { kind: 'invalid', error: '쓰기가 켜져 있지만 허용 폴더가 없어요' };
+      return { kind: 'invalid', error: t('mcp.policyErr.noFolders'), code: 'noFolders' };
     }
     return { kind: 'ok', policy: { ...parsed.data, writeFolders } };
   } catch (e) {
-    return { kind: 'invalid', error: `정책 파일의 폴더가 올바르지 않아요: ${e instanceof Error ? e.message : String(e)}` };
+    return {
+      kind: 'invalid',
+      error: t('mcp.policyErr.badFolder', { message: e instanceof Error ? e.message : String(e) }),
+      code: 'badFolder',
+      params: { message: e instanceof Error ? e.message : String(e) },
+    };
   }
 }
 
@@ -69,7 +98,7 @@ export function readPolicyFile(root: string): PolicyFileRead {
 export function writePolicyFile(root: string, input: unknown): PolicyFile {
   const parsed = policyFileSchema.parse(input);
   const writeFolders = [...new Set(parsed.writeFolders.map((f) => normalizeFolder(f)))];
-  if (parsed.write && writeFolders.length === 0) throw new Error('쓰기를 켜려면 허용 폴더가 하나 이상 필요해요');
+  if (parsed.write && writeFolders.length === 0) throw new Error(t('mcp.policyNeedFolder'));
   const policy: PolicyFile = { ...parsed, writeFolders };
   atomicWrite(policyPath(root), `${JSON.stringify(policy, null, 2)}\n`);
   return policy;

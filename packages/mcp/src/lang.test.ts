@@ -1,0 +1,61 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { setLocale } from '@nopsidian/i18n';
+import { applyServerLocale, readSettingsLanguage, resolveServerLocale, settingsPaths } from './lang.js';
+
+afterEach(() => setLocale('ko'));
+
+describe('MCP 서버 언어 결정', () => {
+  const writeSettings = (value: string): string => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'nops-mcp-lang-'));
+    mkdirSync(path.join(dir, 'Lasagna'), { recursive: true });
+    writeFileSync(path.join(dir, 'Lasagna', 'app-settings.json'), value);
+    return dir;
+  };
+
+  it('NOPSIDIAN_LANG 이 있으면 그것이 최우선', () => {
+    expect(resolveServerLocale({ env: { NOPSIDIAN_LANG: 'en' }, paths: [], systemLanguages: ['ko'] })).toBe('en');
+    expect(resolveServerLocale({ env: { NOPSIDIAN_LANG: 'KO' }, paths: [], systemLanguages: ['en'] })).toBe('ko');
+    // 잘못된 값은 무시하고 다음 단계로
+    expect(resolveServerLocale({ env: { NOPSIDIAN_LANG: 'fr' }, paths: [], systemLanguages: ['en'] })).toBe('en');
+  });
+
+  it('설정 파일의 언어(읽기 전용)를 따르고, system 이면 OS 로캘을 따른다', () => {
+    const en = writeSettings(JSON.stringify({ version: 1, language: 'en' }));
+    try {
+      const paths = [path.join(en, 'Lasagna', 'app-settings.json')];
+      expect(resolveServerLocale({ env: {}, paths, systemLanguages: ['ko-KR'] })).toBe('en');
+      writeFileSync(paths[0]!, JSON.stringify({ version: 1, language: 'system' }));
+      expect(resolveServerLocale({ env: {}, paths, systemLanguages: ['ko-KR'] })).toBe('ko');
+      expect(resolveServerLocale({ env: {}, paths, systemLanguages: ['en-US'] })).toBe('en');
+    } finally {
+      rmSync(en, { recursive: true, force: true });
+    }
+  });
+
+  it('설정 파일이 없거나 깨졌으면 OS 로캘 → 없으면 ko', () => {
+    const broken = writeSettings('{ not json');
+    try {
+      const paths = [path.join(broken, 'Lasagna', 'app-settings.json')];
+      expect(resolveServerLocale({ env: {}, paths, systemLanguages: ['en-US'] })).toBe('en');
+      expect(resolveServerLocale({ env: {}, paths, systemLanguages: [] })).toBe('ko');
+      expect(readSettingsLanguage([path.join(broken, 'nope.json')])).toBeNull();
+    } finally {
+      rmSync(broken, { recursive: true, force: true });
+    }
+  });
+
+  it('userData 규칙대로 경로를 계산한다', () => {
+    expect(settingsPaths('darwin', '/h', {})[0]).toBe('/h/Library/Application Support/Lasagna/app-settings.json');
+    expect(settingsPaths('linux', '/h', { XDG_CONFIG_HOME: '/c' })[0]).toBe('/c/Lasagna/app-settings.json');
+    expect(settingsPaths('win32', '/h', { APPDATA: 'C:\\AppData' })[0]).toContain(path.join('Lasagna', 'app-settings.json'));
+  });
+
+  it('applyServerLocale 은 i18n 로캘까지 바꾼다', () => {
+    expect(applyServerLocale({ env: { NOPSIDIAN_LANG: 'en' }, paths: [] })).toBe('en');
+    // t() 가 영어인지 확인(간단한 서버 문구)
+    expect(resolveServerLocale({ env: { NOPSIDIAN_LANG: 'ko' }, paths: [] })).toBe('ko');
+  });
+});

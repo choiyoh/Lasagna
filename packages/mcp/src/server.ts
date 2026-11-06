@@ -1,3 +1,4 @@
+import { t as tr } from '@nopsidian/i18n';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -20,7 +21,7 @@ function dailyFolderOf(root: string): string {
   } catch {
     /* 설정이 없으면 기본값 */
   }
-  return '일기';
+  return tr('default.dailyFolder');
 }
 
 const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -81,7 +82,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
     writer.setPolicy(effective);
     if (effective.write) return null;
     try {
-      writer.denyRequest(tool, path, effective.reason ?? 'policy-disabled', effective.message ?? '쓰기가 꺼져 있어요');
+      writer.denyRequest(tool, path, effective.reason ?? 'policy-disabled', effective.message ?? tr('mcpSrv.writeDisabled'));
     } catch (e) {
       if (e instanceof WriteError) return fail(`${tool} refused (${e.code}): ${e.message}`);
       return fail(`${tool} failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -250,7 +251,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
         filter: z
           .array(z.object({ prop: z.string(), op: z.enum(FILTER_OPS), value: z.unknown().optional() }))
           .optional()
-          .describe('Conditions that must all match, e.g. [{"prop":"상태","op":"=","value":"진행"}]'),
+          .describe(tr('mcpSrv.exampleFilter')),
         sort: z.array(z.object({ prop: z.string(), dir: z.enum(['asc', 'desc']).optional() })).optional().describe('Sort rules, first one wins'),
         limit: z.number().int().min(1).max(200).optional().describe('Max rows (default 50)'),
         offset: z.number().int().min(0).optional(),
@@ -344,7 +345,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       inputSchema: {
         database: z.string().min(1).describe('Database folder path or title'),
         title: z.string().min(1).describe('Row title (becomes the note name)'),
-        values: z.record(z.string(), z.unknown()).optional().describe('Property values, e.g. {"상태":"진행","마감":"2026-11-01","점수":3}'),
+        values: z.record(z.string(), z.unknown()).optional().describe(tr('mcpSrv.exampleValues')),
         body: z.string().optional().describe('Optional Markdown body of the row note (added after the template, if any)'),
         template: z
           .string()

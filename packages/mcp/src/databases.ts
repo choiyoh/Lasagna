@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { expandTemplate, resolveInVault } from '@nopsidian/core';
@@ -154,7 +155,7 @@ export class DatabaseAccess {
     if (folders.includes(p)) return p;
     const byTitle = folders.filter((f) => (this.schemaOf(f)?.schema.title ?? '').normalize('NFC') === p);
     if (byTitle.length === 1) return byTitle[0]!;
-    throw new WriteError('bad-input', `데이터베이스를 찾을 수 없어요: ${input}. 있는 것: ${folders.map((f) => f || '(볼트 루트)').join(', ') || '없음'} (list_databases 로 확인)`);
+    throw new WriteError('bad-input', t('mcpDb.err.dbNotFound', { name: input, folders: folders.map((f) => f || t('mcpCli.vaultRoot')).join(', ') || t('mcpCli.none') }));
   }
 
   /** 가장 가까운 상위 데이터베이스 폴더(행 노트의 소속) */
@@ -177,12 +178,12 @@ export class DatabaseAccess {
   ): { folder: string; total: number; matched: number; rows: { path: string; title: string; values: Record<string, CellValue> }[] } {
     const dbFolders = findDatabaseFolders(this.root);
     const s = this.schemaOf(folder);
-    if (!s) throw new WriteError('bad-input', `데이터베이스가 아니에요: ${folder}`);
+    if (!s) throw new WriteError('bad-input', t('mcpDb.err.notDb', { folder }));
     const { schema } = s;
     const base = opts.view ? schema.views.find((v) => v.id === opts.view || v.name === opts.view) : schema.views[0];
-    if (opts.view && !base) throw new WriteError('bad-input', `없는 보기: ${opts.view}. 있는 보기: ${schema.views.map((v) => v.name).join(', ')}`);
+    if (opts.view && !base) throw new WriteError('bad-input', t('mcpDb.err.noView', { view: opts.view, views: schema.views.map((v) => v.name).join(', ') }));
     const filters = opts.filter ?? [];
-    for (const f of filters) if (f.prop !== TITLE_PROP && !schema.properties[f.prop]) throw new WriteError('bad-input', `없는 속성: ${f.prop}. 있는 속성: ${Object.keys(schema.properties).join(', ')}`);
+    for (const f of filters) if (f.prop !== TITLE_PROP && !schema.properties[f.prop]) throw new WriteError('bad-input', t('mcpDb.err.noProp', { prop: f.prop, props: Object.keys(schema.properties).join(', ') }));
     const view = {
       id: '_mcp',
       name: 'mcp',
@@ -208,20 +209,20 @@ export class DatabaseAccess {
   frontmatterFor(schema: DbSchema, values: Record<string, unknown>): Record<string, unknown> {
     const fm: Record<string, unknown> = {};
     for (const [name, raw] of Object.entries(values)) {
-      if (name === TITLE_PROP) throw new WriteError('bad-input', '제목(title)은 values 가 아니라 title 인자로 주세요');
+      if (name === TITLE_PROP) throw new WriteError('bad-input', t('mcpDb.err.titleArg'));
       const def = schema.properties[name];
-      if (!def) throw new WriteError('bad-input', `없는 속성: ${name}. 있는 속성: ${Object.keys(schema.properties).join(', ') || '없음'}`);
-      if (!STORED_TYPES.has(def.type)) throw new WriteError('bad-input', `${name}(${def.type}) 은 계산되는 속성이라 쓸 수 없어요`);
-      if (def.type === 'relation' && def.twoWay) throw new WriteError('bad-input', `${name} 은 양방향 관계라 앱에서 고쳐 주세요(반대쪽 노트도 함께 바뀌어야 해서요)`);
+      if (!def) throw new WriteError('bad-input', t('mcpDb.err.noProp', { prop: name, props: Object.keys(schema.properties).join(', ') || t('mcpCli.none') }));
+      if (!STORED_TYPES.has(def.type)) throw new WriteError('bad-input', t('mcpDb.err.computed', { prop: name, type: def.type }));
+      if (def.type === 'relation' && def.twoWay) throw new WriteError('bad-input', t('mcpDb.err.twoWay', { prop: name }));
       const cell = raw === null ? null : normalizeValue(def, raw);
       if (raw !== null && (cell === null || (Array.isArray(cell) && cell.length === 0)) && !(def.type === 'checkbox')) {
-        throw new WriteError('bad-input', `${name} 값을 ${def.type} 형식으로 읽을 수 없어요: ${JSON.stringify(raw)}`);
+        throw new WriteError('bad-input', t('mcpDb.err.badValue', { prop: name, type: def.type, value: JSON.stringify(raw) }));
       }
       if (cell !== null && (def.type === 'select' || def.type === 'status' || def.type === 'multi_select')) {
         const allowed = optionsOf(def).map((o) => o.name);
         const picked = Array.isArray(cell) ? cell : [String(cell)];
         const bad = picked.filter((v) => allowed.length > 0 && !allowed.includes(v));
-        if (bad.length) throw new WriteError('bad-input', `${name} 에 없는 옵션: ${bad.join(', ')}. 쓸 수 있는 옵션: ${allowed.join(', ')}`);
+        if (bad.length) throw new WriteError('bad-input', t('mcpDb.err.badOption', { prop: name, bad: bad.join(', '), allowed: allowed.join(', ') }));
       }
       fm[name] = toFrontmatterValue(def, cell);
     }
@@ -239,7 +240,7 @@ export class DatabaseAccess {
     template?: string,
   ): { rel: string; text: string } {
     const s = this.schemaOf(folder);
-    if (!s) throw new WriteError('bad-input', `데이터베이스가 아니에요: ${folder}`);
+    if (!s) throw new WriteError('bad-input', t('mcpDb.err.notDb', { folder }));
     const fm = this.frontmatterFor(s.schema, values);
     // 고유 ID 속성은 현재 최댓값 + 1
     for (const [name, def] of Object.entries(s.schema.properties)) {
@@ -253,7 +254,7 @@ export class DatabaseAccess {
     }
     fm.created = nowIso(now);
     const clean = [...title].filter((c) => c.charCodeAt(0) >= 32).join('').replace(unsafeName, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
-    if (!clean) throw new WriteError('bad-input', '행 제목이 비어 있어요');
+    if (!clean) throw new WriteError('bad-input', t('mcpDb.err.emptyTitle'));
     let rel = '';
     for (let n = 1; ; n++) {
       rel = path.posix.join(folder, `${clean}${n > 1 ? ` ${n}` : ''}.md`);
@@ -265,10 +266,10 @@ export class DatabaseAccess {
     try {
       tplPath = validateNotePath(tpl);
     } catch (e) {
-      throw new WriteError('bad-input', `템플릿 경로가 올바르지 않아요: ${e instanceof Error ? e.message : String(e)}`);
+      throw new WriteError('bad-input', t('mcpDb.err.badTemplatePath', { message: e instanceof Error ? e.message : String(e) }));
     }
     const tplFile = resolveInVault(this.root, tplPath);
-    if (!existsSync(tplFile)) throw new WriteError('bad-input', `템플릿 노트가 없어요: ${tplPath}. 템플릿 없이 만들려면 template 를 빈 문자열로 주세요`);
+    if (!existsSync(tplFile)) throw new WriteError('bad-input', t('mcpDb.err.templateMissing', { path: tplPath }));
     const filled = expandTemplate(readFileSync(tplFile, 'utf8'), { now, title: clean });
     const withValues = setFrontmatter(filled, fm);
     return { rel, text: body ? `${withValues.replace(/\s+$/, '')}\n\n${body}` : withValues };
@@ -277,7 +278,7 @@ export class DatabaseAccess {
   /** 행 노트의 속성을 고친 새 내용(프런트매터의 그 키만 바뀌고 본문은 그대로) */
   applyValues(notePath: string, values: Record<string, unknown>): (disk: string) => string {
     const folder = this.folderOfRow(notePath);
-    if (folder === null) throw new WriteError('bad-input', `이 노트는 데이터베이스의 행이 아니에요: ${notePath}`);
+    if (folder === null) throw new WriteError('bad-input', t('mcpDb.err.notRow', { path: notePath }));
     const schema = this.schemaOf(folder)!.schema;
     const fm = this.frontmatterFor(schema, values);
     return (disk) => setFrontmatter(disk, fm);

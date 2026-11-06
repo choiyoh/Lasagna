@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { PolicyError, folderCovers, normalizeFolder } from './folders.js';
@@ -22,17 +23,10 @@ export const DEFAULT_WRITE_FOLDER = 'AI';
 export const DEFAULT_MAX_WRITES_PER_MINUTE = 30;
 export const DEFAULT_MAX_BYTES = 1_000_000;
 
-export const USAGE = `nopsidian-mcp — Lasagna 볼트를 MCP(stdio)로 열어 줍니다.
+/** 도움말. 서버 언어(시작 시 결정)로 만든다. */
+export const usage = (): string =>
+  t('mcpCli.usage', { folder: DEFAULT_WRITE_FOLDER, max: DEFAULT_MAX_WRITES_PER_MINUTE });
 
-사용법: node nopsidian-mcp.mjs --vault <볼트 폴더> [옵션]
-
-  --vault <폴더>               볼트 폴더(또는 환경 변수 NOPSIDIAN_VAULT)
-  --write                      쓰기 도구를 켭니다(기본: 읽기 전용)
-  --write-folder <폴더>        쓰기를 허용할 볼트 안 폴더. 여러 번 쓸 수 있고 기본은 "${DEFAULT_WRITE_FOLDER}".
-                               볼트 전체를 허용하려면 --write-folder .
-  --max-writes-per-minute <N>  1분당 쓰기 횟수 한도(기본 ${DEFAULT_MAX_WRITES_PER_MINUTE})
-  --help                       이 도움말
-`;
 
 /** 명령줄 인자·환경 변수에서 정책을 만든다. 잘못되면 PolicyError */
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): McpPolicy | 'help' {
@@ -42,7 +36,7 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
   let maxWrites = DEFAULT_MAX_WRITES_PER_MINUTE;
   const takeValue = (i: number, flag: string): string => {
     const v = argv[i + 1];
-    if (v === undefined || v.startsWith('--')) throw new PolicyError(`${flag} 뒤에 값이 필요해요`);
+    if (v === undefined || v.startsWith('--')) throw new PolicyError(t('mcpCli.needsValue', { flag }));
     return v;
   };
   for (let i = 0; i < argv.length; i++) {
@@ -53,14 +47,14 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
     else if (a === '--write-folder') folders.push(normalizeFolder(takeValue(i++, a)));
     else if (a === '--max-writes-per-minute') {
       const n = Number(takeValue(i++, a));
-      if (!Number.isInteger(n) || n < 1 || n > 1000) throw new PolicyError('--max-writes-per-minute 는 1~1000 사이의 정수여야 해요');
+      if (!Number.isInteger(n) || n < 1 || n > 1000) throw new PolicyError(t('mcpCli.badMaxWrites'));
       maxWrites = n;
-    } else throw new PolicyError(`알 수 없는 옵션: ${a}`);
+    } else throw new PolicyError(t('mcpCli.unknownOption', { option: a }));
   }
-  if (!vault) throw new PolicyError('--vault <볼트 폴더> 가 필요해요');
+  if (!vault) throw new PolicyError(t('mcpCli.needVault'));
   const root = path.resolve(vault);
-  if (!existsSync(root) || !statSync(root).isDirectory()) throw new PolicyError(`볼트 폴더가 없어요: ${root}`);
-  if (folders.length && !write) throw new PolicyError('--write-folder 는 --write 와 함께 써야 해요');
+  if (!existsSync(root) || !statSync(root).isDirectory()) throw new PolicyError(t('mcpCli.vaultMissing', { path: root }));
+  if (folders.length && !write) throw new PolicyError(t('mcpCli.writeFolderNeedsWrite'));
   return {
     root,
     write,
@@ -73,16 +67,16 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
 /** 볼트 안 노트 경로를 정규화·검증한다(절대 경로·`..`·점으로 시작하는 폴더/파일·이상한 글자 거부, `.md` 보장). */
 export function validateNotePath(input: string): string {
   let p = input.normalize('NFC').replace(/\\/g, '/').replace(/^(\.\/)+/, '').trim();
-  if (!p) throw new PolicyError('경로가 비어 있어요');
-  if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) throw new PolicyError('볼트 안의 상대 경로만 쓸 수 있어요');
+  if (!p) throw new PolicyError(t('mcpPolicy.err.emptyPath'));
+  if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) throw new PolicyError(t('mcpPolicy.err.relativeOnly'));
   if (!/\.md$/i.test(p)) p += '.md';
-  if (p.length > 240) throw new PolicyError('경로가 너무 길어요');
+  if (p.length > 240) throw new PolicyError(t('mcpPolicy.err.tooLong'));
   const parts = p.split('/');
   for (const part of parts) {
-    if (part === '' || part === '.' || part === '..') throw new PolicyError(`잘못된 경로예요: ${input}`);
-    if (part.startsWith('.')) throw new PolicyError('점(.)으로 시작하는 폴더·파일은 쓸 수 없어요');
+    if (part === '' || part === '.' || part === '..') throw new PolicyError(t('mcpPolicy.err.badPath', { path: input }));
+    if (part.startsWith('.')) throw new PolicyError(t('mcpPolicy.err.dotName'));
     // eslint-disable-next-line no-control-regex
-    if (/[\\:*?"<>|\u0000-\u001f]/.test(part)) throw new PolicyError(`이름에 쓸 수 없는 글자가 있어요: ${part}`);
+    if (/[\\:*?"<>|\u0000-\u001f]/.test(part)) throw new PolicyError(t('mcpPolicy.err.badChars', { name: part }));
   }
   return p;
 }

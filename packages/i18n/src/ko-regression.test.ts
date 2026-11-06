@@ -517,6 +517,42 @@ const cases: Case[] = [
     base: () => '노트가 지금은 없어요(지웠거나 이름을 바꿨어요)',
     render: () => t('mcp.revertErr.missing'),
   },
+  // L4b: 메인·워커
+  {
+    name: 'main.restoreName',
+    base: (n) => `a.md (복원 ${n}).md`,
+    render: (n) => t('main.restoreName', { stem: 'a.md', n: ` ${n}`, ext: '.md' }),
+  },
+  {
+    name: 'main.copyName',
+    base: () => 'a (사본)',
+    render: () => t('main.copyName', { base: 'a' }),
+  },
+  {
+    name: 'main.notionFolder',
+    base: (n) => `Notion 가져오기 2026-11-0${n}`,
+    render: (n) => t('main.notionFolder', { day: `2026-11-0${n}` }),
+  },
+  {
+    name: 'main.err.tooManyFiles',
+    base: (n) => `파일이 너무 많아요(최대 ${n}개)`,
+    render: (n) => t('main.err.tooManyFiles', { max: n }),
+  },
+  {
+    name: 'main.err.dbNotFound',
+    base: (n) => `데이터베이스를 찾을 수 없어요: DB${n}`,
+    render: (n) => t('main.err.dbNotFound', { name: `DB${n}` }),
+  },
+  {
+    name: 'sync.diag.auth.title',
+    base: () => 'Google 로그인이 만료됐어요',
+    render: () => t('sync.diag.auth.title'),
+  },
+  {
+    name: 'sync.diag.auth.action',
+    base: () => 'Google 계정을 다시 연결해 주세요',
+    render: () => t('sync.diag.auth.action'),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { atomicWrite, extOf, resolveInVault, uniqueName } from '@nopsidian/core';
@@ -44,9 +45,9 @@ export function importMarkdownInto(root: string, sources: readonly string[], int
       } else if (ent.isFile()) {
         const md = isMarkdownFile(ent.name);
         if (!md && !ASSET_EXT.has(extOf(ent.name))) continue;
-        if (++count > MAX_FILES) throw new Error(`파일이 너무 많아요(최대 ${MAX_FILES}개)`);
+        if (++count > MAX_FILES) throw new Error(t('main.err.tooManyFiles', { max: MAX_FILES }));
         if (statSync(from).size > MAX_FILE_SIZE) {
-          res.skipped.push(`${ent.name} (너무 큼)`);
+          res.skipped.push(t('main.skip.tooBig', { name: ent.name }));
           continue;
         }
         mkdirSync(dest, { recursive: true });
@@ -63,11 +64,11 @@ export function importMarkdownInto(root: string, sources: readonly string[], int
     try {
       st = lstatSync(src);
     } catch {
-      res.skipped.push(`${base} (찾을 수 없음)`);
+      res.skipped.push(t('main.skip.notFound', { name: base }));
       continue;
     }
     if (st.isSymbolicLink()) {
-      res.skipped.push(`${base} (링크)`);
+      res.skipped.push(t('main.skip.link', { name: base }));
     } else if (st.isDirectory()) {
       const name = uniqueName(base, taken);
       if (name !== base) res.renamed++;
@@ -76,17 +77,17 @@ export function importMarkdownInto(root: string, sources: readonly string[], int
       if (res.notes + res.assets > before) res.imported.push(rel(name));
     } else if (st.isFile() && isMarkdownFile(base)) {
       if (st.size > MAX_FILE_SIZE) {
-        res.skipped.push(`${base} (너무 큼)`);
+        res.skipped.push(t('main.skip.tooBig', { name: base }));
         continue;
       }
-      if (++count > MAX_FILES) throw new Error(`파일이 너무 많아요(최대 ${MAX_FILES}개)`);
+      if (++count > MAX_FILES) throw new Error(t('main.err.tooManyFiles', { max: MAX_FILES }));
       const name = uniqueName(base, taken);
       if (name !== base) res.renamed++;
       atomicWrite(path.join(destDir, name), readFileSync(src));
       res.notes++;
       res.imported.push(rel(name));
     } else {
-      res.skipped.push(`${base} (Markdown 파일이 아님)`);
+      res.skipped.push(t('main.skip.notMarkdown', { name: base }));
     }
   }
   return res;

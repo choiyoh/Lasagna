@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { compileFormula, evalFormula, formulaError, formulaErrorText, FormulaError, type Compiled, type FDate, type FValue } from '@nopsidian/formula';
 import { isRollupFn, rollupValues, type CellValue, type DateValue, type DbRow, type DbSchema, type Property } from '@nopsidian/core/db';
 
@@ -20,7 +21,7 @@ export interface ComputedDb {
   errors: Record<string, Record<string, string>>;
 }
 
-const CIRCULAR = '순환 참조: 서로를 계산에 쓰고 있어요';
+const circularText = () => t('main.err.circular');
 
 /** `[[이름|별칭#제목]]` → 이름 */
 export const relationName = (raw: string): string => {
@@ -130,10 +131,10 @@ export class ComputeContext {
       for (const d of deps.get(n)!) if (!visit(d)) ok = false;
       state.set(n, 2);
       if (ok) order.push(n);
-      else this.fail(out, n, CIRCULAR);
+      else this.fail(out, n, circularText());
       return ok;
     };
-    for (const n of names) if (!visit(n)) this.fail(out, n, CIRCULAR);
+    for (const n of names) if (!visit(n)) this.fail(out, n, circularText());
     return order.filter((n, i) => order.indexOf(n) === i);
   }
 

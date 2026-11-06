@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 /**
  * 동기화 엔진용 실제 파일시스템 `LocalStore`.
  *
@@ -120,7 +121,7 @@ export class FsLocalStore implements LocalStore {
   async trash(p: SyncPath): Promise<void> {
     const abs = resolveInVault(this.root, p);
     const st = await lstatOrNull(abs);
-    if (!st || st.isDirectory()) throw new Error(`없는 경로: ${p}`);
+    if (!st || st.isDirectory()) throw new Error(t('main.err.missingPath', { path: p }));
     const dest = resolveInVault(this.root, `.nopsidian/trash/${stamp(this.now())}/${nfc(p)}`);
     await fsp.mkdir(path.dirname(dest), { recursive: true });
     await fsp.rename(abs, await freePath(dest));
@@ -130,9 +131,9 @@ export class FsLocalStore implements LocalStore {
     const fromAbs = resolveInVault(this.root, from);
     const toAbs = resolveInVault(this.root, to);
     const st = await lstatOrNull(fromAbs);
-    if (!st || st.isDirectory()) throw new Error(`없는 경로: ${from}`);
+    if (!st || st.isDirectory()) throw new Error(t('main.err.missingPath', { path: from }));
     if (from === to) return; // 제자리 이동 — 덮어쓸 게 없다
-    if (await lstatOrNull(toAbs)) throw new Error(`이미 있는 경로: ${to}`);
+    if (await lstatOrNull(toAbs)) throw new Error(t('main.err.pathExists', { path: to }));
     await fsp.mkdir(path.dirname(toAbs), { recursive: true });
     await fsp.rename(fromAbs, toAbs);
     // 빈 상위 폴더는 지우지 않는다(사용자가 보던 구조 그대로)

@@ -8,6 +8,8 @@ export interface SyncWorkerData {
   clientId: string;
   clientSecret?: string;
   tokens: { accessToken: string; refreshToken: string; expiresAt: number };
+  /** 이 워커가 만드는 문구의 언어(메인이 넘긴다) */
+  locale?: 'ko' | 'en';
 }
 
 export interface PlanSummary {

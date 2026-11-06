@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { copyFileSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import {
@@ -103,6 +104,7 @@ export function exportVaultSite(ctx: ExportContext, outDir: string): { notes: nu
     .sort((a, b) => a.path.localeCompare(b.path, 'ko'))
     .map((n) => `<li><a href="${encodePath(htmlPathOf(n.path))}">${esc(n.title)}</a> <span class="meta">${esc(n.path)}</span></li>`)
     .join('\n');
-  atomicWrite(path.join(outDir, 'index.html'), wrapHtmlDocument({ title: '노트 목록', body: `<h1>노트 목록</h1>\n<ul>\n${items}\n</ul>` }));
+  const listTitle = t('main.export.noteList');
+  atomicWrite(path.join(outDir, 'index.html'), wrapHtmlDocument({ title: listTitle, body: `<h1>${listTitle}</h1>\n<ul>\n${items}\n</ul>` }));
   return { notes: ctx.notes.length, assets };
 }

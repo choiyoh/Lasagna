@@ -56,7 +56,7 @@ export async function conflictCopyPath(path: SyncPath, date: Date, exists: (p: S
 
 /** 계획을 실행한다. 작업 하나가 실패해도 나머지는 계속하고, 각 작업의 결과를 보고서에 담는다. */
 export async function executePlan(plan: SyncPlan, deps: SyncDeps, opts: { force?: boolean } = {}): Promise<SyncReport> {
-  if (plan.blocked && !opts.force) throw new Error(`동기화를 멈췄어요: ${plan.blocked}`);
+  if (plan.blocked && !opts.force) throw Object.assign(new Error(`동기화를 멈췄어요: ${plan.blocked}`), { key: 'blocked', code: 'BLOCKED' });
   const isText = deps.isText ?? defaultIsText;
   const now = deps.now ?? (() => new Date());
   const entries = new Map((await deps.state.entries()).map((e) => [e.path, e]));

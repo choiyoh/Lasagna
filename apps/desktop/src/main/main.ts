@@ -31,7 +31,7 @@ import { readAudit } from '@nopsidian/mcp/audit';
 import { RevertError, applyRestore, logRevert, planRevert } from '@nopsidian/mcp/revert';
 import { readPolicyFile, writePolicyFile } from '@nopsidian/mcp/policy-file';
 import { events, graphLayout, graphSettings, workspaceLayout, type AppLanguage, type EventName } from '@nopsidian/ipc-contract';
-import { resolveLocale, setLocale } from '@nopsidian/i18n';
+import { resolveLocale, setLocale, t } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
@@ -176,7 +176,7 @@ const syncController = new SyncController({
   }),
   workerFile: path.join(__dirname, 'sync-worker.cjs'),
   openExternal: (url) => {
-    if (!openExternalSafe(url)) throw new Error('허용되지 않은 URL');
+    if (!openExternalSafe(url)) throw new Error(t('main.err.badUrl'));
   },
   broadcast: (status) => broadcast('sync.changed', status),
 });
@@ -306,7 +306,7 @@ function registerHandlers() {
     const v = requireVault();
     const content = readFileSync(resolveInVault(v.info.path, rel), 'utf8');
     const r = ensureBlockIdAt(content, line);
-    if (!r) throw new Error('그 줄에서 블록을 찾지 못했어요');
+    if (!r) throw new Error(t('main.err.blockNotFound'));
     if (r.changed) {
       // 대상 노트가 편집기에 열려 있어도 외부 편집과 같은 경로(3-way 병합)로 합쳐진다
       saveNote({ root: v.info.path, rel, content: r.content, baseHash: sha256(content), baseContent: content });
@@ -318,7 +318,7 @@ function registerHandlers() {
     await v.index.ready;
     const notes = await v.index.list();
     const target = notes.find((n) => n.path === targetPath);
-    if (!target) throw new Error('대상 노트를 찾을 수 없어요');
+    if (!target) throw new Error(t('main.err.targetNoteNotFound'));
     // 목록(`unlinkedMentions`)과 같은 기준: 2글자 이하 말은 쓰지 않는다
     const terms = [target.title, ...target.aliases].filter((t) => [...t].length > 2);
     const content = readFileSync(resolveInVault(v.info.path, rel), 'utf8');
@@ -357,7 +357,7 @@ function registerHandlers() {
     const title = ctx.notes.find((n) => n.path === rel)?.title ?? rel;
     const parent = BrowserWindow.fromWebContents(e.sender);
     const opts = {
-      title: format === 'pdf' ? 'PDF로 내보내기' : 'HTML로 내보내기',
+      title: format === 'pdf' ? t('main.dialog.exportPdf') : t('main.dialog.exportHtml'),
       defaultPath: `${title.replace(/[\\/:*?"<>|]/g, '_')}.${format}`,
       filters: [format === 'pdf' ? { name: 'PDF', extensions: ['pdf'] } : { name: 'HTML', extensions: ['html'] }],
     };
@@ -372,7 +372,7 @@ function registerHandlers() {
   handle('import.notion', async (_i, e) => {
     const v = requireVault();
     const parent = BrowserWindow.fromWebContents(e.sender);
-    const opts = { title: 'Notion 내보내기 ZIP 선택', properties: ['openFile' as const], filters: [{ name: 'ZIP', extensions: ['zip'] }] };
+    const opts = { title: t('main.dialog.notionZip'), properties: ['openFile' as const], filters: [{ name: 'ZIP', extensions: ['zip'] }] };
     const r = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
     const file = r.filePaths[0];
     if (r.canceled || !file) return { folder: null, notes: 0, databases: 0, rows: 0, assets: 0, unresolvedLinks: 0, issues: [] };
@@ -394,8 +394,8 @@ function registerHandlers() {
       const parent = BrowserWindow.fromWebContents(e.sender);
       const opts =
         input.mode === 'files'
-          ? { title: 'Markdown 파일 가져오기', properties: ['openFile' as const, 'multiSelections' as const], filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }] }
-          : { title: 'Markdown 폴더 가져오기', properties: ['openDirectory' as const, 'multiSelections' as const] };
+          ? { title: t('main.dialog.importFiles'), properties: ['openFile' as const, 'multiSelections' as const], filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }] }
+          : { title: t('main.dialog.importFolder'), properties: ['openDirectory' as const, 'multiSelections' as const] };
       const r = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
       if (r.canceled) return { notes: 0, assets: 0, renamed: 0, imported: [], skipped: [] };
       paths = r.filePaths;
@@ -406,7 +406,7 @@ function registerHandlers() {
     const v = requireVault();
     await v.index.ready;
     const parent = BrowserWindow.fromWebContents(e.sender);
-    const opts = { title: '내보낼 폴더 선택', properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[] };
+    const opts = { title: t('main.dialog.exportFolder'), properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[] };
     const r = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
     const dir = r.filePaths[0];
     if (r.canceled || !dir) return { dir: null, notes: 0, assets: 0 };
@@ -654,7 +654,7 @@ function registerHandlers() {
     return 'opened' as const;
   });
   handle('app.openExternal', ({ url }) => {
-    if (!openExternalSafe(url)) throw new Error('허용되지 않은 URL');
+    if (!openExternalSafe(url)) throw new Error(t('main.err.badUrl'));
     return undefined;
   });
   handle('settings.language', () => currentLanguage());

@@ -110,6 +110,8 @@ export const syncFailure = z.object({
   action: z.string(),
   /** docs/sync-setup.md 의 해당 단계 */
   docs: z.string(),
+  /** 실패 종류 키 — 있으면 화면·저장본이 지금 언어로 제목·행동을 다시 만든다 */
+  kind: z.string().optional(),
 });
 export type SyncFailure = z.infer<typeof syncFailure>;
 

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthRevokedError, DriveApiError, DriveAuthError } from '@nopsidian/sync-gdrive';
+import { setLocale } from '@nopsidian/i18n';
 import { errorDetails, withRefreshOn401 } from '../workers/sync/error-info';
 import { CredentialStore, SyncController, credentialSuffix, maskEmail, syncFailureFor, vaultKeyFor, type SecretBox } from './sync';
 
@@ -315,6 +316,23 @@ describe('진단 확인의 실패 처리', () => {
       expect(revoked.store.load()?.tokens).toBeUndefined();
     } finally {
       await revoked.controller.detachVault();
+    }
+  });
+});
+
+describe('언어를 바꾼 뒤의 실패 문구', () => {
+  it('저장된 실패(kind)는 지금 언어로 다시 만들고, 성공한 지금 확인 경로도 같은 규칙을 쓴다', async () => {
+    const { controller } = await controllerFor({ error: 'Drive 인증 실패', kind: 'auth', key: 'auth', code: 'HTTP 401' });
+    try {
+      const ko = await controller.check();
+      expect(ko.lastFailure).toMatchObject({ code: 'HTTP 401', title: 'Google 로그인을 확인하지 못했어요' });
+      setLocale('en');
+      const en = await controller.check();
+      expect(en.lastFailure).toMatchObject({ code: 'HTTP 401', title: 'Could not verify the Google sign-in' });
+      setLocale('ko');
+    } finally {
+      await controller.detachVault();
+      setLocale('ko');
     }
   });
 });

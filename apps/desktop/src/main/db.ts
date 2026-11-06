@@ -64,12 +64,12 @@ export function readDbSchema(v: OpenVault, folder: string): DbSchema {
 
 /** 행 노트의 속성 하나를 고친다. 프런트매터의 그 키만 바뀌고 나머지 바이트는 그대로다. */
 export async function updateCell(v: OpenVault, notePath: string, prop: string, value: unknown): Promise<void> {
-  if (prop === TITLE_PROP) throw new Error('제목은 노트 이름 변경(F2)으로 바꿔 주세요');
+  if (prop === TITLE_PROP) throw new Error(t('main.err.titleRename'));
   const folder = await dbFolderOf(v, notePath);
-  if (folder === null) throw new Error('이 노트는 데이터베이스의 행이 아니에요');
+  if (folder === null) throw new Error(t('main.err.notDbRow'));
   const def = readDbSchema(v, folder).properties[prop];
-  if (!def) throw new Error(`없는 속성: ${prop}`);
-  if (!STORED_TYPES.has(def.type)) throw new Error('이 속성은 계산되는 값이라 직접 고칠 수 없어요');
+  if (!def) throw new Error(t('main.err.missingProp', { prop }));
+  if (!STORED_TYPES.has(def.type)) throw new Error(t('main.err.computedProp'));
   const fmValue = toFrontmatterValue(def, normalizeValue(def, value));
   const disk = readFileSync(resolveInVault(v.info.path, notePath), 'utf8');
   const next = setFrontmatter(disk, { [prop]: fmValue });
@@ -184,7 +184,7 @@ export async function createDatabase(v: OpenVault, folder: string, title: string
   const abs = resolveInVault(v.info.path, folder === '' ? '.' : folder);
   mkdirSync(abs, { recursive: true });
   const file = resolveInVault(v.info.path, path.posix.join(folder, DB_FILE));
-  if (existsSync(file)) throw new Error('이미 데이터베이스예요');
+  if (existsSync(file)) throw new Error(t('main.err.alreadyDb'));
   atomicWrite(file, newDbYaml(title));
   return folder;
 }
@@ -198,7 +198,7 @@ export async function editSchema(v: OpenVault, folder: string, op: SchemaOp): Pr
   switch (op.kind) {
     case 'setProperty': {
       const r = propertySchema.safeParse(op.def);
-      if (!r.success || op.name === TITLE_PROP) throw new Error('속성 정의가 올바르지 않아요');
+      if (!r.success || op.name === TITLE_PROP) throw new Error(t('main.err.badPropDef'));
       next = setDbProperty(text, op.name, r.data);
       break;
     }
@@ -206,7 +206,7 @@ export async function editSchema(v: OpenVault, folder: string, op: SchemaOp): Pr
       next = removeDbProperty(text, op.name);
       break;
     case 'renameProperty': {
-      if (op.to === TITLE_PROP) throw new Error('‘title’은 쓸 수 없는 이름이에요');
+      if (op.to === TITLE_PROP) throw new Error(t('main.err.reservedTitle'));
       next = renameDbProperty(text, op.from, op.to);
       if (next !== text) {
         await v.index.ready;
@@ -227,7 +227,7 @@ export async function editSchema(v: OpenVault, folder: string, op: SchemaOp): Pr
     }
     case 'upsertView': {
       const r = viewSchema.safeParse(op.view);
-      if (!r.success) throw new Error('보기 설정이 올바르지 않아요');
+      if (!r.success) throw new Error(t('main.err.badView'));
       next = upsertDbView(text, r.data);
       break;
     }
@@ -266,7 +266,7 @@ export async function exportCsv(v: OpenVault, folder: string, viewId?: string): 
   const schema = first!.schema;
   const cols = first!.view.columns?.length ? first!.view.columns : [TITLE_PROP, ...Object.keys(schema.properties)];
   const table = rowsToCsvTable(schema, cols, rows.map((r) => ({ title: r.title, values: r.values as Record<string, CellValue> })));
-  const opts = { title: 'CSV로 내보내기', defaultPath: `${schema.title ?? 'database'}.csv`, filters: [{ name: 'CSV', extensions: ['csv'] }] };
+  const opts = { title: t('main.dialog.exportCsv'), defaultPath: `${schema.title ?? 'database'}.csv`, filters: [{ name: 'CSV', extensions: ['csv'] }] };
   const win = dlgParent();
   const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
   if (r.canceled || !r.filePath) return null;
@@ -296,13 +296,13 @@ export interface CsvPreview {
 
 /** CSV 파일을 고르게 하고 열 이름·추정 형식·미리보기를 돌려준다. 취소하면 null. */
 export async function importCsvPreview(): Promise<CsvPreview | null> {
-  const opts = { title: 'CSV 가져오기', properties: ['openFile' as const], filters: [{ name: 'CSV', extensions: ['csv', 'tsv', 'txt'] }] };
+  const opts = { title: t('main.dialog.importCsv'), properties: ['openFile' as const], filters: [{ name: 'CSV', extensions: ['csv', 'tsv', 'txt'] }] };
   const win = dlgParent();
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
   const file = r.filePaths[0];
   if (r.canceled || !file) return null;
   const table = parseCsv(readFileSync(file, 'utf8'), { delimiter: 'auto' });
-  if (table.length < 2) throw new Error('가져올 행이 없어요(첫 줄은 열 이름이에요)');
+  if (table.length < 2) throw new Error(t('main.err.noRows'));
   const token = createHash('sha256').update(`${file}:${Date.now()}:${Math.random()}`).digest('hex').slice(0, 16);
   while (csvSessions.size >= 3) csvSessions.delete(csvSessions.keys().next().value!);
   const fileName = path.basename(file);
@@ -339,10 +339,10 @@ export async function importCsvApply(
   choices: CsvColumnChoice[],
 ): Promise<{ folder: string; rows: number; issues: string[] }> {
   const session = csvSessions.get(token);
-  if (!session) throw new Error('가져오기 세션이 만료됐어요. 파일을 다시 골라 주세요');
+  if (!session) throw new Error(t('main.err.importExpired'));
   const { table } = session;
   const titleCols = choices.filter((c) => c.type === 'title');
-  if (titleCols.length !== 1) throw new Error('제목으로 쓸 열을 하나만 골라 주세요');
+  if (titleCols.length !== 1) throw new Error(t('main.err.oneTitleColumn'));
 
   let folder: string;
   let schema: DbSchema | null = null;
@@ -367,7 +367,7 @@ export async function importCsvApply(
     const existing = schema?.properties[c.name];
     let prop: Property | undefined = existing;
     if (!prop) {
-      if (!IMPORT_TYPES.has(c.type)) throw new Error(`지원하지 않는 형식: ${c.type}`);
+      if (!IMPORT_TYPES.has(c.type)) throw new Error(t('main.err.unsupportedType', { type: c.type }));
       const distinct = [...new Set(table.slice(1).flatMap((row) => (c.type === 'multi_select' ? (row[index] ?? '').split(',') : [row[index] ?? ''])).map((x) => x.trim()).filter(Boolean))].slice(0, 100);
       const def = propertySchema.parse(
         c.type === 'select' || c.type === 'multi_select'

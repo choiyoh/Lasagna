@@ -36,19 +36,40 @@ export function resolveLocale(setting: LanguageSetting, systemLanguages: readonl
   return first.startsWith('ko') ? 'ko' : 'en'
 }
 
+/** 숫자를 한국어로 읽었을 때 받침이 있는지(0 영·1 일·3 삼·6 육·7 칠·8 팔 은 있음). */
+const DIGIT_BATCHIM: Record<string, boolean> = {
+  '0': true,
+  '1': true,
+  '2': false,
+  '3': true,
+  '4': false,
+  '5': false,
+  '6': true,
+  '7': true,
+  '8': true,
+  '9': false,
+};
+
 /**
- * 앞말의 받침에 따라 '이에요/예요'를 붙인다(예: 문자열이에요, 숫자예요). 한글이 아니면 '예요'.
- * 영어 사전에서는 두 꼬리말이 빈 문자열이라 그대로 이어 붙는다.
+ * 앞말에 '이에요/예요' 중 무엇이 맞는지. 언어(`target`)마다 다르다 — 영어는 꼬리말이 없어 빈 문자열.
+ * - 한글 음절: 받침이 있으면 '이에요', 없으면 '예요'(문자열이에요 · 숫자예요).
+ * - 숫자로 끝남: 읽는 소리의 받침으로 고른다(0 영이에요 · 1 일이에요 · 2 이예요 · 3 삼이에요 · 10 십이에요).
+ * - 그 밖(영문·기호·이모지): 받침을 알 수 없으므로 안전하게 '이에요' 를 쓴다(문구에서는 값에 따옴표를 붙여 쓴다).
  */
-export function copulaSuffix(word: string): string {
+export function copulaSuffix(word: string, target: Locale = getLocale()): string {
+  if (target !== 'ko') return '';
   const last = Array.from(word).pop() ?? '';
   const code = last.codePointAt(0) ?? 0;
-  const hasBatchim = code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
-  return hasBatchim ? t('copula.ieyo') : t('copula.yeyo');
+  if (code >= 0xac00 && code <= 0xd7a3) {
+    return (code - 0xac00) % 28 !== 0 ? translate(target, 'copula.ieyo') : translate(target, 'copula.yeyo');
+  }
+  const digit = DIGIT_BATCHIM[last];
+  if (digit !== undefined) return translate(target, digit ? 'copula.ieyo' : 'copula.yeyo');
+  return translate(target, 'copula.ieyo');
 }
 
 /** 앞말에 맞는 '이에요/예요'를 붙인 문구. */
-export const withCopula = (word: string): string => word + copulaSuffix(word);
+export const withCopula = (word: string, target: Locale = getLocale()): string => word + copulaSuffix(word, target);
 
 export function getLocale(): Locale {
   return state.locale
@@ -96,7 +117,11 @@ export function translate(
   // '…{type} 이에요' 의 꼬리말은 앞말(값 종류 이름)에 맞춰 여기서 정한다(문자열이에요/숫자예요).
   const needsCopula = text.includes('{be}') && params?.be === undefined
   const withCopulaParam = needsCopula
-    ? { ...params, be: copulaSuffix(typeof params?.type === 'string' ? params.type : typeof params?.value === 'string' ? params.value : '') }
+    ? {
+        ...params,
+        // 꼬리말은 **호출의 target 언어**로 정한다(현재 앱 언어가 아니라).
+        be: copulaSuffix(typeof params?.type === 'string' ? params.type : typeof params?.value === 'string' ? params.value : '', target),
+      }
     : params
   return interpolate(text, withCopulaParam)
 }

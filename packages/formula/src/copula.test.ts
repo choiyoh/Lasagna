@@ -39,3 +39,23 @@ describe('값 종류 뒤의 이에요/예요', () => {
     expect(en).not.toMatch(/\{be\}/);
   });
 });
+
+describe('raw 값이 들어가는 문구', () => {
+  it('fromTimestamp 값은 숫자·영문 모두 따옴표 + 고정 서술어로 안전하다', () => {
+    setLocale('ko');
+    for (const value of ['0', '1', '123', 'string', '🙂', '']) {
+      const err = { key: 'formula.err.fromTimestampArg' as MessageKey, params: { value } };
+      expect([value, formulaErrorText(err)]).toEqual([value, `fromTimestamp: 숫자가 필요한데 '${value}' 값이에요`]);
+    }
+    setLocale('en');
+    const en = formulaErrorText({ key: 'formula.err.fromTimestampArg' as MessageKey, params: { value: 'string' } });
+    expect(en).toBe('fromTimestamp: expected a number but got string');
+    expect(en).not.toMatch(HANGUL);
+  });
+
+  it('날짜 함수의 타입 오류는 값 종류 이름을 쓴다(raw 영문 대신)', () => {
+    setLocale('ko');
+    const err = { key: 'formula.err.parseDateArg' as MessageKey, params: { type: { key: 'formula.type.number' as MessageKey } } };
+    expect(formulaErrorText(err)).toBe('parseDate: 문자열이나 날짜가 필요한데 숫자예요');
+  });
+});

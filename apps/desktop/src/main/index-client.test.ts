@@ -112,7 +112,7 @@ describe('IndexClient', () => {
     await expect(call).rejects.toThrow('색인 DB 를 열지 못했어요');
   });
 
-  it('close() 는 죽은 워커의 응답을 끝없이 기다리지 않는다', async () => {
+  it('close()는 죽은 워커의 응답을 끝없이 기다리지 않는다', async () => {
     vi.useFakeTimers();
     try {
       const { client, workers } = makeClient();
@@ -153,7 +153,7 @@ describe('IndexClient', () => {
     await expect(client.list()).rejects.toThrow(/자동 재시작을 멈췄어요/);
   });
 
-  it('close() 는 재시작하지 않고 워커를 정리한다', async () => {
+  it('close()는 재시작하지 않고 워커를 정리한다', async () => {
     const { client, workers } = makeClient();
     workers[0].ready();
     await client.ready;
@@ -168,7 +168,7 @@ describe('IndexClient', () => {
     expect(workers).toHaveLength(1); // exit 가 와도 재시작하지 않는다
   });
 
-  it('close() 는 응답 뒤 워커가 스스로 exit 할 때까지 기다린다', async () => {
+  it('close()는 응답 뒤 워커가 스스로 exit 할 때까지 기다린다', async () => {
     const { client, workers } = makeClient();
     workers[0].ready();
     await client.ready;
@@ -182,7 +182,7 @@ describe('IndexClient', () => {
     expect(workers[0].terminated).toBe(true);
   });
 
-  it('close() 는 대기 중인 호출을 거부한다', async () => {
+  it('close()는 대기 중인 호출을 거부한다', async () => {
     const { client, workers } = makeClient();
     workers[0].ready();
     await client.ready;

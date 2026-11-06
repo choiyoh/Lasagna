@@ -1097,7 +1097,7 @@ export const ko = {
   'formula.err.parseDateArg': 'parseDate: 문자열이나 날짜가 필요한데 {type}{be}',
   'formula.err.formatString': 'formatDate: 형식은 문자열이어야 해요',
   'formula.err.startOfSecond': 'startOf: 쓸 수 없는 단위: second',
-  'formula.err.fromTimestampArg': 'fromTimestamp: 숫자가 필요한데 {value}{be}',
+  'formula.err.fromTimestampArg': "fromTimestamp: 숫자가 필요한데 '{value}' 값이에요",
   'formula.err.dateRangeOrder': 'dateRange: 끝이 시작보다 빠를 수 없어요',
   'formula.err.argNotNumber': '{fn}: {what} 값이 숫자가 아니에요',
   'formula.err.argNotInteger': '{fn}: {what} 값은 정수여야 해요',

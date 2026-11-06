@@ -1096,7 +1096,7 @@ export const en: Record<MessageKey, string> = {
   'formula.err.parseDateArg': 'parseDate: expected text or a date but got {type}{be}',
   'formula.err.formatString': 'formatDate: the format must be text',
   'formula.err.startOfSecond': 'startOf: cannot use this unit: second',
-  'formula.err.fromTimestampArg': 'fromTimestamp: expected a number but got {value}{be}',
+  'formula.err.fromTimestampArg': 'fromTimestamp: expected a number but got {value}',
   'formula.err.dateRangeOrder': 'dateRange: the end cannot be before the start',
   'formula.err.argNotNumber': '{fn}: {what} is not a number',
   'formula.err.argNotInteger': '{fn}: {what} must be a whole number',

@@ -32,6 +32,14 @@ describe('data defaults follow the app language when they are created', () => {
     expect(parseDbSchema(newDbYaml('x')).schema.views[0]!.name).toBe('View');
   });
 
+  it('name 없는 보기를 읽을 때도 같은 기본값을 쓴다(실제 parse 경로)', () => {
+    setLocale('ko');
+    expect(parseDbSchema('version: 1\ntitle: x\nviews:\n  - { id: v1, type: table }\n').schema.views[0]!.name).toBe('보기');
+    expect(parseDbSchema('version: 1\n').schema.views[0]!.name).toBe('보기');
+    setLocale('en');
+    expect(parseDbSchema('version: 1\ntitle: x\nviews:\n  - { id: v1, type: table }\n').schema.views[0]!.name).toBe('View');
+  });
+
   it('names a conflict copy', () => {
     const now = new Date(Date.UTC(2026, 10, 5));
     setLocale('ko');

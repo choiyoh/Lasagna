@@ -83,7 +83,8 @@ export const CALC_FNS = ['count', 'count_values', 'count_empty', 'count_unique',
 
 export const view = z.object({
   id: z.string().min(1),
-  name: z.string().default(() => t('db.view.table')),
+  // 만들어 저장되는 기본값: ko 는 base 와 같은 '보기', en 은 'View' (타입 라벨 '표'/'Table' 과 다르다)
+  name: z.string().default(() => t('default.dbViewName')),
   type: z.enum(['table', 'board', 'list', 'gallery', 'calendar', 'timeline']).default('table'),
   /** 보일 속성 순서(`title` 포함). 없으면 모든 속성 */
   columns: z.array(z.string()).optional(),

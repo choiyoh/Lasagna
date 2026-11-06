@@ -1,6 +1,7 @@
 import { t } from '@nopsidian/i18n';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Toast } from './app-types';
+import { userMessage } from './user-message';
 
 /** 화면 아래에 잠깐 뜨는 알림. `undo` 가 있으면 "되돌리기" 버튼이 붙는다. */
 export function ToastView({ toast, setToast }: { toast: Toast | null; setToast: Dispatch<SetStateAction<Toast | null>> }) {
@@ -24,7 +25,7 @@ export function ToastView({ toast, setToast }: { toast: Toast | null; setToast: 
           onClick={() => {
             const undo = toast.undo!;
             setToast(null);
-            void undo().catch((e) => setToast({ message: t('toast.undoFailed', { message: e instanceof Error ? e.message : String(e) }) }));
+            void undo().catch((e) => setToast({ message: t('toast.undoFailed', { message: userMessage(e) }) }));
           }}
         >
           {t('toast.undo')}

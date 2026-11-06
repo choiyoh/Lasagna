@@ -163,7 +163,15 @@ export const syncRunSummary = z.object({
   conflicts: z.number(),
   failed: z.number(),
   conflictPaths: z.array(z.string()),
-  errors: z.array(z.object({ path: z.string(), message: z.string() })),
+  // key/params 는 추가 필드 — 있으면 화면이 표시 시점에 번역한다(구버전은 message 만 읽는다).
+  errors: z.array(
+    z.object({
+      path: z.string(),
+      message: z.string(),
+      key: z.string().optional(),
+      params: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+    }),
+  ),
 });
 
 // ── 데이터베이스(폴더 + _db.yaml) ──
@@ -211,7 +219,14 @@ export const dbQueryOutput = z.object({
   folder: z.string(),
   /** `@nopsidian/core/db` 의 DbSchema — 렌더러가 core 스키마 타입으로 읽는다 */
   schema: z.unknown(),
-  issues: z.array(z.object({ path: z.string(), message: z.string() })),
+  issues: z.array(
+    z.object({
+      path: z.string(),
+      message: z.string(),
+      key: z.string().optional(),
+      params: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+    }),
+  ),
   view: z.unknown(),
   total: z.number(),
   matched: z.number(),

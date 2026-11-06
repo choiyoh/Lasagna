@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CommentItem } from '@nopsidian/ipc-contract';
 import { keys } from './keys';
 import { SELECTION_REPLY, SELECTION_REQUEST } from './outline';
+import { userMessage } from './user-message';
 
 const when = (iso: string) => formatShortDateTime(iso);
 
@@ -52,7 +53,7 @@ export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: (
       load();
       onChanged?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      setError(userMessage(e));
     }
   };
   const mutate = async (fn: () => Promise<unknown>) => {

@@ -4,6 +4,7 @@ import type { VaultInfo } from '@nopsidian/ipc-contract';
 import { Logo } from './Logo';
 import { applyTheme, loadTheme, nextTheme, THEME_ICON, THEME_KEY, type ThemeChoice } from './theme';
 import { useLocale } from './useLocale';
+import { userMessage } from './user-message';
 
 export function VaultPicker({ onOpen }: { onOpen: (v: VaultInfo) => void }) {
   useLocale();
@@ -20,7 +21,7 @@ export function VaultPicker({ onOpen }: { onOpen: (v: VaultInfo) => void }) {
       const v = await fn();
       if (v) onOpen(v);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(userMessage(e));
     }
   };
 

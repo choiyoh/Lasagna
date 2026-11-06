@@ -1,5 +1,6 @@
 import { t } from '@nopsidian/i18n';
 import { folderCovers, normalizeFolder, PolicyError } from '@nopsidian/mcp/folders';
+import { userMessage } from './user-message';
 
 /** `mcp.info` IPC 가 돌려주는 것: 번들된 서버 경로·볼트·앱 실행 파일·패키징 여부 */
 export interface McpInfo {
@@ -68,7 +69,7 @@ export function folderError(folder: string): FolderError | null {
     return null;
   } catch (e) {
     const code = e instanceof PolicyError ? e.code : undefined;
-    return { ...(code ? { code, params: e instanceof PolicyError ? e.params : undefined } : {}), message: e instanceof Error ? e.message : String(e) };
+    return { ...(code ? { code, params: e instanceof PolicyError ? e.params : undefined } : {}), message: userMessage(e) };
   }
 }
 

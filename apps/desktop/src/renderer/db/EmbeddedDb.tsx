@@ -9,6 +9,7 @@ import { TableView } from './TableView';
 import { TimelineView } from './TimelineView';
 import type { CellValue, DbData, DbRowDto, View } from './types';
 import { hiddenColumnView, sortedView } from './view-edit';
+import { userMessage } from '../user-message';
 
 export interface DbEmbedHost {
   vaultId: string;
@@ -20,7 +21,7 @@ export interface DbEmbedHost {
   renameNote?: (path: string, title: string) => void;
 }
 
-const clean = (e: unknown) => (e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+const clean = (e: unknown) => (userMessage(e));
 
 /** 노트 안에 들어가는 데이터베이스 보기(```dbview). 값은 바로 고칠 수 있고, 제목·카드를 누르면 노트가 열린다. */
 export function EmbeddedDb({ source, host }: { source: string; host: DbEmbedHost }) {

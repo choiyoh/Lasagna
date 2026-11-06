@@ -8,6 +8,7 @@ import { errorText } from './errors.js';
 import { csvToRows, guessColumns } from './db/csv.js';
 import { parseDbEmbed } from './db/embed.js';
 import { renameFrontmatterKey, setFrontmatter } from './db/yaml-edit.js';
+import { parseDbSchema } from './db/schema.js';
 import { readHistory } from './history.js';
 import { parseNote, replaceBlock } from './markdown/parse.js';
 import { applyEdits } from './markdown/link-spans.js';
@@ -138,5 +139,20 @@ describe('core 오류 문구의 언어', () => {
     const koRows = csvToRows([['Title', 'Score'], ['a', 'not-a-number']], koCols);
     expect(koRows[0]!.issues[0]).toContain("1행");
     expect(koRows[0]!.issues[0]).toContain("읽을 수 없는 값 'not-a-number'");
+  });
+
+  it('스키마 이슈는 코드+params 도 함께 남겨 화면이 표시 시점에 번역한다', () => {
+    setLocale('ko');
+    const ko = parseDbSchema('version: 1\nproperties:\n  title: { type: text }\n');
+    const koIssue = ko.issues.find((i) => i.path === 'properties.title')!;
+    expect(koIssue).toMatchObject({ key: 'db.issue.reservedTitle' });
+    expect(koIssue.message).toBe('`title` 은 노트 제목에 쓰는 예약어라 속성 이름으로 쓸 수 없어요');
+
+    // 코드로 다시 만들면 그때 언어를 따른다(저장된 message 가 아니라 key 를 쓴다)
+    setLocale('en');
+    const en = parseDbSchema('version: 1\nproperties:\n  title: { type: text }\n');
+    const enIssue = en.issues.find((i) => i.path === 'properties.title')!;
+    expect(enIssue.message).not.toMatch(HANGUL);
+    expect(enIssue.message).toBe('`title` is reserved for the note title, so it cannot be a property name');
   });
 });

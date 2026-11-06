@@ -44,8 +44,8 @@ export interface RunSummary {
   failed: number;
   /** 충돌 사본·충돌 표식이 남은 노트 */
   conflictPaths: string[];
-  /** 앞쪽 몇 건의 실패 사유 */
-  errors: { path: string; message: string }[];
+  /** 앞쪽 몇 건의 실패 사유. `key`/`params` 가 있으면 화면이 그때그때 번역한다(추가 필드). */
+  errors: { path: string; message: string; key?: string; params?: Record<string, string | number> }[];
 }
 
 export type SyncErrorKind = 'auth' | 'offline' | 'other';

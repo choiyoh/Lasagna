@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { t, tPlural } from '@nopsidian/i18n';
 import { typeLabel } from './labels';
+import { userMessage } from '../user-message';
 
 type Preview = NonNullable<Awaited<ReturnType<typeof window.nops.db.importCsvPreview>>>;
 
@@ -44,7 +45,7 @@ export function CsvImportDialog({ preview, existing, onClose, onDone }: Props) {
       });
       setResult(r);
     } catch (e) {
-      setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      setError(userMessage(e));
     } finally {
       setBusy(false);
     }

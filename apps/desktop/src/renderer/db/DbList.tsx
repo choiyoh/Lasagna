@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { t } from '@nopsidian/i18n';
 import { CsvImportDialog } from './CsvImportDialog';
 import { DatabaseIcon } from '../icons';
+import { userMessage } from '../user-message';
 
 interface Props {
   onOpen: (folder: string) => void;
@@ -39,7 +40,7 @@ export function DbList({ onOpen }: Props) {
       setCreating(false);
       onOpen(r.folder);
     } catch (e) {
-      setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      setError(userMessage(e));
     }
   };
 
@@ -79,7 +80,7 @@ export function DbList({ onOpen }: Props) {
             onClick={() =>
               void window.nops.db.importCsvPreview().then(
                 (p) => p && setImporting(p),
-                (e) => setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)),
+                (e) => setError(userMessage(e)),
               )
             }
           >

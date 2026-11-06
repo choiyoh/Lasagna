@@ -3,7 +3,8 @@ import type { SyncDiagnostics, SyncStatus } from '@nopsidian/ipc-contract';
 import { formatDateTime, formatRelativeTime, t, tPlural, type MessageKey } from '@nopsidian/i18n';
 import { useLocale } from './useLocale';
 import { formatSyncDiagnostics } from './sync-diagnostics';
-import { blockedPlanText } from './sync-blocked';
+import { blockedPlanText, resultErrorText } from './sync-blocked';
+import { userMessage } from './user-message';
 
 type Plan = Awaited<ReturnType<typeof window.nops.sync.plan>>;
 type Run = Awaited<ReturnType<typeof window.nops.sync.run>>;
@@ -85,7 +86,7 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      setError(userMessage(e));
     } finally {
       setBusy(null);
     }
@@ -345,7 +346,9 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
               {result.failed > 0 && <span className="warn">{t('sync.resultFailed', { n: result.failed })}</span>}
             </p>
             {result.errors.map((e, i) => (
-              <p key={i} className="small warn">{e.path}: {e.message}</p>
+              <p key={i} className="small warn">
+                {e.path}: {resultErrorText(e)}
+              </p>
             ))}
           </section>
         )}

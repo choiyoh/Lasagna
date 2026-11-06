@@ -13,6 +13,13 @@ const hasPlaceholder = (text: string): boolean => /\{[a-zA-Z_][\w]*\}/.test(text
  * 계획이 멈춘 사유 문구. 코드가 있으면 **그릴 때마다** 지금 언어로 만들고,
  * 값이 없거나 자리표시자가 남으면 일반 문구로 안전하게 떨어진다(레거시 `blocked` 문자열은 마지막 수단).
  */
+/** 동기화 결과의 실패 사유 — 코드가 있으면 그릴 때 번역한다(옛 문구가 남지 않게). */
+export function resultErrorText(e: { message: string; key?: string; params?: Record<string, string | number> }): string {
+  if (!e.key) return e.message;
+  const text = t(e.key as never, (e.params ?? {}) as never);
+  return hasPlaceholder(text) ? e.message : text;
+}
+
 export function blockedPlanText(plan: BlockedPlan): string {
   if (!plan.blockedCode) return plan.blocked ?? '';
   const text = plan.blockedParams ? t('sync.blocked.deleteRatio', plan.blockedParams) : t('sync.blocked.stop');

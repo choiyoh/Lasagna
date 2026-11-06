@@ -127,7 +127,7 @@ views:
     const local = new Indexer(dir, ':memory:');
     local.scan();
     const ko = local.queryDatabase({ folder: '수식', viewId: 'all', locale: 'ko' });
-    expect(ko.errors['수식/행.md']?.['계산']).toBe('round: 숫자가 필요한데 문자열 이에요');
+    expect(ko.errors['수식/행.md']?.['계산']).toBe('round: 숫자가 필요한데 문자열이에요');
     const en = local.queryDatabase({ folder: '수식', viewId: 'all', locale: 'en' });
     expect(en.errors['수식/행.md']?.['계산']).toBe('round: expected a number but got Text');
     // 같은 언어로 다시 물으면 캐시를 쓴다(문구 동일)
@@ -158,7 +158,7 @@ views:
     const local = new Indexer(dir, ':memory:');
     local.scan();
     const ko = local.rowDatabase('수식/행.md', 'ko');
-    expect(ko?.errors['계산']).toBe('round: 숫자가 필요한데 문자열 이에요');
+    expect(ko?.errors['계산']).toBe('round: 숫자가 필요한데 문자열이에요');
     const en = local.rowDatabase('수식/행.md', 'en');
     expect(en?.errors['계산']).toBe('round: expected a number but got Text');
   });

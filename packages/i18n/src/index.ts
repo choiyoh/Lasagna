@@ -36,6 +36,20 @@ export function resolveLocale(setting: LanguageSetting, systemLanguages: readonl
   return first.startsWith('ko') ? 'ko' : 'en'
 }
 
+/**
+ * 앞말의 받침에 따라 '이에요/예요'를 붙인다(예: 문자열이에요, 숫자예요). 한글이 아니면 '예요'.
+ * 영어 사전에서는 두 꼬리말이 빈 문자열이라 그대로 이어 붙는다.
+ */
+export function copulaSuffix(word: string): string {
+  const last = Array.from(word).pop() ?? '';
+  const code = last.codePointAt(0) ?? 0;
+  const hasBatchim = code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
+  return hasBatchim ? t('copula.ieyo') : t('copula.yeyo');
+}
+
+/** 앞말에 맞는 '이에요/예요'를 붙인 문구. */
+export const withCopula = (word: string): string => word + copulaSuffix(word);
+
 export function getLocale(): Locale {
   return state.locale
 }
@@ -79,7 +93,12 @@ export function translate(
     console.warn(`[i18n] missing ${target} message: ${key}`)
     return key
   }
-  return interpolate(text, params)
+  // '…{type} 이에요' 의 꼬리말은 앞말(값 종류 이름)에 맞춰 여기서 정한다(문자열이에요/숫자예요).
+  const needsCopula = text.includes('{be}') && params?.be === undefined
+  const withCopulaParam = needsCopula
+    ? { ...params, be: copulaSuffix(typeof params?.type === 'string' ? params.type : typeof params?.value === 'string' ? params.value : '') }
+    : params
+  return interpolate(text, withCopulaParam)
 }
 
 /** 지금 언어로 번역한다. */

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { en } from './messages/en'
 import { ko } from './messages/ko'
 import {
+  copulaSuffix,
+  withCopula,
   DEFAULT_LOCALE,
   getLocale,
   interpolate,
@@ -106,5 +108,19 @@ describe('messages', () => {
     expect(tPlural('demo.notes', 3, undefined, catalog)).toBe('3 notes')
     setLocale('ko')
     expect(tPlural('demo.notes', 1, undefined, { ...catalog, 'demo.notes.other': '노트 {n}개' })).toBe('노트 1개')
+  })
+})
+
+describe('copulaSuffix', () => {
+  it('앞말의 받침에 따라 이에요/예요를 고르고, 영어에서는 빈 문자열이다', () => {
+    setLocale('ko')
+    expect(withCopula('문자열')).toBe('문자열이에요')
+    expect(withCopula('숫자')).toBe('숫자예요')
+    expect(withCopula('목록')).toBe('목록이에요')
+    expect(withCopula('날짜')).toBe('날짜예요')
+    expect(withCopula('')).toBe('예요')
+    setLocale('en')
+    expect(copulaSuffix('string')).toBe('')
+    setLocale('ko')
   })
 })

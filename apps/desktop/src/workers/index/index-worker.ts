@@ -8,6 +8,7 @@ import { WatchRecovery } from './watch-recovery';
 import { closeWatcherThen, watchSettleMs } from './close-watcher';
 import { classifyWatchEvents, type PendingKind, type WatchEvent } from './watch-events';
 import type { WorkerRequest, WorkerResponse, WorkerEvent } from './protocol';
+import { errorText } from '@nopsidian/core';
 
 const port = parentPort!;
 const root = (workerData as { root: string }).root;
@@ -90,7 +91,7 @@ async function startWatching() {
       // 폴더 확인(stat)이 비동기라 묶음끼리 순서가 뒤바뀌지 않게 한 줄로 세운다(create 뒤 delete 가 먼저 반영되면 지운 노트가 되살아난다)
       eventChain = eventChain
         .then(() => collectEvents(events))
-        .catch((e) => recovery.fail(e instanceof Error ? e.message : String(e)));
+        .catch((e) => recovery.fail(errorText(e)));
     },
     { ignore: ['**/.nopsidian/**', '**/.git/**', '**/node_modules/**'] },
   );
@@ -136,7 +137,7 @@ port.on('message', async (req: WorkerRequest) => {
         return;
     }
   } catch (e) {
-    post({ type: 'response', id: req.id, error: e instanceof Error ? e.message : String(e) });
+    post({ type: 'response', id: req.id, error: errorText(e) });
   }
 });
 
@@ -156,8 +157,8 @@ ix.scanParallel((done, total) => {
       await startWatching();
     } catch (e) {
       // 감시를 못 걸어도 색인 자체는 살아 있어야 한다 — 복구 스케줄러가 물러나며 다시 시도한다
-      recovery.fail(e instanceof Error ? e.message : String(e));
+      recovery.fail(errorText(e));
     }
     await rescan();
   })
-  .catch((e) => post({ type: 'fatal', error: e instanceof Error ? e.message : String(e) }));
+  .catch((e) => post({ type: 'fatal', error: errorText(e) }));

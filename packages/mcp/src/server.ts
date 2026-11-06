@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { listComments } from '@nopsidian/core';
+import { errorText, listComments } from '@nopsidian/core';
 import { DatabaseAccess, FILTER_OPS } from './databases.js';
 import { canWrite, type McpPolicy } from './policy.js';
 import { effectivePolicy, readPolicyFile, type EffectivePolicy } from './policy-file.js';
@@ -101,7 +101,8 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       writer.denyRequest(tool, path, effective.reason ?? 'policy-disabled', policyDenyReason(effective));
     } catch (e) {
       if (e instanceof WriteError) return fail(`${tool} refused (${e.code}): ${e.message}`);
-      return fail(`${tool} failed: ${e instanceof Error ? e.message : String(e)}`);
+      // 응답 경계: 코어의 코드+params 오류는 지금(서버) 언어로 번역해 내보낸다(키 노출 금지).
+      return fail(`${tool} failed: ${errorText(e)}`);
     }
     return null;
   };
@@ -280,7 +281,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
         const folder = dbs.resolveFolder(database);
         return ok(dbs.query(folder, { view, filter, sort: sort?.map((r) => ({ prop: r.prop, dir: r.dir ?? 'asc' })), limit, offset }));
       } catch (e) {
-        return fail(e instanceof WriteError ? e.message : `query_database failed: ${e instanceof Error ? e.message : String(e)}`);
+        return fail(e instanceof WriteError ? e.message : `query_database failed: ${errorText(e)}`);
       }
     },
   );
@@ -298,7 +299,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       return ok({ ...r, note: r.status === 'saved' ? undefined : 'The note was changed by someone else while writing; the changes were merged (check for conflict markers).' });
     } catch (e) {
       if (e instanceof WriteError) return fail(`${tool} refused (${e.code}): ${e.message}`);
-      return fail(`${tool} failed: ${e instanceof Error ? e.message : String(e)}`);
+      return fail(`${tool} failed: ${errorText(e)}`);
     }
   };
   const folders = policy.writeFolders.map((f) => (f ? `${f}/` : 'anywhere')).join(', ');
@@ -455,7 +456,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
         const c = writer.comment('add_comment', n?.path ?? path, text, quote);
         return ok({ id: c.id, path: n?.path ?? path, author: c.author, createdAt: c.createdAt });
       } catch (e) {
-        return fail(e instanceof WriteError ? `add_comment refused (${e.code}): ${e.message}` : `add_comment failed: ${e instanceof Error ? e.message : String(e)}`);
+        return fail(e instanceof WriteError ? `add_comment refused (${e.code}): ${e.message}` : `add_comment failed: ${errorText(e)}`);
       }
     },
   );

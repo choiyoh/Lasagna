@@ -367,7 +367,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   const exportCsv = () =>
     void window.nops.db.exportCsv({ folder, viewId: data?.view.id ?? '' }).then(
       (r) => r && setNotice(tPlural('db.csvSaved', r.rows)),
-      (e) => setError(String(e)),
+      (e) => setError(userMessage(e)),
     );
   const importCsv = () =>
     void window.nops.db.importCsvPreview().then(

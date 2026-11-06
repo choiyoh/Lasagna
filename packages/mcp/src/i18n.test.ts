@@ -123,6 +123,26 @@ describe('정책 거부·감사·폴더 규칙', () => {
     expect(enText).not.toMatch(/cannot start with a dot/);
   });
 
+  it('코어 CodedError 도 응답 경계에서 번역한다(키 노출 0, en 한글 0)', async () => {
+    for (const locale of ['ko', 'en'] as const) {
+      const c = await connect(locale, { writeFolders: ['AI', '할일'] });
+      mkdirSync(path.join(c.root, '할일'), { recursive: true });
+      writeFileSync(path.join(c.root, '할일/_db.yaml'), 'title: 할 일\nproperties:\n  점수: { type: number }\n');
+      // 프런트매터가 깨진 템플릿 → 코어 setFrontmatter 가 CodedError(db.issue.yaml) 를 던진다
+      writeFileSync(path.join(c.root, 'AI/bad.md'), '---\na: [1\n---\n# 템플릿\n');
+      const r = await c.call('add_database_row', { database: '할일', title: '행', template: 'AI/bad.md' });
+      const text = r.content[0]!.text;
+      expect(text).not.toContain('db.issue.yaml');
+      expect(text).not.toContain('core.err');
+      if (locale === 'en') {
+        expect(text).not.toMatch(HANGUL);
+        expect(text).toContain('YAML error');
+      } else {
+        expect(text).toContain('YAML 오류');
+      }
+    }
+  });
+
   it('댓글 fallback 작성자는 언어와 무관하게 base 값으로 저장한다', async () => {
     const en = await connect('en', { write: true, writeFolders: ['AI'] });
     // 클라이언트 이름이 없는 writer(앱이 직접 띄운 stdio 서버와 같은 상태)

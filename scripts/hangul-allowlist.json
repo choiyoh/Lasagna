@@ -49,7 +49,7 @@
   "packages/mcp/src/cli.ts": 3,
   "packages/mcp/src/databases.ts": 15,
   "packages/mcp/src/folders.ts": 1,
-  "packages/mcp/src/policy-file.ts": 8,
+  "packages/mcp/src/policy-file.ts": 2,
   "packages/mcp/src/policy.ts": 20,
   "packages/mcp/src/revert.ts": 7,
   "packages/mcp/src/server.ts": 4,

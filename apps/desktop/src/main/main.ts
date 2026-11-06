@@ -473,7 +473,7 @@ function registerHandlers() {
     const read = readPolicyFile(v.info.path);
     if (read.kind === 'ok') return { exists: true, policy: read.policy, error: null };
     if (read.kind === 'missing') return { exists: false, policy: null, error: null };
-    return { exists: true, policy: null, error: read.error };
+    return { exists: true, policy: null, error: read.error, errorCode: read.code, ...(read.params ? { errorParams: read.params } : {}) };
   });
   handle('mcp.policySet', ({ write, writeFolders, maxWritesPerMinute }) => {
     const v = requireVault();

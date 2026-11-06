@@ -391,6 +391,9 @@ importers:
       '@nopsidian/core':
         specifier: workspace:*
         version: link:../core
+      '@nopsidian/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       yaml:
         specifier: ^2.9.1
         version: 2.9.1

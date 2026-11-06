@@ -1188,4 +1188,11 @@ export const en: Record<MessageKey, string> = {
   'mcp.vscodeHint': 'VS Code MCP settings use servers, not mcpServers, and need "type": "stdio". To use it in every workspace, run “MCP: Open User Configuration” from the command palette.',
   'mcp.geminiHint': 'Save the settings file, then restart Gemini CLI.',
   'mcp.serverNameAria': 'MCP server name',
+  'mcp.policyErr.unreadable': 'Could not read the policy file: {message}',
+  'mcp.policyErr.invalidJson': 'The policy file is not valid JSON',
+  'mcp.policyErr.invalidSchema': 'The policy file has the wrong shape: {path} {message}',
+  'mcp.policyErr.invalidSchemaNoIssue': 'The policy file has the wrong shape',
+  'mcp.policyErr.noFolders': 'Writing is on but no write folder is allowed',
+  'mcp.policyErr.badFolder': 'The policy file has an invalid folder: {message}',
+  'mcp.policyNeedFolder': 'Turn on writing with at least one allowed folder',
 }

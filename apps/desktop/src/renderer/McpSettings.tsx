@@ -12,6 +12,32 @@ interface AuditRow {
   note?: string;
 }
 
+type PolicyErrorState = { code?: string; params?: Record<string, string>; message: string };
+
+/** 정책 오류 문구: 사전 코드가 있으면 지금 언어로, 없으면 서버가 준 문장 그대로. */
+function policyErrorText(error: PolicyErrorState | null): string {
+  if (!error) return '';
+  if (error.code) {
+    // 형식 오류는 어느 자리가 문제인지 알 때만 경로·메시지를 붙인다(base 와 같은 선택 규칙).
+    const key = (error.code === 'invalidSchema' && !error.params?.path ? 'mcp.policyErr.invalidSchemaNoIssue' : `mcp.policyErr.${error.code}`) as MessageKey;
+    const text = t(key, error.params as never);
+    if (!text.startsWith('mcp.policyErr.')) return text;
+  }
+  return error.message;
+}
+
+/** 문장 안의 `{name}` 자리를 <code> 로 그린다(강조 위치는 그대로 두고 문구만 번역). */
+function withCode(key: MessageKey, name: string, value: string) {
+  const [before, after = ''] = t(key).split(`{${name}}`);
+  return (
+    <>
+      {before}
+      <code>{value}</code>
+      {after}
+    </>
+  );
+}
+
 const ACTION_LABEL: Record<AuditRow['action'], string> = {
   create: 'mcp.action.create',
   append: 'mcp.action.append',
@@ -31,7 +57,8 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   const [confirming, setConfirming] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   /** 앱 정책 파일을 읽거나 쓰지 못한 이유. 있으면 쓰기는 서버에서 차단된다. */
-  const [policyError, setPolicyError] = useState('');
+  /** 정책 오류: 코드가 있으면 표시 시점에 지금 언어로 만든다(파일 안 문구는 옛 언어로 굳지 않게). */
+  const [policyError, setPolicyError] = useState<{ code?: string; params?: Record<string, string>; message: string } | null>(null);
   /** 정책 파일이 실제로 있는가. false 면 지금은 에이전트 인자만 적용된다. */
   const [policyExists, setPolicyExists] = useState<boolean | null>(null);
   const revert = async (a: AuditRow) => {
@@ -60,18 +87,18 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
             setCfg(merged);
             setPolicyExists(true);
             saveMcpSettings(next.vaultId, merged);
-            setPolicyError(read.error ?? '');
+            setPolicyError(read.error ? { code: read.errorCode ?? undefined, params: read.errorParams, message: read.error } : null);
             return;
           }
           setPolicyExists(read.exists);
           // 파일이 깨졌으면 서버가 쓰기를 막으므로 화면도 안전한 쪽(꺼짐)으로 보여 준다.
           setCfg(read.error ? { ...local, write: false } : local);
-          setPolicyError(read.error ?? '');
+          setPolicyError(read.error ? { code: read.errorCode ?? undefined, params: read.errorParams, message: read.error } : null);
         })
         .catch((e) => {
           setPolicyExists(null);
           setCfg({ ...local, write: false });
-          setPolicyError(e instanceof Error ? e.message : String(e));
+          setPolicyError({ message: e instanceof Error ? e.message : String(e) });
         });
     });
     refresh();
@@ -90,7 +117,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
     let folders: string[];
     if (folderIssue || dailyIssue) {
       if (next.write) {
-        setPolicyError(t('mcp.fixFolderFirst', { issue: folderIssue ?? dailyIssue ?? '' }));
+        setPolicyError({ message: t('mcp.fixFolderFirst', { issue: folderIssue ?? dailyIssue ?? '' }) });
         return; // 켠 상태의 잘못된 폴더는 저장하지 않는다
       }
       folders = [t('mcp.defaultFolder')]; // 끈 상태는 폴더와 무관하므로 정책 파일을 유효하게 남긴다
@@ -103,12 +130,12 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
     }
     void window.nops.mcp.policySet({ write: next.write, writeFolders: folders, maxWritesPerMinute: next.maxWritesPerMinute })
       .then((saved) => {
-        setPolicyError('');
+        setPolicyError(null);
         setPolicyExists(true);
         // 응답이 늦게 와도 그 사이 친 폴더·이름을 되돌리지 않는다.
         setCfg((prev) => (prev ? { ...prev, maxWritesPerMinute: saved.maxWritesPerMinute } : prev));
       })
-      .catch((e) => setPolicyError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)));
+      .catch((e) => setPolicyError({ message: e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e) }));
   };
   const update = (patch: Partial<McpSettingsConfig>) => {
     const next = { ...current, ...patch };
@@ -149,14 +176,14 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
         <input type="checkbox" checked={current.write} onChange={(e) => update({ write: e.target.checked })} aria-label={t('mcp.writeLabel')} />
       </label>
       <p className="muted small" data-testid="mcp-policy-note">
-        {t('mcp.policySaved', { file: '.nopsidian/mcp-policy.json' })}
+        {withCode('mcp.policySaved', 'file', '.nopsidian/mcp-policy.json')}
       </p>
       <p className="muted small" data-testid="mcp-policy-device-note">
         {t('mcp.policyDevice')}
       </p>
       {policyError && (
         <p className="warn small" data-testid="mcp-policy-warning">
-          {t('mcp.policyErrorRetry', { error: policyError })}
+          {t('mcp.policyErrorRetry', { error: policyErrorText(policyError) })}
         </p>
       )}
       {policyExists === false && (

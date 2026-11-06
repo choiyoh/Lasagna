@@ -1189,4 +1189,11 @@ export const ko = {
   'mcp.vscodeHint': 'VS Code 의 MCP 설정은 mcpServers 가 아니라 servers 이고 "type": "stdio" 가 필요해요. 모든 워크스페이스에서 쓰려면 명령 팔레트 → “MCP: Open User Configuration”.',
   'mcp.geminiHint': '설정 파일을 저장한 뒤 Gemini CLI 를 다시 시작하세요.',
   'mcp.serverNameAria': 'MCP 서버 이름',
+  'mcp.policyErr.unreadable': '정책 파일을 읽을 수 없어요: {message}',
+  'mcp.policyErr.invalidJson': '정책 파일이 올바른 JSON 이 아니에요',
+  'mcp.policyErr.invalidSchema': '정책 파일 형식이 올바르지 않아요: {path} {message}',
+  'mcp.policyErr.invalidSchemaNoIssue': '정책 파일 형식이 올바르지 않아요',
+  'mcp.policyErr.noFolders': '쓰기가 켜져 있지만 허용 폴더가 없어요',
+  'mcp.policyErr.badFolder': '정책 파일의 폴더가 올바르지 않아요: {message}',
+  'mcp.policyNeedFolder': '쓰기를 켜려면 허용 폴더가 하나 이상 필요해요',
 } as const

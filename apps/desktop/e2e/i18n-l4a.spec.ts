@@ -99,3 +99,30 @@ test('English smoke: MCP settings and command palette, snippet command unchanged
   expect(items.join('\n')).toMatch(/[A-Za-z]/);
   await page.keyboard.press('Escape');
 });
+
+test('깨진 정책 파일도 화면 언어로 안내한다', async () => {
+  const page = await app.firstWindow();
+  // 볼트의 정책 파일을 깨뜨린다(사용자 데이터가 아니라 앱이 만드는 설정 파일)
+  mkdirSync(path.join(vaultDir, '.nopsidian'), { recursive: true });
+  writeFileSync(path.join(vaultDir, '.nopsidian', 'mcp-policy.json'), '{ not json');
+  await page.reload();
+  await openVaultIfNeeded(page);
+
+  // 영어: 영어 문구, 한글 0
+  await page.getByTestId('settings-btn').click();
+  await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: 'English' }).click();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-btn').click();
+  const mcp = page.getByTestId('mcp-settings');
+  await expect(mcp).toContainText('The policy file is not valid JSON');
+  expect(await mcp.innerText()).not.toMatch(HANGUL);
+  await page.keyboard.press('Escape');
+
+  // 한국어: base 와 같은 문구
+  await page.getByTestId('settings-btn').click();
+  await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: '한국어' }).click();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-btn').click();
+  await expect(page.getByTestId('mcp-settings')).toContainText('정책 파일이 올바른 JSON 이 아니에요');
+  await page.keyboard.press('Escape');
+});

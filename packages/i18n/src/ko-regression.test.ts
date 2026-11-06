@@ -484,6 +484,22 @@ const cases: Case[] = [
     base: () => '이 빌드에는 MCP 서버 파일이 없어요. 앱을 다시 설치하거나 개발 중이면 pnpm --filter @nopsidian/mcp build 를 실행하세요.',
     render: () => t('mcp.noServer', { command: 'pnpm --filter @nopsidian/mcp build' }),
   },
+  // L4a: MCP 정책 오류(코드+파라미터)
+  {
+    name: 'mcp.policyErr.unreadable',
+    base: () => '정책 파일을 읽을 수 없어요: EACCES',
+    render: () => t('mcp.policyErr.unreadable', { message: 'EACCES' }),
+  },
+  {
+    name: 'mcp.policyErr.invalidSchema',
+    base: () => '정책 파일 형식이 올바르지 않아요: write Invalid input',
+    render: () => t('mcp.policyErr.invalidSchema', { path: 'write', message: 'Invalid input' }),
+  },
+  {
+    name: 'mcp.policyErr.badFolder',
+    base: () => '정책 파일의 폴더가 올바르지 않아요: 경로가 볼트 밖이에요',
+    render: () => t('mcp.policyErr.badFolder', { message: '경로가 볼트 밖이에요' }),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

@@ -552,7 +552,14 @@ export const contract = {
   /** 앱이 정본으로 쓰는 MCP 쓰기 정책 파일. 없으면 exists=false, 깨졌으면 policy=null + error */
   'mcp.policyGet': {
     input: z.undefined(),
-    output: z.object({ exists: z.boolean(), policy: mcpPolicyFile.nullable(), error: z.string().nullable() }),
+    output: z.object({
+      exists: z.boolean(),
+      policy: mcpPolicyFile.nullable(),
+      error: z.string().nullable(),
+      /** 화면이 지금 언어로 다시 만들 오류 종류(있으면 error 대신 이걸로 표시) */
+      errorCode: z.enum(['unreadable', 'invalidJson', 'invalidSchema', 'noFolders', 'badFolder']).nullable().optional(),
+      errorParams: z.record(z.string(), z.string()).optional(),
+    }),
   },
   /** 앱 설정 변경을 정책 파일에 원자적으로 저장한다. 폴더는 서버와 같은 규칙으로 검증된다. */
   'mcp.policySet': {

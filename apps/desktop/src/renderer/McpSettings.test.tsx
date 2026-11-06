@@ -124,6 +124,8 @@ describe('McpSettings', () => {
     expect(input('쓸 수 있는 폴더').value).toBe('메모');
     expect(input('오늘의 노트 폴더도 허용').checked).toBe(true);
     expect(container.querySelector('[data-testid="mcp-policy-note"]')?.textContent).toContain('이미 연결된 에이전트');
+    // 파일 경로는 base 처럼 <code> 로 강조한다(문구만 사전으로 옮겼다)
+    expect(container.querySelector('[data-testid="mcp-policy-note"] code')?.textContent).toBe('.nopsidian/mcp-policy.json');
     expect(container.querySelector('[data-testid="mcp-policy-missing"]')).toBeNull();
     expect(container.querySelector('[data-testid="mcp-policy-device-note"]')?.textContent).toContain('다른 기기');
     expect(container.querySelector('[data-testid="mcp-cli"]')?.textContent).toContain('--write-folder "메모" --write-folder "일기"');

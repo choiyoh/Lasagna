@@ -34,25 +34,28 @@ interface EffectiveClient {
 }
 
 /** 오류 코드 → 사람이 읽는 제목·다음 행동·문서 단계. 원문 오류는 화면에 그대로 쓰지 않는다. */
-const DOCS_BASE = 'https://github.com/choiyoh/Lasagna/blob/main/docs/sync-setup.md';
+const DOCS_BASE: Record<'ko' | 'en', string> = {
+  ko: 'https://github.com/choiyoh/Lasagna/blob/main/docs/sync-setup.md',
+  en: 'https://github.com/choiyoh/Lasagna/blob/main/docs/sync-setup.en.md',
+};
 // 오류 코드 → 사전 키(제목·다음 행동). 문서 단계 anchor 는 문서 제목 그대로의 값이라 번역하지 않는다.
-const FAILURES: Record<string, { code: string; title: MessageKey; action: MessageKey; anchor: string }> = {
-  auth: { code: 'HTTP 401', title: 'sync.diag.auth.title', action: 'sync.diag.auth.action', anchor: '2-앱에서-연결' },
-  authCheck: { code: 'HTTP 401', title: 'sync.diag.authCheck.title', action: 'sync.diag.authCheck.action', anchor: '문제-해결' },
-  authRevoked: { code: 'invalid_grant', title: 'sync.diag.authRevoked.title', action: 'sync.diag.authRevoked.action', anchor: '2-앱에서-연결' },
-  notConnected: { code: 'NOT_CONNECTED', title: 'sync.diag.notConnected.title', action: 'sync.diag.notConnected.action', anchor: '2-앱에서-연결' },
-  apiDisabled: { code: 'HTTP 403 · accessNotConfigured', title: 'sync.diag.apiDisabled.title', action: 'sync.diag.apiDisabled.action', anchor: '1-google-cloud-설정-한-번만' },
-  quota: { code: 'HTTP 403 · storageQuotaExceeded', title: 'sync.diag.quota.title', action: 'sync.diag.quota.action', anchor: '문제-해결' },
-  rateLimit: { code: 'HTTP 429/403 · rateLimitExceeded', title: 'sync.diag.rateLimit.title', action: 'sync.diag.rateLimit.action', anchor: '문제-해결' },
-  network: { code: 'NETWORK', title: 'sync.diag.network.title', action: 'sync.diag.network.action', anchor: '문제-해결' },
-  server: { code: 'HTTP 5xx', title: 'sync.diag.server.title', action: 'sync.diag.server.action', anchor: '문제-해결' },
-  notFound: { code: 'HTTP 404', title: 'sync.diag.notFound.title', action: 'sync.diag.notFound.action', anchor: '문제-해결' },
-  forbidden: { code: 'HTTP 403', title: 'sync.diag.forbidden.title', action: 'sync.diag.forbidden.action', anchor: '문제-해결' },
-  folderMissing: { code: 'FOLDER_MISSING', title: 'sync.diag.folderMissing.title', action: 'sync.diag.folderMissing.action', anchor: '3-두-번째-기기' },
-  partial: { code: 'PARTIAL', title: 'sync.diag.partial.title', action: 'sync.diag.partial.action', anchor: '문제-해결' },
-  blocked: { code: 'BLOCKED', title: 'sync.diag.blocked.title', action: 'sync.diag.blocked.action', anchor: '문제-해결' },
-  busy: { code: 'BUSY', title: 'sync.diag.busy.title', action: 'sync.diag.busy.action', anchor: '문제-해결' },
-  unknown: { code: 'UNKNOWN', title: 'sync.diag.unknown.title', action: 'sync.diag.unknown.action', anchor: '문제-해결' },
+const FAILURES: Record<string, { code: string; title: MessageKey; action: MessageKey; anchor: string; anchorEn: string }> = {
+  auth: { code: 'HTTP 401', title: 'sync.diag.auth.title', action: 'sync.diag.auth.action', anchor: '2-앱에서-연결', anchorEn: '2-connect-in-the-app' },
+  authCheck: { code: 'HTTP 401', title: 'sync.diag.authCheck.title', action: 'sync.diag.authCheck.action', anchor: '문제-해결', anchorEn: 'troubleshooting' },
+  authRevoked: { code: 'invalid_grant', title: 'sync.diag.authRevoked.title', action: 'sync.diag.authRevoked.action', anchor: '2-앱에서-연결', anchorEn: '2-connect-in-the-app' },
+  notConnected: { code: 'NOT_CONNECTED', title: 'sync.diag.notConnected.title', action: 'sync.diag.notConnected.action', anchor: '2-앱에서-연결', anchorEn: '2-connect-in-the-app' },
+  apiDisabled: { code: 'HTTP 403 · accessNotConfigured', title: 'sync.diag.apiDisabled.title', action: 'sync.diag.apiDisabled.action', anchor: '1-google-cloud-설정-한-번만', anchorEn: '1-google-cloud-setup-once' },
+  quota: { code: 'HTTP 403 · storageQuotaExceeded', title: 'sync.diag.quota.title', action: 'sync.diag.quota.action', anchor: '문제-해결', anchorEn: 'troubleshooting' },
+  rateLimit: { code: 'HTTP 429/403 · rateLimitExceeded', title: 'sync.diag.rateLimit.title', action: 'sync.diag.rateLimit.action', anchor: '문제-해결', anchorEn: 'troubleshooting' },
+  network: { code: 'NETWORK', title: 'sync.diag.network.title', action: 'sync.diag.network.action', anchor: '문제-해결', anchorEn: 'troubleshooting' },
+  server: { code: 'HTTP 5xx', title: 'sync.diag.server.title', action: 'sync.diag.server.action', anchor: '문제-해결', anchorEn: 'troubleshooting' },
+  notFound: { code: 'HTTP 404', title: 'sync.diag.notFound.title', action: 'sync.diag.notFound.action', anchor: '문제-해결', anchorEn: 'troubleshooting' },
+  forbidden: { code: 'HTTP 403', title: 'sync.diag.forbidden.title', action: 'sync.diag.forbidden.action', anchor: '문제-해결', anchorEn: 'troubleshooting' },
+  folderMissing: { code: 'FOLDER_MISSING', title: 'sync.diag.folderMissing.title', action: 'sync.diag.folderMissing.action', anchor: '3-두-번째-기기', anchorEn: '3-a-second-device' },
+  partial: { code: 'PARTIAL', title: 'sync.diag.partial.title', action: 'sync.diag.partial.action', anchor: '문제-해결', anchorEn: 'troubleshooting' },
+  blocked: { code: 'BLOCKED', title: 'sync.diag.blocked.title', action: 'sync.diag.blocked.action', anchor: '문제-해결', anchorEn: 'troubleshooting' },
+  busy: { code: 'BUSY', title: 'sync.diag.busy.title', action: 'sync.diag.busy.action', anchor: '문제-해결', anchorEn: 'troubleshooting' },
+  unknown: { code: 'UNKNOWN', title: 'sync.diag.unknown.title', action: 'sync.diag.unknown.action', anchor: '문제-해결', anchorEn: 'troubleshooting' },
 };
 
 export interface FailureLike {
@@ -105,14 +108,20 @@ export function syncFailureFor(e: FailureLike, at = Date.now()): SyncFailure {
   const f = FAILURES[key] ?? FAILURES.unknown!;
   // 서버·404·일반 403 은 실제 HTTP 상태를 접힌 코드에 남긴다.
   const code = (key === 'server' || key === 'notFound' || key === 'forbidden') && e.code !== undefined ? e.code : f.code;
-  return { at, code, kind: key, title: t(f.title), action: t(f.action), docs: `${DOCS_BASE}#${f.anchor}` };
+  return { at, code, kind: key, title: t(f.title), action: t(f.action), docs: docsUrl(f, getLocale()) };
+}
+
+/** 오류 종류의 문서 링크 — 앱 언어에 맞는 문서와 그 문서의 앵커로 보낸다. */
+export function docsUrl(f: { anchor: string; anchorEn: string }, locale: 'ko' | 'en'): string {
+  return `${DOCS_BASE[locale]}#${locale === 'ko' ? f.anchor : f.anchorEn}`;
 }
 
 /** 저장된 실패(kind 가 있으면)를 지금 언어로 다시 만든다 — 언어를 바꿔도 옛 문장이 남지 않게. */
 function localizedFailure(f: SyncFailure | null): SyncFailure | null {
   if (!f?.kind) return f;
   const entry = FAILURES[f.kind];
-  return entry ? { ...f, title: t(entry.title), action: t(entry.action) } : f;
+  // 문서 링크도 지금 언어로 다시 만든다(영어 앱이면 영어 문서·영어 앵커).
+  return entry ? { ...f, title: t(entry.title), action: t(entry.action), docs: docsUrl(entry, getLocale()) } : f;
 }
 
 /** 로컬 진단에 쓰는 접미사. 클라이언트 ID 의 `.apps.googleusercontent.com` 은 빼고 보여 준다. */

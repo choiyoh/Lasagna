@@ -1,3 +1,5 @@
+[English](README.en.md)
+
 # Lasagna
 
 > 예전 이름은 Nopsidian 이에요. 기존 호환을 위해 볼트 안의 `.nopsidian/` 폴더, `@nopsidian/*` 패키지 이름,
@@ -85,8 +87,8 @@ pnpm format                              # Prettier
 
 ## Google Drive 동기화 켜기
 
-본인의 Google Cloud 프로젝트에서 OAuth 클라이언트를 만들고 Drive API 를 켠 뒤, 앱의 설정 → **동기화** 에
-클라이언트 ID·보안 비밀을 넣어요. 순서대로 따라 하는 안내는 [docs/sync-setup.md](docs/sync-setup.md).
+본인의 Google Cloud 프로젝트에서 OAuth 클라이언트를 만들고 Drive API 를 켠 뒤, 앱의 **설정(⌘,) → 볼트 →
+☁ Google Drive 동기화…** 에 클라이언트 ID·보안 비밀을 넣어요. 순서대로 따라 하는 안내는 [docs/sync-setup.md](docs/sync-setup.md).
 
 ## 문서
 

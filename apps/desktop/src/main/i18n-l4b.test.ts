@@ -22,8 +22,9 @@ describe('메인 프로세스 문구의 로캘', () => {
     expect(en.title).toBe('Google sign-in expired');
     expect(en.action).toBe('Reconnect your Google account');
     expect(`${en.title} ${en.action}`).not.toMatch(/[가-힣]/);
-    // 문서 anchor 는 문서 제목 값이라 언어와 무관하게 그대로
-    expect(en.docs).toBe(ko.docs);
+    // 문서 링크는 앱 언어를 따른다(L5): 영어는 영어 문서·영어 앵커
+    expect(ko.docs).toBe('https://github.com/choiyoh/Lasagna/blob/main/docs/sync-setup.md#2-앱에서-연결');
+    expect(en.docs).toBe('https://github.com/choiyoh/Lasagna/blob/main/docs/sync-setup.en.md#2-connect-in-the-app');
   });
 
   it('사본 파일 이름: ko 는 base, en 은 copy', () => {

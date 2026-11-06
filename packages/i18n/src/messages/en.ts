@@ -1371,7 +1371,7 @@ export const en: Record<MessageKey, string> = {
   'mcpSrv.exampleValues': 'Property values, e.g. {"Status":"Doing","Due":"2026-11-01","Score":3}',
   'mcp.policyErr.appDisabled': 'Writing is turned off in the app settings',
   'mcp.policyErr.noOverlap': 'The app policy and the server arguments do not allow any common folder',
-  'mcpDb.err.badTemplatePath': 'The template path is not valid: {reason}{message}',
+  'mcpDb.err.badTemplatePath': 'The template path is not valid ({reason})',
   'mcpDb.reason.emptyPath': 'the path is empty',
   'mcpDb.reason.relativeOnly': 'the path is outside the vault',
   'mcpDb.reason.tooLong': 'the path is too long',

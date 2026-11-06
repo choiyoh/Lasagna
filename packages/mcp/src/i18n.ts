@@ -1,4 +1,4 @@
-import { t, translate, type MessageKey, type TranslateParams } from '@nopsidian/i18n';
+import { t, translate, getLocale, type Locale, type MessageKey, type TranslateParams } from '@nopsidian/i18n';
 
 /** 문장 틀에 넣을 값. `{ key }` 면 그 문구를 지금 언어로 풀어 넣는다(문장 중첩 방지). */
 export type Param = string | number | { key: MessageKey; params?: Record<string, string> };
@@ -8,6 +8,9 @@ const resolve = (params: Params = {}): TranslateParams =>
   Object.fromEntries(
     Object.entries(params).map(([name, value]) => [name, typeof value === 'object' ? t(value.key, value.params) : value]),
   );
+
+/** 지금 언어. */
+export const locale = (): Locale => getLocale();
 
 /** 지금 언어로. `{ key }` 파라미터는 중첩 번역한다. */
 export const tr = (key: MessageKey, params: Params = {}): string => t(key, resolve(params));

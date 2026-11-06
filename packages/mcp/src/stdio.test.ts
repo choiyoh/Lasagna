@@ -16,6 +16,8 @@ beforeAll(() => {
   execFileSync(process.execPath, ['build.mjs'], { cwd: PKG, stdio: 'ignore' });
   root = mkdtempSync(path.join(tmpdir(), 'nops-mcp-stdio-'));
   mkdirSync(path.join(root, 'AI'), { recursive: true });
+  mkdirSync(path.join(root, '할일'), { recursive: true });
+  writeFileSync(path.join(root, '할일', '_db.yaml'), 'title: 할 일\nproperties:\n  점수: { type: number }\n');
   writeFileSync(path.join(root, 'note.md'), '# note\n');
 }, 120_000);
 
@@ -132,6 +134,27 @@ describe('실제 stdio MCP 서버의 언어', () => {
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
+  });
+
+  it('템플릿 경로 오류가 두 언어 모두 한 문장으로 나온다', async () => {
+    const call = async (locale: 'ko' | 'en') => {
+      const session = start({ NOPSIDIAN_LANG: locale });
+      try {
+        await handshake(session);
+        session.send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'add_database_row', arguments: { database: '할일', title: 'x', template: '.bad' } } });
+        const res = (await session.read(3)) as { result: { content: { text: string }[] } };
+        return res.result.content[0]!.text;
+      } finally {
+        session.close();
+      }
+    };
+    const koText = await call('ko');
+    const enText = await call('en');
+    expect(koText).toContain('템플릿 경로가 올바르지 않아요: 점(.)으로 시작하는 폴더·파일은 쓸 수 없어요');
+    expect(enText).toContain('The template path is not valid (a name starts with a dot)');
+    expect(enText).not.toMatch(HANGUL);
+    expect(enText).not.toMatch(/\{\}/);
+    expect(enText).not.toMatch(/cannot start with a dot/);
   });
 
   it('대표 오류도 영어로 나온다(허용 폴더 밖 쓰기)', async () => {

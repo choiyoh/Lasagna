@@ -1372,7 +1372,7 @@ export const ko = {
   'mcpSrv.exampleValues': 'Property values, e.g. {"상태":"진행","마감":"2026-11-01","점수":3}',
   'mcp.policyErr.appDisabled': '앱 설정에서 쓰기를 꺼 두었어요',
   'mcp.policyErr.noOverlap': '앱 정책과 서버 인자가 허용하는 폴더가 겹치지 않아요',
-  'mcpDb.err.badTemplatePath': '템플릿 경로가 올바르지 않아요: {message}{reason}',
+  'mcpDb.err.badTemplatePath': '템플릿 경로가 올바르지 않아요: {reason}',
   'mcpDb.reason.emptyPath': '',
   'mcpDb.reason.relativeOnly': '',
   'mcpDb.reason.tooLong': '',

@@ -9,7 +9,6 @@ import type { McpPolicy } from './policy.js';
 import { usage } from './policy.js';
 import { createServer } from './server.js';
 import { NoteWriter } from './writer.js';
-import { tr } from './i18n.js';
 
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
 const dirs: string[] = [];
@@ -105,14 +104,23 @@ describe('정책 거부·감사·폴더 규칙', () => {
     expect(denial.note).not.toMatch(/cannot start/);
   });
 
-  it('템플릿 경로 오류는 문장을 끼우지 않는다(ko base 동일·en 이유 명사구)', () => {
-    const ko = tr('mcpDb.err.badTemplatePath', { message: tr('mcpPolicy.err.dotName'), reason: '' });
-    expect(ko).toBe('템플릿 경로가 올바르지 않아요: 점(.)으로 시작하는 폴더·파일은 쓸 수 없어요');
+  it('템플릿 경로 오류는 실제 add_database_row 경로에서 한 문장으로만 나온다', async () => {
+    const en = await connect('en', { writeFolders: ['AI', '할일'] });
+    const ko = await connect('ko', { writeFolders: ['AI', '할일'] });
+    for (const c of [ko, en]) {
+      mkdirSync(path.join(c.root, '할일'), { recursive: true });
+      writeFileSync(path.join(c.root, '할일/_db.yaml'), 'title: 할 일\nproperties:\n  점수: { type: number }\n');
+    }
+    const args = { database: '할일', title: '새 행', template: '.bad' };
+    const koText = (await ko.call('add_database_row', args)).content[0]!.text; // 지금 언어는 ko
     setLocale('en');
-    const en = tr('mcpDb.err.badTemplatePath', { message: '', reason: tr('mcpDb.reason.dotName') });
-    setLocale('ko');
-    expect(en).toBe('The template path is not valid: a name starts with a dot');
-    expect(en).not.toMatch(HANGUL);
+    const enText = (await en.call('add_database_row', args)).content[0]!.text;
+    expect(koText).toContain('템플릿 경로가 올바르지 않아요: 점(.)으로 시작하는 폴더·파일은 쓸 수 없어요');
+    expect(enText).toContain('The template path is not valid (a name starts with a dot)');
+    expect(enText).not.toMatch(HANGUL);
+    expect(enText).not.toMatch(/\{\}/);
+    expect(enText.match(/not valid/g)).toHaveLength(1);
+    expect(enText).not.toMatch(/cannot start with a dot/);
   });
 
   it('댓글 fallback 작성자는 언어와 무관하게 base 값으로 저장한다', async () => {

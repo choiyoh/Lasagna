@@ -664,6 +664,8 @@ function registerHandlers() {
     const current = currentLanguage();
     // 메인에서 만드는 기본값(새 행 제목·볼트 기본 폴더 등)도 앱 언어를 따르게 한다.
     setLocale(current.locale);
+    // 색인 워커도 자기 언어로 문구를 만든다(열린 볼트의 워커에 알린다).
+    getCurrent()?.index.setLocale(current.locale);
     broadcast('language.changed', current);
     return current;
   });

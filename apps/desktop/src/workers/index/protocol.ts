@@ -21,6 +21,7 @@ export type WorkerRequest =
   | { id: string; method: 'assets' }
   | { id: string; method: 'query'; params: { name: IndexQuery; args: unknown[] } }
   | { id: string; method: 'search'; params: { q: string; limit: number } }
+  | { id: string; method: 'setLocale'; params: { locale: 'ko' | 'en' } }
   | { id: string; method: 'close' };
 
 export type WorkerResponse =

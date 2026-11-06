@@ -1,4 +1,4 @@
-import { t } from '@nopsidian/i18n';
+import { getLocale, t, type Locale } from '@nopsidian/i18n';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
@@ -42,7 +42,9 @@ export class IndexClient {
   private waiting = new Set<string>();
   private readyPromise: Promise<void> = Promise.resolve();
   private rejectReady: ((e: Error) => void) | undefined;
-  private createWorker: () => WorkerLike;
+  private createWorker: (locale: Locale) => WorkerLike;
+  /** 워커가 문구를 만들 때 쓰는 언어(시작 시 넘기고, 앱 언어가 바뀌면 함께 알린다) */
+  private locale: Locale = getLocale();
   private restarting = false;
   private gaveUp = false;
   private closed = false;
@@ -54,13 +56,14 @@ export class IndexClient {
   constructor(
     root: string,
     private readonly onEvent: Listener,
-    createWorker?: () => WorkerLike,
+    createWorker?: (locale: Locale) => WorkerLike,
   ) {
     this.createWorker =
       createWorker ??
       (() =>
         new Worker(path.join(__dirname, 'index-worker.cjs'), {
-          workerData: { root },
+          // 워커는 별도 스레드라 자기 i18n 상태가 있다 — 시작 언어를 넘긴다(sync 워커와 같은 방식).
+          workerData: { root, locale: getLocale() },
           // 파싱은 일회용 파서 스레드가 맡는다. 색인 스레드의 힙 한도는 쓰레기가 끝없이 쌓이지 않게 하는 안전장치(큰 노트 하나는 수 MB)
           resourceLimits: { maxOldGenerationSizeMb: 256 },
         }));
@@ -72,9 +75,19 @@ export class IndexClient {
     return this.readyPromise;
   }
 
+  /** 앱 언어가 바뀌면 워커에도 알린다(다음 문구부터 새 언어). */
+  setLocale(locale: Locale): void {
+    this.locale = locale;
+    try {
+      this.worker?.postMessage({ id: randomUUID(), method: 'setLocale', params: { locale } });
+    } catch {
+      // 워커가 이미 죽었으면 다음 spawn 이 새 언어로 뜬다
+    }
+  }
+
   /** 워커를 띄우고 이 워커의 ready 약속으로 갈아 끼운다. */
   private spawn() {
-    const worker = this.createWorker();
+    const worker = this.createWorker(this.locale);
     this.worker = worker;
     let resolveReady!: () => void;
     let rejectReady!: (e: Error) => void;

@@ -1,4 +1,4 @@
-import { t } from '@nopsidian/i18n';
+import { setLocale, t, type Locale } from '@nopsidian/i18n';
 import { parentPort, workerData } from 'node:worker_threads';
 import { subscribe, type AsyncSubscription } from '@parcel/watcher';
 import { realpathSync } from 'node:fs';
@@ -12,6 +12,7 @@ import { errorText } from '@nopsidian/core';
 
 const port = parentPort!;
 const root = (workerData as { root: string }).root;
+if ((workerData as { locale?: Locale }).locale) setLocale((workerData as { locale: Locale }).locale);
 const ix = new Indexer(root);
 // macOS의 /var → /private/var 같은 심볼릭 링크 때문에 감시 이벤트 경로는 realpath 기준으로 온다.
 const watchRoot = realpathSync(root);
@@ -122,6 +123,9 @@ port.on('message', async (req: WorkerRequest) => {
         return post({ type: 'response', id: req.id, result: ix.listAssets() });
       case 'search':
         return post({ type: 'response', id: req.id, result: ix.search(req.params.q, req.params.limit) });
+      case 'setLocale':
+        setLocale(req.params.locale);
+        return post({ type: 'response', id: req.id, result: null });
       case 'close':
         recovery.stop();
         await closeWatcherThen(

@@ -496,6 +496,12 @@ const cases: Case[] = [
     render: () => t('mcp.policyErr.invalidSchema', { path: 'write', message: 'Invalid input' }),
   },
   {
+    // 루트가 배열이면 zod 경로가 빈 문자열 — base 는 ': ' + '' + ' ' + message 라 두 칸이 된다
+    name: 'mcp.policyErr.invalidSchema.root',
+    base: () => '정책 파일 형식이 올바르지 않아요:  Invalid input',
+    render: () => t('mcp.policyErr.invalidSchema', { path: '', message: 'Invalid input' }),
+  },
+  {
     name: 'mcp.policyErr.badFolder',
     base: () => '정책 파일의 폴더가 올바르지 않아요: 경로가 볼트 밖이에요',
     render: () => t('mcp.policyErr.badFolder', { message: '경로가 볼트 밖이에요' }),

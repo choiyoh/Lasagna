@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { t, type MessageKey } from '@nopsidian/i18n';
+import { getLocale, t, type MessageKey } from '@nopsidian/i18n';
 import { defaultServerName, folderContains, folderError, isValidServerName, mcpSnippet, type McpInfo } from './mcp-snippet';
 import { configFromPolicy, loadMcpSettings, policyFolders, saveMcpSettings, serverNameConflict, type McpSettingsConfig } from './mcp-settings';
 
@@ -19,18 +19,44 @@ interface LocalizedText {
   code?: string;
   params?: Record<string, string>;
   message?: string;
+  /** 폴더 문제를 문장 틀에 넣을 때: 번역된 문장 대신 코드·경로만 저장한다 */
+  folderCode?: string;
+  folderPath?: string;
 }
 
 /** 정책 오류 문구. 코드가 있으면 지금 언어로, 없으면 원문. */
 function policyErrorText(error: LocalizedText | null): string {
   if (!error) return '';
+  // 폴더 문제는 코드·경로만 저장해 두고 여기서 지금 언어로 문장을 만든다.
+  if (error.key && error.folderCode) {
+    return t(error.key, folderIssueParams({ code: error.folderCode, params: { path: error.folderPath ?? '' } }));
+  }
   if (error.code) {
     // 형식 오류는 어느 자리가 문제인지 알 때만 경로·메시지를 붙인다(base 와 같은 선택 규칙).
-    const key = (error.code === 'invalidSchema' && !error.params?.path ? 'mcp.policyErr.invalidSchemaNoIssue' : `mcp.policyErr.${error.code}`) as MessageKey;
+    const key = (error.code === 'invalidSchema' && !error.params?.message ? 'mcp.policyErr.invalidSchemaNoIssue' : `mcp.policyErr.${error.code}`) as MessageKey;
     const text = t(key, error.params as never);
     if (!text.startsWith('mcp.policyErr.')) return text;
   }
   return text(error);
+}
+
+/**
+ * 폴더 문제를 문장 틀에 넣을 파라미터로. 한국어는 완전한 문장(`issue`)을, 영어는 경로(`path`)를 쓴다.
+ * 번역은 그리는 시점에 하므로 언어를 바꿔도 옛 문장이 남지 않는다.
+ */
+function folderIssueParams(issue: LocalizedText | null | undefined): Record<string, string> {
+  if (!issue) return { issue: '', path: '' };
+  const path = issue.params?.path ?? '';
+  // 한국어는 base 처럼 완전한 문장을, 영어는 문장 틀에 맞는 명사구를 넣는다.
+  const issueText =
+    getLocale() === 'ko'
+      ? issue.code
+        ? t(`mcp.policyErr.${issue.code}` as MessageKey, issue.params as never)
+        : text(issue)
+      : path
+        ? t('mcp.folderIssueNoun', { path })
+        : t('mcp.folderIssueNounEmpty');
+  return { issue: issueText, path };
 }
 
 /** 키가 있으면 지금 언어로, 없으면 원문(서버·IPC 오류 문자열). */
@@ -134,7 +160,8 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
     let folders: string[];
     if (folderIssue || dailyIssue) {
       if (next.write) {
-        setPolicyError({ key: 'mcp.fixFolderFirst', params: { issue: text(folderIssue ?? dailyIssue) } });
+        const issue = folderIssue ?? dailyIssue!;
+        setPolicyError({ key: 'mcp.fixFolderFirst', folderCode: issue.code, folderPath: issue.params?.path ?? '' });
         return; // 켠 상태의 잘못된 폴더는 저장하지 않는다
       }
       folders = [t('mcp.defaultFolder')]; // 끈 상태는 폴더와 무관하므로 정책 파일을 유효하게 남긴다
@@ -228,7 +255,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
           </label>
           {folderIssue && (
             <p className="warn small" data-testid="mcp-folder-warning">
-              {t('mcp.folderBlocked', { issue: text(folderIssue) })}
+              {t('mcp.folderBlocked', folderIssueParams(folderIssue))}
             </p>
           )}
           <label className="settings__row">
@@ -245,7 +272,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
           </label>
           {dailyIssue && (
             <p className="warn small" data-testid="mcp-folder-warning">
-              {t('mcp.dailyFix', { issue: text(dailyIssue) })}
+              {t('mcp.dailyFix', folderIssueParams(dailyIssue))}
             </p>
           )}
           {!current.allowDailyFolder && !folderIssue && !dailyCovered && (

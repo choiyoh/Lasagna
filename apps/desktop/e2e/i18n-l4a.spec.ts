@@ -108,22 +108,34 @@ test('깨진 정책 파일도 화면 언어로 안내한다', async () => {
   await page.reload();
   await openVaultIfNeeded(page);
 
-  // 영어: 영어 문구, 한글 0
+  // 영어로 연다 — 설정 창은 열어 둔 채 언어만 바꾼다
   await page.getByTestId('settings-btn').click();
-  await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: 'English' }).click();
-  await page.keyboard.press('Escape');
-  await page.getByTestId('settings-btn').click();
+  const englishRadio = page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: 'English' });
+  const koreanRadio = page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: '한국어' });
+  await englishRadio.click();
   const mcp = page.getByTestId('mcp-settings');
+  await expect(mcp).toContainText('The policy file is not valid JSON');
+  expect(await mcp.innerText()).not.toMatch(HANGUL);
+
+  // 한국어로 바꾸면 base 문구, 다시 영어로 바꾸면 영어 (혼합 언어 없음)
+  await koreanRadio.click();
+  await expect(mcp).toContainText('정책 파일이 올바른 JSON 이 아니에요');
+  expect(await mcp.innerText()).not.toMatch(/policy file/);
+  await englishRadio.click();
   await expect(mcp).toContainText('The policy file is not valid JSON');
   expect(await mcp.innerText()).not.toMatch(HANGUL);
   await page.keyboard.press('Escape');
 
-  // 한국어: base 와 같은 문구
+  // 루트가 배열인 스키마 오류: 영어 상세 문구 유지, 한글 0
+  writeFileSync(path.join(vaultDir, '.nopsidian', 'mcp-policy.json'), '[]');
+  await page.reload();
+  await openVaultIfNeeded(page);
   await page.getByTestId('settings-btn').click();
-  await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: '한국어' }).click();
-  await page.keyboard.press('Escape');
-  await page.getByTestId('settings-btn').click();
-  await expect(page.getByTestId('mcp-settings')).toContainText('정책 파일이 올바른 JSON 이 아니에요');
+  const mcp2 = page.getByTestId('mcp-settings');
+  await expect(mcp2).toContainText('The policy file has the wrong shape');
+  expect(await mcp2.innerText()).not.toMatch(HANGUL);
+  await page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: '한국어' }).click();
+  await expect(mcp2).toContainText('정책 파일 형식이 올바르지 않아요');
   await page.keyboard.press('Escape');
 });
 
@@ -153,13 +165,17 @@ test('잘못된 폴더·VSCode 탭·복사·언어 전환이 모두 화면 언�
   const folder = mcp.getByLabel('Folders agents can write');
   await folder.fill('../bad');
   const warning = mcp.locator('[data-testid="mcp-folder-warning"]');
-  await expect(warning).toContainText('That path cannot be used as a write folder');
+  await expect(warning).toContainText('Fix the folder “../bad” first');
   expect(await warning.innerText()).not.toMatch(HANGUL);
 
   // 같은 설정 창 안에서 언어만 바꾼다 — 상태 문구가 즉시 새 언어로 바뀌어야 한다
   await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: '한국어' }).click();
   await expect(mcp.locator('[data-testid="mcp-folder-warning"]')).toContainText('쓰기 폴더로 쓸 수 없는 경로예요');
+  // 한국어 경고에 영어가 섞이지 않는다
+  expect(await mcp.locator('[data-testid="mcp-folder-warning"]').innerText()).not.toMatch(/Fix|folder|can’t/);
   await page.getByRole('radiogroup', { name: '언어' }).getByRole('radio', { name: 'English' }).click();
-  await expect(mcp.locator('[data-testid="mcp-folder-warning"]')).toContainText('That path cannot be used as a write folder');
+  const enWarning = await mcp.locator('[data-testid="mcp-folder-warning"]').innerText();
+  expect(enWarning).toContain('Fix the folder “../bad” first');
+  expect(enWarning).not.toMatch(HANGUL);
   await page.keyboard.press('Escape');
 });

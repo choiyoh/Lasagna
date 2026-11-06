@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '@nopsidian/i18n';
 import { syncFailureFor } from './sync';
+import { errorDetails } from '../workers/sync/error-info';
 import { duplicateNote } from './trash';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -37,5 +38,25 @@ describe('메인 프로세스 문구의 로캘', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('동기화 오류 코드와 저장된 실패', () => {
+  it('워커가 붙인 key 로 busy/blocked 를 판정한다(문구 매칭 없이, 영어 메시지도)', () => {
+    setLocale('en');
+    const busy = errorDetails(Object.assign(new Error('A sync is already running'), { key: 'busy', code: 'BUSY' }));
+    expect(busy).toMatchObject({ key: 'busy', code: 'BUSY' });
+    const blocked = errorDetails(Object.assign(new Error('stopped'), { key: 'blocked' }));
+    expect(blocked).toMatchObject({ key: 'blocked', code: 'BLOCKED' });
+  });
+
+  it('실패에는 kind 가 남아 저장본을 지금 언어로 다시 만들 수 있다', () => {
+    setLocale('ko');
+    const ko = syncFailureFor({ code: 'HTTP 401' });
+    expect(ko.kind).toBe('auth');
+    setLocale('en');
+    const en = syncFailureFor({ code: 'HTTP 401' });
+    expect(en.kind).toBe('auth');
+    expect(en.title).toBe('Google sign-in expired');
   });
 });

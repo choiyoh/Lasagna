@@ -1309,4 +1309,13 @@ export const ko = {
   'sync.diag.busy.action': '동기화가 끝난 뒤 다시 확인해 주세요',
   'sync.diag.unknown.title': '동기화 중 문제가 생겼어요',
   'sync.diag.unknown.action': '진단 정보를 복사해 확인해 주세요',
+  'main.sync.keychainUnavailable': 'OS 키체인을 쓸 수 없어 로그인 정보를 안전하게 저장할 수 없어요',
+  'main.sync.noBuiltinClient': '이 빌드에는 Google 클라이언트가 내장되어 있지 않아요',
+  'main.sync.noClient': 'Google 클라이언트가 설정되지 않았어요',
+  'main.sync.noRefreshToken': 'Google이 refresh token을 주지 않았어요. 클라이언트 유형이 "데스크톱 앱"인지 확인해 주세요',
+  'main.sync.failedCount': '{n}개 파일을 동기화하지 못했어요',
+  'main.sync.folderUnverified': 'Drive 폴더를 확인하지 못했어요',
+  'main.sync.notConnected': 'Google 계정이 연결되지 않았어요',
+  'main.sync.aborted': '동기화가 중단됐어요',
+  'main.err.syncBusyRun': '지금 동기화 중이에요',
 } as const

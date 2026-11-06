@@ -1308,4 +1308,13 @@ export const en: Record<MessageKey, string> = {
   'sync.diag.busy.action': 'Check again when the sync finishes',
   'sync.diag.unknown.title': 'Something went wrong during sync',
   'sync.diag.unknown.action': 'Copy the diagnostics to check',
+  'main.sync.keychainUnavailable': 'The OS keychain is unavailable, so the sign-in cannot be stored safely',
+  'main.sync.noBuiltinClient': 'This build has no built-in Google client',
+  'main.sync.noClient': 'No Google client is configured',
+  'main.sync.noRefreshToken': 'Google did not return a refresh token. Check that the client type is “Desktop app”',
+  'main.sync.failedCount': '{n} files could not be synced',
+  'main.sync.folderUnverified': 'Could not check the Drive folder',
+  'main.sync.notConnected': 'No Google account is connected',
+  'main.sync.aborted': 'The sync stopped',
+  'main.err.syncBusyRun': 'A sync is running now',
 }

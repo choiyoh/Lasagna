@@ -6,7 +6,7 @@ const RATE_LIMIT_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded'
 /** 워커 안의 예외를 직렬화 가능한 안정적인 분류 키로 바꾼다. */
 export function errorDetails(e: unknown): SyncErrorDetails {
   const err = e instanceof Error ? e : new Error(String(e));
-  const maybe = err as unknown as { status?: unknown; reason?: unknown };
+  const maybe = err as unknown as { status?: unknown; reason?: unknown; key?: string; code?: string };
   const status = typeof maybe.status === 'number' ? maybe.status : undefined;
   const reason = typeof maybe.reason === 'string' ? maybe.reason : undefined;
 
@@ -64,10 +64,11 @@ export function errorDetails(e: unknown): SyncErrorDetails {
     } else if (status !== undefined) {
       code = `HTTP ${status}`;
     }
-  } else if (err.message.includes('이미 동기화 중')) {
+  } else if (maybe.key === 'busy') {
+    // 워커가 붙인 코드로 판정한다(문구 매칭은 언어에 따라 깨진다).
     key = 'busy';
     code = 'BUSY';
-  } else if (err.message.includes('멈췄어요')) {
+  } else if (maybe.key === 'blocked' || maybe.code === 'BLOCKED') {
     key = 'blocked';
     code = 'BLOCKED';
   }

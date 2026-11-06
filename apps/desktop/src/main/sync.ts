@@ -94,8 +94,8 @@ const failureKey = (e: FailureLike): string => {
     }
   }
   if (e.name === 'OAuthError' || e.name === 'TypeError') return 'network';
-  if (e.message?.includes('멈췄어요') === true) return 'blocked';
-  if (e.message?.includes('이미 동기화 중') === true) return 'busy';
+  if (e.key === 'blocked' || e.message?.includes('멈췄어요') === true) return 'blocked';
+  if (e.key === 'busy' || e.message?.includes('이미 동기화 중') === true) return 'busy';
   return 'unknown';
 };
 
@@ -105,7 +105,14 @@ export function syncFailureFor(e: FailureLike, at = Date.now()): SyncFailure {
   const f = FAILURES[key] ?? FAILURES.unknown!;
   // 서버·404·일반 403 은 실제 HTTP 상태를 접힌 코드에 남긴다.
   const code = (key === 'server' || key === 'notFound' || key === 'forbidden') && e.code !== undefined ? e.code : f.code;
-  return { at, code, title: t(f.title), action: t(f.action), docs: `${DOCS_BASE}#${f.anchor}` };
+  return { at, code, kind: key, title: t(f.title), action: t(f.action), docs: `${DOCS_BASE}#${f.anchor}` };
+}
+
+/** 저장된 실패(kind 가 있으면)를 지금 언어로 다시 만든다 — 언어를 바꿔도 옛 문장이 남지 않게. */
+function localizedFailure(f: SyncFailure | null): SyncFailure | null {
+  if (!f?.kind) return f;
+  const entry = FAILURES[f.kind];
+  return entry ? { ...f, title: t(entry.title), action: t(entry.action) } : f;
 }
 
 /** 로컬 진단에 쓰는 접미사. 클라이언트 ID 의 `.apps.googleusercontent.com` 은 빼고 보여 준다. */
@@ -142,7 +149,7 @@ export class CredentialStore {
   }
 
   save(c: Credentials): void {
-    if (!this.box.available()) throw new Error('OS 키체인을 쓸 수 없어 로그인 정보를 안전하게 저장할 수 없어요');
+    if (!this.box.available()) throw new Error(t('main.sync.keychainUnavailable'));
     mkdirSync(path.dirname(this.file), { recursive: true });
     writeFileSync(this.file, JSON.stringify({ enc: this.box.encrypt(JSON.stringify(c)).toString('base64') }), { mode: 0o600 });
     // mode 는 새로 만들 때만 적용되므로, 이미 있던 파일도 다시 0600 으로 맞춘다.
@@ -336,7 +343,7 @@ export class SyncController {
   /** 직접 입력한 클라이언트를 지우고 빌드에 내장된 클라이언트로 돌아간다. 토큰은 다시 로그인해야 한다. */
   useBuiltinClient(): SyncStatus {
     const builtin = this.builtinClient;
-    if (builtin === null) throw new Error('이 빌드에는 Google 클라이언트가 내장되어 있지 않아요');
+    if (builtin === null) throw new Error(t('main.sync.noBuiltinClient'));
     const prev = this.o.credentials.load();
     const keep = this.tokensFor(prev, builtin.clientId);
     if (keep === undefined) this.o.credentials.clear();
@@ -351,7 +358,7 @@ export class SyncController {
 
   async connect(): Promise<SyncStatus> {
     const client = this.effectiveClient();
-    if (client === null) throw new Error('Google 클라이언트가 설정되지 않았어요');
+    if (client === null) throw new Error(t('main.sync.noClient'));
     this.cancelConnect?.();
     const pkce = createPkce();
     const state = randomState();
@@ -368,7 +375,7 @@ export class SyncController {
         verifier: pkce.verifier,
         redirectUri: loop.redirectUri,
       });
-      if (!tokens.refreshToken) throw new Error('Google이 refresh token을 주지 않았어요. 클라이언트 유형이 "데스크톱 앱"인지 확인해 주세요');
+      if (!tokens.refreshToken) throw new Error(t('main.sync.noRefreshToken'));
       this.o.credentials.save({ ...(this.o.credentials.load() ?? {}), tokens, tokenClientId: client.clientId });
       await this.stopWorker();
       this.device.lastRefreshFailure = null;
@@ -398,7 +405,7 @@ export class SyncController {
   }
 
   setEnabled(enabled: boolean): SyncStatus {
-    if (!this.root) throw new Error('열린 볼트가 없어요');
+    if (!this.root) throw new Error(t('main.err.noVault'));
     this.device.enabled = enabled;
     this.saveDevice();
     if (!enabled) void this.stopWorker();
@@ -442,7 +449,7 @@ export class SyncController {
   }
 
   async run(force: boolean): Promise<RunSummary> {
-    if (this.running) throw new Error('이미 동기화 중이에요');
+    if (this.running) throw Object.assign(new Error(t('main.err.syncBusy')), { key: 'busy', code: 'BUSY' });
     this.running = true;
     this.state = 'syncing';
     this.device.lastAttempt = Date.now();
@@ -456,11 +463,11 @@ export class SyncController {
       this.saveDevice();
       this.conflicts = r.conflictPaths;
       this.state = r.failed > 0 ? 'error' : 'idle';
-      this.message = r.failed > 0 ? `${r.failed}개 파일을 동기화하지 못했어요` : null;
+      this.message = r.failed > 0 ? t('main.sync.failedCount', { n: r.failed }) : null;
       return r;
     } catch (e) {
       const err = e as Error & { kind?: string; key?: string; code?: string; status?: number; reason?: string };
-      this.state = err.kind === 'auth' ? 'needsAuth' : err.kind === 'offline' ? 'offline' : /멈췄어요/.test(err.message) ? 'blocked' : 'error';
+      this.state = err.kind === 'auth' ? 'needsAuth' : err.kind === 'offline' ? 'offline' : (err as { key?: string }).key === 'blocked' || err.kind === 'blocked' ? 'blocked' : 'error';
       const failure = syncFailureFor(err);
       this.message = this.state === 'blocked' ? err.message : failure.title;
       this.device.lastFailure = failure;
@@ -485,10 +492,10 @@ export class SyncController {
       accountEmail: this.device.lastAccountEmail,
       tokenExpiresAt: client?.tokens?.expiresAt ?? null,
       tokenValid: client?.tokens !== undefined && client.tokens.expiresAt > Date.now(),
-      lastRefreshFailure: this.device.lastRefreshFailure,
+      lastRefreshFailure: localizedFailure(this.device.lastRefreshFailure),
       pendingChanges: null,
       folder: this.device.lastFolder ?? this.emptyFolder(),
-      lastFailure: this.device.lastFailure,
+      lastFailure: localizedFailure(this.device.lastFailure),
     };
   }
 
@@ -520,7 +527,7 @@ export class SyncController {
     }
     try {
       const r = await this.call<DiagnosticsSummary>({ method: 'diagnose', params: { remote: true } });
-      if (r.folder === null) throw new Error('Drive 폴더를 확인하지 못했어요');
+      if (r.folder === null) throw new Error(t('main.sync.folderUnverified'));
       const folder: SyncDiagnostics['folder'] = { ...r.folder, checkedAt: r.checkedAt };
       this.device.lastFolder = folder;
       this.device.lastAccountEmail = r.accountEmail === null ? this.device.lastAccountEmail : maskEmail(r.accountEmail);
@@ -554,7 +561,7 @@ export class SyncController {
     } catch (e) {
       const key = failureKey(e as FailureLike);
       // 동기화 중이라 확인만 못한 경우는 '실패'가 아니다. 화면에는 알리고 기록은 남기지 않는다.
-      if (key === 'busy') throw Object.assign(new Error('지금 동기화 중이에요'), { key: 'busy', code: 'BUSY' });
+      if (key === 'busy') throw Object.assign(new Error(t('main.err.syncBusyRun')), { key: 'busy', code: 'BUSY' });
       const failure = syncFailureFor(key === 'auth' ? { key: 'authCheck', code: 'HTTP 401' } : (e as FailureLike));
       this.device.lastFailure = failure;
       // refresh token 이 invalid_grant 로 확실히 거부된 경우에만 로그아웃한다.
@@ -580,7 +587,7 @@ export class SyncController {
   private ensureWorker(): Worker {
     if (this.worker) return this.worker;
     const client = this.effectiveClient();
-    if (!this.root || client?.tokens === undefined) throw Object.assign(new Error('Google 계정이 연결되지 않았어요'), { kind: 'auth' });
+    if (!this.root || client?.tokens === undefined) throw Object.assign(new Error(t('main.sync.notConnected')), { kind: 'auth', key: 'notConnected' });
     const data: SyncWorkerData = {
       root: this.root,
       vaultKey: vaultKeyFor(this.name),
@@ -638,7 +645,7 @@ export class SyncController {
   private async stopWorker() {
     const w = this.worker;
     this.worker = null;
-    this.failAll(new Error('동기화가 중단됐어요'));
+    this.failAll(new Error(t('main.sync.aborted')));
     if (w) await w.terminate();
   }
 }

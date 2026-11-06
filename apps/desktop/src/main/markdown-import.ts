@@ -80,7 +80,7 @@ export function importMarkdownInto(root: string, sources: readonly string[], int
         res.skipped.push(t('main.skip.tooBig', { name: base }));
         continue;
       }
-      if (++count > MAX_FILES) throw new Error(`파일이 너무 많아요(최대 ${MAX_FILES}개)`);
+      if (++count > MAX_FILES) throw new Error(t('main.err.tooManyFiles', { max: MAX_FILES }));
       const name = uniqueName(base, taken);
       if (name !== base) res.renamed++;
       atomicWrite(path.join(destDir, name), readFileSync(src));

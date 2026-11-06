@@ -133,7 +133,7 @@ export class FsLocalStore implements LocalStore {
     const st = await lstatOrNull(fromAbs);
     if (!st || st.isDirectory()) throw new Error(t('main.err.missingPath', { path: from }));
     if (from === to) return; // 제자리 이동 — 덮어쓸 게 없다
-    if (await lstatOrNull(toAbs)) throw new Error(`이미 있는 경로: ${to}`);
+    if (await lstatOrNull(toAbs)) throw new Error(t('main.err.pathExists', { path: to }));
     await fsp.mkdir(path.dirname(toAbs), { recursive: true });
     await fsp.rename(fromAbs, toAbs);
     // 빈 상위 폴더는 지우지 않는다(사용자가 보던 구조 그대로)

@@ -23,6 +23,7 @@ import type {
 } from './protocol';
 import { SqliteSyncState } from './sqlite-state';
 import { isSyncablePath } from './syncable';
+import { syncBusyError } from './errors';
 
 const data = workerData as SyncWorkerData;
 if (data.locale) setLocale(data.locale);
@@ -124,7 +125,7 @@ port.on('message', async (req: SyncRequest) => {
       post({ type: 'response', id: req.id, result: null });
       return process.exit(0);
     }
-    if (busy) throw new Error(t('main.err.syncBusy'));
+    if (busy) throw syncBusyError();
     busy = true;
     try {
       if (req.method === 'diagnose') {

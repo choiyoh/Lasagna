@@ -556,7 +556,7 @@ export class SyncController {
         tokenExpiresAt: r.tokenExpiresAt,
         tokenValid: r.tokenExpiresAt > Date.now(),
         folder,
-        lastFailure: this.device.lastFailure,
+        lastFailure: localizedFailure(this.device.lastFailure),
       };
     } catch (e) {
       const key = failureKey(e as FailureLike);

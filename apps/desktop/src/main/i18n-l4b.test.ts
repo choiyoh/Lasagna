@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '@nopsidian/i18n';
 import { syncFailureFor } from './sync';
 import { errorDetails } from '../workers/sync/error-info';
+import { syncBusyError } from '../workers/sync/errors';
+import { executePlan } from '@nopsidian/sync-gdrive';
 import { duplicateNote } from './trash';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -42,12 +44,16 @@ describe('메인 프로세스 문구의 로캘', () => {
 });
 
 describe('동기화 오류 코드와 저장된 실패', () => {
-  it('워커가 붙인 key 로 busy/blocked 를 판정한다(문구 매칭 없이, 영어 메시지도)', () => {
-    setLocale('en');
-    const busy = errorDetails(Object.assign(new Error('A sync is already running'), { key: 'busy', code: 'BUSY' }));
-    expect(busy).toMatchObject({ key: 'busy', code: 'BUSY' });
-    const blocked = errorDetails(Object.assign(new Error('stopped'), { key: 'blocked' }));
-    expect(blocked).toMatchObject({ key: 'blocked', code: 'BLOCKED' });
+  it('실제 throw 지점의 busy/blocked 를 코드로 분류한다(문구 매칭 없이, 영어 모드 포함)', async () => {
+    for (const locale of ['ko', 'en'] as const) {
+      setLocale(locale);
+      const busy = errorDetails(syncBusyError());
+      expect(busy).toMatchObject({ key: 'busy', code: 'BUSY' });
+      // 실제 실행 지점(패키지)의 blocked 오류
+      const err = await executePlan({ blocked: '삭제가 너무 많아요' } as never, {} as never).catch((e) => e);
+      expect(errorDetails(err)).toMatchObject({ key: 'blocked', code: 'BLOCKED' });
+      expect(syncFailureFor(err).title).toBe(locale === 'ko' ? '삭제가 너무 많아 동기화를 멈췄어요' : 'Sync stopped because too much would be deleted');
+    }
   });
 
   it('실패에는 kind 가 남아 저장본을 지금 언어로 다시 만들 수 있다', () => {

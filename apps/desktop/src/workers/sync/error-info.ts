@@ -65,6 +65,7 @@ export function errorDetails(e: unknown): SyncErrorDetails {
       code = `HTTP ${status}`;
     }
   } else if (maybe.key === 'busy') {
+    // 새 오류는 워커가 key 를 붙인다. 아래 문구 매칭은 그 전에 만든 오류·기록 호환용이다.
     // 워커가 붙인 코드로 판정한다(문구 매칭은 언어에 따라 깨진다).
     key = 'busy';
     code = 'BUSY';

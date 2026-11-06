@@ -56,7 +56,7 @@ NOPS_GDRIVE_CLIENT_ID='…' NOPS_GDRIVE_CLIENT_SECRET='…' pnpm package
 
 ### First run
 1. Open a vault in the app.
-2. Open **☁ Google Drive sync…** in the sidebar.
+2. Open **Settings (⌘,) → Vault → ☁ Google Drive sync…**.
 3. With a built-in client, just press **Sign in with Google**. The browser asks you to sign in and allow access, then
    returns to the app.
 4. Right after signing in, the first sync preview opens. Turn on **Sync this vault with Drive**, review the plan, then

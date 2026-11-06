@@ -47,7 +47,7 @@ NOPS_GDRIVE_CLIENT_ID='…' NOPS_GDRIVE_CLIENT_SECRET='…' pnpm package
 
 ### 첫 실행
 1. 앱에서 볼트를 연다.
-2. 사이드바의 **☁ 동기화**를 연다.
+2. **설정(⌘,) → 볼트 → ☁ Google Drive 동기화…** 를 연다.
 3. 내장 클라이언트가 있으면 **Google로 로그인** 버튼만 누르면 된다. 브라우저에서 로그인·허용 후 앱으로 돌아온다.
 4. 로그인 직후 첫 동기화 미리보기가 열린다. **이 볼트를 Drive와 동기화**를 켜고 계획을 확인한 뒤 실행한다.
 5. 이후에는 파일이 바뀐 뒤 10초, 그리고 2분마다 자동으로 동기화한다.
@@ -72,14 +72,14 @@ Drive 폴더는 볼트 이름으로 매칭된다: `Nopsidian/<볼트 이름>/`.
 | 화면의 오류 | 확인할 것 |
 |---|---|
 | Google 로그인이 만료됐어요 (`HTTP 401`) | **지금 확인**은 먼저 refresh token으로 갱신을 시도한다. 잠시 뒤 다시 확인하고, 동기화가 계속 401이면 Google 계정을 다시 연결한다. |
-| Drive API가 꺼져 있어요 (`accessNotConfigured`) | Google Cloud 콘솔 → API 및 서비스 → 라이브러리에서 **Google Drive API**를 사용 설정한다. |
-| 저장 공간이 부족해요 (`storageQuotaExceeded`) | Google Drive 저장 공간을 비우거나 다른 계정을 쓴다. |
-| 요청이 제한됐어요 (`rateLimitExceeded`, `dailyLimitExceeded`) | 1~5분 뒤 **지금 확인**을 다시 누른다. |
+| Google Drive API가 꺼져 있어요 (`accessNotConfigured`) | Google Cloud 콘솔 → API 및 서비스 → 라이브러리에서 **Google Drive API**를 사용 설정한다. |
+| Google Drive 저장 공간이 부족해요 (`storageQuotaExceeded`) | Google Drive 저장 공간을 비우거나 다른 계정을 쓴다. |
+| Google이 잠시 요청을 제한했어요 (`rateLimitExceeded`, `dailyLimitExceeded`) | 1~5분 뒤 **지금 확인**을 다시 누른다. |
 | 인터넷에 연결되지 않았어요 (`NETWORK`) | 네트워크를 확인한 뒤 다시 시도한다. |
 | Drive 접근 권한이 없어요 (`HTTP 403`) | Google 계정 권한과 클라이언트 설정을 확인한다. |
 | Google 쪽 일시 오류예요 (`HTTP 5xx`) | 잠시 뒤 다시 시도한다. |
 | Drive에서 파일이나 폴더를 찾을 수 없어요 (`HTTP 404`) | 다시 확인하거나 동기화를 다시 실행한다. |
-| Drive 폴더를 찾을 수 없어요 (`FOLDER_MISSING`) | 두 번째 기기라면 같은 이름의 볼트를 열었는지 확인한다. 첫 동기화 전에는 폴더가 없는 것이 정상이다. |
+| Drive에서 이 볼트의 폴더를 찾을 수 없어요 (`FOLDER_MISSING`) | 두 번째 기기라면 같은 이름의 볼트를 열었는지 확인한다. 첫 동기화 전에는 폴더가 없는 것이 정상이다. |
 
 **진단 정보 복사**는 클라이언트 출처(내장/직접 입력), 클라이언트 ID 끝 4자리, 보안 비밀 등록 여부, 계정 연결 여부, 폴더 존재 여부, 오류 코드만 복사한다.
 토큰·비밀 값·이메일(마스킹 포함)·폴더 ID/경로·노트 이름/경로는 복사하지 않는다.

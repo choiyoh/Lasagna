@@ -91,7 +91,7 @@ write tools only work inside the folders you allow. Tool list and options: [docs
 ## Turning on Google Drive sync
 
 Create an OAuth client in your own Google Cloud project, turn on the Drive API, then enter the client ID and client
-secret in the app's settings under **Google Drive sync**. The step-by-step guide is
+secret in the app's settings under **Settings (⌘,) → Vault → ☁ Google Drive sync…**. The step-by-step guide is
 [docs/sync-setup.en.md](docs/sync-setup.en.md).
 
 ## Documentation

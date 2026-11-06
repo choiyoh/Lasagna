@@ -1,8 +1,13 @@
+import type { MessageKey } from '@nopsidian/i18n';
+import { PolicyError } from './folders.js';
+import { tr, trIn, type Params } from './i18n.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { addComment, parseNote, resolveInVault, saveNote, sha256, splitFrontmatter, type Comment } from '@nopsidian/core';
 import { stringify } from 'yaml';
 import { appendAudit, type AuditEntry } from './audit.js';
 import { canWrite, validateNotePath, type McpPolicy } from './policy.js';
+
+type DenyReason = string | { key: MessageKey; params?: Params };
 
 export type WriteErrorCode =
   | 'read-only'
@@ -91,7 +96,7 @@ const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
  */
 export function appendText(content: string, text: string, heading?: string): string {
   const add = text.replace(/\s+$/, '');
-  if (!add) throw new WriteError('bad-input', '덧붙일 내용이 비어 있어요');
+  if (!add) throw new WriteError('bad-input', tr('mcpW.err.emptyAppend'));
   if (!heading) {
     const base = content.replace(/\s+$/, '');
     return `${base ? `${base}\n\n` : ''}${add}\n`;
@@ -99,8 +104,8 @@ export function appendText(content: string, text: string, heading?: string): str
   const headings = parseNote(content).meta.headings;
   const h = headings.find((x) => norm(x.text) === norm(heading));
   if (!h) {
-    const list = headings.map((x) => `${'#'.repeat(x.level)} ${x.text}`).join(', ') || '(제목 없음)';
-    throw new WriteError('bad-heading', `“${heading}” 제목을 찾을 수 없어요. 있는 제목: ${list}`);
+    const list = headings.map((x) => `${'#'.repeat(x.level)} ${x.text}`).join(', ') || tr('mcpDb.noHeading');
+    throw new WriteError('bad-heading', tr('mcpW.err.headingNotFound', { heading, list }));
   }
   const lines = content.split('\n');
   const next = headings.find((x) => x.line > h.line && x.level <= h.level);
@@ -117,7 +122,7 @@ export function composeNote(content: string, opts: { title?: string; tags?: stri
   const tags = (opts.tags ?? []).map((t) => t.replace(/^#/, '').trim()).filter(Boolean);
   if (tags.length) props.tags = tags;
   const wantsFm = Object.keys(props).length > 0;
-  if (wantsFm && hasFm) throw new WriteError('bad-input', '내용에 이미 프런트매터(---)가 있어요. tags·properties 는 쓰지 말고 내용 안에 함께 적어 주세요');
+  if (wantsFm && hasFm) throw new WriteError('bad-input', tr('mcpW.err.frontmatterTwice'));
   let body = content;
   if (opts.title && !hasFm && !/^\s*#\s/.test(body)) body = `# ${opts.title.trim()}\n\n${body}`;
   const fm = wantsFm ? `---\n${stringify(props)}---\n` : '';
@@ -141,7 +146,7 @@ export class NoteWriter {
 
   create(tool: string, rawPath: string, content: string, opts: { title?: string; tags?: string[]; properties?: Record<string, unknown> } = {}): WriteResult {
     const rel = this.guard(tool, rawPath);
-    if (existsSync(resolveInVault(this.policy.root, rel))) this.deny(tool, rel, 'exists', `이미 있는 노트예요: ${rel}. 내용을 덧붙이려면 append_to_note, 고치려면 read_note 로 hash 를 받아 update_note 를 쓰세요`);
+    if (existsSync(resolveInVault(this.policy.root, rel))) this.deny(tool, rel, 'exists', { key: 'mcpW.err.noteExistsHint', params: { path: rel } });
     const text = composeNote(content, opts);
     return this.commit(tool, 'create', rel, text, null);
   }
@@ -159,7 +164,7 @@ export class NoteWriter {
     // read_note 가 일부만 돌려준 경우 hash 에 "partial:" 이 붙어 있다. 낡음 검사는 전체 내용 해시로 똑같이 한다.
     const partial = baseHash.startsWith(PARTIAL_HASH_PREFIX);
     const expected = partial ? baseHash.slice(PARTIAL_HASH_PREFIX.length) : baseHash;
-    if (sha256(disk) !== expected) this.deny(tool, rel, 'stale', '노트가 읽은 뒤에 바뀌었어요. read_note 로 다시 읽고 최신 hash 로 시도하세요');
+    if (sha256(disk) !== expected) this.deny(tool, rel, 'stale', { key: 'mcpW.err.stale' });
     const text = content.replace(/\s+$/, '') + '\n';
     // 일부만 읽고 받은 hash 로 노트를 통째로 바꾸면, 잘려 나간 뒷부분을 모르는 채 지워 버릴 수 있다.
     // 디스크에서 방금 읽은 내용보다 짧아지면 거부한다(전체를 읽고 받은 hash 는 그대로 허용 — 기존 동작).
@@ -183,7 +188,7 @@ export class NoteWriter {
     const disk = this.readDisk(tool, rel);
     const partial = baseHash.startsWith(PARTIAL_HASH_PREFIX);
     const expected = partial ? baseHash.slice(PARTIAL_HASH_PREFIX.length) : baseHash;
-    if (sha256(disk) !== expected) this.deny(tool, rel, 'stale', '노트가 읽은 뒤에 바뀌었어요. read_note 로 다시 읽고 최신 hash 로 시도하세요');
+    if (sha256(disk) !== expected) this.deny(tool, rel, 'stale', { key: 'mcpW.err.stale' });
 
     const matches = findTextMatches(disk, oldText);
     if (matches.length !== 1) {
@@ -200,20 +205,20 @@ export class NoteWriter {
   }
 
   /** 서버가 정책 파일 때문에 거부할 때 감사 기록을 남기고 던진다. */
-  denyRequest(tool: string, rawPath: string, code: WriteErrorCode, message: string): never {
+  denyRequest(tool: string, rawPath: string, code: WriteErrorCode, reason: DenyReason): never {
     let rel = rawPath;
     try {
       rel = validateNotePath(rawPath);
     } catch {
       /* 경로가 이미 잘못됐어도 감사 기록에는 원문을 남긴다 */
     }
-    this.deny(tool, rel, code, message);
+    this.deny(tool, rel, code, reason);
   }
 
   /** 이미 완성된 노트 전문을 그대로 새 노트로 쓴다(데이터베이스 행처럼 프런트매터를 직접 만든 경우). 있으면 실패. */
   createExact(tool: string, rawPath: string, text: string): WriteResult {
     const rel = this.guard(tool, rawPath);
-    if (existsSync(resolveInVault(this.policy.root, rel))) this.deny(tool, rel, 'exists', `이미 있는 노트예요: ${rel}`);
+    if (existsSync(resolveInVault(this.policy.root, rel))) this.deny(tool, rel, 'exists', { key: 'mcpW.err.noteExists', params: { path: rel } });
     return this.commit(tool, 'create', rel, text, null);
   }
 
@@ -239,21 +244,23 @@ export class NoteWriter {
     try {
       rel = validateNotePath(rawPath);
     } catch (e) {
-      this.log({ action: 'denied', tool, path: rawPath, note: e instanceof Error ? e.message : String(e) });
+      // 감사 note 는 언어와 무관하게 base(ko) — 응답만 지금 언어로.
+      const base = e instanceof PolicyError && e.code ? trIn('ko', e.code as never, e.params) : e instanceof Error ? e.message : String(e);
+      this.log({ action: 'denied', tool, path: rawPath, note: base });
       throw new WriteError('bad-input', e instanceof Error ? e.message : String(e));
     }
-    if (!this.policy.write) this.deny(tool, rel, 'read-only', '이 서버는 읽기 전용이에요(--write 로 시작해야 댓글을 달 수 있어요)');
-    if (!existsSync(resolveInVault(this.policy.root, rel))) this.deny(tool, rel, 'not-found', `없는 노트예요: ${rel}`);
-    const t = this.now().getTime();
-    this.stamps = this.stamps.filter((s) => t - s < 60_000);
-    if (this.stamps.length >= this.policy.maxWritesPerMinute) this.deny(tool, rel, 'rate-limit', `1분에 ${this.policy.maxWritesPerMinute}번까지만 쓸 수 있어요. 잠시 뒤에 다시 시도하세요`);
+    if (!this.policy.write) this.deny(tool, rel, 'read-only', { key: 'mcpW.err.readOnlyComment' });
+    if (!existsSync(resolveInVault(this.policy.root, rel))) this.deny(tool, rel, 'not-found', { key: 'mcpW.err.noteMissing', params: { path: rel } });
+    const now = this.now().getTime();
+    this.stamps = this.stamps.filter((s) => now - s < 60_000);
+    if (this.stamps.length >= this.policy.maxWritesPerMinute) this.deny(tool, rel, 'rate-limit', { key: 'mcpW.err.rateLimit', params: { max: this.policy.maxWritesPerMinute } });
     let c: Comment;
     try {
-      c = addComment(this.policy.root, rel, { author: this.client() ?? 'AI 에이전트', text, quote }, this.now());
+      c = addComment(this.policy.root, rel, { author: this.client() ?? trIn('ko', 'mcpW.aiAgent'), text, quote }, this.now());
     } catch (e) {
       throw new WriteError('bad-input', e instanceof Error ? e.message : String(e));
     }
-    this.stamps.push(t);
+    this.stamps.push(now);
     this.log({ action: 'comment', tool, path: rel, bytes: Buffer.byteLength(text), note: c.id });
     return c;
   }
@@ -264,29 +271,30 @@ export class NoteWriter {
     try {
       rel = validateNotePath(rawPath);
     } catch (e) {
-      this.log({ action: 'denied', tool, path: rawPath, note: e instanceof Error ? e.message : String(e) });
+      const base = e instanceof PolicyError && e.code ? trIn('ko', e.code as never, e.params) : e instanceof Error ? e.message : String(e);
+      this.log({ action: 'denied', tool, path: rawPath, note: base });
       throw new WriteError('bad-input', e instanceof Error ? e.message : String(e));
     }
-    if (!this.policy.write) this.deny(tool, rel, 'read-only', '이 서버는 읽기 전용이에요(--write 로 시작해야 쓸 수 있어요)');
+    if (!this.policy.write) this.deny(tool, rel, 'read-only', { key: 'mcpW.err.readOnlyWrite' });
     if (!canWrite(this.policy, rel)) {
-      const where = this.policy.writeFolders.map((f) => f || '볼트 전체').join(', ');
-      this.deny(tool, rel, 'forbidden-folder', `이 폴더에는 쓸 수 없어요. 쓸 수 있는 폴더: ${where}`);
+      const where = this.policy.writeFolders.map((f) => f || tr('mcpCli.wholeVault')).join(', ');
+      this.deny(tool, rel, 'forbidden-folder', { key: 'mcpW.err.forbiddenFolder', params: { folders: where } });
     }
     const t = this.now().getTime();
     this.stamps = this.stamps.filter((s) => t - s < 60_000);
-    if (this.stamps.length >= this.policy.maxWritesPerMinute) this.deny(tool, rel, 'rate-limit', `1분에 ${this.policy.maxWritesPerMinute}번까지만 쓸 수 있어요. 잠시 뒤에 다시 시도하세요`);
+    if (this.stamps.length >= this.policy.maxWritesPerMinute) this.deny(tool, rel, 'rate-limit', { key: 'mcpW.err.rateLimit', params: { max: this.policy.maxWritesPerMinute } });
     return rel;
   }
 
   private readDisk(tool: string, rel: string): string {
     const full = resolveInVault(this.policy.root, rel);
-    if (!existsSync(full)) this.deny(tool, rel, 'not-found', `없는 노트예요: ${rel}. 새로 만들려면 create_note 를 쓰세요`);
+    if (!existsSync(full)) this.deny(tool, rel, 'not-found', { key: 'mcpW.err.noteMissingCreate', params: { path: rel } });
     return readFileSync(full, 'utf8');
   }
 
   private commit(tool: string, action: 'create' | 'append' | 'update', rel: string, text: string, disk: string | null): WriteResult {
     const bytes = Buffer.byteLength(text);
-    if (bytes > this.policy.maxBytes) this.deny(tool, rel, 'too-large', `내용이 너무 커요(${bytes}바이트, 한도 ${this.policy.maxBytes})`);
+    if (bytes > this.policy.maxBytes) this.deny(tool, rel, 'too-large', { key: 'mcpW.err.tooLarge', params: { bytes, max: this.policy.maxBytes } });
     const r = saveNote({ root: this.policy.root, rel, content: text, baseHash: disk === null ? null : sha256(disk), ...(disk !== null ? { baseContent: disk } : {}), now: this.now() });
     this.countAttempt();
     const status = r.status === 'merged' ? 'merged' : r.status === 'conflict' || r.status === 'copy' ? 'conflict' : 'saved';
@@ -299,9 +307,12 @@ export class NoteWriter {
     this.stamps.push(this.now().getTime());
   }
 
-  private deny(tool: string, rel: string, code: WriteErrorCode, message: string): never {
-    this.log({ action: 'denied', tool, path: rel, note: `${code}: ${message}` });
-    throw new WriteError(code, message);
+  private deny(tool: string, rel: string, code: WriteErrorCode, reason: DenyReason): never {
+    // 감사 기록은 언어와 무관하게 base(ko) 값으로, 응답은 지금 언어로 — 두 용도를 분리한다.
+    const base = typeof reason === 'string' ? reason : trIn('ko', reason.key, reason.params);
+    const text = typeof reason === 'string' ? reason : tr(reason.key, reason.params);
+    this.log({ action: 'denied', tool, path: rel, note: `${code}: ${base}` });
+    throw new WriteError(code, text);
   }
 
   private log(e: Omit<AuditEntry, 't' | 'client'>): void {

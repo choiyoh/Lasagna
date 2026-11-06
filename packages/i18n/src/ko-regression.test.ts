@@ -553,6 +553,27 @@ const cases: Case[] = [
     base: () => 'Google 계정을 다시 연결해 주세요',
     render: () => t('sync.diag.auth.action'),
   },
+  // L4c: MCP 서버
+  {
+    name: 'mcpW.err.headingNotFound',
+    base: (n) => `“제목${n}” 제목을 찾을 수 없어요. 있는 제목: # a`,
+    render: (n) => t('mcpW.err.headingNotFound', { heading: `제목${n}`, list: '# a' }),
+  },
+  {
+    name: 'mcpW.err.rateLimit',
+    base: (n) => `1분에 ${n}번까지만 쓸 수 있어요. 잠시 뒤에 다시 시도하세요`,
+    render: (n) => t('mcpW.err.rateLimit', { max: n }),
+  },
+  {
+    name: 'mcpDb.err.noProp',
+    base: (n) => `없는 속성: p${n}. 있는 속성: a, b`,
+    render: (n) => t('mcpDb.err.noProp', { prop: `p${n}`, props: 'a, b' }),
+  },
+  {
+    name: 'mcpCli.writeAllowed',
+    base: (n) => `쓰기 허용: AI${n}, 볼트 전체`,
+    render: (n) => t('mcpCli.writeAllowed', { folders: `AI${n}, ${t('mcpCli.wholeVault')}` }),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

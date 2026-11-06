@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { t } from '@nopsidian/i18n';
+import { t, type MessageKey } from '@nopsidian/i18n';
 import path from 'node:path';
 import { z } from 'zod';
 import { atomicWrite } from '@nopsidian/core';
@@ -38,7 +38,10 @@ export type EffectivePolicy = McpPolicy & {
   source: 'args' | 'file';
   /** 쓰기를 거부할 때 감사 기록에 남길 코드 */
   reason?: 'policy-disabled' | 'policy-invalid';
-  message?: string;
+  /** 거부 사유 — 언어별 문장을 저장하지 않고 코드/키로 들고 있다가 응답 시점에 번역한다 */
+  messageKey?: MessageKey;
+  errorCode?: PolicyErrorCode;
+  errorParams?: Record<string, string>;
 };
 
 export function policyPath(root: string): string {
@@ -112,7 +115,7 @@ export function effectivePolicy(args: McpPolicy, file: PolicyFileRead): Effectiv
   if (!args.write) return { ...args, source: 'args' };
   if (file.kind === 'missing') return { ...args, source: 'args' };
   if (file.kind === 'invalid') {
-    return { ...args, write: false, writeFolders: [], source: 'file', reason: 'policy-invalid', message: file.error };
+    return { ...args, write: false, writeFolders: [], source: 'file', reason: 'policy-invalid', errorCode: file.code, ...(file.params ? { errorParams: file.params } : {}) };
   }
   const policy = file.policy;
   const maxWritesPerMinute = Math.min(args.maxWritesPerMinute, policy.maxWritesPerMinute);
@@ -124,7 +127,7 @@ export function effectivePolicy(args: McpPolicy, file: PolicyFileRead): Effectiv
       maxWritesPerMinute,
       source: 'file',
       reason: 'policy-disabled',
-      message: '앱 설정에서 쓰기를 꺼 두었어요',
+      messageKey: 'mcp.policyErr.appDisabled',
     };
   }
   const writeFolders = intersectWriteFolders(args.writeFolders, policy.writeFolders);
@@ -136,7 +139,7 @@ export function effectivePolicy(args: McpPolicy, file: PolicyFileRead): Effectiv
       maxWritesPerMinute,
       source: 'file',
       reason: 'policy-disabled',
-      message: '앱 정책과 서버 인자가 허용하는 폴더가 겹치지 않아요',
+      messageKey: 'mcp.policyErr.noOverlap',
     };
   }
   return { ...args, writeFolders, maxWritesPerMinute, source: 'file' };

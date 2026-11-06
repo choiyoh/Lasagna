@@ -1,3 +1,5 @@
+import type { MessageKey } from '@nopsidian/i18n';
+import { tr, trIn } from './i18n.js';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -11,17 +13,32 @@ import { NoteWriter, PARTIAL_HASH_PREFIX, WriteError, type WriteResult } from '.
 
 export const SERVER_NAME = 'nopsidian';
 
-/** 앱 설정(`.nopsidian/config.json`)의 데일리 노트 폴더(기본 `일기`) */
+/**
+ * 데일리 노트 폴더. 앱(main/vault.ts)과 같은 규칙을 쓴다: 설정 값 → 이미 있는 폴더(현재 언어 이름 → 다른 언어 이름)
+ * → 둘 다 없으면 현재 언어 기본값. 기존 '일기' 볼트에서 영어 앱과 같은 폴더를 쓰게 한다.
+ */
 function dailyFolderOf(root: string): string {
   try {
     const raw = JSON.parse(readFileSync(path.join(root, '.nopsidian', 'config.json'), 'utf8')) as { dailyFolder?: unknown };
     const f = typeof raw.dailyFolder === 'string' ? raw.dailyFolder.replace(/^\/+|\/+$/g, '') : '';
     if (f && !f.startsWith('.') && !f.includes('..')) return f;
   } catch {
-    /* 설정이 없으면 기본값 */
+    /* 설정이 없으면 폴더를 본다 */
   }
-  return '일기';
+  const current = tr('default.dailyFolder');
+  const legacy = trIn('ko', 'default.dailyFolder');
+  for (const name of [current, legacy]) {
+    if (existsSync(path.join(root, name))) return name;
+  }
+  return current;
 }
+
+const policyDenyReason = (effective: EffectivePolicy): { key: MessageKey; params?: Record<string, string> } =>
+  effective.messageKey
+    ? { key: effective.messageKey }
+    : effective.errorCode
+      ? { key: `mcp.policyErr.${effective.errorCode}` as MessageKey, params: effective.errorParams }
+      : { key: 'mcpSrv.writeDisabled' };
 
 const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -81,7 +98,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
     writer.setPolicy(effective);
     if (effective.write) return null;
     try {
-      writer.denyRequest(tool, path, effective.reason ?? 'policy-disabled', effective.message ?? '쓰기가 꺼져 있어요');
+      writer.denyRequest(tool, path, effective.reason ?? 'policy-disabled', policyDenyReason(effective));
     } catch (e) {
       if (e instanceof WriteError) return fail(`${tool} refused (${e.code}): ${e.message}`);
       return fail(`${tool} failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -250,7 +267,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
         filter: z
           .array(z.object({ prop: z.string(), op: z.enum(FILTER_OPS), value: z.unknown().optional() }))
           .optional()
-          .describe('Conditions that must all match, e.g. [{"prop":"상태","op":"=","value":"진행"}]'),
+          .describe(tr('mcpSrv.exampleFilter')),
         sort: z.array(z.object({ prop: z.string(), dir: z.enum(['asc', 'desc']).optional() })).optional().describe('Sort rules, first one wins'),
         limit: z.number().int().min(1).max(200).optional().describe('Max rows (default 50)'),
         offset: z.number().int().min(0).optional(),
@@ -344,7 +361,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
       inputSchema: {
         database: z.string().min(1).describe('Database folder path or title'),
         title: z.string().min(1).describe('Row title (becomes the note name)'),
-        values: z.record(z.string(), z.unknown()).optional().describe('Property values, e.g. {"상태":"진행","마감":"2026-11-01","점수":3}'),
+        values: z.record(z.string(), z.unknown()).optional().describe(tr('mcpSrv.exampleValues')),
         body: z.string().optional().describe('Optional Markdown body of the row note (added after the template, if any)'),
         template: z
           .string()
@@ -461,7 +478,7 @@ export function createServer(policy: McpPolicy, version = '0.0.0'): CreatedServe
         maxBytes: effective.maxBytes,
         source: effective.source,
         reason: effective.reason ?? null,
-        error: effective.message ?? null,
+        error: effective.write ? null : tr(policyDenyReason(effective).key, policyDenyReason(effective).params),
         canWriteExample: effective.write && canWrite(effective, `${effective.writeFolders[0] ? `${effective.writeFolders[0]}/` : ''}Example.md`),
       });
     },

@@ -1,7 +1,9 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { PolicyError, USAGE, parseArgs } from './policy.js';
+import { t } from '@nopsidian/i18n';
+import { applyServerLocale } from './lang.js';
+import { PolicyError, parseArgs, usage } from './policy.js';
 import { createServer } from './server.js';
 
 declare const __VERSION__: string | undefined;
@@ -24,24 +26,28 @@ export function isDirectRun(argv: readonly string[], moduleUrl: string): boolean
  * 앱은 `--mcp-stdio` 로 이 함수를 직접 불러 쓴다(별도 Node.js 가 필요 없다).
  */
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
+  // 시작 시 한 번 언어를 정한다(NOPSIDIAN_LANG → 앱 설정 파일 → OS → ko).
+  applyServerLocale();
   let policy;
   try {
     policy = parseArgs([...argv]);
   } catch (e) {
     if (e instanceof PolicyError) {
-      process.stderr.write(`오류: ${e.message}\n\n${USAGE}`);
+      process.stderr.write(t('mcpCli.error', { message: e.message, usage: usage() }));
       return 2;
     }
     throw e;
   }
   if (policy === 'help') {
-    process.stdout.write(USAGE);
+    process.stdout.write(usage());
     return 0;
   }
   const { server } = createServer(policy, typeof __VERSION__ === 'string' ? __VERSION__ : '0.0.0');
   await server.connect(new StdioServerTransport());
   // stdout 은 MCP 프로토콜 전용이므로 상태는 stderr 로만 낸다
-  process.stderr.write(`nopsidian-mcp: ${policy.root} (${policy.write ? `쓰기 허용: ${policy.writeFolders.map((f) => f || '볼트 전체').join(', ')}` : '읽기 전용'})\n`);
+  process.stderr.write(
+    `nopsidian-mcp: ${policy.root} (${policy.write ? t('mcpCli.writeAllowed', { folders: policy.writeFolders.map((f) => f || t('mcpCli.wholeVault')).join(', ') }) : t('mcpCli.readOnly')})\n`,
+  );
   // 클라이언트가 stdin 을 닫으면(또는 연결이 끝나면) 돌아온다. 앱은 이때 프로세스를 끝낸다.
   await new Promise<void>((resolve) => {
     server.server.onclose = () => resolve();
@@ -57,7 +63,7 @@ if (isDirectRun(process.argv, import.meta.url)) {
       process.exitCode = code;
     })
     .catch((e) => {
-      process.stderr.write(`nopsidian-mcp 오류: ${e instanceof Error ? e.stack ?? e.message : String(e)}\n`);
+      process.stderr.write(t('mcpCli.fatal', { message: e instanceof Error ? (e.stack ?? e.message) : String(e) }));
       process.exit(1);
     });
 }

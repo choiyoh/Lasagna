@@ -506,6 +506,17 @@ const cases: Case[] = [
     base: () => '정책 파일의 폴더가 올바르지 않아요: 경로가 볼트 밖이에요',
     render: () => t('mcp.policyErr.badFolder', { message: '경로가 볼트 밖이에요' }),
   },
+  // L4a: 되돌리기 오류
+  {
+    name: 'mcp.revertErr.changed',
+    base: () => '그 뒤로 노트가 또 바뀌었어요. 더 최근 작업부터 되돌리거나 노트의 버전 기록에서 복원해 주세요',
+    render: () => t('mcp.revertErr.changed'),
+  },
+  {
+    name: 'mcp.revertErr.missing',
+    base: () => '노트가 지금은 없어요(지웠거나 이름을 바꿨어요)',
+    render: () => t('mcp.revertErr.missing'),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

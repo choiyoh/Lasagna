@@ -1200,4 +1200,10 @@ export const ko = {
   'mcp.vscodeTarget': '.vscode/mcp.json (워크스페이스)',
   'mcp.folderIssueNoun': '폴더 “{path}”',
   'mcp.folderIssueNounEmpty': '쓰기 폴더',
+  'mcp.revertErr.not-found': '그 기록을 찾을 수 없어요',
+  'mcp.revertErr.not-revertable': '되돌릴 수 있는 작업이 아니에요',
+  'mcp.revertErr.already': '이미 되돌린 작업이에요',
+  'mcp.revertErr.missing': '노트가 지금은 없어요(지웠거나 이름을 바꿨어요)',
+  'mcp.revertErr.changed': '그 뒤로 노트가 또 바뀌었어요. 더 최근 작업부터 되돌리거나 노트의 버전 기록에서 복원해 주세요',
+  'mcp.revertErr.no-snapshot': '이전 내용의 버전 기록이 없어요(오래돼 정리됐을 수 있어요)',
 } as const

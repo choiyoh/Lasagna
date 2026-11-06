@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { setLocale } from '@nopsidian/i18n';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { McpSettings } from './McpSettings';
@@ -194,5 +195,29 @@ describe('McpSettings', () => {
     const cli = container.querySelector('[data-testid="mcp-cli"]')?.textContent ?? '';
     expect(cli).toContain('--write-folder "일기"');
     expect(cli).not.toContain('--write-folder "일기/2026"');
+  });
+});
+
+describe('되돌리기 오류의 로캘', () => {
+  it('알려진 실패 코드는 화면 언어로 보여 주고, 언어를 바꾸면 다시 번역한다', async () => {
+    const audit = [
+      { t: '2026-11-05T00:00:00.000Z', client: 'claude', action: 'update' as const, tool: 'write_note', path: 'a.md' },
+    ];
+    (window.nops.mcp.audit as ReturnType<typeof vi.fn>).mockImplementation(async () => audit);
+    (window.nops.mcp.revert as ReturnType<typeof vi.fn>).mockImplementation(async () => ({ kind: 'failed', code: 'changed' }));
+    await render();
+
+    const undo = container.querySelector<HTMLButtonElement>('[data-testid="mcp-revert"]')!;
+    await act(async () => undo.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="mcp-revert-confirm"]')!.click());
+    await flush();
+    const msg = () => container.querySelector('[data-testid="mcp-revert-msg"]')?.textContent ?? '';
+    expect(msg()).toContain('버전 기록에서 복원');
+
+    setLocale('en');
+    await act(async () => root!.render(<McpSettings onOpenNote={() => {}} onReverted={() => {}} />));
+    expect(msg()).toContain('version history');
+    expect(msg()).not.toMatch(/[가-힣]/);
+    setLocale('ko');
   });
 });

@@ -1199,4 +1199,10 @@ export const en: Record<MessageKey, string> = {
   'mcp.policyNeedFolder': 'Turn on writing with at least one allowed folder',
   'mcp.policyErr.badWriteFolder': 'That path cannot be used as a write folder: {path}',
   'mcp.vscodeTarget': '.vscode/mcp.json (workspace)',
+  'mcp.revertErr.not-found': 'That activity could not be found',
+  'mcp.revertErr.not-revertable': 'This activity cannot be reverted',
+  'mcp.revertErr.already': 'This activity was already reverted',
+  'mcp.revertErr.missing': 'The note is gone (deleted or renamed)',
+  'mcp.revertErr.changed': 'The note changed after this activity. Revert a newer one first, or restore it from the note’s version history',
+  'mcp.revertErr.no-snapshot': 'There is no earlier version to restore (it may have been cleaned up)',
 }

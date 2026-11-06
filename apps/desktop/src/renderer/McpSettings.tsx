@@ -15,8 +15,9 @@ interface AuditRow {
 /** 화면에 보일 문구: 사전 키(또는 정책 오류 코드)를 들고 있다가 그릴 때 지금 언어로 만든다. */
 interface LocalizedText {
   key?: MessageKey;
-  /** 정책 오류 코드(`mcp.policyErr.<code>`) */
+  /** 오류 코드: 정책은 `mcp.policyErr.<code>`, 되돌리기는 `mcp.revertErr.<code>` */
   code?: string;
+  kind?: 'policy' | 'revert';
   params?: Record<string, string>;
   message?: string;
   /** 폴더 문제를 문장 틀에 넣을 때: 번역된 문장 대신 코드·경로만 저장한다 */
@@ -32,8 +33,9 @@ function policyErrorText(error: LocalizedText | null): string {
     return t(error.key, folderIssueParams({ code: error.folderCode, params: { path: error.folderPath ?? '' } }));
   }
   if (error.code) {
-    // 형식 오류는 어느 자리가 문제인지 알 때만 경로·메시지를 붙인다(base 와 같은 선택 규칙).
-    const key = (error.code === 'invalidSchema' && !error.params?.message ? 'mcp.policyErr.invalidSchemaNoIssue' : `mcp.policyErr.${error.code}`) as MessageKey;
+    // 정책/되돌리기 오류 코드마다 사전 키가 있다(모르는 코드는 사유 원문을 그대로).
+    const prefixed = error.kind === 'revert' ? `mcp.revertErr.${error.code}` : `mcp.policyErr.${error.code}`;
+    const key = (error.code === 'invalidSchema' && !error.params?.message ? 'mcp.policyErr.invalidSchemaNoIssue' : prefixed) as MessageKey;
     const text = t(key, error.params as never);
     if (!text.startsWith('mcp.policyErr.')) return text;
   }
@@ -107,6 +109,12 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   const revert = async (a: AuditRow) => {
     try {
       const r = await window.nops.mcp.revert({ t: a.t, path: a.path });
+      if (r.kind === 'failed') {
+        const known = ['not-found', 'not-revertable', 'already', 'missing', 'changed', 'no-snapshot'].includes(r.code ?? '');
+        setMessage(known ? { code: r.code, kind: 'revert' } : { message: r.message ?? '' });
+        setConfirming(null);
+        return;
+      }
       setMessage({ key: r.kind === 'trashed' ? 'mcp.reverted.trashed' : 'mcp.reverted.restored', params: { path: a.path } });
       onReverted(a.path, r.kind);
     } catch (e) {
@@ -374,7 +382,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
             ))}
           </ul>
         )}
-        {message && <p className="small" role="status" data-testid="mcp-revert-msg">{text(message)}</p>}
+        {message && <p className="small" role="status" data-testid="mcp-revert-msg">{policyErrorText(message)}</p>}
         <p className="muted small">{t('mcp.revertHint')}</p>
       </div>
     </section>

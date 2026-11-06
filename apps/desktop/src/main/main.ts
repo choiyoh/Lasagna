@@ -492,8 +492,9 @@ function registerHandlers() {
       applyRestore(v.info.path, entry, plan.content);
       return { kind: 'restored' as const };
     } catch (e) {
-      // 사용자에게 보일 문구만 넘긴다
-      throw e instanceof RevertError ? new Error(e.message) : e;
+      // 되돌릴 수 없는 이유는 코드로 넘겨 화면이 지금 언어로 안내하게 한다(그 밖의 오류는 그대로).
+      if (e instanceof RevertError) return { kind: 'failed' as const, code: e.code, message: e.message };
+      throw e;
     }
   });
   handle('mcp.audit', ({ limit }) => readAudit(requireVault().info.path, limit));

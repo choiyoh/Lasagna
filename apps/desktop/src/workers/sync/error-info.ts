@@ -1,4 +1,5 @@
 import { DriveApiError } from '@nopsidian/sync-gdrive';
+import { errorCode } from '@nopsidian/sync-gdrive/errors';
 import type { SyncErrorDetails, SyncErrorKey, SyncErrorKind } from './protocol';
 
 const RATE_LIMIT_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded', 'dailyLimitExceeded']);
@@ -74,11 +75,13 @@ export function errorDetails(e: unknown): SyncErrorDetails {
     code = 'BLOCKED';
   }
 
+  const coded = errorCode(err);
   return {
     error: err.message,
     kind,
     key,
     code,
+    ...(coded ? { messageKey: coded.key, messageParams: coded.params } : {}),
     ...(status === undefined ? {} : { status }),
     ...(reason === undefined ? {} : { reason }),
   };

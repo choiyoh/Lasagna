@@ -6,6 +6,7 @@ import { CellEditor, CellView } from './CellEditor';
 import { typeLabel } from './labels';
 import { makeDef, WITH_OPTIONS } from './PropertyManager';
 import type { CellValue, DbRowDto, DbSchema, Property } from './types';
+import { userMessage } from '../user-message';
 
 /** 행 패널에서 바로 만들 수 있는 속성 형식(관계·롤업·수식은 데이터베이스 화면의 속성 관리에서) */
 const QUICK_TYPES = ['text', 'number', 'select', 'multi_select', 'status', 'date', 'checkbox', 'url', 'email', 'phone'];
@@ -77,7 +78,7 @@ function RowProps({ path, notes, hasTitle, onRename }: { path: string; notes: ()
       await load();
       setEditing(name);
     } catch (e) {
-      setAddError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      setAddError(userMessage(e));
     }
   };
 

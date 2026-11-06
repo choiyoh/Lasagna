@@ -1,5 +1,6 @@
 import { getLocale, t } from '@nopsidian/i18n';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { userMessage } from './user-message';
 
 interface Props {
   children: ReactNode;
@@ -64,7 +65,7 @@ export class ErrorBoundary extends Component<Props, State> {
       <div className="errorboundary" role="alert">
         <strong>{label ? t('error.crashedWith', { label: getLocale() === 'ko' ? `${label}${objectParticle(label)}` : label }) : t('error.crashed')}</strong>
         <pre className="errorboundary__message muted small">
-          <code>{error.message || String(error)}</code>
+          <code>{userMessage(error) || String(error)}</code>
         </pre>
         <div className="errorboundary__actions">
           <button type="button" onClick={this.reset}>

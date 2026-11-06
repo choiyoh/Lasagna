@@ -146,8 +146,8 @@ describe('read / exists', () => {
   });
 
   it('탈출 시도는 거부한다', async () => {
-    await expect(store.read('../밖.md')).rejects.toThrow(/벗어나는/);
-    await expect(store.read('/etc/passwd')).rejects.toThrow(/벗어나는/);
+    await expect(store.read('../밖.md')).rejects.toThrow(/core\.err\.pathEscape|벗어나는/);
+    await expect(store.read('/etc/passwd')).rejects.toThrow(/core\.err\.pathEscape|벗어나는/);
   });
 
   it('폴더가 아닌 것이 있는지 본다', async () => {
@@ -190,7 +190,7 @@ describe('write', () => {
   });
 
   it('탈출 시도는 거부한다', async () => {
-    await expect(store.write('../밖.md', utf8('x'))).rejects.toThrow(/벗어나는/);
+    await expect(store.write('../밖.md', utf8('x'))).rejects.toThrow(/core\.err\.pathEscape|벗어나는/);
   });
 });
 
@@ -223,7 +223,7 @@ describe('trash', () => {
   });
 
   it('탈출 시도는 거부한다', async () => {
-    await expect(store.trash('../밖.md')).rejects.toThrow(/벗어나는/);
+    await expect(store.trash('../밖.md')).rejects.toThrow(/core\.err\.pathEscape|벗어나는/);
   });
 });
 
@@ -261,7 +261,7 @@ describe('move', () => {
 
   it('탈출 시도는 거부한다', async () => {
     put('a.md', 'a');
-    await expect(store.move('a.md', '../밖.md')).rejects.toThrow(/벗어나는/);
-    await expect(store.move('../밖.md', 'b.md')).rejects.toThrow(/벗어나는/);
+    await expect(store.move('a.md', '../밖.md')).rejects.toThrow(/core\.err\.pathEscape|벗어나는/);
+    await expect(store.move('../밖.md', 'b.md')).rejects.toThrow(/core\.err\.pathEscape|벗어나는/);
   });
 });

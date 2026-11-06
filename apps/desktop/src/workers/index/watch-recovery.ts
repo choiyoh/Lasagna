@@ -1,4 +1,5 @@
 /** 연속 실패 횟수별 복구 대기(ms): 첫 실패는 바로, 그다음은 5초, 그 뒤로는 30초. */
+import { errorText } from '@nopsidian/core';
 export const RECOVER_DELAYS_MS: readonly number[] = [0, 5_000, 30_000];
 
 export function recoverDelayMs(failures: number): number {
@@ -53,7 +54,7 @@ export class WatchRecovery {
       if (this.failures === seen) this.failures = 0;
     } catch (e) {
       this.running = false;
-      this.fail(e instanceof Error ? e.message : String(e));
+      this.fail(errorText(e));
       return;
     }
     this.running = false;

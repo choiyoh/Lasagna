@@ -21,6 +21,7 @@ import { defaultOp } from './filter-ops';
 import { suggestFilterRemovals } from './filter-suggestions';
 import { EmptyState } from '../components/EmptyState';
 import { useLocale } from '../useLocale';
+import { userMessage } from '../user-message';
 
 interface Props {
   folder: string;
@@ -115,7 +116,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           setError('');
         }
       } catch (e) {
-        if (n === seq.current) setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+        if (n === seq.current) setError(userMessage(e));
       }
     },
     [folder, viewId, draft],
@@ -204,7 +205,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         if (base) setUndoView(base);
         await load(v);
       } catch (e) {
-        setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+        setError(userMessage(e));
       }
     },
     [folder, load],
@@ -256,7 +257,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         await window.nops.db.editSchema({ folder, op });
         await load();
       } catch (e) {
-        setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+        setError(userMessage(e));
       }
     },
     [folder, load],
@@ -277,7 +278,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         // 정렬·필터·그룹이 값에 따라 달라지므로 한 번 더 맞춘다
         void load();
       } catch (e) {
-        setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+        setError(userMessage(e));
         void load();
       }
     },
@@ -317,7 +318,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         });
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      setError(userMessage(e));
     }
   }, [adding, data, folder, load, onToast, view]);
 
@@ -337,7 +338,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           setUndoDelete({ message: paths.length > 1 ? t('db.rowsTrashed', { count: paths.length }) : t('db.rowTrashed'), trashIds });
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+        setError(userMessage(e));
       }
       await load();
     },
@@ -366,12 +367,12 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   const exportCsv = () =>
     void window.nops.db.exportCsv({ folder, viewId: data?.view.id ?? '' }).then(
       (r) => r && setNotice(tPlural('db.csvSaved', r.rows)),
-      (e) => setError(String(e)),
+      (e) => setError(userMessage(e)),
     );
   const importCsv = () =>
     void window.nops.db.importCsvPreview().then(
       (p) => p && setImporting(p),
-      (e) => setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)),
+      (e) => setError(userMessage(e)),
     );
   const tabs = data?.schema.views ?? [];
   const rows = useMemo(() => data?.rows ?? [], [data]);
@@ -534,7 +535,9 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
           <summary>{tPlural('db.yamlIssues', data.issues.length)}</summary>
           <ul>
             {data.issues.map((i, k) => (
-              <li key={k}><code>{i.path || t('db.document')}</code> {i.message}</li>
+              <li key={k}>
+                <code>{i.path || t('db.document')}</code> {i.key ? t(i.key as never, (i.params ?? {}) as never) : i.message}
+              </li>
             ))}
           </ul>
         </details>

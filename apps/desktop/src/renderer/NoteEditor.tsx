@@ -31,6 +31,7 @@ import type { SourceEditor } from '@nopsidian/editor/nops/source';
 import type { AssetStore } from './assets';
 import { registerFlush } from './flush';
 import { TemplatePicker } from './TemplatePicker';
+import { userMessage } from './user-message';
 
 const SAVE_DELAY_MS = 500;
 
@@ -253,7 +254,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         copy: (text) => {
           navigator.clipboard.writeText(text).then(
             () => setNotice(t('note.copied', { text })),
-            (e) => setNotice(t('note.copyFailed', { message: e instanceof Error ? e.message : String(e) })),
+            (e) => setNotice(t('note.copyFailed', { message: userMessage(e) })),
           );
         },
       },

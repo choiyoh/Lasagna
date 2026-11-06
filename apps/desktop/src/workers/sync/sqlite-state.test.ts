@@ -87,10 +87,10 @@ describe('base 스냅샷', () => {
   });
 
   it('탈출 시도는 거부한다', async () => {
-    await expect(state.putBase('../밖.md', utf8('x'))).rejects.toThrow(/벗어나는/);
-    await expect(state.getBase('../밖.md')).rejects.toThrow(/벗어나는/);
-    await expect(state.getBase('/etc/passwd')).rejects.toThrow(/벗어나는/);
-    await expect(state.removeBase('..')).rejects.toThrow(/벗어나는/);
+    await expect(state.putBase('../밖.md', utf8('x'))).rejects.toThrow(/core\.err\.pathEscape|벗어나는/);
+    await expect(state.getBase('../밖.md')).rejects.toThrow(/core\.err\.pathEscape|벗어나는/);
+    await expect(state.getBase('/etc/passwd')).rejects.toThrow(/core\.err\.pathEscape|벗어나는/);
+    await expect(state.removeBase('..')).rejects.toThrow(/core\.err\.pathEscape|벗어나는/);
   });
 });
 

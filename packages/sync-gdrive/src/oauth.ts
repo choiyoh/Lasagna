@@ -10,6 +10,7 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
+import { t, type MessageKey } from '@nopsidian/i18n';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 /** Drive 앱이 쓰는 최소 권한 — 앱이 직접 만들거나 연 파일만 접근할 수 있다. */
@@ -72,18 +73,22 @@ export function buildAuthUrl(a: {
 /** 인증 흐름이 실패했을 때(OAuth 오류 응답 포함). `code` 는 Google 이 준 `error` 값. */
 export class OAuthError extends Error {
   constructor(
-    message: string,
+    /** 번역 전 코드(사전 키). 표시하는 쪽이 지금 언어로 번역한다. */
+    public readonly key: MessageKey,
     public readonly code?: string,
+    public readonly params: Record<string, string | number> = {},
   ) {
-    super(message);
+    super(key);
     this.name = 'OAuthError';
   }
 }
 
 /** refresh_token 이 더 이상 유효하지 않을 때(invalid_grant) — 사용자가 연결을 해제했다. */
 export class AuthRevokedError extends Error {
-  constructor(message = '연결이 해제됐어요. 다시 로그인해 주세요.') {
-    super(message);
+  readonly key: MessageKey = 'sync.err.revoked';
+  readonly params: Record<string, string | number> = {};
+  constructor() {
+    super('sync.err.revoked');
     this.name = 'AuthRevokedError';
   }
 }
@@ -140,13 +145,13 @@ async function postToken(
   const error = typeof json?.error === 'string' ? json.error : undefined;
   if (error !== undefined || res.ok === false) {
     // 메시지에 code·토큰 값을 넣지 않는다.
-    throw new OAuthError('토큰 요청이 거부됐어요', error);
+    throw new OAuthError('sync.err.tokenRejected', error);
   }
 
   const accessToken = json?.access_token;
   const expiresIn = Number(json?.expires_in);
   if (typeof accessToken !== 'string' || accessToken === '' || !Number.isFinite(expiresIn)) {
-    throw new OAuthError('토큰 응답 형식이 올바르지 않아요');
+    throw new OAuthError('sync.err.tokenBadResponse');
   }
 
   const refreshToken =
@@ -362,32 +367,32 @@ export async function startLoopback(a: {
   server.on('request', (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     if (url.pathname !== CALLBACK_PATH) {
-      sendPage(res, 404, page('찾을 수 없어요', '없는 주소예요.'));
+      sendPage(res, 404, page(t('sync.page.notFoundTitle'), t('sync.page.notFoundBody')));
       return;
     }
     if (url.searchParams.get('state') !== a.state) {
       // 공격자나 다른 흐름의 콜백일 수 있으므로 결과를 확정하지 않고 계속 기다린다.
-      sendPage(res, 400, page('잘못된 요청', '요청을 확인할 수 없어요.'));
+      sendPage(res, 400, page(t('sync.page.badRequestTitle'), t('sync.page.badRequestBody')));
       return;
     }
 
     const error = url.searchParams.get('error');
     if (error !== null) {
-      sendPage(res, 200, page('연결 실패', '연결하지 못했어요. 앱에서 다시 시도해 주세요.'), () => {
-        finish(() => rejectResult(new OAuthError('인증이 거부됐어요', error)));
+      sendPage(res, 200, page(t('sync.page.failTitle'), t('sync.page.failBody')), () => {
+        finish(() => rejectResult(new OAuthError('sync.err.denied', error)));
       });
       return;
     }
 
     const code = url.searchParams.get('code');
     if (code === null || code === '') {
-      sendPage(res, 200, page('연결 실패', '연결하지 못했어요. 앱에서 다시 시도해 주세요.'), () => {
-        finish(() => rejectResult(new OAuthError('인증 코드가 오지 않았어요')));
+      sendPage(res, 200, page(t('sync.page.failTitle'), t('sync.page.failBody')), () => {
+        finish(() => rejectResult(new OAuthError('sync.err.noCode')));
       });
       return;
     }
 
-    sendPage(res, 200, page('연결 완료', '연결됐어요. 이 창은 닫아도 돼요.'), () => {
+    sendPage(res, 200, page(t('sync.page.doneTitle'), t('sync.page.doneBody')), () => {
       finish(() => resolveResult({ code }));
     });
   });
@@ -402,11 +407,11 @@ export async function startLoopback(a: {
 
   // 대기 중 서버 오류(포트 회수 등)는 조용히 매달리지 말고 알린다.
   server.on('error', () => {
-    finish(() => rejectResult(new OAuthError('인증을 기다리는 중 서버 오류가 났어요')));
+    finish(() => rejectResult(new OAuthError('sync.err.serverError')));
   });
 
   timer = setTimeout(() => {
-    finish(() => rejectResult(new OAuthError('시간 안에 인증이 끝나지 않았어요')));
+    finish(() => rejectResult(new OAuthError('sync.err.timeout')));
   }, timeoutMs);
 
   const address = server.address();
@@ -416,7 +421,7 @@ export async function startLoopback(a: {
     redirectUri: `http://127.0.0.1:${port}${CALLBACK_PATH}`,
     result,
     close: () => {
-      finish(() => rejectResult(new OAuthError('인증이 취소됐어요')));
+      finish(() => rejectResult(new OAuthError('sync.err.cancelled')));
     },
   };
 }

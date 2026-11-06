@@ -268,7 +268,8 @@ const highlight: MarkSpec = {
 };
 
 function withAttrs(spec: NodeSpec | undefined, attrs: NonNullable<NodeSpec['attrs']>): NodeSpec {
-  if (!spec) throw new Error('업스트림 노드를 찾지 못함');
+  // 이 함수는 스키마를 만들 때(모듈 로드) 불린다 — t() 를 부르면 로드 시점 언어로 고정되므로 코드만 붙인다.
+  if (!spec) throw Object.assign(new Error('editor.err.upstreamNode'), { key: 'editor.err.upstreamNode', params: {} });
   return { ...spec, attrs: { ...(spec.attrs ?? {}), ...attrs } };
 }
 

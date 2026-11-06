@@ -1,9 +1,10 @@
 import { formatShortDateTime, t } from '@nopsidian/i18n';
-import { commentAuthorName } from './comments-author';
+import { commentAuthorName, commentLengthError } from './comments-author';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CommentItem } from '@nopsidian/ipc-contract';
 import { keys } from './keys';
 import { SELECTION_REPLY, SELECTION_REQUEST } from './outline';
+import { userMessage } from './user-message';
 
 const when = (iso: string) => formatShortDateTime(iso);
 
@@ -38,6 +39,12 @@ export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: (
 
   const submit = async () => {
     if (!text.trim()) return;
+    // IPC 입력 스키마(max 5000)가 먼저 막아 raw 검증 오류가 화면에 뜨지 않게, 길이는 여기서 먼저 확인한다.
+    const tooLong = commentLengthError(text);
+    if (tooLong) {
+      setError(tooLong);
+      return;
+    }
     try {
       await window.nops.comment.add({ path, text: text.trim(), ...(quote ? { quote } : {}) });
       setText('');
@@ -46,7 +53,7 @@ export function CommentsPanel({ path, onChanged }: { path: string; onChanged?: (
       load();
       onChanged?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      setError(userMessage(e));
     }
   };
   const mutate = async (fn: () => Promise<unknown>) => {

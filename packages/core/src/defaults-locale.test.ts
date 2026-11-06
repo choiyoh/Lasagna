@@ -22,13 +22,23 @@ describe('data defaults follow the app language when they are created', () => {
     expect(enRows[0]!.title).toBe('Untitled 1');
   });
 
-  it('names a new database view', () => {
+  it('names a new database view (새 DB 는 base 그대로 표/Table)', () => {
     setLocale('ko');
     expect(defaultSchema('x').views[0]!.name).toBe('표');
     expect(parseDbSchema(newDbYaml('x')).schema.views[0]!.name).toBe('표');
     setLocale('en');
     expect(defaultSchema('x').views[0]!.name).toBe('Table');
     expect(parseDbSchema(newDbYaml('x')).schema.views[0]!.name).toBe('Table');
+  });
+
+  it('name 없는 view 의 parse 기본값은 base 리터럴과 같은 보기/View, views 가 아예 없으면 새 DB 기본값', () => {
+    const unnamed = 'version: 1\ntitle: x\nviews:\n  - { id: v1, type: table }\n';
+    setLocale('ko');
+    expect(parseDbSchema(unnamed).schema.views[0]!.name).toBe('보기');
+    expect(parseDbSchema('version: 1\n').schema.views[0]!.name).toBe('표');
+    setLocale('en');
+    expect(parseDbSchema(unnamed).schema.views[0]!.name).toBe('View');
+    expect(parseDbSchema('version: 1\n').schema.views[0]!.name).toBe('Table');
   });
 
   it('names a conflict copy', () => {

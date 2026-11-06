@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getLocale, t, type MessageKey } from '@nopsidian/i18n';
 import { defaultServerName, folderContains, folderError, isValidServerName, mcpSnippet, type McpInfo } from './mcp-snippet';
 import { configFromPolicy, loadMcpSettings, policyFolders, saveMcpSettings, serverNameConflict, type McpSettingsConfig } from './mcp-settings';
+import { userMessage } from './user-message';
 
 interface AuditRow {
   t: string;
@@ -123,7 +124,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
       setMessage({ key: r.kind === 'trashed' ? 'mcp.reverted.trashed' : 'mcp.reverted.restored', params: { path: a.path } });
       onReverted(a.path, r.kind);
     } catch (e) {
-      setMessage({ message: e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e) });
+      setMessage({ message: userMessage(e) });
     }
     setConfirming(null);
     refresh();
@@ -154,7 +155,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
         .catch((e) => {
           setPolicyExists(null);
           setCfg({ ...local, write: false });
-          setPolicyError({ message: e instanceof Error ? e.message : String(e) });
+          setPolicyError({ message: userMessage(e) });
         });
     });
     refresh();
@@ -192,7 +193,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
         // 응답이 늦게 와도 그 사이 친 폴더·이름을 되돌리지 않는다.
         setCfg((prev) => (prev ? { ...prev, maxWritesPerMinute: saved.maxWritesPerMinute } : prev));
       })
-      .catch((e) => setPolicyError({ message: e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e) }));
+      .catch((e) => setPolicyError({ message: userMessage(e) }));
   };
   const update = (patch: Partial<McpSettingsConfig>) => {
     const next = { ...current, ...patch };

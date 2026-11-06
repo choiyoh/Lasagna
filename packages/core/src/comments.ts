@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { atomicWrite } from './save.js';
+import { CodedError } from './errors.js';
 
 /** 노트에 다는 댓글. 볼트의 `.nopsidian/comments/<경로 해시>.json` 에 노트마다 한 파일로 둔다(드라이브 동기화 대상). */
 /** 앱이 스스로 쓴 댓글의 저장 작성자 값(표시는 언어에 따라 다르다). */
@@ -68,8 +69,8 @@ export function listComments(root: string, rel: string): Comment[] {
 
 export function addComment(root: string, rel: string, input: { author: string; text: string; quote?: string }, now = new Date()): Comment {
   const text = input.text.trim();
-  if (!text) throw new Error('댓글 내용이 비어 있어요');
-  if (text.length > MAX_COMMENT_CHARS) throw new Error(`댓글이 너무 길어요(최대 ${MAX_COMMENT_CHARS}자)`);
+  if (!text) throw new CodedError('core.err.commentEmpty');
+  if (text.length > MAX_COMMENT_CHARS) throw new CodedError('core.err.commentTooLong', { max: MAX_COMMENT_CHARS });
   const quote = input.quote?.trim().replace(/\s+/g, ' ').slice(0, MAX_QUOTE_CHARS);
   const c: Comment = { id: randomUUID().slice(0, 8), author: input.author.trim().slice(0, 60) || SELF_AUTHOR, text, ...(quote ? { quote } : {}), createdAt: now.toISOString() };
   const f = load(root, rel);

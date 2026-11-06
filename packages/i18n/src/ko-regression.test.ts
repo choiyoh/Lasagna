@@ -574,6 +574,58 @@ const cases: Case[] = [
     base: (n) => `쓰기 허용: AI${n}, 볼트 전체`,
     render: (n) => t('mcpCli.writeAllowed', { folders: `AI${n}, ${t('mcpCli.wholeVault')}` }),
   },
+  {
+    name: 'sync.err.nameExists',
+    base: (n) => `이미 같은 이름의 파일이 있어요: f${n}.md`,
+    render: (n) => t('sync.err.nameExists', { path: `f${n}.md` }),
+  },
+  {
+    name: 'sync.blocked.deleteRatio',
+    base: (n) => `파일 ${n}개 중 2개(40%)를 지우려 해요. 의도한 게 맞는지 확인해 주세요.`,
+    render: (n) => t('sync.blocked.deleteRatio', { tracked: n, deletes: 2, percent: 40 }),
+  },
+  {
+    name: 'sync.blocked.stopDeleteRatio',
+    base: (n) => `동기화를 멈췄어요: 파일 ${n}개 중 2개(40%)를 지우려 해요. 의도한 게 맞는지 확인해 주세요.`,
+    render: (n) => t('sync.blocked.stopDeleteRatio', { tracked: n, deletes: 2, percent: 40 }),
+  },
+  {
+    name: 'core.err.commentTooLong',
+    base: (n) => `댓글이 너무 길어요(최대 ${n}자)`,
+    render: (n) => t('core.err.commentTooLong', { max: n }),
+  },
+  {
+    name: 'core.err.pathEscape',
+    base: (n) => `볼트 밖으로 벗어나는 경로: ../${n}.md`,
+    render: (n) => t('core.err.pathEscape', { path: `../${n}.md` }),
+  },
+  {
+    name: 'core.err.blockMissing',
+    base: (n) => `블록 ${n} 없음`,
+    render: (n) => t('core.err.blockMissing', { index: n }),
+  },
+  {
+    name: 'db.csv.unreadable',
+    base: (n) => `${n}행 점수: 읽을 수 없는 값 'x'`,
+    render: (n) => t('db.csv.unreadable', { row: n, column: '점수', value: 'x' }),
+  },
+  {
+    // name 없는 view 를 읽을 때의 기본값(base 는 리터럴 '보기')
+    name: 'default.dbViewName',
+    base: () => '보기',
+    render: () => t('default.dbViewName'),
+  },
+  {
+    // 새 DB 를 만들 때의 기본 보기 이름(base L3a 승인본과 같은 '표')
+    name: 'db.view.table',
+    base: () => '표',
+    render: () => t('db.view.table'),
+  },
+  {
+    name: 'preload.err.unknownEvent',
+    base: (n) => `알 수 없는 이벤트: e${n}`,
+    render: (n) => t('preload.err.unknownEvent', { event: `e${n}` }),
+  },
 ]
 
 afterEach(() => setLocale('ko'))

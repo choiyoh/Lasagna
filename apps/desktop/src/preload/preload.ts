@@ -9,7 +9,8 @@ for (const channel of Object.keys(contract) as Channel[]) {
 }
 
 const on = (event: EventName, cb: (payload: unknown) => void) => {
-  if (!(event in events)) throw new Error(`알 수 없는 이벤트: ${event}`);
+  // preload 에는 언어 초기화가 없다 — 문구를 만들지 말고 코드만 붙여 던진다.
+  if (!(event in events)) throw Object.assign(new Error(`unknown event: ${event}`), { key: 'preload.err.unknownEvent', params: { event } });
   const listener = (_e: unknown, payload: unknown) => cb(payload);
   ipcRenderer.on(event, listener);
   return () => void ipcRenderer.removeListener(event, listener);

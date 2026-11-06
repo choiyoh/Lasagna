@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { setLocale } from '@nopsidian/i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkerEvent, WorkerResponse } from '../workers/index/protocol';
 import { IndexClient, type WorkerLike } from './index-client';
@@ -33,12 +34,15 @@ class FakeWorker extends EventEmitter implements WorkerLike {
 function makeClient() {
   const workers: FakeWorker[] = [];
   const events: WorkerEvent[] = [];
-  const client = new IndexClient('/vault', (e) => events.push(e), () => {
+  /** 워커를 만들 때 넘긴 언어(워커 스레드의 i18n 시작값) */
+  const locales: string[] = [];
+  const client = new IndexClient('/vault', (e) => events.push(e), (locale) => {
+    locales.push(locale);
     const w = new FakeWorker();
     workers.push(w);
     return w;
   });
-  return { client, workers, events, current: () => workers[workers.length - 1] as FakeWorker };
+  return { client, workers, events, locales, current: () => workers[workers.length - 1] as FakeWorker };
 }
 
 describe('IndexClient', () => {
@@ -195,5 +199,23 @@ describe('IndexClient', () => {
     await client.ready;
     workers[0].emit('message', { type: 'event', name: 'index.watchError', payload: { message: '감시 실패' } } satisfies WorkerEvent);
     expect(events).toEqual([{ type: 'event', name: 'index.watchError', payload: { message: '감시 실패' } }]);
+  });
+});
+
+describe('IndexClient 언어', () => {
+  it('워커를 만들 때 앱 언어를 넘기고, 언어 변경은 워커에 알린다', () => {
+    setLocale('en');
+    const { client, locales, current } = makeClient();
+    expect(locales).toEqual(['en']);
+
+    // 앱 언어가 바뀌면 메시지로 알리고, 재시작한 워커도 새 언어로 뜬다
+    setLocale('ko');
+    client.setLocale('ko');
+    const notice = current().posted.find((m) => m.method === 'setLocale');
+    expect(notice?.params).toEqual({ locale: 'ko' });
+
+    client.setLocale('en');
+    expect(current().posted.filter((m) => m.method === 'setLocale').at(-1)?.params).toEqual({ locale: 'en' });
+    setLocale('ko');
   });
 });

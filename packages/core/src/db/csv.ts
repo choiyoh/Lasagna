@@ -1,4 +1,4 @@
-import { t } from '@nopsidian/i18n';
+import { t, type MessageKey } from '@nopsidian/i18n';
 import { TITLE_PROP } from './schema.js';
 import type { DbSchema, Property } from './schema.js';
 import { normalizeValue, toFrontmatterValue } from './values.js';
@@ -290,6 +290,8 @@ export interface ImportedRow {
   title: string;
   values: Record<string, unknown>; // toFrontmatterValue 가 쓴 프런트매터 값
   issues: string[];
+  /** 위 이슈의 코드+params(추가 필드) — 표시 시점에 번역한다. */
+  issueKeys?: { key: MessageKey; params: Record<string, string | number> }[];
 }
 
 /**
@@ -304,6 +306,7 @@ export function csvToRows(rows: string[][], columns: ColumnGuess[]): ImportedRow
 
   return dataRows.map((row, rowIndex) => {
     const issues: string[] = [];
+    const issueKeys: { key: MessageKey; params: Record<string, string | number> }[] = [];
     const values: Record<string, unknown> = {};
     let title = '';
 
@@ -318,7 +321,8 @@ export function csvToRows(rows: string[][], columns: ColumnGuess[]): ImportedRow
       const text = canonicalCell(column.prop, raw);
       const frontmatter = toFrontmatterValue(column.prop, normalizeValue(column.prop, text));
       if (frontmatter === undefined) {
-        issues.push(`${rowIndex + 1}행 ${column.name}: 읽을 수 없는 값 '${raw}'`);
+        issues.push(t('db.csv.unreadable', { row: rowIndex + 1, column: column.name, value: raw }));
+        issueKeys.push({ key: 'db.csv.unreadable', params: { row: rowIndex + 1, column: column.name, value: raw } });
         continue;
       }
       values[column.name] = frontmatter;
@@ -328,7 +332,7 @@ export function csvToRows(rows: string[][], columns: ColumnGuess[]): ImportedRow
       unnamed += 1;
       title = t('default.untitledN', { n: unnamed });
     }
-    return { title, values, issues };
+    return { title, values, issues, ...(issueKeys.length > 0 ? { issueKeys } : {}) };
   });
 }
 

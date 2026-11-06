@@ -1,9 +1,11 @@
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
+import { CodedError } from './errors.js';
 
-export class PathEscapeError extends Error {
+/** 볼트 밖으로 나가는 경로. 문구는 표시 시점에 번역한다(코드+params). */
+export class PathEscapeError extends CodedError {
   constructor(rel: string) {
-    super(`볼트 밖으로 벗어나는 경로: ${rel}`);
+    super('core.err.pathEscape', { path: rel });
     this.name = 'PathEscapeError';
   }
 }

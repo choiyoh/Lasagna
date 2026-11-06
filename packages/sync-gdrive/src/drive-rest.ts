@@ -11,6 +11,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
+import { t, type MessageKey } from '@nopsidian/i18n';
 
 import type { DriveClient, RemoteFile, SyncPath, VaultFolderInfo } from './types.js';
 import { RevisionConflictError } from './types.js';
@@ -33,7 +34,7 @@ const RATE_LIMIT_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded'
 
 /** 401 — 토큰이 만료·폐기됐다. 재시도해도 소용없다(토큰을 새로 받아야 한다). */
 export class DriveAuthError extends Error {
-  constructor(message = 'Drive 인증 실패(401): 액세스 토큰이 만료됐거나 폐기됐어요') {
+  constructor(message = t('sync.err.driveAuth')) {
     super(message);
     this.name = 'DriveAuthError';
   }
@@ -46,6 +47,9 @@ export class DriveApiError extends Error {
     public readonly status: number,
     /** Google API 오류 사유(예: accessNotConfigured, storageQuotaExceeded) */
     public readonly reason?: string,
+    /** 화면 문구용 코드+params(있으면 표시 시점에 번역한다). 서버가 준 메시지는 데이터라 message 로 둔다. */
+    public readonly key?: MessageKey,
+    public readonly params: Record<string, string | number> = {},
   ) {
     super(message);
     this.name = 'DriveApiError';
@@ -253,7 +257,7 @@ export class GoogleDriveClient implements DriveClient {
       if (found && found.appProperties?.nopsVault === this.vaultKey && found.appProperties.relPath === path) {
         target = { id: found.id, revision: found.headRevisionId ?? '' };
       } else if (found) {
-        throw new Error(`이미 같은 이름의 파일이 있어요: ${path}`);
+        throw new Error(t('sync.err.nameExists', { path }));
       }
     }
 
@@ -451,7 +455,7 @@ export class GoogleDriveClient implements DriveClient {
     });
     const location = session.headers.get('location');
     if (!location) {
-      throw new DriveApiError('resumable 업로드 응답에 Location 헤더가 없어요', session.status);
+      throw new DriveApiError('sync.err.noLocation', session.status, undefined, 'sync.err.noLocation');
     }
     // 세션 만들기(POST)는 리소스를 만들지 않으므로 확인 없이 재시도해도 되고, 본문 PUT 만 확인한다.
     return this.request(location, {
@@ -502,7 +506,8 @@ export class GoogleDriveClient implements DriveClient {
         const already = await alreadyCreated();
         if (already) return already;
         if (attempt >= this.maxRetries) {
-          throw new DriveApiError(`Drive 요청 실패(네트워크): ${errorText(failure)}`, 0);
+          const message = errorText(failure);
+          throw new DriveApiError('sync.err.network', 0, undefined, 'sync.err.network', { message });
         }
         await this.sleep(this.backoffMs(attempt, null));
         continue;

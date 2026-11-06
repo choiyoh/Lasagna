@@ -1,4 +1,4 @@
-import { t } from '@nopsidian/i18n';
+import { t, type MessageKey } from '@nopsidian/i18n';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 
@@ -83,7 +83,8 @@ export const CALC_FNS = ['count', 'count_values', 'count_empty', 'count_unique',
 
 export const view = z.object({
   id: z.string().min(1),
-  name: z.string().default('보기'),
+  // 만들어 저장되는 기본값: ko 는 base 와 같은 '보기', en 은 'View' (타입 라벨 '표'/'Table' 과 다르다)
+  name: z.string().default(() => t('default.dbViewName')),
   type: z.enum(['table', 'board', 'list', 'gallery', 'calendar', 'timeline']).default('table'),
   /** 보일 속성 순서(`title` 포함). 없으면 모든 속성 */
   columns: z.array(z.string()).optional(),
@@ -120,7 +121,11 @@ export type DbSchema = z.infer<typeof dbSchema>;
 
 export interface DbParseIssue {
   path: string;
+  /** 표시용 문구 — 요청(표시) 시점에 `key`+`params` 로 다시 만든다. */
   message: string;
+  /** 번역 전 코드와 값(추가 필드). 있으면 소비자가 표시 시점에 번역한다. */
+  key?: MessageKey;
+  params?: Record<string, string | number>;
 }
 export interface DbParseResult {
   schema: DbSchema;
@@ -142,7 +147,10 @@ export function parseDbSchema(yamlText: string, fallbackTitle?: string): DbParse
   try {
     raw = parseYaml(yamlText);
   } catch (e) {
-    return { schema: defaultSchema(fallbackTitle), issues: [{ path: '', message: t('db.issue.yaml', { message: e instanceof Error ? e.message : String(e) }) }] };
+    return {
+      schema: defaultSchema(fallbackTitle),
+      issues: [issue('', 'db.issue.yaml', { message: e instanceof Error ? e.message : String(e) })],
+    };
   }
   const doc = raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const out = defaultSchema(fallbackTitle);
@@ -157,7 +165,7 @@ export function parseDbSchema(yamlText: string, fallbackTitle?: string): DbParse
   if (props && typeof props === 'object' && !Array.isArray(props)) {
     for (const [name, def] of Object.entries(props as Record<string, unknown>)) {
       if (name === TITLE_PROP) {
-        issues.push({ path: `properties.${name}`, message: t('db.issue.reservedTitle') });
+        issues.push(issue(`properties.${name}`, 'db.issue.reservedTitle'));
         continue;
       }
       const r = property.safeParse(def);
@@ -165,7 +173,7 @@ export function parseDbSchema(yamlText: string, fallbackTitle?: string): DbParse
       else issues.push({ path: `properties.${name}`, message: describe(r.error) });
     }
   } else if (props !== undefined) {
-    issues.push({ path: 'properties', message: t('db.issue.propertiesMap') });
+    issues.push(issue('properties', 'db.issue.propertiesMap'));
   }
 
   const views = doc.views;
@@ -174,12 +182,12 @@ export function parseDbSchema(yamlText: string, fallbackTitle?: string): DbParse
     views.forEach((v, i) => {
       const r = view.safeParse(v);
       if (!r.success) return void issues.push({ path: `views[${i}]`, message: describe(r.error) });
-      if (seen.has(r.data.id)) return void issues.push({ path: `views[${i}].id`, message: t('db.issue.duplicateViewId', { id: r.data.id }) });
+      if (seen.has(r.data.id)) return void issues.push(issue(`views[${i}].id`, 'db.issue.duplicateViewId', { id: r.data.id }));
       seen.add(r.data.id);
       out.views.push(r.data);
     });
   } else if (views !== undefined) {
-    issues.push({ path: 'views', message: t('db.issue.viewsList') });
+    issues.push(issue('views', 'db.issue.viewsList'));
   }
   if (out.views.length === 0) out.views = defaultSchema().views;
 
@@ -187,13 +195,18 @@ export function parseDbSchema(yamlText: string, fallbackTitle?: string): DbParse
   const known = new Set([TITLE_PROP, ...Object.keys(out.properties)]);
   for (const v of out.views) {
     for (const [field, name] of [['groupBy', v.groupBy], ['subGroupBy', v.subGroupBy], ['dateProp', v.dateProp], ['cover', v.cover]] as const) {
-      if (name && !known.has(name)) issues.push({ path: `views.${v.id}.${field}`, message: t('db.issue.missingProperty', { name }) });
+      if (name && !known.has(name)) issues.push(issue(`views.${v.id}.${field}`, 'db.issue.missingProperty', { name }));
     }
-    for (const c of v.columns ?? []) if (!known.has(c)) issues.push({ path: `views.${v.id}.columns`, message: t('db.issue.missingProperty', { name: c }) });
+    for (const c of v.columns ?? []) if (!known.has(c)) issues.push(issue(`views.${v.id}.columns`, 'db.issue.missingProperty', { name: c }));
   }
   return { schema: out, issues };
 }
 
+/** 코드+params 를 담은 이슈(문구는 지금 언어로도 채워 둔다 — 소비자가 코드로 다시 만든다). */
+function issue(path: string, key: MessageKey, params: Record<string, string | number> = {}): DbParseIssue {
+  return { path, message: t(key, params), key, params };
+}
+
 function describe(e: z.ZodError): string {
-  return e.issues.map((i) => `${i.path.join('.') || '(값)'}: ${i.message}`).join('; ');
+  return e.issues.map((i) => `${i.path.join('.') || t('core.err.valueField')}: ${i.message}`).join('; ');
 }

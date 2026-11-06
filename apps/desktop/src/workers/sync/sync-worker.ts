@@ -88,6 +88,7 @@ function summarizePlan(plan: SyncPlan): PlanSummary {
   return {
     firstSync: plan.firstSync,
     blocked: plan.blocked,
+    ...(plan.blockedCode ? { blockedCode: plan.blockedCode, blockedParams: plan.blockedParams } : {}),
     tracked: plan.tracked,
     counts,
     ops: plan.ops.slice(0, 300).map(describeOp),
@@ -146,7 +147,11 @@ port.on('message', async (req: SyncRequest) => {
         errors: report.results
           .filter((r) => r.status === 'failed')
           .slice(0, 20)
-          .map((r) => ({ path: 'path' in r.op ? r.op.path : r.op.from, message: r.error ?? '' })),
+          .map((r) => ({
+            path: 'path' in r.op ? r.op.path : r.op.from,
+            message: r.error ?? '',
+            ...(r.errorKey ? { key: r.errorKey, params: r.errorParams } : {}),
+          })),
       };
       post({ type: 'response', id: req.id, result });
     } finally {

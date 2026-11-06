@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { t, tPlural } from '@nopsidian/i18n';
 import { typeLabel } from './labels';
+import { userMessage } from '../user-message';
 
 type Preview = NonNullable<Awaited<ReturnType<typeof window.nops.db.importCsvPreview>>>;
 
@@ -40,11 +41,11 @@ export function CsvImportDialog({ preview, existing, onClose, onDone }: Props) {
       const r = await window.nops.db.importCsvApply({
         token: preview.token,
         target: mode === 'new' ? { mode: 'new', name: name.trim() || preview.fileName } : { mode: 'existing', folder: existing!.folder },
-        columns: cols.map((c) => ({ index: c.index, name: c.name.trim() || c.header || `열${c.index + 1}`, type: c.type })),
+        columns: cols.map((c) => ({ index: c.index, name: c.name.trim() || c.header || t('default.csvColumn', { n: c.index + 1 }), type: c.type })),
       });
       setResult(r);
     } catch (e) {
-      setError(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      setError(userMessage(e));
     } finally {
       setBusy(false);
     }
@@ -95,7 +96,7 @@ export function CsvImportDialog({ preview, existing, onClose, onDone }: Props) {
                   const locked = lockedType(c);
                   return (
                     <tr key={c.index}>
-                      <td>{c.header || `열${c.index + 1}`}</td>
+                      <td>{c.header || t('default.csvColumn', { n: c.index + 1 })}</td>
                       <td className="muted small">{c.sample.filter(Boolean).slice(0, 2).join(' · ')}</td>
                       <td>
                         <input value={c.name} onChange={(e) => setCols(cols.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} aria-label={t('csv.propNameAria', { header: c.header })} disabled={c.type === 'skip'} />

@@ -386,7 +386,7 @@ export async function importCsvApply(
   const imported = csvToRows(table, columns);
   const issues: string[] = [];
   for (const row of imported) {
-    issues.push(...row.issues);
+    issues.push(...(row.issueKeys ? row.issueKeys.map((i) => t(i.key, i.params)) : row.issues));
     const rel = freeNotePath(v.info.path, folder, row.title);
     atomicWrite(resolveInVault(v.info.path, rel), buildRowNote(row.values, ''));
   }

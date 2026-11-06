@@ -11,6 +11,7 @@ import { placeGroupInOrder, remapOrder, type SidebarOrder } from './sidebar-orde
 import type { TreeNode } from './sidebar/build-tree';
 import { topLevel, type Entry } from './sidebar/selection';
 import type { TabsAction } from './tabs';
+import { userMessage } from './user-message';
 
 /** 노트·폴더를 만들고, 이름을 바꾸고, 옮기고, 지우는 동작들. 앱 상태는 인자로 받는다. */
 export interface EntryActionDeps {
@@ -68,7 +69,7 @@ export function useEntryActions(deps: EntryActionDeps) {
         await window.nops.folder.create({ path: parent ? `${parent}/${name}` : name });
         refresh();
       } catch (e) {
-        setToast({ message: t('entry.folderCreateFailed', { message: e instanceof Error ? e.message : String(e) }) });
+        setToast({ message: t('entry.folderCreateFailed', { message: userMessage(e) }) });
       }
     },
     [refresh],
@@ -160,14 +161,14 @@ export function useEntryActions(deps: EntryActionDeps) {
         confirmLabel: t('entry.renameConfirm'),
         onConfirm: () => {
           setConfirm(null);
-          void apply().catch((e) => setToast({ message: t('entry.failed', { message: e instanceof Error ? e.message : String(e) }) }));
+          void apply().catch((e) => setToast({ message: t('entry.failed', { message: userMessage(e) }) }));
         },
       });
     } catch (e) {
       setToast({
         message: opts.auto
           ? t('entry.renameKeptFile')
-          : t('entry.renameFailed', { message: e instanceof Error ? e.message : String(e) }),
+          : t('entry.renameFailed', { message: userMessage(e) }),
       });
     }
   }, [refresh, applyMovedState]);
@@ -187,7 +188,7 @@ export function useEntryActions(deps: EntryActionDeps) {
         window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: p }));
         refresh();
       } catch (e) {
-        setToast({ message: t('entry.iconFailed', { message: e instanceof Error ? e.message : String(e) }) });
+        setToast({ message: t('entry.iconFailed', { message: userMessage(e) }) });
       }
     },
     [refresh],
@@ -204,7 +205,7 @@ export function useEntryActions(deps: EntryActionDeps) {
         window.dispatchEvent(new CustomEvent('nops:reload-note', { detail: p }));
         refresh();
       } catch (e) {
-        setToast({ message: t('entry.coverFailed', { message: e instanceof Error ? e.message : String(e) }) });
+        setToast({ message: t('entry.coverFailed', { message: userMessage(e) }) });
       }
     },
     [refresh],
@@ -338,7 +339,7 @@ export function useEntryActions(deps: EntryActionDeps) {
                 },
               });
             } catch (e) {
-              setToast({ message: t('entry.deleteFailed', { message: e instanceof Error ? e.message : String(e) }) });
+              setToast({ message: t('entry.deleteFailed', { message: userMessage(e) }) });
             }
           })();
         },
@@ -390,7 +391,7 @@ export function useEntryActions(deps: EntryActionDeps) {
               });
             } catch (e) {
               refresh();
-              setToast({ message: t('entry.deleteFailed', { message: e instanceof Error ? e.message : String(e) }) });
+              setToast({ message: t('entry.deleteFailed', { message: userMessage(e) }) });
             }
           })();
         },

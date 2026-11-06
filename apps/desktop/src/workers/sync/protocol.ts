@@ -15,6 +15,9 @@ export interface SyncWorkerData {
 export interface PlanSummary {
   firstSync: boolean;
   blocked: string | null;
+  /** blocked 사유의 코드·값(있으면 화면이 이 값으로 그린다) — 추가 필드 */
+  blockedCode?: 'deleteRatio';
+  blockedParams?: { tracked: number; deletes: number; percent: number };
   tracked: number;
   counts: Record<string, number>;
   /** 화면에 보여 줄 작업 목록(최대 300개) */
@@ -41,8 +44,8 @@ export interface RunSummary {
   failed: number;
   /** 충돌 사본·충돌 표식이 남은 노트 */
   conflictPaths: string[];
-  /** 앞쪽 몇 건의 실패 사유 */
-  errors: { path: string; message: string }[];
+  /** 앞쪽 몇 건의 실패 사유. `key`/`params` 가 있으면 화면이 그때그때 번역한다(추가 필드). */
+  errors: { path: string; message: string; key?: string; params?: Record<string, string | number> }[];
 }
 
 export type SyncErrorKind = 'auth' | 'offline' | 'other';
@@ -70,6 +73,9 @@ export interface SyncErrorDetails {
   code: string;
   status?: number;
   reason?: string;
+  /** 화면 문구용 코드+params — 있으면 표시 시점에 번역한다(추가 필드). */
+  messageKey?: string;
+  messageParams?: Record<string, string | number>;
 }
 
 export type SyncRequest =

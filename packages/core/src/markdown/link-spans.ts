@@ -1,3 +1,4 @@
+import { CodedError } from '../errors.js';
 import type { Root, RootContent } from 'mdast';
 import { parseForEditor } from './editor-parse.js';
 import { maskInlineCode, NO_INLINE_SCAN } from './parse.js';
@@ -141,7 +142,7 @@ export function applyEdits(source: string, edits: readonly TextEdit[]): string {
   let out = source;
   let prevStart = Infinity;
   for (const e of sorted) {
-    if (e.end > prevStart) throw new RangeError('겹치는 편집');
+    if (e.end > prevStart) throw new CodedError('core.err.overlappingEdit');
     out = out.slice(0, e.start) + e.text + out.slice(e.end);
     prevStart = e.start;
   }

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { vaultUrl } from '@nopsidian/core/assets';
 import { GRADIENTS, parseCover } from './cover';
+import { userMessage } from './user-message';
 
 interface Props {
   /** 볼트 안 이미지 첨부 경로 전체(이미 이미지 확장자만 걸러서 준다) */
@@ -69,7 +70,7 @@ export function CoverPicker({ images, vaultId, current, onPick, onUpload, onClos
       const path = await onUpload(file);
       onPick({ image: path });
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('cover.uploadFailed'));
+      setError(e instanceof Error && e.message ? userMessage(e) : t('cover.uploadFailed'));
     } finally {
       setBusy(false);
       // 같은 파일을 다시 고를 수 있게 입력칸을 비운다

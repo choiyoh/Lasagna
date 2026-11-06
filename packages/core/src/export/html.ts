@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
@@ -126,7 +127,8 @@ function transform(node: Parent, opts: HtmlExportOptions, footnotes: InlineFootn
     }
     if (child.type === 'code' || child.type === 'inlineCode') {
       if (child.type === 'code' && child.lang === 'dbview') {
-        next.push(html('<p class="placeholder">[데이터베이스 보기 — 앱에서 볼 수 있어요]</p>'));
+        // 사전 문구는 신뢰하지만 HTML 로 넣으므로 최소한만 막는다.
+        next.push(html(`<p class="placeholder">${t('core.dbviewPlaceholder').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] ?? c)}</p>`));
       } else next.push(child);
       continue;
     }

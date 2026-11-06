@@ -3,6 +3,7 @@ import { t, tPlural } from '@nopsidian/i18n';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Toast } from './app-types';
 import { flushAll } from './flush';
+import { userMessage } from './user-message';
 
 /** 노트·볼트 내보내기와 Notion 가져오기(결과는 알림으로 알린다) */
 export function useImportExport({ selected, refresh, setToast }: { selected: string | null; refresh: () => void; setToast: Dispatch<SetStateAction<Toast | null>> }) {
@@ -14,7 +15,7 @@ export function useImportExport({ selected, refresh, setToast }: { selected: str
         const r = await window.nops.export.note({ path: selected, format });
         if (r.saved) setToast({ message: t('import.exported', { path: r.saved }) });
       } catch (e) {
-        setToast({ message: t('import.exportFailed', { message: e instanceof Error ? e.message : String(e) }) });
+        setToast({ message: t('import.exportFailed', { message: userMessage(e) }) });
       }
     },
     [selected, setToast],
@@ -33,7 +34,7 @@ export function useImportExport({ selected, refresh, setToast }: { selected: str
         });
       }
     } catch (e) {
-      setToast({ message: t('import.exportFailed', { message: e instanceof Error ? e.message : String(e) }) });
+      setToast({ message: t('import.exportFailed', { message: userMessage(e) }) });
     }
   }, [setToast]);
 
@@ -52,7 +53,7 @@ export function useImportExport({ selected, refresh, setToast }: { selected: str
         }),
       });
     } catch (e) {
-      setToast({ message: t('import.failed', { message: e instanceof Error ? e.message : String(e) }) });
+      setToast({ message: t('import.failed', { message: userMessage(e) }) });
     }
   }, [refresh, setToast]);
 
@@ -73,7 +74,7 @@ export function useImportExport({ selected, refresh, setToast }: { selected: str
         }
         setToast({ message: `${parts.join(' · ')}.` });
       } catch (e) {
-        setToast({ message: t('import.failed', { message: e instanceof Error ? e.message : String(e) }) });
+        setToast({ message: t('import.failed', { message: userMessage(e) }) });
       }
     },
     [refresh, setToast],

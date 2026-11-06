@@ -126,14 +126,14 @@ export function convertNotionExport(rawEntries: ZipEntry[], opts: { rootFolder?:
     const cached = dirMap.get(oldDir);
     if (cached !== undefined) return cached;
     const parent = mapDir(posix.dirname(oldDir));
-    const name = stripNotionId(posix.basename(oldDir)) || '폴더';
+    const name = stripNotionId(posix.basename(oldDir)) || t('default.folderName');
     const mapped = parent ? `${parent}/${name}` : name;
     dirMap.set(oldDir, mapped);
     return mapped;
   };
   for (const e of [...entries].sort((a, b) => a.path.localeCompare(b.path))) {
     const dir = mapDir(posix.dirname(e.path));
-    const name = stripNotionId(posix.basename(e.path)) || '이름 없음';
+    const name = stripNotionId(posix.basename(e.path)) || t('default.nameless');
     const ext = extOf(name);
     const stem = ext ? name.slice(0, -ext.length) : name;
     let candidate = dir ? `${dir}/${name}` : name;

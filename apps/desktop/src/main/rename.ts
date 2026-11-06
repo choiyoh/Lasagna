@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { atomicWrite, planMoves, resolveInVault, sha256, type Move, type MovePlan, relocateComments } from '@nopsidian/core';
@@ -8,12 +9,12 @@ export function expandMoves(root: string, from: string, to: string): Move[] {
   const isDir = existsSync(fromFull) && statSync(fromFull).isDirectory();
   // 노트는 확장자를 생략해도 .md를 유지한다
   const target = !isDir && from.toLowerCase().endsWith('.md') && !to.toLowerCase().endsWith('.md') ? `${to}.md` : to;
-  if (!existsSync(fromFull)) throw new Error(`없는 경로: ${from}`);
-  if (from === target) throw new Error('이름이 같아요');
+  if (!existsSync(fromFull)) throw new Error(t('main.err.missingPath', { path: from }));
+  if (from === target) throw new Error(t('main.err.sameName'));
   const toFull = resolveInVault(root, target);
-  if (existsSync(toFull) && from.toLowerCase() !== target.toLowerCase()) throw new Error(`이미 있는 경로: ${target}`);
-  if (isDir && (target + '/').startsWith(from + '/')) throw new Error('폴더를 자기 자신 안으로는 옮길 수 없어요');
-  if (target.split('/').some((s) => s.startsWith('.') || s === '')) throw new Error('점(.)으로 시작하는 이름이나 빈 이름은 쓸 수 없어요');
+  if (existsSync(toFull) && from.toLowerCase() !== target.toLowerCase()) throw new Error(t('main.err.pathExists', { path: target }));
+  if (isDir && (target + '/').startsWith(from + '/')) throw new Error(t('main.err.intoItself'));
+  if (target.split('/').some((s) => s.startsWith('.') || s === '')) throw new Error(t('main.err.badName'));
 
   if (!isDir) return [{ from, to: target }];
   const moves: Move[] = [];
@@ -124,7 +125,7 @@ function pruneEmptyDirs(dirs: string[]) {
 /** 이름 변경을 되돌린다. 그 뒤에 사용자가 같은 노트를 또 고쳤다면 그 노트의 내용은 덮어쓰지 않고 건너뛴다. */
 export function undoRename(root: string, id: string): { restored: number; skipped: string[] } {
   const file = undoPath(root, id);
-  if (!existsSync(file)) throw new Error('되돌릴 기록이 없어요');
+  if (!existsSync(file)) throw new Error(t('main.err.noRevertRecord'));
   const record = JSON.parse(readFileSync(file, 'utf8')) as UndoRecord;
   const skipped: string[] = [];
   let restored = 0;

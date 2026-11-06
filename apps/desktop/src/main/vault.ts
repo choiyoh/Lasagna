@@ -57,13 +57,13 @@ export const getCurrent = () => current;
 export const getVaultRoot = (id: string) => (current?.info.id === id ? current.info.path : undefined);
 
 export function requireVault(): OpenVault {
-  if (!current) throw new Error('열린 볼트가 없어요');
+  if (!current) throw new Error(t('main.err.noVault'));
   return current;
 }
 
 export async function openVaultAt(root: string): Promise<VaultInfo> {
   const real = path.resolve(root);
-  if (!statSync(real).isDirectory()) throw new Error('폴더가 아님');
+  if (!statSync(real).isDirectory()) throw new Error(t('main.err.notFolder'));
   const dotDir = path.join(real, '.nopsidian');
   mkdirSync(dotDir, { recursive: true });
   const cfg = path.join(dotDir, 'config.json');
@@ -80,7 +80,7 @@ export async function openVaultAt(root: string): Promise<VaultInfo> {
   const index = new IndexClient(real, (e) => {
     // 감시 오류는 IPC 계약에 없는 이벤트라 렌더러로 보내지 않고 로그로만 남긴다
     if (e.name === 'index.watchError') {
-      console.warn(`[index] 파일 감시 오류: ${e.payload.message}`);
+      console.warn(`[index] ${t('main.watchError', { message: e.payload.message })}`);
       return;
     }
     if (e.name === 'note.changed' || e.name === 'asset.changed') vaultHooks.changed?.();
@@ -104,13 +104,13 @@ export async function openVaultAt(root: string): Promise<VaultInfo> {
 
 export async function openRecent(id: string): Promise<VaultInfo> {
   const found = readRecent().find((v) => v.id === id);
-  if (!found) throw new Error('최근 볼트에 없음');
+  if (!found) throw new Error(t('main.err.notInRecent'));
   return openVaultAt(found.path);
 }
 
 export async function pickAndOpen(parent: BrowserWindow | null): Promise<VaultInfo | null> {
   const opts = {
-    title: '볼트 폴더 선택',
+    title: t('main.dialog.vaultFolder'),
     properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[],
   };
   const r = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);

@@ -142,17 +142,17 @@ export function queryDatabase(db: Database.Database, root: string, p: DbQueryPar
   // worker 스레드는 렌더러와 다른 컨텍스트라, 요청마다 지금 앱 언어를 받아 문구를 만든다.
   if (p.locale) setLocale(p.locale);
   const parsed = readSchema(root, p.folder);
-  if (!parsed) throw new Error(`데이터베이스를 찾을 수 없어요: ${p.folder || '(루트)'}`);
+  if (!parsed) throw new Error(t('main.err.dbNotFound', { name: p.folder || t('main.root') }));
   const { schema, issues } = parsed;
   let view: View | undefined;
   if (p.view !== undefined) {
     const r = viewSchema.safeParse(p.view);
-    if (!r.success) throw new Error('보기 설정이 올바르지 않아요');
+    if (!r.success) throw new Error(t('main.err.badView'));
     view = r.data;
   } else {
     view = schema.views.find((v) => v.id === p.viewId) ?? schema.views[0];
   }
-  if (!view) throw new Error('보기가 없어요');
+  if (!view) throw new Error(t('main.err.noView'));
   const folders = dbFolders(db);
   const minute = Math.floor(Date.now() / 60_000);
   const hit = ctxCache.get(db);

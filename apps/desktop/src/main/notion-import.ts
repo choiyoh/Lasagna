@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { existsSync } from 'node:fs';
 import { unzipSync } from 'fflate';
 import { atomicWrite, resolveInVault } from '@nopsidian/core';
@@ -14,7 +15,7 @@ export function readZipEntries(data: Uint8Array, depth = 0): ZipEntry[] {
     filter: (f) => {
       total += f.originalSize;
       count++;
-      if (total > MAX_TOTAL || count > MAX_FILES) throw new Error('압축 파일이 너무 커요');
+      if (total > MAX_TOTAL || count > MAX_FILES) throw new Error(t('main.err.zipTooBig'));
       return !f.name.endsWith('/');
     },
   });
@@ -30,8 +31,8 @@ export function readZipEntries(data: Uint8Array, depth = 0): ZipEntry[] {
 /** 변환 결과를 볼트의 새 폴더(`Notion 가져오기 날짜`, 겹치면 번호)에 쓴다. */
 export function importNotionInto(root: string, entries: ZipEntry[], now = new Date()): NotionImportResult & { folder: string } {
   const day = now.toISOString().slice(0, 10);
-  let folder = `Notion 가져오기 ${day}`;
-  for (let n = 2; existsSync(resolveInVault(root, folder)); n++) folder = `Notion 가져오기 ${day} ${n}`;
+  let folder = t('main.notionFolder', { day });
+  for (let n = 2; existsSync(resolveInVault(root, folder)); n++) folder = t('main.notionFolderN', { day, n });
   const result = convertNotionExport(entries, { rootFolder: folder });
   for (const f of result.files) atomicWrite(resolveInVault(root, f.path), f.data);
   return { ...result, folder };

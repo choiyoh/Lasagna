@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { mcpScriptPath } from './mcp-cli';
@@ -28,19 +29,19 @@ export async function runMcpStdio(argv: string[], opts: RunMcpStdioOptions): Pro
   const stderr = opts.stderr ?? ((text: string) => void process.stderr.write(text));
   const script = mcpScriptPath(opts);
   if (!(opts.exists ?? existsSync)(script)) {
-    stderr(`nopsidian-mcp: 서버 파일이 없어요: ${script}\n`);
+    stderr(t('main.mcp.noScript', { script }));
     return 1;
   }
   try {
     const mod = (await (opts.load ?? ((url: string) => import(url)))(pathToFileURL(script).href)) as McpModule;
     if (typeof mod?.main !== 'function') {
-      stderr(`nopsidian-mcp: 서버 모듈에 main 이 없어요: ${script}\n`);
+      stderr(t('main.mcp.noMain', { script }));
       return 1;
     }
     const code = await mod.main(argv);
     return typeof code === 'number' && Number.isInteger(code) ? code : 0;
   } catch (e) {
-    stderr(`nopsidian-mcp 오류: ${e instanceof Error ? e.stack ?? e.message : String(e)}\n`);
+    stderr(t('main.mcp.error', { message: e instanceof Error ? e.stack ?? e.message : String(e) }));
     return 1;
   }
 }

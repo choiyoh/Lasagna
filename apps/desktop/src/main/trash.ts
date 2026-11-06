@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { resolveInVault } from '@nopsidian/core';
@@ -25,7 +26,7 @@ function move(from: string, to: string) {
 /** 노트(또는 폴더)를 볼트의 `.nopsidian/trash/` 로 옮긴다. 원래 경로는 옆에 적어 둬 되돌릴 수 있다. */
 export function moveToTrash(root: string, rel: string, now = new Date()): TrashResult {
   const src = resolveInVault(root, rel);
-  if (!existsSync(src)) throw new Error('이미 없는 항목이에요');
+  if (!existsSync(src)) throw new Error(t('main.err.missingItem'));
   const isFolder = statSync(src).isDirectory();
   const dir = path.join(root, ...TRASH);
   mkdirSync(dir, { recursive: true });
@@ -39,14 +40,14 @@ export function moveToTrash(root: string, rel: string, now = new Date()): TrashR
 
 /** 휴지통에서 원래 자리로 되돌린다. 그 자리에 이미 다른 것이 있으면 ` (복원)` 을 붙인다. 돌려주는 값은 되돌린 경로. */
 export function restoreFromTrash(root: string, trashId: string): string {
-  if (!/^[\w.\- 가-힣()]+$/u.test(trashId) || trashId.includes('..')) throw new Error('잘못된 휴지통 항목이에요');
+  if (!/^[\w.\- 가-힣()]+$/u.test(trashId) || trashId.includes('..')) throw new Error(t('main.err.badTrashId'));
   const dir = path.join(root, ...TRASH);
   const item = path.join(dir, trashId);
   const meta = JSON.parse(readFileSync(path.join(dir, `${trashId}.json`), 'utf8')) as { path: string; isFolder: boolean };
   let target = meta.path;
   const ext = meta.isFolder ? '' : path.posix.extname(target);
   const stem = ext ? target.slice(0, -ext.length) : target;
-  for (let n = 1; existsSync(resolveInVault(root, target)); n++) target = `${stem} (복원${n > 1 ? ` ${n}` : ''})${ext}`;
+  for (let n = 1; existsSync(resolveInVault(root, target)); n++) target = t('main.restoreName', { stem, n: n > 1 ? ` ${n}` : '', ext });
   const dest = resolveInVault(root, target);
   mkdirSync(path.dirname(dest), { recursive: true });
   move(item, dest);
@@ -122,8 +123,8 @@ export function createFolder(root: string, rel: string): string {
 export function duplicateNote(root: string, rel: string): string {
   const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/') + 1) : '';
   const base = rel.slice(dir.length).replace(/\.md$/i, '');
-  let name = `${base} (사본)`;
-  for (let n = 2; existsSync(resolveInVault(root, `${dir}${name}.md`)); n++) name = `${base} (사본 ${n})`;
+  let name = t('main.copyName', { base });
+  for (let n = 2; existsSync(resolveInVault(root, `${dir}${name}.md`)); n++) name = t('main.copyNameN', { base, n });
   const content = readFileSync(resolveInVault(root, rel), 'utf8');
   const esc = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const next = content.replace(new RegExp(`^((?:---\\r?\\n[\\s\\S]*?\\r?\\n---\\r?\\n)?\\s*)# ${esc}[ \\t]*(\\r?\\n|$)`), `$1# ${name}$2`);

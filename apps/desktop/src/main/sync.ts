@@ -1,3 +1,4 @@
+import { getLocale, t, type MessageKey } from '@nopsidian/i18n';
 import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -34,23 +35,24 @@ interface EffectiveClient {
 
 /** 오류 코드 → 사람이 읽는 제목·다음 행동·문서 단계. 원문 오류는 화면에 그대로 쓰지 않는다. */
 const DOCS_BASE = 'https://github.com/choiyoh/Lasagna/blob/main/docs/sync-setup.md';
-const FAILURES: Record<string, { code: string; title: string; action: string; anchor: string }> = {
-  auth: { code: 'HTTP 401', title: 'Google 로그인이 만료됐어요', action: 'Google 계정을 다시 연결해 주세요', anchor: '2-앱에서-연결' },
-  authCheck: { code: 'HTTP 401', title: 'Google 로그인을 확인하지 못했어요', action: '잠시 뒤 ‘지금 확인’을 다시 시도해 주세요', anchor: '문제-해결' },
-  authRevoked: { code: 'invalid_grant', title: 'Google 연결이 해제됐어요', action: 'Google 계정을 다시 연결해 주세요', anchor: '2-앱에서-연결' },
-  notConnected: { code: 'NOT_CONNECTED', title: 'Google 계정이 연결되지 않았어요', action: 'Google 계정을 연결해 주세요', anchor: '2-앱에서-연결' },
-  apiDisabled: { code: 'HTTP 403 · accessNotConfigured', title: 'Google Drive API가 꺼져 있어요', action: 'Google Cloud에서 Drive API를 켜 주세요', anchor: '1-google-cloud-설정-한-번만' },
-  quota: { code: 'HTTP 403 · storageQuotaExceeded', title: 'Google Drive 저장 공간이 부족해요', action: 'Drive 저장 공간을 확인해 주세요', anchor: '문제-해결' },
-  rateLimit: { code: 'HTTP 429/403 · rateLimitExceeded', title: 'Google이 잠시 요청을 제한했어요', action: '1~5분 뒤 다시 확인해 주세요', anchor: '문제-해결' },
-  network: { code: 'NETWORK', title: '인터넷에 연결되지 않았어요', action: '연결을 확인한 뒤 다시 시도해 주세요', anchor: '문제-해결' },
-  server: { code: 'HTTP 5xx', title: 'Google 쪽 일시 오류예요', action: '잠시 뒤 다시 시도하세요', anchor: '문제-해결' },
-  notFound: { code: 'HTTP 404', title: 'Drive에서 파일이나 폴더를 찾을 수 없어요', action: '다시 확인하거나 동기화를 다시 실행해 주세요', anchor: '문제-해결' },
-  forbidden: { code: 'HTTP 403', title: 'Drive 접근 권한이 없어요', action: 'Google 계정 권한을 확인해 주세요', anchor: '문제-해결' },
-  folderMissing: { code: 'FOLDER_MISSING', title: 'Drive에서 이 볼트의 폴더를 찾을 수 없어요', action: '같은 이름의 볼트인지 확인하거나 첫 동기화를 실행해 주세요', anchor: '3-두-번째-기기' },
-  partial: { code: 'PARTIAL', title: '일부 파일을 동기화하지 못했어요', action: '진단 정보를 복사해 실패한 파일을 확인해 주세요', anchor: '문제-해결' },
-  blocked: { code: 'BLOCKED', title: '삭제가 너무 많아 동기화를 멈췄어요', action: '계획을 확인한 뒤 필요하면 한 번만 강제 실행해 주세요', anchor: '문제-해결' },
-  busy: { code: 'BUSY', title: '지금 동기화 중이에요', action: '동기화가 끝난 뒤 다시 확인해 주세요', anchor: '문제-해결' },
-  unknown: { code: 'UNKNOWN', title: '동기화 중 문제가 생겼어요', action: '진단 정보를 복사해 확인해 주세요', anchor: '문제-해결' },
+// 오류 코드 → 사전 키(제목·다음 행동). 문서 단계 anchor 는 문서 제목 그대로의 값이라 번역하지 않는다.
+const FAILURES: Record<string, { code: string; title: MessageKey; action: MessageKey; anchor: string }> = {
+  auth: { code: 'HTTP 401', title: 'sync.diag.auth.title', action: 'sync.diag.auth.action', anchor: '2-앱에서-연결' },
+  authCheck: { code: 'HTTP 401', title: 'sync.diag.authCheck.title', action: 'sync.diag.authCheck.action', anchor: '문제-해결' },
+  authRevoked: { code: 'invalid_grant', title: 'sync.diag.authRevoked.title', action: 'sync.diag.authRevoked.action', anchor: '2-앱에서-연결' },
+  notConnected: { code: 'NOT_CONNECTED', title: 'sync.diag.notConnected.title', action: 'sync.diag.notConnected.action', anchor: '2-앱에서-연결' },
+  apiDisabled: { code: 'HTTP 403 · accessNotConfigured', title: 'sync.diag.apiDisabled.title', action: 'sync.diag.apiDisabled.action', anchor: '1-google-cloud-설정-한-번만' },
+  quota: { code: 'HTTP 403 · storageQuotaExceeded', title: 'sync.diag.quota.title', action: 'sync.diag.quota.action', anchor: '문제-해결' },
+  rateLimit: { code: 'HTTP 429/403 · rateLimitExceeded', title: 'sync.diag.rateLimit.title', action: 'sync.diag.rateLimit.action', anchor: '문제-해결' },
+  network: { code: 'NETWORK', title: 'sync.diag.network.title', action: 'sync.diag.network.action', anchor: '문제-해결' },
+  server: { code: 'HTTP 5xx', title: 'sync.diag.server.title', action: 'sync.diag.server.action', anchor: '문제-해결' },
+  notFound: { code: 'HTTP 404', title: 'sync.diag.notFound.title', action: 'sync.diag.notFound.action', anchor: '문제-해결' },
+  forbidden: { code: 'HTTP 403', title: 'sync.diag.forbidden.title', action: 'sync.diag.forbidden.action', anchor: '문제-해결' },
+  folderMissing: { code: 'FOLDER_MISSING', title: 'sync.diag.folderMissing.title', action: 'sync.diag.folderMissing.action', anchor: '3-두-번째-기기' },
+  partial: { code: 'PARTIAL', title: 'sync.diag.partial.title', action: 'sync.diag.partial.action', anchor: '문제-해결' },
+  blocked: { code: 'BLOCKED', title: 'sync.diag.blocked.title', action: 'sync.diag.blocked.action', anchor: '문제-해결' },
+  busy: { code: 'BUSY', title: 'sync.diag.busy.title', action: 'sync.diag.busy.action', anchor: '문제-해결' },
+  unknown: { code: 'UNKNOWN', title: 'sync.diag.unknown.title', action: 'sync.diag.unknown.action', anchor: '문제-해결' },
 };
 
 export interface FailureLike {
@@ -103,7 +105,7 @@ export function syncFailureFor(e: FailureLike, at = Date.now()): SyncFailure {
   const f = FAILURES[key] ?? FAILURES.unknown!;
   // 서버·404·일반 403 은 실제 HTTP 상태를 접힌 코드에 남긴다.
   const code = (key === 'server' || key === 'notFound' || key === 'forbidden') && e.code !== undefined ? e.code : f.code;
-  return { at, code, title: f.title, action: f.action, docs: `${DOCS_BASE}#${f.anchor}` };
+  return { at, code, title: t(f.title), action: t(f.action), docs: `${DOCS_BASE}#${f.anchor}` };
 }
 
 /** 로컬 진단에 쓰는 접미사. 클라이언트 ID 의 `.apps.googleusercontent.com` 은 빼고 보여 준다. */
@@ -588,7 +590,7 @@ export class SyncController {
       tokens: client.tokens,
     };
     const tokenClientId = client.clientId;
-    const w = new Worker(this.o.workerFile, { workerData: data });
+    const w = new Worker(this.o.workerFile, { workerData: { ...data, locale: getLocale() } });
     w.on('message', (m: SyncResponse) => {
       if (m.type === 'response') {
         const call = this.calls.get(m.id);

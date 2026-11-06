@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { parentPort, workerData } from 'node:worker_threads';
 import { subscribe, type AsyncSubscription } from '@parcel/watcher';
 import { realpathSync } from 'node:fs';
@@ -112,7 +113,7 @@ port.on('message', async (req: WorkerRequest) => {
       case 'query': {
         const { name, args } = req.params;
         const allowed = ['backlinkContexts', 'outgoingLinks', 'unlinkedMentions', 'notesByTag', 'tags', 'headingsOf', 'blocksOf', 'globalGraph', 'localGraph', 'databases', 'queryDatabase', 'rowDatabase', 'databaseRowPaths', 'databaseFolders'];
-        if (!allowed.includes(name)) throw new Error(`허용되지 않은 질의: ${name}`);
+        if (!allowed.includes(name)) throw new Error(t('main.err.queryNotAllowed', { name }));
         const fn = (ix as unknown as Record<string, (...a: unknown[]) => unknown>)[name]!;
         return post({ type: 'response', id: req.id, result: fn.apply(ix, args) });
       }

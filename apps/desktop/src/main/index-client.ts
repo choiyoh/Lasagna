@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
@@ -7,11 +8,11 @@ import type { IndexQuery, WorkerEvent, WorkerResponse } from '../workers/index/p
 type Listener = (e: WorkerEvent) => void;
 
 /** 워커가 멈췄을 때 대기 중인 호출에 주는 오류 */
-const WORKER_DOWN = '색인 작업이 멈춰 다시 시작하고 있어요';
+const WORKER_DOWN = 'main.index.workerDown';
 /** 재시작 한도를 넘겼을 때 */
-const GAVE_UP = '색인 작업이 반복해서 멈춰 자동 재시작을 멈췄어요. 앱을 다시 시작해 주세요';
+const GAVE_UP = 'main.index.gaveUp';
 /** 우리가 닫는 중이라 더는 응답을 받을 수 없을 때 */
-const CLOSED = '색인을 닫았어요';
+const CLOSED = 'main.index.closed';
 /** 60초 안에 이만큼 넘게 멈추면 재시작을 포기한다 */
 const MAX_RESTARTS = 3;
 const RESTART_WINDOW_MS = 60_000;
@@ -107,14 +108,14 @@ export class IndexClient {
       }
     });
     worker.on('error', (err) => this.handleDeath(worker, err));
-    worker.on('exit', (code) => this.handleDeath(worker, new Error(`색인 워커가 코드 ${code} 로 끝났어요`)));
+    worker.on('exit', (code) => this.handleDeath(worker, new Error(t('main.index.workerExit', { code }))));
   }
 
   /** 워커가 죽었다: 보낸 요청을 거부하고 새 워커로 다시 시작한다(닫는 중이면 아무것도 안 한다). */
   private handleDeath(worker: WorkerLike, err: Error) {
     if (worker !== this.worker || this.closed || this.gaveUp) return;
-    this.rejectReady?.(new Error(WORKER_DOWN));
-    this.failSent(new Error(WORKER_DOWN));
+    this.rejectReady?.(new Error(t(WORKER_DOWN)));
+    this.failSent(new Error(t(WORKER_DOWN)));
     this.restart(err);
   }
 
@@ -126,7 +127,7 @@ export class IndexClient {
       return;
     }
     this.restarts.push(now);
-    console.warn(`[index] 색인 워커가 멈춰 다시 시작해요(${this.restarts.length}/${MAX_RESTARTS}): ${err.message}`);
+    console.warn(`[index] ${t('main.index.restart', { n: this.restarts.length, max: MAX_RESTARTS, message: err.message })}`);
     this.restarting = true;
     try {
       this.spawn();
@@ -139,10 +140,10 @@ export class IndexClient {
   private giveUp(reason: string) {
     this.gaveUp = true;
     this.restarting = false;
-    console.warn(`[index] ${GAVE_UP}: ${reason}`);
-    this.readyPromise = Promise.reject(new Error(GAVE_UP));
+    console.warn(`[index] ${t(GAVE_UP)}: ${reason}`);
+    this.readyPromise = Promise.reject(new Error(t(GAVE_UP)));
     this.readyPromise.catch(() => undefined);
-    this.failAll(new Error(GAVE_UP));
+    this.failAll(new Error(t(GAVE_UP)));
   }
 
   private call<T>(method: string, params?: unknown): Promise<T> {
@@ -157,7 +158,7 @@ export class IndexClient {
   /** 재시작 중에 만든 호출은 새 워커가 ready 한 뒤에 보낸다 — 잃거나 거부하지 않는다. */
   private send(req: { id: string; method: string; params?: unknown }) {
     if (this.closed) return this.post(req); // 닫는 중: 종료 요청은 곧바로 보낸다
-    if (this.gaveUp) return this.fail(req.id, new Error(GAVE_UP));
+    if (this.gaveUp) return this.fail(req.id, new Error(t(GAVE_UP)));
     if (this.restarting) {
       this.waiting.add(req.id);
       return;
@@ -219,7 +220,7 @@ export class IndexClient {
   }
   async close() {
     this.closed = true;
-    this.failAll(new Error(CLOSED));
+    this.failAll(new Error(t(CLOSED)));
     if (!this.gaveUp) {
       // 워커가 이미 죽었으면 응답이 오지 않는다 — 잠깐만 기다리고 강제로 끝낸다
       let timer: ReturnType<typeof setTimeout> | undefined;

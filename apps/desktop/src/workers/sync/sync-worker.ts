@@ -1,3 +1,4 @@
+import { setLocale, t } from '@nopsidian/i18n';
 import { parentPort, workerData } from 'node:worker_threads';
 import path from 'node:path';
 import { merge3 } from '@nopsidian/core';
@@ -24,6 +25,7 @@ import { SqliteSyncState } from './sqlite-state';
 import { isSyncablePath } from './syncable';
 
 const data = workerData as SyncWorkerData;
+if (data.locale) setLocale(data.locale);
 const port = parentPort!;
 const post = (m: SyncResponse) => port.postMessage(m);
 
@@ -33,7 +35,7 @@ const guardedFetch: typeof fetch = (input, init) => {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const url = new URL(raw);
   if (url.protocol !== 'https:' || !ALLOWED_HOSTS.has(url.hostname)) {
-    return Promise.reject(new Error(`허용되지 않은 주소: ${url.hostname}`));
+    return Promise.reject(new Error(t('main.err.hostNotAllowed', { host: url.hostname })));
   }
   return fetch(input, init);
 };
@@ -122,7 +124,7 @@ port.on('message', async (req: SyncRequest) => {
       post({ type: 'response', id: req.id, result: null });
       return process.exit(0);
     }
-    if (busy) throw new Error('이미 동기화 중이에요');
+    if (busy) throw new Error(t('main.err.syncBusy'));
     busy = true;
     try {
       if (req.method === 'diagnose') {

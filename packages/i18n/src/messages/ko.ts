@@ -1206,4 +1206,6 @@ export const ko = {
   'mcp.revertErr.missing': '노트가 지금은 없어요(지웠거나 이름을 바꿨어요)',
   'mcp.revertErr.changed': '그 뒤로 노트가 또 바뀌었어요. 더 최근 작업부터 되돌리거나 노트의 버전 기록에서 복원해 주세요',
   'mcp.revertErr.no-snapshot': '이전 내용의 버전 기록이 없어요(오래돼 정리됐을 수 있어요)',
+  'mcp.policyErr.needFolder': '쓸 폴더를 입력하세요. 볼트 전체는 .(점)으로 적어요.',
+  'mcp.genericError': '설정을 저장하지 못했어요. 값을 확인하고 다시 시도해 주세요.',
 } as const

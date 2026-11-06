@@ -1205,4 +1205,6 @@ export const en: Record<MessageKey, string> = {
   'mcp.revertErr.missing': 'The note is gone (deleted or renamed)',
   'mcp.revertErr.changed': 'The note changed after this activity. Revert a newer one first, or restore it from the note’s version history',
   'mcp.revertErr.no-snapshot': 'There is no earlier version to restore (it may have been cleaned up)',
+  'mcp.policyErr.needFolder': 'Enter a folder. Use . (dot) for the whole vault.',
+  'mcp.genericError': 'Could not save the settings. Check the values and try again.',
 }

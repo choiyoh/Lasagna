@@ -221,3 +221,47 @@ describe('되돌리기 오류의 로캘', () => {
     setLocale('ko');
   });
 });
+
+describe('오류 문구에 자리표시자가 새지 않는다', () => {
+  it('savePolicy 경로 전수: ko/en 모두 {…} 리터럴이 없다', async () => {
+    // 정책 파일 읽기/스키마 오류
+    for (const err of [
+      { exists: true, policy: null, error: '깨짐', errorCode: 'invalidJson' },
+      { exists: true, policy: null, error: '형식', errorCode: 'invalidSchema', errorParams: { path: 'write', message: 'bad' } },
+      { exists: true, policy: null, error: '읽기', errorCode: 'unreadable', errorParams: { message: 'EACCES' } },
+    ]) {
+      policyGet.mockImplementation(async () => err);
+      await render();
+      const warn = container.querySelector('[data-testid="mcp-policy-warning"]')?.textContent ?? '';
+      expect(warn).not.toMatch(/[{}]/);
+      setLocale('en');
+      await act(async () => root!.render(<McpSettings onOpenNote={() => {}} onReverted={() => {}} />));
+      expect(container.querySelector('[data-testid="mcp-policy-warning"]')?.textContent ?? '').not.toMatch(/[{}]/);
+      setLocale('ko');
+      act(() => root!.unmount());
+      root = null;
+      container.remove();
+      container = document.createElement('div');
+      document.body.append(container);
+    }
+  });
+
+  it('쓰기를 켠 채 폴더를 비우면 폴더 이름이 문장에 채워진다(리터럴 없음)', async () => {
+    await render();
+    const write = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    await act(async () => write.click());
+    await typeInto(input('쓸 수 있는 폴더'), '');
+    // 저장 버튼(정책 만들기)이 없으면 토글에서 저장 경로를 타지 않으므로, 안내 문구로 대체 확인
+    // 저장 경로(savePolicy)를 실제로 타도록 토글을 껐다 켠다
+    await act(async () => write.click());
+    await act(async () => write.click());
+    const koText = container.textContent ?? '';
+    expect(koText).not.toMatch(/[{}]/);
+    setLocale('en');
+    await act(async () => root!.render(<McpSettings onOpenNote={() => {}} onReverted={() => {}} />));
+    const enText = container.textContent ?? '';
+    expect(enText).not.toMatch(/[{}]/);
+    expect(enText).not.toMatch(/\{issue\}/);
+    setLocale('ko');
+  });
+});

@@ -1,5 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -100,7 +100,7 @@ test('English smoke: MCP settings and command palette, snippet command unchanged
   await page.keyboard.press('Escape');
 });
 
-test('깨진 정책 파일도 화면 언어로 안내한다', async () => {
+test('깨진 정책 파일·빈 폴더도 화면 언어로 안내한다', async () => {
   const page = await app.firstWindow();
   // 볼트의 정책 파일을 깨뜨린다(사용자 데이터가 아니라 앱이 만드는 설정 파일)
   mkdirSync(path.join(vaultDir, '.nopsidian'), { recursive: true });
@@ -117,25 +117,60 @@ test('깨진 정책 파일도 화면 언어로 안내한다', async () => {
   await expect(mcp).toContainText('The policy file is not valid JSON');
   expect(await mcp.innerText()).not.toMatch(HANGUL);
 
-  // 한국어로 바꾸면 base 문구, 다시 영어로 바꾸면 영어 (혼합 언어 없음)
+  // 한국어로 바꾸면 base 문구, 다시 영어로 바꾸면 영어 (혼합 언어·자리표시자 리터럴 없음)
   await koreanRadio.click();
   await expect(mcp).toContainText('정책 파일이 올바른 JSON 이 아니에요');
   expect(await mcp.innerText()).not.toMatch(/policy file/);
   await englishRadio.click();
   await expect(mcp).toContainText('The policy file is not valid JSON');
   expect(await mcp.innerText()).not.toMatch(HANGUL);
+  // 경고·안내 문구(스니펫 JSON 은 제외)에 자리표시자 리터럴이 없다
+  for (const sel of ['[data-testid="mcp-policy-warning"]', '[data-testid="mcp-policy-note"]']) {
+    expect(await mcp.locator(sel).first().innerText()).not.toMatch(/[{}]/);
+  }
   await page.keyboard.press('Escape');
 
-  // 루트가 배열인 스키마 오류: 영어 상세 문구 유지, 한글 0
+  // 루트가 배열인 스키마 오류
   writeFileSync(path.join(vaultDir, '.nopsidian', 'mcp-policy.json'), '[]');
   await page.reload();
   await openVaultIfNeeded(page);
   await page.getByTestId('settings-btn').click();
+  await englishRadio.click();
   const mcp2 = page.getByTestId('mcp-settings');
   await expect(mcp2).toContainText('The policy file has the wrong shape');
   expect(await mcp2.innerText()).not.toMatch(HANGUL);
-  await page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: '한국어' }).click();
+  await koreanRadio.click();
   await expect(mcp2).toContainText('정책 파일 형식이 올바르지 않아요');
+  await englishRadio.click();
+
+  // 읽을 수 없는 정책 파일(권한)도 영어/한국어 안내
+  chmodSync(path.join(vaultDir, '.nopsidian', 'mcp-policy.json'), 0o000);
+  try {
+    await page.reload();
+    await openVaultIfNeeded(page);
+    await page.getByTestId('settings-btn').click();
+    await englishRadio.click();
+    const unreadable = page.getByTestId('mcp-settings');
+    await expect(unreadable).toContainText('Could not read the policy file');
+    expect(await unreadable.locator('[data-testid="mcp-policy-warning"]').first().innerText()).not.toMatch(HANGUL);
+    await koreanRadio.click();
+    await expect(page.getByTestId('mcp-settings')).toContainText('정책 파일을 읽을 수 없어요');
+    await englishRadio.click();
+  } finally {
+    chmodSync(path.join(vaultDir, '.nopsidian', 'mcp-policy.json'), 0o644);
+  }
+
+  // 쓰기를 켠 채 폴더를 비우면 폴더 이름이 문장에 채워지고 {…} 리터럴이 없다(영→한→영)
+  await mcp2.getByRole('checkbox', { name: 'Let agents write notes' }).check();
+  await mcp2.getByLabel('Folders agents can write').fill('');
+  const warn = () => mcp2.locator('[data-testid="mcp-policy-warning"], [data-testid="mcp-folder-warning"]').first().innerText();
+  expect(await warn()).not.toMatch(/[{}]/);
+  await koreanRadio.click();
+  expect(await warn()).not.toMatch(/[{}]/);
+  expect(await mcp2.locator('[data-testid="mcp-folder-warning"]').first().innerText()).toContain('쓸 폴더를 입력하세요');
+  await englishRadio.click();
+  expect(await warn()).not.toMatch(/[{}]/);
+  expect(await warn()).not.toMatch(HANGUL);
   await page.keyboard.press('Escape');
 });
 
@@ -177,5 +212,6 @@ test('잘못된 폴더·VSCode 탭·복사·언어 전환이 모두 화면 언�
   const enWarning = await mcp.locator('[data-testid="mcp-folder-warning"]').innerText();
   expect(enWarning).toContain('Fix the folder “../bad” first');
   expect(enWarning).not.toMatch(HANGUL);
+
   await page.keyboard.press('Escape');
 });

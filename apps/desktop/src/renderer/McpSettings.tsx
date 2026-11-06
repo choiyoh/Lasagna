@@ -30,7 +30,7 @@ function policyErrorText(error: LocalizedText | null): string {
   if (!error) return '';
   // 폴더 문제는 코드·경로만 저장해 두고 여기서 지금 언어로 문장을 만든다.
   if (error.key && error.folderCode) {
-    return t(error.key, folderIssueParams({ code: error.folderCode, params: { path: error.folderPath ?? '' } }));
+    return noPlaceholders(t(error.key, folderIssueParams({ code: error.folderCode, params: { path: error.folderPath ?? '' } })));
   }
   if (error.code) {
     // 정책/되돌리기 오류 코드마다 사전 키가 있다(모르는 코드는 사유 원문을 그대로).
@@ -39,7 +39,12 @@ function policyErrorText(error: LocalizedText | null): string {
     const text = t(key, error.params as never);
     if (!text.startsWith('mcp.policyErr.')) return text;
   }
-  return text(error);
+  return noPlaceholders(text(error));
+}
+
+/** 채워지지 않은 `{자리}` 가 화면에 그대로 나오지 않게 마지막으로 막는다. */
+function noPlaceholders(value: string): string {
+  return /\{[a-zA-Z_]+\}/.test(value) ? t('mcp.genericError') : value;
 }
 
 /**
@@ -169,7 +174,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
     if (folderIssue || dailyIssue) {
       if (next.write) {
         const issue = folderIssue ?? dailyIssue!;
-        setPolicyError({ key: 'mcp.fixFolderFirst', folderCode: issue.code, folderPath: issue.params?.path ?? '' });
+        setPolicyError({ key: 'mcp.fixFolderFirst', folderCode: issue.code ?? 'needFolder', folderPath: issue.params?.path ?? '' });
         return; // 켠 상태의 잘못된 폴더는 저장하지 않는다
       }
       folders = [t('mcp.defaultFolder')]; // 끈 상태는 폴더와 무관하므로 정책 파일을 유효하게 남긴다

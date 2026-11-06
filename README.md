@@ -1,3 +1,5 @@
+[English](README.en.md)
+
 # Lasagna
 
 > 예전 이름은 Nopsidian 이에요. 기존 호환을 위해 볼트 안의 `.nopsidian/` 폴더, `@nopsidian/*` 패키지 이름,

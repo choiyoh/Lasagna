@@ -1,3 +1,5 @@
+[English](sync-setup.en.md) · [README](../README.md)
+
 # Google Drive 동기화 설정
 
 Nopsidian은 **본인의 Google Cloud 프로젝트**로 Drive에 접근합니다(앱 자체 서버·계정 없음, ADR-0001).

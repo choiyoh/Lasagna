@@ -1,3 +1,5 @@
+[English](mcp.en.md) · [README](../README.md)
+
 # AI 에이전트 연결 (MCP)
 
 Claude 같은 AI 에이전트가 Lasagna 볼트의 노트를 **찾아 읽고**, 허용하면 **새 노트를 쓰게** 하는 MCP(Model Context Protocol) 서버입니다. 앱이 꺼져 있어도 동작하는 독립 프로세스(stdio)이고, 앱이 켜져 있으면 에이전트가 쓴 노트가 사이드바·열린 편집기에 바로 나타납니다.

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setLocale } from '@nopsidian/i18n';
-import { applyServerLocale, readSettingsLanguage, resolveServerLocale, settingsPaths } from './lang.js';
+import { applyServerLocale, osLanguages, readSettingsLanguage, resolveServerLocale, settingsPaths } from './lang.js';
 
 afterEach(() => setLocale('ko'));
 
@@ -51,6 +51,31 @@ describe('MCP 서버 언어 결정', () => {
     expect(settingsPaths('darwin', '/h', {})[0]).toBe('/h/Library/Application Support/Lasagna/app-settings.json');
     expect(settingsPaths('linux', '/h', { XDG_CONFIG_HOME: '/c' })[0]).toBe('/c/Lasagna/app-settings.json');
     expect(settingsPaths('win32', '/h', { APPDATA: 'C:\\AppData' })[0]).toContain(path.join('Lasagna', 'app-settings.json'));
+  });
+
+  it('OS 로캘에 언어 정보가 없으면 en 으로 떨어지지 않고 ko', () => {
+    expect(osLanguages({})).toEqual([]);
+    expect(osLanguages({ LANG: '' })).toEqual([]);
+    expect(osLanguages({ LANG: 'C', LC_ALL: 'POSIX' })).toEqual([]);
+    expect(osLanguages({ LANG: 'ko_KR.UTF-8' })).toEqual(['ko-KR']);
+    expect(osLanguages({ LANG: 'C', LC_MESSAGES: 'en_US.UTF-8' })).toEqual(['en-US']);
+    expect(resolveServerLocale({ env: { LANG: 'C' }, paths: [] })).toBe('ko');
+    expect(resolveServerLocale({ env: { LANG: 'ko_KR.UTF-8' }, paths: [] })).toBe('ko');
+    expect(resolveServerLocale({ env: { LANG: 'en_US.UTF-8' }, paths: [] })).toBe('en');
+  });
+
+  it('예전 userData 이름(Nopsidian)의 설정도 읽는다(새 이름 우선)', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'nops-mcp-legacy-'));
+    try {
+      mkdirSync(path.join(dir, 'Nopsidian'), { recursive: true });
+      writeFileSync(path.join(dir, 'Nopsidian', 'app-settings.json'), JSON.stringify({ version: 1, language: 'en' }));
+      expect(resolveServerLocale({ env: {}, paths: settingsPaths('linux', dir, { XDG_CONFIG_HOME: dir }), systemLanguages: ['ko'] })).toBe('en');
+      mkdirSync(path.join(dir, 'Lasagna'), { recursive: true });
+      writeFileSync(path.join(dir, 'Lasagna', 'app-settings.json'), JSON.stringify({ version: 1, language: 'ko' }));
+      expect(resolveServerLocale({ env: {}, paths: settingsPaths('linux', dir, { XDG_CONFIG_HOME: dir }), systemLanguages: ['en'] })).toBe('ko');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('applyServerLocale 은 i18n 로캘까지 바꾼다', () => {

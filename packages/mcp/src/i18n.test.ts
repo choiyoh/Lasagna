@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -8,6 +8,7 @@ import { setLocale } from '@nopsidian/i18n';
 import type { McpPolicy } from './policy.js';
 import { usage } from './policy.js';
 import { createServer } from './server.js';
+import { NoteWriter } from './writer.js';
 
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
 const dirs: string[] = [];
@@ -67,5 +68,39 @@ describe('MCP 서버 문구의 로캘', () => {
     setLocale('en');
     expect(usage()).toContain('Usage: node nopsidian-mcp.mjs');
     expect(usage()).not.toMatch(HANGUL);
+  });
+});
+
+describe('정책 거부·감사·폴더 규칙', () => {
+  it('정책 파일이 쓰기를 끄면 응답은 지금 언어, 감사 note 는 base(ko) 값', async () => {
+    const en = await connect('en', { write: true, writeFolders: ['AI'] });
+    mkdirSync(path.join(en.root, '.nopsidian'), { recursive: true });
+    writeFileSync(path.join(en.root, '.nopsidian', 'mcp-policy.json'), JSON.stringify({ version: 1, write: false, writeFolders: ['AI'], maxWritesPerMinute: 30 }));
+    // 서버는 정책 파일을 요청마다 다시 읽는다
+    const denied = await en.call('create_note', { path: 'AI/new.md', content: '# x' });
+    expect(denied.content[0]!.text).toContain('Writing is turned off in the app settings');
+    expect(denied.content[0]!.text).not.toMatch(HANGUL);
+    const audit = readFileSync(path.join(en.root, '.nopsidian', 'mcp-audit.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const denial = audit.find((a) => a.action === 'denied');
+    expect(denial.note).toContain('앱 설정에서 쓰기를 꺼 두었어요');
+  });
+
+  it('정책 파일이 없고 이미 일기 폴더가 있으면 영어 서버도 그 폴더를 쓴다', async () => {
+    const en = await connect('en', { write: true, writeFolders: [''] });
+    mkdirSync(path.join(en.root, '일기'), { recursive: true });
+    const r = await en.call('append_to_daily_note', { date: '2026-11-05', content: 'hi' });
+    if (r.isError) throw new Error(r.content[0]!.text);
+    expect(existsSync(path.join(en.root, '일기', '2026-11-05.md'))).toBe(true);
+    expect(existsSync(path.join(en.root, 'Journal'))).toBe(false);
+  });
+
+  it('댓글 fallback 작성자는 언어와 무관하게 base 값으로 저장한다', async () => {
+    const en = await connect('en', { write: true, writeFolders: ['AI'] });
+    // 클라이언트 이름이 없는 writer(앱이 직접 띄운 stdio 서버와 같은 상태)
+    const writer = new NoteWriter({ root: en.root, write: true, writeFolders: ['AI'], maxWritesPerMinute: 30, maxBytes: 100_000 } as never);
+    writer.comment('add_comment', 'note.md', 'hi');
+    const dir = path.join(en.root, '.nopsidian', 'comments');
+    const raw = readFileSync(path.join(dir, readdirSync(dir)[0]!), 'utf8');
+    expect(raw).toContain('AI 에이전트');
   });
 });

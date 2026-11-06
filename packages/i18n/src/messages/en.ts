@@ -1370,4 +1370,6 @@ export const en: Record<MessageKey, string> = {
   'mcpDb.noHeading': '(no heading)',
   'mcpSrv.exampleFilter': 'Conditions that must all match, e.g. [{"prop":"Status","op":"=","value":"Doing"}]',
   'mcpSrv.exampleValues': 'Property values, e.g. {"Status":"Doing","Due":"2026-11-01","Score":3}',
+  'mcp.policyErr.appDisabled': 'Writing is turned off in the app settings',
+  'mcp.policyErr.noOverlap': 'The app policy and the server arguments do not allow any common folder',
 }

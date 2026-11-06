@@ -29,7 +29,6 @@
   "packages/editor/src/nops/toc.ts": 1,
   "packages/formula/src/fn-date.ts": 5,
   "packages/ipc-contract/src/index.ts": 2,
-  "packages/mcp/src/policy-file.ts": 2,
   "packages/mcp/src/revert.ts": 1,
   "packages/sync-gdrive/src/drive-rest.ts": 4,
   "packages/sync-gdrive/src/executor.ts": 2,

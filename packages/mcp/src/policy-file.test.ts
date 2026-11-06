@@ -82,7 +82,9 @@ describe('인자와 정책 파일의 교집합', () => {
     const off = effectivePolicy(p, { kind: 'ok', policy: file({ write: false }) });
     expect(off).toMatchObject({ write: false, reason: 'policy-disabled', source: 'file' });
     const bad = effectivePolicy(p, { kind: 'invalid', error: '깨짐', code: 'invalidJson' });
-    expect(bad).toMatchObject({ write: false, reason: 'policy-invalid', message: '깨짐', source: 'file' });
+    expect(bad).toMatchObject({ write: false, reason: 'policy-invalid', source: 'file' });
+    // 문구는 저장하지 않고 코드로만 들고 있는다(응답 시점에 번역)
+    expect(bad.messageKey).toBeUndefined();
   });
 
   it('폴더는 교집합, 횟수는 더 작은 값을 쓴다', () => {

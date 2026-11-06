@@ -67,16 +67,16 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
 /** 볼트 안 노트 경로를 정규화·검증한다(절대 경로·`..`·점으로 시작하는 폴더/파일·이상한 글자 거부, `.md` 보장). */
 export function validateNotePath(input: string): string {
   let p = input.normalize('NFC').replace(/\\/g, '/').replace(/^(\.\/)+/, '').trim();
-  if (!p) throw new PolicyError(t('mcpPolicy.err.emptyPath'));
-  if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) throw new PolicyError(t('mcpPolicy.err.relativeOnly'));
+  if (!p) throw new PolicyError(t('mcpPolicy.err.emptyPath'), { code: 'mcpPolicy.err.emptyPath' });
+  if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) throw new PolicyError(t('mcpPolicy.err.relativeOnly'), { code: 'mcpPolicy.err.relativeOnly' });
   if (!/\.md$/i.test(p)) p += '.md';
-  if (p.length > 240) throw new PolicyError(t('mcpPolicy.err.tooLong'));
+  if (p.length > 240) throw new PolicyError(t('mcpPolicy.err.tooLong'), { code: 'mcpPolicy.err.tooLong' });
   const parts = p.split('/');
   for (const part of parts) {
-    if (part === '' || part === '.' || part === '..') throw new PolicyError(t('mcpPolicy.err.badPath', { path: input }));
-    if (part.startsWith('.')) throw new PolicyError(t('mcpPolicy.err.dotName'));
+    if (part === '' || part === '.' || part === '..') throw new PolicyError(t('mcpPolicy.err.badPath', { path: input }), { code: 'mcpPolicy.err.badPath', params: { path: input } });
+    if (part.startsWith('.')) throw new PolicyError(t('mcpPolicy.err.dotName'), { code: 'mcpPolicy.err.dotName' });
     // eslint-disable-next-line no-control-regex
-    if (/[\\:*?"<>|\u0000-\u001f]/.test(part)) throw new PolicyError(t('mcpPolicy.err.badChars', { name: part }));
+    if (/[\\:*?"<>|\u0000-\u001f]/.test(part)) throw new PolicyError(t('mcpPolicy.err.badChars', { name: part }), { code: 'mcpPolicy.err.badChars', params: { name: part } });
   }
   return p;
 }

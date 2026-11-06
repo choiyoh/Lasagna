@@ -1371,4 +1371,6 @@ export const ko = {
   'mcpDb.noHeading': '(제목 없음)',
   'mcpSrv.exampleFilter': 'Conditions that must all match, e.g. [{"prop":"상태","op":"=","value":"진행"}]',
   'mcpSrv.exampleValues': 'Property values, e.g. {"상태":"진행","마감":"2026-11-01","점수":3}',
+  'mcp.policyErr.appDisabled': '앱 설정에서 쓰기를 꺼 두었어요',
+  'mcp.policyErr.noOverlap': '앱 정책과 서버 인자가 허용하는 폴더가 겹치지 않아요',
 } as const

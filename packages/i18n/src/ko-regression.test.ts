@@ -610,9 +610,16 @@ const cases: Case[] = [
     render: (n) => t('db.csv.unreadable', { row: n, column: '점수', value: 'x' }),
   },
   {
+    // name 없는 view 를 읽을 때의 기본값(base 는 리터럴 '보기')
     name: 'default.dbViewName',
     base: () => '보기',
     render: () => t('default.dbViewName'),
+  },
+  {
+    // 새 DB 를 만들 때의 기본 보기 이름(base L3a 승인본과 같은 '표')
+    name: 'db.view.table',
+    base: () => '표',
+    render: () => t('db.view.table'),
   },
   {
     name: 'preload.err.unknownEvent',

@@ -275,7 +275,7 @@ describe('_db.yaml 편집', () => {
     expect(schema.title).toBe('독서 목록');
     expect(schema.properties).toEqual({});
     expect(schema.views).toHaveLength(1);
-    expect(schema.views[0]).toMatchObject({ id: 'v1', name: '보기', type: 'table' });
+    expect(schema.views[0]).toMatchObject({ id: 'v1', name: '표', type: 'table' });
   });
 
   it('깨진 YAML 은 편집 함수 모두 Error', () => {

@@ -625,7 +625,7 @@ export function newDbYaml(title: string): string {
     title,
     rowsFolder: '.',
     properties: {},
-    views: [{ id: 'v1', name: t('default.dbViewName'), type: 'table', sort: [] }],
+    views: [{ id: 'v1', name: t('db.view.table'), type: 'table', sort: [] }],
     templates: [],
   };
   return stringify(schema, { lineWidth: 0 });

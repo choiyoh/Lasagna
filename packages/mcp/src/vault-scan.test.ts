@@ -397,7 +397,7 @@ describe('list·tags 필터', () => {
     expect(scanner.list({ tag: '머신러닝/없음' })).toEqual([]);
   });
 
-  it('tags() 는 노트 수를 세고 대소문자를 합쳐 개수 내림차순·이름순으로 돌려준다', () => {
+  it('tags()는 노트 수를 세고 대소문자를 합쳐 개수 내림차순·이름순으로 돌려준다', () => {
     const root = makeVault({
       'AI/agent.md': '---\ntags: [AI]\n---\n# 에이전트\n',
       'x/nested.md': '---\ntags: [머신러닝/기초, AI]\n---\n# 중첩\n',

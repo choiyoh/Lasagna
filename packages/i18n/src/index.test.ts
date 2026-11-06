@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { en } from './messages/en'
 import { ko } from './messages/ko'
 import {
+  copulaSuffix,
+  withCopula,
   DEFAULT_LOCALE,
   getLocale,
   interpolate,
@@ -106,5 +108,44 @@ describe('messages', () => {
     expect(tPlural('demo.notes', 3, undefined, catalog)).toBe('3 notes')
     setLocale('ko')
     expect(tPlural('demo.notes', 1, undefined, { ...catalog, 'demo.notes.other': '노트 {n}개' })).toBe('노트 1개')
+  })
+})
+
+describe('copulaSuffix', () => {
+  it('앞말의 받침에 따라 이에요/예요를 고르고, 영어에서는 빈 문자열이다', () => {
+    setLocale('ko')
+    expect(withCopula('문자열')).toBe('문자열이에요')
+    expect(withCopula('숫자')).toBe('숫자예요')
+    expect(withCopula('목록')).toBe('목록이에요')
+    expect(withCopula('날짜')).toBe('날짜예요')
+    expect(withCopula('')).toBe('이에요') // 빈 값은 받침을 알 수 없어 안전한 쪽
+    setLocale('en')
+    expect(copulaSuffix('string')).toBe('')
+    setLocale('ko')
+  })
+
+  it('숫자로 끝나면 읽는 소리의 받침을 따른다(0영·1일·3삼·6육·7칠·8팔 이에요)', () => {
+    setLocale('ko')
+    const yes = ['0', '1', '3', '6', '7', '8', '10', '13', '100', '123', '1000']
+    const no = ['2', '4', '5', '9', '12', '25']
+    for (const word of yes) expect([word, copulaSuffix(word)]).toEqual([word, '이에요'])
+    for (const word of no) expect([word, copulaSuffix(word)]).toEqual([word, '예요'])
+  })
+
+  it('영문·기호·이모지로 끝나면 받침을 알 수 없어 이에요로 둔다(문구에서는 따옴표를 쓴다)', () => {
+    setLocale('ko')
+    for (const word of ['string', 'Text', 'Date', '%', '#', '🙂', 'a1', '']) {
+      expect([word, copulaSuffix(word)]).toEqual([word, '이에요'])
+    }
+  })
+
+  it('translate(target) 는 그 target 언어로 꼬리말을 정한다(앱 언어와 무관)', () => {
+    setLocale('en')
+    // en 앱에서도 ko 문구를 만들면 ko 규칙(문자열이에요)
+    expect(translate('ko', 'formula.err.needsNumber', { what: 'x', type: '문자열' })).toBe('x: 숫자가 필요한데 문자열이에요')
+    expect(translate('ko', 'formula.err.needsNumber', { what: 'x', type: '숫자' })).toBe('x: 숫자가 필요한데 숫자예요')
+    setLocale('ko')
+    // ko 앱에서도 en 문구에는 꼬리말이 붙지 않는다
+    expect(translate('en', 'formula.err.needsNumber', { what: 'x', type: 'Text' })).toBe('x: expected a number but got Text')
   })
 })

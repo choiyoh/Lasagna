@@ -295,7 +295,7 @@ describe('TokenProvider', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('current() 는 사본이라 밖에서 고쳐도 내부 상태가 바뀌지 않는다', async () => {
+  it('current()는 사본이라 밖에서 고쳐도 내부 상태가 바뀌지 않는다', async () => {
     const { fetchImpl } = fakeFetch(() => jsonResponse({ access_token: 'AT2', expires_in: 3600 }));
     const provider = new TokenProvider({ clientId: 'cid', fetch: fetchImpl, tokens: tokens() });
 
@@ -475,7 +475,7 @@ describe('startLoopback', () => {
     await expect(fetch(`${handle.redirectUri}?code=X&state=ST`)).rejects.toThrow();
   });
 
-  it('close() 는 여러 번 불러도 안전하고 대기 중인 결과를 끝낸다', async () => {
+  it('close()는 여러 번 불러도 안전하고 대기 중인 결과를 끝낸다', async () => {
     const handle = await startLoopback({ state: 'ST' });
 
     handle.close();

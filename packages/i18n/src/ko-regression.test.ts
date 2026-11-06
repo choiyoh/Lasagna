@@ -425,22 +425,22 @@ const cases: Case[] = [
   },
   {
     name: 'formula.err.arityExact',
-    base: (n) => `round() 는 인자가 ${n}개 필요해요(지금 ${n}개)`,
+    base: (n) => `round()는 인자가 ${n}개 필요해요(지금 ${n}개)`,
     render: (n) => t(n === 1 ? 'formula.err.arityExact.one' : 'formula.err.arityExact.other', { name: 'round', n, count: n }),
   },
   {
     name: 'formula.err.arityAtLeast',
-    base: (n) => `concat() 는 인자가 ${n}개 이상개 필요해요(지금 ${n}개)`,
+    base: (n) => `concat()는 인자가 ${n}개 이상 필요해요(지금 ${n}개)`,
     render: (n) => t(n === 1 ? 'formula.err.arityAtLeast.one' : 'formula.err.arityAtLeast.other', { name: 'concat', min: n, count: n }),
   },
   {
     name: 'formula.err.arityBetween',
-    base: (n) => `round() 는 인자가 1~${n}개 필요해요(지금 ${n}개)`,
+    base: (n) => `round()는 인자가 1~${n}개 필요해요(지금 ${n}개)`,
     render: (n) => t('formula.err.arityBetween.other', { name: 'round', min: 1, max: n, count: n }),
   },
   {
     name: 'formula.err.needsNumber',
-    base: (n) => `${n}: 숫자가 필요한데 문자열 이에요`,
+    base: (n) => `${n}: 숫자가 필요한데 문자열이에요`,
     render: (n) => t('formula.err.needsNumber', { what: String(n), type: t('formula.type.string') }),
   },
   {
@@ -450,7 +450,7 @@ const cases: Case[] = [
   },
   {
     name: 'formula.err.needsList',
-    base: (n) => `sort${n}: 목록이 필요한데 날짜 이에요`,
+    base: (n) => `sort${n}: 목록이 필요한데 날짜예요`,
     render: (n) => t('formula.err.needsList', { fn: `sort${n}`, type: t('formula.type.date') }),
   },
   // L4a: MCP 설정

@@ -12,7 +12,7 @@ describe('ko↔en 전환에서도 오류 문구가 따라간다', () => {
     const ko = compileFormula('round()');
     expect(ko.ok).toBe(false);
     if (!ko.ok) {
-      expect(ko.error.message).toBe('round() 는 인자가 1~2개 필요해요(지금 0개)');
+      expect(ko.error.message).toBe('round()는 인자가 1~2개 필요해요(지금 0개)');
       setLocale('en');
       expect(formulaErrorText(ko.error)).toBe('round() takes 1–2 arguments (got 0)');
     }
@@ -31,7 +31,7 @@ describe('ko↔en 전환에서도 오류 문구가 따라간다', () => {
       }
     })();
     if (!err) throw new Error('expected error');
-    expect(formulaErrorText(err)).toContain('목록이 필요한데 문자열 이에요');
+    expect(formulaErrorText(err)).toContain('목록이 필요한데 문자열이에요');
     setLocale('en');
     const text = formulaErrorText(err);
     expect(text).toBe('sort: expected a list but got Text');
@@ -48,7 +48,7 @@ describe('ko↔en 전환에서도 오류 문구가 따라간다', () => {
     } catch (e) {
       err = e;
     }
-    expect(formulaErrorText(err)).toBe('repeat: 문자열이 필요한데 목록 이에요');
+    expect(formulaErrorText(err)).toBe('repeat: 문자열이 필요한데 목록이에요');
     setLocale('en');
     expect(formulaErrorText(err)).toBe('repeat: expected text but got List');
   });
@@ -57,8 +57,8 @@ describe('ko↔en 전환에서도 오류 문구가 따라간다', () => {
   it('날짜 함수의 목록 인자 오류도 표시 시점에 번역된다(formatDate/parseDate)', () => {
     const listEnv: Env = { prop: () => [1] };
     const cases: [string, string, string][] = [
-      ['formatDate(prop("목록"), "yyyy")', 'formatDate: 날짜 인자가 필요한데 목록 이에요', 'formatDate: expected a date but got List'],
-      ['parseDate(prop("목록"))', 'parseDate: 문자열이나 날짜가 필요한데 목록 이에요', 'parseDate: expected text or a date but got List'],
+      ['formatDate(prop("목록"), "yyyy")', 'formatDate: 날짜 인자가 필요한데 목록이에요', 'formatDate: expected a date but got List'],
+      ['parseDate(prop("목록"))', 'parseDate: 문자열이나 날짜가 필요한데 목록이에요', 'parseDate: expected text or a date but got List'],
     ];
     for (const [src, koText, enText] of cases) {
       setLocale('ko');

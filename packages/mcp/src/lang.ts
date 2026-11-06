@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { resolveLocale, setLocale, type Locale } from '@nopsidian/i18n';
+import { setLocale, type Locale } from '@nopsidian/i18n';
 
 /** 앱이 쓰는 userData 폴더 이름. 예전 이름(Nopsidian)으로 쓰인 설정도 함께 본다(읽기 전용). */
 const APP_NAMES = (): string[] => (process.env.NOPSIDIAN_APP_NAME ? [process.env.NOPSIDIAN_APP_NAME] : ['Lasagna', 'Nopsidian']);
@@ -49,8 +49,9 @@ export function resolveServerLocale(opts: {
   if (forced === 'ko' || forced === 'en') return forced;
   const setting = readSettingsLanguage(opts.paths ?? settingsPaths(opts.platform, undefined, env));
   const system = opts.systemLanguages ?? osLanguages(env);
-  if (setting !== null) return resolveLocale(setting, system);
-  // OS 로캘에 명시적 언어 정보가 없으면(C/POSIX/빈 값) en-US 로 떨어뜨리지 않고 ko 로 둔다.
+  // 설정이 ko/en 이면 그대로, 'system' 이면 OS 로캘의 **명시적** 언어만 따른다.
+  if (setting === 'ko' || setting === 'en') return setting;
+  // OS 로캘에 언어 정보가 없으면(C/POSIX/빈 값) en-US 로 떨어뜨리지 않고 ko 로 둔다.
   const first = (system[0] ?? '').toLowerCase();
   return first.startsWith('ko') ? 'ko' : first.startsWith('en') ? 'en' : 'ko';
 }

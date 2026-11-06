@@ -1,4 +1,5 @@
 import type { MessageKey } from '@nopsidian/i18n';
+import { PolicyError } from './folders.js';
 import { tr, trIn, type Params } from './i18n.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { addComment, parseNote, resolveInVault, saveNote, sha256, splitFrontmatter, type Comment } from '@nopsidian/core';
@@ -243,7 +244,9 @@ export class NoteWriter {
     try {
       rel = validateNotePath(rawPath);
     } catch (e) {
-      this.log({ action: 'denied', tool, path: rawPath, note: e instanceof Error ? e.message : String(e) });
+      // 감사 note 는 언어와 무관하게 base(ko) — 응답만 지금 언어로.
+      const base = e instanceof PolicyError && e.code ? trIn('ko', e.code as never, e.params) : e instanceof Error ? e.message : String(e);
+      this.log({ action: 'denied', tool, path: rawPath, note: base });
       throw new WriteError('bad-input', e instanceof Error ? e.message : String(e));
     }
     if (!this.policy.write) this.deny(tool, rel, 'read-only', { key: 'mcpW.err.readOnlyComment' });
@@ -268,7 +271,8 @@ export class NoteWriter {
     try {
       rel = validateNotePath(rawPath);
     } catch (e) {
-      this.log({ action: 'denied', tool, path: rawPath, note: e instanceof Error ? e.message : String(e) });
+      const base = e instanceof PolicyError && e.code ? trIn('ko', e.code as never, e.params) : e instanceof Error ? e.message : String(e);
+      this.log({ action: 'denied', tool, path: rawPath, note: base });
       throw new WriteError('bad-input', e instanceof Error ? e.message : String(e));
     }
     if (!this.policy.write) this.deny(tool, rel, 'read-only', { key: 'mcpW.err.readOnlyWrite' });

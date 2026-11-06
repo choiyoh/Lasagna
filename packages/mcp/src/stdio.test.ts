@@ -116,6 +116,24 @@ describe('실제 stdio MCP 서버의 언어', () => {
     }
   });
 
+  it('설정이 system 이고 OS 로캘 정보가 없으면 ko 로 뜬다', async () => {
+    const home = mkdtempSync(path.join(tmpdir(), 'nops-mcp-sys-'));
+    try {
+      const settings = settingsPaths(process.platform, home, { XDG_CONFIG_HOME: path.join(home, '.config') })[0]!;
+      mkdirSync(path.dirname(settings), { recursive: true });
+      writeFileSync(settings, JSON.stringify({ version: 1, language: 'system' }));
+      const session = start({ HOME: home, XDG_CONFIG_HOME: path.join(home, '.config'), LANG: 'C' });
+      try {
+        const tools = await handshake(session);
+        expect(JSON.stringify(tools.map((t) => t.description))).toMatch(HANGUL);
+      } finally {
+        session.close();
+      }
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it('대표 오류도 영어로 나온다(허용 폴더 밖 쓰기)', async () => {
     const session = start({ NOPSIDIAN_LANG: 'en' });
     try {

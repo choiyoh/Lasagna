@@ -78,6 +78,40 @@ describe('MCP 서버 언어 결정', () => {
     }
   });
 
+  it('설정 값 × OS 로캘 매트릭스: system 에 명시적 OS 언어가 없으면 항상 ko', () => {
+    const matrix: [string | Record<string, unknown>, NodeJS.ProcessEnv, 'ko' | 'en'][] = [
+      // 설정 파일 없음(빈 객체 = 파일을 만들지 않는다)
+      [{}, {}, 'ko'],
+      [{}, { LANG: 'en_US.UTF-8' }, 'en'],
+      [{}, { LANG: 'ko_KR.UTF-8' }, 'ko'],
+      // 설정 ko/en 은 OS 와 무관
+      [{ version: 1, language: 'ko' }, { LANG: 'en_US.UTF-8' }, 'ko'],
+      [{ version: 1, language: 'en' }, { LANG: 'ko_KR.UTF-8' }, 'en'],
+      // system 은 OS 의 명시적 언어를 따르고, 없으면 ko
+      [{ version: 1, language: 'system' }, {}, 'ko'],
+      [{ version: 1, language: 'system' }, { LANG: 'C' }, 'ko'],
+      [{ version: 1, language: 'system' }, { LC_ALL: 'POSIX', LANG: 'C' }, 'ko'],
+      [{ version: 1, language: 'system' }, { LANG: 'en_US.UTF-8' }, 'en'],
+      [{ version: 1, language: 'system' }, { LANG: 'ko_KR.UTF-8' }, 'ko'],
+      // 깨진 파일은 없는 것으로 본다
+      ['{ not json', {}, 'ko'],
+      ['{ not json', { LANG: 'en_US.UTF-8' }, 'en'],
+    ];
+    for (const [settings, env, expected] of matrix) {
+      const dir = mkdtempSync(path.join(tmpdir(), 'nops-mcp-matrix-'));
+      try {
+        const file = settingsPaths(process.platform, dir, { XDG_CONFIG_HOME: path.join(dir, '.config') })[0]!;
+        if (settings !== '{}') {
+          mkdirSync(path.dirname(file), { recursive: true });
+          writeFileSync(file, typeof settings === 'string' ? settings : JSON.stringify(settings));
+        }
+        expect(resolveServerLocale({ env: { ...env, HOME: dir }, systemLanguages: undefined, paths: [file] })).toBe(expected);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
   it('applyServerLocale 은 i18n 로캘까지 바꾼다', () => {
     expect(applyServerLocale({ env: { NOPSIDIAN_LANG: 'en' }, paths: [] })).toBe('en');
     // t() 가 영어인지 확인(간단한 서버 문구)

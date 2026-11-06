@@ -1,5 +1,5 @@
 import { PolicyError } from './folders.js';
-import { tr, type Param } from './i18n.js';
+import { tr } from './i18n.js';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { expandTemplate, resolveInVault } from '@nopsidian/core';
@@ -267,8 +267,16 @@ export class DatabaseAccess {
     try {
       tplPath = validateNotePath(tpl);
     } catch (e) {
-      const detail: Param = e instanceof PolicyError && e.code ? { key: e.code as never, params: e.params } : e instanceof Error ? e.message : String(e);
-      throw new WriteError('bad-input', tr('mcpDb.err.badTemplatePath', { message: detail }));
+      // ko 는 base 처럼 완전한 문장을, en 은 이유(명사구)를 넣는다 — 문장 틀에 문장을 끼우지 않는다.
+      const code = e instanceof PolicyError ? e.code : undefined;
+      const reasonKey = code ? (`mcpDb.reason.${code.replace('mcpPolicy.err.', '')}` as never) : null;
+      throw new WriteError(
+        'bad-input',
+        tr('mcpDb.err.badTemplatePath', {
+          message: code ? tr(code as never, (e as PolicyError).params) : e instanceof Error ? e.message : String(e),
+          reason: reasonKey ? tr(reasonKey) : e instanceof Error ? e.message : String(e),
+        }),
+      );
     }
     const tplFile = resolveInVault(this.root, tplPath);
     if (!existsSync(tplFile)) throw new WriteError('bad-input', tr('mcpDb.err.templateMissing', { path: tplPath }));

@@ -9,6 +9,7 @@ import type { McpPolicy } from './policy.js';
 import { usage } from './policy.js';
 import { createServer } from './server.js';
 import { NoteWriter } from './writer.js';
+import { tr } from './i18n.js';
 
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
 const dirs: string[] = [];
@@ -92,6 +93,26 @@ describe('정책 거부·감사·폴더 규칙', () => {
     if (r.isError) throw new Error(r.content[0]!.text);
     expect(existsSync(path.join(en.root, '일기', '2026-11-05.md'))).toBe(true);
     expect(existsSync(path.join(en.root, 'Journal'))).toBe(false);
+  });
+
+  it('잘못된 경로의 감사 note 도 base(ko)로 저장하고 응답만 영어', async () => {
+    const en = await connect('en', { write: true, writeFolders: ['AI'] });
+    const r = await en.call('create_note', { path: '.hidden.md', content: '# x' });
+    expect(r.content[0]!.text).toContain('cannot start with a dot');
+    const audit = readFileSync(path.join(en.root, '.nopsidian', 'mcp-audit.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const denial = audit.find((a) => a.action === 'denied');
+    expect(denial.note).toContain('점(.)으로 시작하는 폴더·파일은 쓸 수 없어요');
+    expect(denial.note).not.toMatch(/cannot start/);
+  });
+
+  it('템플릿 경로 오류는 문장을 끼우지 않는다(ko base 동일·en 이유 명사구)', () => {
+    const ko = tr('mcpDb.err.badTemplatePath', { message: tr('mcpPolicy.err.dotName'), reason: '' });
+    expect(ko).toBe('템플릿 경로가 올바르지 않아요: 점(.)으로 시작하는 폴더·파일은 쓸 수 없어요');
+    setLocale('en');
+    const en = tr('mcpDb.err.badTemplatePath', { message: '', reason: tr('mcpDb.reason.dotName') });
+    setLocale('ko');
+    expect(en).toBe('The template path is not valid: a name starts with a dot');
+    expect(en).not.toMatch(HANGUL);
   });
 
   it('댓글 fallback 작성자는 언어와 무관하게 base 값으로 저장한다', async () => {

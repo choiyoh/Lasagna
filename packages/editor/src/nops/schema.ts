@@ -1,6 +1,7 @@
 import { Schema } from 'prosemirror-model';
 import type { MarkSpec, NodeSpec } from 'prosemirror-model';
 import { tableNodes } from 'prosemirror-tables';
+import { t } from '@nopsidian/i18n';
 
 import { marks as baseMarks, nodes as baseNodes } from '@oh-new-editor/core';
 
@@ -268,7 +269,7 @@ const highlight: MarkSpec = {
 };
 
 function withAttrs(spec: NodeSpec | undefined, attrs: NonNullable<NodeSpec['attrs']>): NodeSpec {
-  if (!spec) throw new Error('업스트림 노드를 찾지 못함');
+  if (!spec) throw new Error(t('editor.err.upstreamNode'));
   return { ...spec, attrs: { ...(spec.attrs ?? {}), ...attrs } };
 }
 

@@ -1,4 +1,5 @@
 import type { LocalFile, RemoteFile, SyncEntry, SyncOp, SyncPath, SyncPlan } from './types.js';
+import { t } from '@nopsidian/i18n';
 
 export interface PlanInput {
   local: LocalFile[];
@@ -108,11 +109,20 @@ export function planSync(input: PlanInput): SyncPlan {
   const deletes = ops.filter((o) => o.type === 'trashLocal' || o.type === 'trashRemote').length;
   const tracked = E.size;
   const ratio = input.maxDeleteRatio ?? 0.2;
-  const blocked =
+  const blockedParams =
     tracked >= (input.guardMinTracked ?? 5) && deletes / tracked > ratio
-      ? `파일 ${tracked}개 중 ${deletes}개(${Math.round((deletes / tracked) * 100)}%)를 지우려 해요. 의도한 게 맞는지 확인해 주세요.`
+      ? { tracked, deletes, percent: Math.round((deletes / tracked) * 100) }
       : null;
-  return { ops, deletes, tracked, blocked, firstSync: E.size === 0 };
+  // `blocked` 는 구버전 소비자를 위한 지금 언어 문장이고, 화면은 코드+params 로 다시 그린다.
+  const blocked = blockedParams ? t('sync.blocked.deleteRatio', blockedParams) : null;
+  return {
+    ops,
+    deletes,
+    tracked,
+    blocked,
+    ...(blockedParams ? { blockedCode: 'deleteRatio' as const, blockedParams } : {}),
+    firstSync: E.size === 0,
+  };
 }
 
 function priority(op: SyncOp): number {

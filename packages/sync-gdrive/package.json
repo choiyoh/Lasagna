@@ -17,5 +17,8 @@
     ".": "./src/index.ts",
     "./types": "./src/types.ts",
     "./testing": "./src/testing/memory-drive.ts"
+  },
+  "dependencies": {
+    "@nopsidian/i18n": "workspace:*"
   }
 }

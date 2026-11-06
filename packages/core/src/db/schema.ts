@@ -83,7 +83,7 @@ export const CALC_FNS = ['count', 'count_values', 'count_empty', 'count_unique',
 
 export const view = z.object({
   id: z.string().min(1),
-  name: z.string().default('보기'),
+  name: z.string().default(() => t('db.view.table')),
   type: z.enum(['table', 'board', 'list', 'gallery', 'calendar', 'timeline']).default('table'),
   /** 보일 속성 순서(`title` 포함). 없으면 모든 속성 */
   columns: z.array(z.string()).optional(),
@@ -195,5 +195,5 @@ export function parseDbSchema(yamlText: string, fallbackTitle?: string): DbParse
 }
 
 function describe(e: z.ZodError): string {
-  return e.issues.map((i) => `${i.path.join('.') || '(값)'}: ${i.message}`).join('; ');
+  return e.issues.map((i) => `${i.path.join('.') || t('core.err.valueField')}: ${i.message}`).join('; ');
 }

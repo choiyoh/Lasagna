@@ -15,6 +15,9 @@ export interface SyncWorkerData {
 export interface PlanSummary {
   firstSync: boolean;
   blocked: string | null;
+  /** blocked 사유의 코드·값(있으면 화면이 이 값으로 그린다) — 추가 필드 */
+  blockedCode?: 'deleteRatio';
+  blockedParams?: { tracked: number; deletes: number; percent: number };
   tracked: number;
   counts: Record<string, number>;
   /** 화면에 보여 줄 작업 목록(최대 300개) */

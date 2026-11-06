@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
@@ -37,7 +38,7 @@ export function listHistory(root: string, rel: string): HistoryEntry[] {
 }
 
 export function readHistory(root: string, rel: string, id: string): string {
-  if (!ID_RE.test(id)) throw new Error('잘못된 기록 이름입니다');
+  if (!ID_RE.test(id)) throw new Error(t('core.err.badHistoryName'));
   return readFileSync(path.join(historyDir(root, rel), id), 'utf8');
 }
 

@@ -1,5 +1,6 @@
 import { sha256Hex, text, utf8 } from './hash.js';
 import { planSync, type PlanInput } from './planner.js';
+import { t } from '@nopsidian/i18n';
 import {
   RevisionConflictError,
   type DriveClient,
@@ -49,14 +50,18 @@ export async function conflictCopyPath(path: SyncPath, date: Date, exists: (p: S
   const stem = hasExt ? path.slice(0, dot) : path;
   const ext = hasExt ? path.slice(dot) : '';
   for (let n = 1; ; n++) {
-    const candidate = `${stem} (충돌 ${day}${n > 1 ? ` ${n}` : ''})${ext}`;
+    const candidate = n > 1 ? t('default.conflictNameN', { stem, date: day, n, ext }) : t('default.conflictName', { stem, date: day, ext });
     if (!(await exists(candidate))) return candidate;
   }
 }
 
 /** 계획을 실행한다. 작업 하나가 실패해도 나머지는 계속하고, 각 작업의 결과를 보고서에 담는다. */
 export async function executePlan(plan: SyncPlan, deps: SyncDeps, opts: { force?: boolean } = {}): Promise<SyncReport> {
-  if (plan.blocked && !opts.force) throw Object.assign(new Error(`동기화를 멈췄어요: ${plan.blocked}`), { key: 'blocked', code: 'BLOCKED' });
+  if (plan.blocked && !opts.force) {
+    // 문장 틀에 문장을 넣지 않는다: 사유별 완전한 문구를 코드로 고른다.
+    const message = plan.blockedCode === 'deleteRatio' && plan.blockedParams ? t('sync.blocked.stopDeleteRatio', plan.blockedParams) : t('sync.blocked.stop');
+    throw Object.assign(new Error(message), { key: 'blocked', code: 'BLOCKED' });
+  }
   const isText = deps.isText ?? defaultIsText;
   const now = deps.now ?? (() => new Date());
   const entries = new Map((await deps.state.entries()).map((e) => [e.path, e]));

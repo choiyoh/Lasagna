@@ -25,6 +25,7 @@ import {
   relocateComments,
   removeComment,
   setCommentResolved,
+  SELF_AUTHOR,
 } from '@nopsidian/core';
 import { existsSync, readFileSync } from 'node:fs';
 import { readAudit } from '@nopsidian/mcp/audit';
@@ -449,7 +450,7 @@ function registerHandlers() {
     return undefined;
   });
   handle('comment.list', ({ path: rel }) => listComments(requireVault().info.path, rel));
-  handle('comment.add', ({ path: rel, text, quote }) => addComment(requireVault().info.path, rel, { author: '나', text, quote }));
+  handle('comment.add', ({ path: rel, text, quote }) => addComment(requireVault().info.path, rel, { author: SELF_AUTHOR, text, quote }));
   handle('comment.resolve', ({ path: rel, id, resolved }) => ({ ok: setCommentResolved(requireVault().info.path, rel, id, resolved) }));
   handle('comment.remove', ({ path: rel, id }) => ({ ok: removeComment(requireVault().info.path, rel, id) }));
   handle('mcp.info', () => {

@@ -313,7 +313,7 @@ export function SyncDialog({ status, onClose, onOpenNote }: Props) {
           <section data-testid="sync-plan">
             <h3>{plan.firstSync ? t('sync.firstPlan') : t('sync.plan')}</h3>
             <p className="small">{Object.entries(plan.counts).map(([k, n]) => `${opLabel(k)} ${n}`).join(' · ') || t('sync.noChanges')}</p>
-            {plan.blocked && <p className="small warn">{plan.blocked}</p>}
+            {plan.blocked && <p className="small warn">{plan.blockedCode ? t('sync.blocked.deleteRatio', plan.blockedParams ?? {}) : plan.blocked}</p>}
             <ul className="syncdialog__ops">
               {plan.ops.slice(0, 60).map((o, i) => (
                 <li key={i}>

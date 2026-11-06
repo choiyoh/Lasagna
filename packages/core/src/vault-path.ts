@@ -1,9 +1,10 @@
+import { t } from '@nopsidian/i18n';
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
 
 export class PathEscapeError extends Error {
   constructor(rel: string) {
-    super(`볼트 밖으로 벗어나는 경로: ${rel}`);
+    super(t('core.err.pathEscape', { path: rel }));
     this.name = 'PathEscapeError';
   }
 }

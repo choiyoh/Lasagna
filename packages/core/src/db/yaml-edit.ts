@@ -55,7 +55,7 @@ function deepEq(a: unknown, b: unknown): boolean {
 }
 
 function yamlErrorMessage(doc: Document): string {
-  return `YAML 오류: ${doc.errors[0]?.message ?? '알 수 없는 오류'}`;
+  return t('db.issue.yaml', { message: doc.errors[0]?.message ?? t('core.err.unknown') });
 }
 
 /**
@@ -413,7 +413,7 @@ function viewsOf(doc: Doc): YAMLSeq<unknown> {
  */
 export function setFrontmatter(content: string, changes: Record<string, unknown>): string {
   const parts = splitFrontmatter(content);
-  if (parts?.error) throw new Error(`YAML 오류: ${parts.error}`);
+  if (parts?.error) throw new Error(t('db.issue.yaml', { message: parts.error }));
 
   const closing = parts ? parts.raw.lastIndexOf('---') : 0;
   const eol = parts ? (parts.raw.startsWith('---\r\n') ? '\r\n' : '\n') : detectEol(content);
@@ -455,7 +455,7 @@ export function setFrontmatter(content: string, changes: Record<string, unknown>
 export function renameFrontmatterKey(content: string, from: string, to: string): string {
   if (from === to) return content;
   const parts = splitFrontmatter(content);
-  if (parts?.error) throw new Error(`YAML 오류: ${parts.error}`);
+  if (parts?.error) throw new Error(t('db.issue.yaml', { message: parts.error }));
   if (!parts) return content;
 
   const oldYaml = parts.raw.slice(parts.raw.indexOf('\n') + 1, parts.raw.lastIndexOf('---'));
@@ -467,7 +467,7 @@ export function renameFrontmatterKey(content: string, from: string, to: string):
 
   const pair = map.items.find((it) => keyOf(it) === from);
   if (!pair) return content;
-  if (map.items.some((it) => keyOf(it) === to)) throw new Error(`이미 있는 키입니다: ${to}`);
+  if (map.items.some((it) => keyOf(it) === to)) throw new Error(t('core.err.keyExists', { key: to }));
   pair.key = sc(to);
 
   const eol = parts.raw.startsWith('---\r\n') ? '\r\n' : '\n';

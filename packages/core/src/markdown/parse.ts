@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
@@ -244,6 +245,6 @@ export function assemble(note: ParsedNote): string {
 /** i번째 블록의 원문만 교체한 새 문서 원문. 나머지 바이트는 그대로 유지된다. */
 export function replaceBlock(note: ParsedNote, index: number, newSource: string): string {
   const b = note.blocks[index];
-  if (!b) throw new RangeError(`블록 ${index} 없음`);
+  if (!b) throw new RangeError(t('core.err.blockMissing', { index }));
   return note.source.slice(0, b.start) + newSource + note.source.slice(b.end);
 }

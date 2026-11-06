@@ -10,6 +10,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@nopsidian/i18n": "workspace:*",
     "zod": "^4.6.5"
   }
 }

@@ -318,7 +318,7 @@ export function csvToRows(rows: string[][], columns: ColumnGuess[]): ImportedRow
       const text = canonicalCell(column.prop, raw);
       const frontmatter = toFrontmatterValue(column.prop, normalizeValue(column.prop, text));
       if (frontmatter === undefined) {
-        issues.push(`${rowIndex + 1}행 ${column.name}: 읽을 수 없는 값 '${raw}'`);
+        issues.push(t('db.csv.unreadable', { row: rowIndex + 1, column: column.name, value: raw }));
         continue;
       }
       values[column.name] = frontmatter;

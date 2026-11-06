@@ -88,6 +88,7 @@ function summarizePlan(plan: SyncPlan): PlanSummary {
   return {
     firstSync: plan.firstSync,
     blocked: plan.blocked,
+    ...(plan.blockedCode ? { blockedCode: plan.blockedCode, blockedParams: plan.blockedParams } : {}),
     tracked: plan.tracked,
     counts,
     ops: plan.ops.slice(0, 300).map(describeOp),

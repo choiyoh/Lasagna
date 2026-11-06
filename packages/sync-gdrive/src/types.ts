@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 /**
  * Drive 동기화 엔진의 경계 타입. 엔진은 Drive·파일시스템·상태 저장소를 이 인터페이스로만 만나므로
  * 순수 TS로 테스트할 수 있고(메모리 가짜 구현), 실제 구현은 Main/SyncWorker 쪽에서 끼워 넣는다.
@@ -39,7 +40,7 @@ export interface SyncEntry {
 /** 업로드 중 Drive 쪽이 이미 바뀌었을 때 던진다. 엔진은 이 작업을 건너뛰고 다음 동기화에 다시 계획한다. */
 export class RevisionConflictError extends Error {
   constructor(public readonly path: SyncPath) {
-    super(`원격이 먼저 바뀌었어요: ${path}`);
+    super(t('sync.err.remoteAhead', { path }));
     this.name = 'RevisionConflictError';
   }
 }
@@ -116,6 +117,9 @@ export interface SyncPlan {
   tracked: number;
   /** 삭제가 너무 많아 멈춘 사유. 있으면 `execute` 는 `force` 없이 실행을 거부한다. */
   blocked: string | null;
+  /** 위 사유의 코드와 값 — 화면에서는 이 값으로 그때그때 번역해 그린다(추가 필드, 구버전은 `blocked` 만 읽는다). */
+  blockedCode?: 'deleteRatio';
+  blockedParams?: { tracked: number; deletes: number; percent: number };
   /** 첫 동기화(기록이 하나도 없음) — UI가 dry-run 확인을 받는다 */
   firstSync: boolean;
 }

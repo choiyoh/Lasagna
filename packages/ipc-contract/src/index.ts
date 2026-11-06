@@ -1,3 +1,4 @@
+import { t } from '@nopsidian/i18n';
 import { z } from 'zod';
 
 /** 볼트 루트 기준 상대 경로. 절대 경로·`..` 탈출은 main의 경로 가드가 한 번 더 검사한다. */
@@ -5,7 +6,8 @@ export const relPath = z
   .string()
   .min(1)
   .max(1024)
-  .refine((p) => !p.includes('\0'), 'NUL 문자는 허용되지 않음');
+  // 문구는 검증(파싱) 시점에 지금 언어로 만든다(모듈 로드 시 t() 금지).
+  .refine((p) => !p.includes('\0'), { error: () => t('ipc.err.nul') });
 
 export const vaultInfo = z.object({ id: z.string(), name: z.string(), path: z.string() });
 export type VaultInfo = z.infer<typeof vaultInfo>;
@@ -145,6 +147,9 @@ export type SyncDiagnostics = z.infer<typeof syncDiagnostics>;
 export const syncPlanSummary = z.object({
   firstSync: z.boolean(),
   blocked: z.string().nullable(),
+  // 추가 필드: 사유 코드·값(있으면 화면이 그때그때 번역해 그린다). 구버전은 blocked 만 쓴다.
+  blockedCode: z.literal('deleteRatio').optional(),
+  blockedParams: z.object({ tracked: z.number(), deletes: z.number(), percent: z.number() }).optional(),
   tracked: z.number(),
   counts: z.record(z.string(), z.number()),
   ops: z.array(z.object({ type: z.string(), path: z.string(), to: z.string().optional() })),
@@ -531,7 +536,7 @@ export const contract = {
   'asset.save': {
     input: z.object({
       name: z.string().max(255),
-      data: z.instanceof(Uint8Array).refine((d) => d.byteLength <= MAX_ASSET_BYTES, '파일이 너무 큽니다'),
+      data: z.instanceof(Uint8Array).refine((d) => d.byteLength <= MAX_ASSET_BYTES, { error: () => t('ipc.err.tooLarge') }),
     }),
     output: z.object({ path: relPath, reused: z.boolean() }),
   },

@@ -1195,4 +1195,6 @@ export const en: Record<MessageKey, string> = {
   'mcp.policyErr.noFolders': 'Writing is on but no write folder is allowed',
   'mcp.policyErr.badFolder': 'The policy file has an invalid folder: {message}',
   'mcp.policyNeedFolder': 'Turn on writing with at least one allowed folder',
+  'mcp.policyErr.badWriteFolder': 'That path cannot be used as a write folder: {path}',
+  'mcp.vscodeTarget': '.vscode/mcp.json (workspace)',
 }

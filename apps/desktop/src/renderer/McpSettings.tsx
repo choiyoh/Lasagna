@@ -12,10 +12,17 @@ interface AuditRow {
   note?: string;
 }
 
-type PolicyErrorState = { code?: string; params?: Record<string, string>; message: string };
+/** 화면에 보일 문구: 사전 키(또는 정책 오류 코드)를 들고 있다가 그릴 때 지금 언어로 만든다. */
+interface LocalizedText {
+  key?: MessageKey;
+  /** 정책 오류 코드(`mcp.policyErr.<code>`) */
+  code?: string;
+  params?: Record<string, string>;
+  message?: string;
+}
 
-/** 정책 오류 문구: 사전 코드가 있으면 지금 언어로, 없으면 서버가 준 문장 그대로. */
-function policyErrorText(error: PolicyErrorState | null): string {
+/** 정책 오류 문구. 코드가 있으면 지금 언어로, 없으면 원문. */
+function policyErrorText(error: LocalizedText | null): string {
   if (!error) return '';
   if (error.code) {
     // 형식 오류는 어느 자리가 문제인지 알 때만 경로·메시지를 붙인다(base 와 같은 선택 규칙).
@@ -23,19 +30,29 @@ function policyErrorText(error: PolicyErrorState | null): string {
     const text = t(key, error.params as never);
     if (!text.startsWith('mcp.policyErr.')) return text;
   }
-  return error.message;
+  return text(error);
 }
 
-/** 문장 안의 `{name}` 자리를 <code> 로 그린다(강조 위치는 그대로 두고 문구만 번역). */
-function withCode(key: MessageKey, name: string, value: string) {
-  const [before, after = ''] = t(key).split(`{${name}}`);
-  return (
-    <>
-      {before}
-      <code>{value}</code>
-      {after}
-    </>
-  );
+/** 키가 있으면 지금 언어로, 없으면 원문(서버·IPC 오류 문자열). */
+function text(value: LocalizedText | null | undefined): string {
+  if (!value) return '';
+  return value.key ? t(value.key, value.params as never) : (value.message ?? '');
+}
+
+/** 문장 안의 `{name}` 자리들을 <code> 로 그린다(강조 위치는 그대로 두고 문구만 번역). */
+function withCodes(key: MessageKey, parts: [string, string][]) {
+  // 자리표시자를 지우지 않고 그대로 둔 문장에서 {name} 을 찾아 쪼갠다.
+  let rest = t(key);
+  const out: React.ReactNode[] = [];
+  parts.forEach(([name, value], i) => {
+    const token = `{${name}}`;
+    const at = rest.indexOf(token);
+    if (at < 0) return;
+    out.push(rest.slice(0, at), <code key={`${name}-${i}`}>{value}</code>);
+    rest = rest.slice(at + token.length);
+  });
+  out.push(rest);
+  return <>{out}</>;
 }
 
 const ACTION_LABEL: Record<AuditRow['action'], string> = {
@@ -55,19 +72,19 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   const [copied, setCopied] = useState('');
   /** 되돌리기 확인 중인 기록과 결과 문구 */
   const [confirming, setConfirming] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<LocalizedText | null>(null);
   /** 앱 정책 파일을 읽거나 쓰지 못한 이유. 있으면 쓰기는 서버에서 차단된다. */
   /** 정책 오류: 코드가 있으면 표시 시점에 지금 언어로 만든다(파일 안 문구는 옛 언어로 굳지 않게). */
-  const [policyError, setPolicyError] = useState<{ code?: string; params?: Record<string, string>; message: string } | null>(null);
+  const [policyError, setPolicyError] = useState<LocalizedText | null>(null);
   /** 정책 파일이 실제로 있는가. false 면 지금은 에이전트 인자만 적용된다. */
   const [policyExists, setPolicyExists] = useState<boolean | null>(null);
   const revert = async (a: AuditRow) => {
     try {
       const r = await window.nops.mcp.revert({ t: a.t, path: a.path });
-      setMessage(r.kind === 'trashed' ? t('mcp.reverted.trashed', { path: a.path }) : t('mcp.reverted.restored', { path: a.path }));
+      setMessage({ key: r.kind === 'trashed' ? 'mcp.reverted.trashed' : 'mcp.reverted.restored', params: { path: a.path } });
       onReverted(a.path, r.kind);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e));
+      setMessage({ message: e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e) });
     }
     setConfirming(null);
     refresh();
@@ -109,7 +126,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
   const initial: McpSettingsConfig = { write: false, folder: 'AI', allowDailyFolder: false, maxWritesPerMinute: 30, name: defaultServerName(info), client: 'claude-code' };
   const current = cfg ?? initial;
   /** 빈 폴더는 입력 중일 수 있으므로 정책 파일에 쓰지 않는다(볼트 전체는 `.`). */
-  const folderProblem = (folder: string) => (folder.trim() === '' ? t('mcp.needFolder') : folderError(folder));
+  const folderProblem = (folder: string): LocalizedText | null => (folder.trim() === '' ? { key: 'mcp.needFolder' } : folderError(folder));
   /** 바뀐 정책 값을 파일(정본)에 쓴다. 파일이 없으면 서버는 기존 인자 동작을 유지한다. */
   const savePolicy = (next: McpSettingsConfig) => {
     const folderIssue = folderProblem(next.folder);
@@ -117,7 +134,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
     let folders: string[];
     if (folderIssue || dailyIssue) {
       if (next.write) {
-        setPolicyError({ message: t('mcp.fixFolderFirst', { issue: folderIssue ?? dailyIssue ?? '' }) });
+        setPolicyError({ key: 'mcp.fixFolderFirst', params: { issue: text(folderIssue ?? dailyIssue) } });
         return; // 켠 상태의 잘못된 폴더는 저장하지 않는다
       }
       folders = [t('mcp.defaultFolder')]; // 끈 상태는 폴더와 무관하므로 정책 파일을 유효하게 남긴다
@@ -176,7 +193,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
         <input type="checkbox" checked={current.write} onChange={(e) => update({ write: e.target.checked })} aria-label={t('mcp.writeLabel')} />
       </label>
       <p className="muted small" data-testid="mcp-policy-note">
-        {withCode('mcp.policySaved', 'file', '.nopsidian/mcp-policy.json')}
+        {withCodes('mcp.policySaved', [['file', '.nopsidian/mcp-policy.json']])}
       </p>
       <p className="muted small" data-testid="mcp-policy-device-note">
         {t('mcp.policyDevice')}
@@ -189,7 +206,10 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
       {policyExists === false && (
         <div className="settings__row" data-testid="mcp-policy-missing">
           <span>
-            {t('mcp.policyMissing', { write: '--write', folder: '--write-folder' })}
+            {withCodes('mcp.policyMissing', [
+              ['write', '--write'],
+              ['folder', '--write-folder'],
+            ])}
             <small className="muted">{t('mcp.policyMissingHint')}</small>
           </span>
           <button type="button" data-testid="mcp-policy-create" onClick={() => savePolicy(current)}>
@@ -208,7 +228,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
           </label>
           {folderIssue && (
             <p className="warn small" data-testid="mcp-folder-warning">
-              {t('mcp.folderBlocked', { issue: folderIssue })}
+              {t('mcp.folderBlocked', { issue: text(folderIssue) })}
             </p>
           )}
           <label className="settings__row">
@@ -225,7 +245,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
           </label>
           {dailyIssue && (
             <p className="warn small" data-testid="mcp-folder-warning">
-              {t('mcp.dailyFix', { issue: dailyIssue })}
+              {t('mcp.dailyFix', { issue: text(dailyIssue) })}
             </p>
           )}
           {!current.allowDailyFolder && !folderIssue && !dailyCovered && (
@@ -283,7 +303,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
           </div>
         </div>
       ) : (
-        <p className="warn small">{t('mcp.noServer', { command: 'pnpm --filter @nopsidian/mcp build' })}</p>
+        <p className="warn small">{withCodes('mcp.noServer', [['command', 'pnpm --filter @nopsidian/mcp build']])}</p>
       )}
       <div className="mcp__audit">
         <div className="mcp__label">
@@ -327,7 +347,7 @@ export function McpSettings({ onOpenNote, onReverted }: { onOpenNote: (path: str
             ))}
           </ul>
         )}
-        {message && <p className="small" role="status" data-testid="mcp-revert-msg">{message}</p>}
+        {message && <p className="small" role="status" data-testid="mcp-revert-msg">{text(message)}</p>}
         <p className="muted small">{t('mcp.revertHint')}</p>
       </div>
     </section>

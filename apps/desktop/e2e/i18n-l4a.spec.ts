@@ -126,3 +126,40 @@ test('깨진 정책 파일도 화면 언어로 안내한다', async () => {
   await expect(page.getByTestId('mcp-settings')).toContainText('정책 파일이 올바른 JSON 이 아니에요');
   await page.keyboard.press('Escape');
 });
+
+test('잘못된 폴더·VSCode 탭·복사·언어 전환이 모두 화면 언어를 따른다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await page.getByTestId('settings-btn').click();
+  await page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: 'English' }).click();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-btn').click();
+  const mcp = page.getByTestId('mcp-settings');
+
+  // VSCode 탭: 경로는 그대로, 설명만 번역
+  await page.getByRole('tab', { name: 'VS Code' }).click();
+  await expect(mcp).toContainText('.vscode/mcp.json (workspace)');
+  const vscode = (await page.getByTestId('mcp-code-vscode').textContent()) ?? '';
+  expect(vscode).toContain('"servers"');
+  expect(vscode).toContain('"type": "stdio"');
+  expect(vscode).not.toMatch(HANGUL);
+
+  // 복사 결과 문구
+  await mcp.getByRole('button', { name: 'Copy' }).click();
+  await expect(mcp.getByRole('button', { name: 'Copied' })).toBeVisible();
+
+  // 잘못된 폴더: 영어 경고 → 한국어 전환 시 즉시 한국어(상태 문자열 재번역)
+  await mcp.getByRole('checkbox', { name: 'Let agents write notes' }).check();
+  const folder = mcp.getByLabel('Folders agents can write');
+  await folder.fill('../bad');
+  const warning = mcp.locator('[data-testid="mcp-folder-warning"]');
+  await expect(warning).toContainText('That path cannot be used as a write folder');
+  expect(await warning.innerText()).not.toMatch(HANGUL);
+
+  // 같은 설정 창 안에서 언어만 바꾼다 — 상태 문구가 즉시 새 언어로 바뀌어야 한다
+  await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: '한국어' }).click();
+  await expect(mcp.locator('[data-testid="mcp-folder-warning"]')).toContainText('쓰기 폴더로 쓸 수 없는 경로예요');
+  await page.getByRole('radiogroup', { name: '언어' }).getByRole('radio', { name: 'English' }).click();
+  await expect(mcp.locator('[data-testid="mcp-folder-warning"]')).toContainText('That path cannot be used as a write folder');
+  await page.keyboard.press('Escape');
+});

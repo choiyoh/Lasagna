@@ -1,5 +1,5 @@
 import { t } from '@nopsidian/i18n';
-import { folderCovers, normalizeFolder } from '@nopsidian/mcp/folders';
+import { folderCovers, normalizeFolder, PolicyError } from '@nopsidian/mcp/folders';
 
 /** `mcp.info` IPC 가 돌려주는 것: 번들된 서버 경로·볼트·앱 실행 파일·패키징 여부 */
 export interface McpInfo {
@@ -55,12 +55,20 @@ export interface McpSnippet {
 export const shellQuote = (s: string) => `"${s.replace(/(["\\$`])/g, '\\$1')}"`;
 
 /** 쓰기 폴더를 서버와 같은 규칙으로 검증한다. 문제가 있으면 화면에 보여 줄 이유, 없으면 null. */
-export function folderError(folder: string): string | null {
+/** 폴더 오류: 코드가 있으면 화면이 지금 언어로 다시 만든다(정책 파일 오류와 같은 방식). */
+export interface FolderError {
+  code?: string;
+  params?: Record<string, string>;
+  message: string;
+}
+
+export function folderError(folder: string): FolderError | null {
   try {
     normalizeFolder(folder);
     return null;
   } catch (e) {
-    return e instanceof Error ? e.message : String(e);
+    const code = e instanceof PolicyError ? e.code : undefined;
+    return { ...(code ? { code, params: e instanceof PolicyError ? e.params : undefined } : {}), message: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -197,7 +205,7 @@ export function mcpSnippet(info: McpInfo, opts: McpSnippetOptions): McpSnippet |
       {
         id: 'vscode',
         label: 'VS Code',
-        target: '.vscode/mcp.json (워크스페이스)',
+        target: t('mcp.vscodeTarget'),
         format: 'json',
         code: vscode,
         hint: t('mcp.vscodeHint'),

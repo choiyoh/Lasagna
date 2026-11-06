@@ -1196,4 +1196,6 @@ export const ko = {
   'mcp.policyErr.noFolders': '쓰기가 켜져 있지만 허용 폴더가 없어요',
   'mcp.policyErr.badFolder': '정책 파일의 폴더가 올바르지 않아요: {message}',
   'mcp.policyNeedFolder': '쓰기를 켜려면 허용 폴더가 하나 이상 필요해요',
+  'mcp.policyErr.badWriteFolder': '쓰기 폴더로 쓸 수 없는 경로예요: {path}',
+  'mcp.vscodeTarget': '.vscode/mcp.json (워크스페이스)',
 } as const

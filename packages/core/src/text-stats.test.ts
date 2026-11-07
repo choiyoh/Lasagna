@@ -51,6 +51,21 @@ describe('글자수 규칙', () => {
     expect(stats('Hello world, again')).toEqual({ chars: 18, charsNoSpace: 16, words: 3 });
   });
 
+  it('코드 블록·인라인 코드는 마크다운 해석 없이 그대로 센다', () => {
+    expect(stats('```md\n# 코드 주석\n- 코드 목록\n**코드 굵게**\n```')).toEqual({ chars: 23, charsNoSpace: 18, words: 8 });
+    expect(stats('`**굵게** # 아님`')).toEqual({ chars: 11, charsNoSpace: 9, words: 3 });
+  });
+
+  it('콜아웃 표식은 빼고 제목·내용만 센다', () => {
+    expect(stats('> [!note] 제목\n> 내용')).toEqual({ chars: 4, charsNoSpace: 4, words: 2 });
+    expect(stats('> [!warning]')).toEqual({ chars: 0, charsNoSpace: 0, words: 0 });
+  });
+
+  it('수식은 원문 LaTeX 을 세지 않는다', () => {
+    expect(stats('$x^2 + y^2$')).toEqual({ chars: 0, charsNoSpace: 0, words: 0 });
+    expect(stats('$$\nE = mc^2\n$$')).toEqual({ chars: 0, charsNoSpace: 0, words: 0 });
+  });
+
   it('5만 자 문서도 빠르게 센다', () => {
     const text = '가나다라마바사 아자차카타파하\n'.repeat(3500).slice(0, 50_000);
     const started = performance.now();

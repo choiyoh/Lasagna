@@ -88,13 +88,13 @@ test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은
   await expect(status).toBeVisible();
   // "# Hello" → 보이는 글자 'Hello' 5자
   // '# Hello' + '본문' → 보이는 글자 7자
-  await expect(page.getByTestId('writer-chars')).toHaveText(/^글자수 7 · 공백 포함$/);
+  await expect(page.getByTestId('writer-chars')).toHaveText(/^7자 · 공백 포함$/);
 
   // 입력하면 150ms 디바운스 뒤 갱신
   await page.locator('.ProseMirror p').last().click();
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type(' world');
-  await expect(page.getByTestId('writer-chars')).toHaveText(/^글자수 13 · 공백 포함$/);
+  await expect(page.getByTestId('writer-chars')).toHaveText(/^13자 · 공백 포함$/);
 
   // 선택 영역 표시
   for (let i = 0; i < 5; i += 1) await page.keyboard.press('Shift+ArrowLeft');
@@ -104,7 +104,7 @@ test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은
   await page.getByTestId('settings-btn').click();
   await page.getByRole('radiogroup', { name: '글자수 기준' }).getByRole('radio', { name: '공백 제외' }).click();
   await page.keyboard.press('Escape');
-  await expect(page.getByTestId('writer-chars')).toHaveText(/^글자수 12 · 공백 제외$/);
+  await expect(page.getByTestId('writer-chars')).toHaveText(/^12자 · 공백 제외$/);
 
   // 끄면 사라지고, 토글 전후 노트 파일은 바이트 단위로 같다(입력으로 바뀐 내용은 그대로)
   await expect.poll(() => readFileSync(notePath, 'utf8'), { timeout: 10_000 }).toContain('world');
@@ -119,7 +119,7 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
   const page = await app.firstWindow();
   await openNote(page);
   await toggleWriter(page, true);
-  await expect(page.getByTestId('writer-chars')).toHaveText(/글자수 \d+ · 공백/);
+  await expect(page.getByTestId('writer-chars')).toHaveText(/\d+자 · 공백/);
 
   // 재시작해도 켜져 있다
   await app.close();
@@ -127,7 +127,7 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
   const again = await app.firstWindow();
   await openNote(again);
   await expect(again.getByTestId('writer-status')).toBeVisible();
-  await expect(again.getByTestId('writer-chars')).toHaveText(/글자수 \d+/);
+  await expect(again.getByTestId('writer-chars')).toHaveText(/\d+자/);
 
   // 영어로 바꾸면 characters · words
   await again.getByTestId('settings-btn').click();
@@ -138,4 +138,29 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
   expect(en).toMatch(/characters/);
   expect(en).toMatch(/words/);
   expect(en).not.toMatch(HANGUL);
+});
+
+test('소스 모드에서도 같은 규칙으로 세고, 공백만 선택하면 선택 표시가 없다', async () => {
+  const page = await app.firstWindow();
+  await openNote(page);
+  await toggleWriter(page, true);
+  const editCount = await page.getByTestId('writer-chars').innerText();
+
+  // 소스 모드로 바꿔도(마크다운 원문 기준) 같은 값 — 두 경로가 같은 규칙을 쓴다
+  await page.keyboard.press('ControlOrMeta+e');
+  await expect(page.getByTestId('source-editor')).toBeVisible();
+  await expect(page.getByTestId('writer-chars')).toHaveText(editCount);
+  // 소스에서 편집해도 숫자가 갱신된다
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type('\n\n소스에서 추가');
+  await expect(page.getByTestId('writer-chars')).not.toHaveText(editCount);
+  await page.keyboard.press('ControlOrMeta+e');
+  await expect(page.getByTestId('note-editor')).toBeVisible();
+
+  // 공백만 선택하면 선택/전체 표시를 띄우지 않는다
+  await page.locator('.ProseMirror').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  for (let i = 0; i < 2; i += 1) await page.keyboard.press('Shift+ArrowLeft');
+  await expect(page.getByTestId('writer-selection')).toHaveCount(0);
 });

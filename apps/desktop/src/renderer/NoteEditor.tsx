@@ -10,7 +10,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
-import { countMarkdown, graphemeCount, type TextStats } from '@nopsidian/core';
+import { countMarkdown, type TextStats } from '@nopsidian/core';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
 import type { DbEmbedHost } from './db/EmbeddedDb';
@@ -140,9 +140,23 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const writer = language.writerMode === true;
   const spacing = language.writerSpacing ?? 'include';
   const [writerStats, setWriterStats] = useState<TextStats | null>(null);
-  const [writerSelected, setWriterSelected] = useState<number | null>(null);
+  /** 좁은 창(920px 이하)에서는 한국어 기준 표기를 '포함/제외'로 줄인다(디자이너 시안). */
+  const [narrow, setNarrow] = useState(() => window.innerWidth <= 920);
+  useEffect(() => {
+    // 테스트 환경(jsdom)에는 matchMedia 가 없을 수 있다 — 없으면 창 폭으로만 판단한다.
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(max-width: 920px)');
+    const onChange = () => setNarrow(mq.matches);
+    setNarrow(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  /** 선택 영역도 전체와 같은 규칙(보이는 글자·줄바꿈 제외·공백 기준)으로 센다. */
+  const [writerSelected, setWriterSelected] = useState<TextStats | null>(null);
   /** 지금 모드(편집/소스)의 마크다운 원문을 돌려주는 함수. 재생성될 때마다 새로 꽂는다. */
   const writerTextRef = useRef<(() => string) | null>(null);
+  /** 소스 모드에서도 글자수가 갱신되도록 소스 편집도 같은 tick 을 올린다. */
+  const bumpDocTick = () => setDocTick((t) => t + 1);
   /** 언어가 바뀌면 에디터를 새로 만든다(문구는 만들 때 잡힌다) — 그 전에 저장하고 커서를 옮겨 둔다 */
   const localeRef = useRef(locale);
   const restoreSel = useRef<{ anchor: number; head: number } | null>(null);
@@ -155,17 +169,19 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const [docTick, setDocTick] = useState(0);
   // 작가 모드 상태줄: 입력 중에는 150ms 모아서 계산한다(5만 자에서도 입력이 끊기지 않게).
   useEffect(() => {
+    // 노트를 바꾸면 이전 노트의 숫자를 남기지 않는다(로딩 중에는 비운다).
     if (!writer) {
       setWriterStats(null);
       setWriterSelected(null);
       return;
     }
+    setWriterStats(null);
     const timer = setTimeout(() => {
       const text = writerTextRef.current?.() ?? '';
       setWriterStats(countMarkdown(text));
     }, 150);
     return () => clearTimeout(timer);
-  }, [writer, docTick, epoch, spacing]);
+  }, [writer, docTick, epoch, spacing, path]);
 
   // 선택 영역 글자수 — 선택이 바뀔 때만(문서 변경과 별개로) 다시 센다.
   useEffect(() => {
@@ -176,14 +192,20 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       if (!root || !selection || selection.rangeCount === 0 || selection.isCollapsed) return setWriterSelected(null);
       if (!root.contains(selection.anchorNode)) return setWriterSelected(null);
       const text = selection.toString();
-      setWriterSelected(text.trim() === '' ? null : graphemeCount(text));
+      if (text.trim() === '') return setWriterSelected(null);
+      // 전체와 같은 규칙으로 센다(마크다운 기호·링크 주소·줄바꿈 제외, 공백 기준 동일).
+      setWriterSelected(countMarkdown(text));
     };
     document.addEventListener('selectionchange', read);
     return () => document.removeEventListener('selectionchange', read);
-  }, [writer, epoch]);
+  }, [writer, epoch, path]);
   useEffect(() => {
     restoreSel.current = null;
   }, [path]);
+  // 편집 ↔ 소스 전환은 마크다운이 같아도 경로가 달라질 수 있으니 바로 다시 센다.
+  useEffect(() => {
+    bumpDocTick();
+  }, [mode]);
   const [pickingIcon, setPickingIcon] = useState(false);
   const [pickingCover, setPickingCover] = useState(false);
   const peekRef = useRef(peek);
@@ -431,7 +453,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     editor.on('change', markDirty);
     editor.on('change', () => setDocTick((t) => t + 1));
     // 작가 모드 글자수는 **저장과 같은 원문**으로 센다 — 편집 모드와 소스 모드가 같은 결과를 내야 한다.
-    writerTextRef.current = () => (current === 'source' && source ? source.getText() : serializeDocument(editor.getDocument(), baseline));
+    writerTextRef.current = () =>
+      modeRef.current === 'source' && source ? source.getText() : serializeDocument(editor.getDocument(), baseline);
 
     // ── 개요 패널: 제목 목록을 알리고, 누르면 그 제목으로 이동 ──
     let outlineTimer: ReturnType<typeof setTimeout> | undefined;
@@ -493,7 +516,13 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
           // 소스 편집기(CodeMirror)는 처음 쓸 때 불러온다
           const { createSourceEditor } = await import('@nopsidian/editor/nops/source');
           if (disposed) return;
-          source = createSourceEditor(sourceHost, { text: currentContent(), onChange: markDirty });
+          source = createSourceEditor(sourceHost, {
+            text: currentContent(),
+            onChange: () => {
+              markDirty();
+              bumpDocTick();
+            },
+          });
         } else {
           source.setText(currentContent());
         }
@@ -735,20 +764,23 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       {writer && writerStats && (
         <div className="note-editor__writer" data-testid="writer-status" aria-live="off">
           <span data-testid="writer-chars">
-            {locale === 'ko'
-              ? // 한국어(웹소설 기준)는 글자수만 — 단어 수는 넣지 않는다
-                t(spacing === 'include' ? 'writer.charsOnly' : 'writer.charsNoSpaceOnly', {
-                  count: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace),
-                })
-              : t(spacing === 'include' ? 'writer.chars' : 'writer.charsNoSpace', {
-                  count: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace),
-                  words: formatNumber(writerStats.words),
-                })}
+            {t(
+              narrow && locale === 'ko'
+                ? // 좁은 창(920px 이하)에서는 '공백 포함' → '포함' 으로 줄인다
+                  spacing === 'include'
+                  ? 'writer.charsShort'
+                  : 'writer.charsNoSpaceShort'
+                : spacing === 'include'
+                  ? 'writer.chars'
+                  : 'writer.charsNoSpace',
+              { count: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace) },
+            )}
+            {locale === 'en' && <> · {t('writer.words', { words: formatNumber(writerStats.words) })}</>}
           </span>
           {writerSelected !== null && (
             <span className="note-editor__writer-sel" data-testid="writer-selection">
               {t('writer.selection', {
-                selected: formatNumber(writerSelected),
+                selected: formatNumber(spacing === 'include' ? writerSelected.chars : writerSelected.charsNoSpace),
                 total: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace),
               })}
             </span>

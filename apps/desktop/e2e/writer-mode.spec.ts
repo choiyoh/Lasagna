@@ -135,7 +135,8 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
   await expect(again.locator('aside.sidebar').getByRole('button', { name: 'Other', exact: true })).toBeVisible({ timeout: 20_000 });
   await again.locator('aside.sidebar').getByRole('button', { name: 'Other', exact: true }).click();
   const otherCount = await again.getByTestId('writer-chars').innerText();
-  await expect(again.getByTestId('writer-chars')).toHaveText(/\d+자 · 공백 포함$/);
+  // 기준(공백 포함/제외)은 앞에서 저장된 값을 따른다
+  await expect(again.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 (포함|제외)$/);
 
   // 빠른 전환기로 노트를 바꿔도 상태줄이 새 노트 값으로 갱신된다
   await again.keyboard.press('ControlOrMeta+o');
@@ -231,6 +232,8 @@ test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type('추가 문장');
   await expect(page.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 포함$/);
+  // 편집분이 저장될 때까지 기다린다(저장 전에 밖에서 바꾸면 3-way 병합이 일어난다).
+  await expect(page.locator('.note-editor__status')).toHaveAttribute('data-state', 'saved', { timeout: 15_000 });
 
   // 밖에서 파일을 통째로 바꾸면(무음 reload) 상태줄도 새 내용 기준이어야 한다
   const editedCount = await page.getByTestId('writer-chars').innerText();

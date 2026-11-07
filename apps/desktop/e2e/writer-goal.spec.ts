@@ -222,7 +222,8 @@ test('읽기 전용 볼트에서 목표 저장이 실패하면 화면 값이 유
   await toggleWriter(page, true);
   const file = path.join(vaultDir, 'NoFm.md');
   writeFileSync(file, '---\ngoal_chars: 500\n---\n# 제목\n\n본문 문장\n');
-  await expect(page.getByTestId('writer-goal-text')).toContainText('/500자');
+  // 앞 테스트에서 영어로 바꿨을 수 있다 — 숫자 부분만 언어와 무관하게 확인한다
+  await expect(page.getByTestId('writer-goal-text')).toContainText(/\/500(?!\d)/);
   const { chmodSync } = await import('node:fs');
   chmodSync(file, 0o444);
   chmodSync(vaultDir, 0o555);

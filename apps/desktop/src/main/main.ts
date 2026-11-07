@@ -563,7 +563,8 @@ function registerHandlers() {
   handle('db.list', async () => {
     const v = requireVault();
     await v.index.ready;
-    return v.index.query('databases');
+    // 제목 없는(root) 데이터베이스의 기본 이름도 앱 언어를 따르게 locale 을 함께 넘긴다.
+    return v.index.query('databases', currentLanguage().locale) as never;
   });
   handle('db.row', async ({ path: rel }) => {
     const v = requireVault();

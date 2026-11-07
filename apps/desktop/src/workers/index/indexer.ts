@@ -640,9 +640,9 @@ export class Indexer {
       .all(tag, like) as { path: string; title: string }[];
   }
 
-  /** 데이터베이스(`_db.yaml` 이 있는 폴더) 목록 */
-  databases() {
-    return listDatabases(this.db, this.root);
+  /** 데이터베이스(`_db.yaml` 이 있는 폴더) 목록. `locale` 은 요청 시점 언어(문구용). */
+  databases(locale?: 'ko' | 'en') {
+    return listDatabases(this.db, this.root, locale);
   }
 
   databaseRowPaths(folder: string) {

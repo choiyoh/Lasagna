@@ -117,7 +117,7 @@ export function docsUrl(f: { anchor: string; anchorEn: string }, locale: 'ko' | 
 }
 
 /** 저장된 실패(kind 가 있으면)를 지금 언어로 다시 만든다 — 언어를 바꿔도 옛 문장이 남지 않게. */
-function localizedFailure(f: SyncFailure | null): SyncFailure | null {
+export function localizedFailure(f: SyncFailure | null): SyncFailure | null {
   if (!f?.kind) return f;
   const entry = FAILURES[f.kind];
   // 문서 링크도 지금 언어로 다시 만든다(영어 앱이면 영어 문서·영어 앵커).

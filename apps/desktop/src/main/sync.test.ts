@@ -321,18 +321,58 @@ describe('진단 확인의 실패 처리', () => {
 });
 
 describe('언어를 바꾼 뒤의 실패 문구', () => {
-  it('저장된 실패(kind)는 지금 언어로 다시 만들고, 성공한 지금 확인 경로도 같은 규칙을 쓴다', async () => {
-    const { controller } = await controllerFor({ error: 'Drive 인증 실패', kind: 'auth', key: 'auth', code: 'HTTP 401' });
+  it('ko 로 기록된 남는 실패(PARTIAL)를 en 으로 바꾼 뒤 check() 성공 응답에서 영어로 다시 그린다', async () => {
+    // 1) 파일 동기화 실패(PARTIAL) → 2) '지금 확인' 성공(폴더 있음) → PARTIAL 은 지우지 않고 남긴다
+    const success = {
+      result: {
+        checkedAt: 2,
+        pendingChanges: 0,
+        folder: { exists: true, id: 'f1', name: 'v', checkedAt: 2 },
+        accountEmail: null,
+        tokenExpiresAt: Date.now() + 600_000,
+      },
+    };
+    const { controller } = await controllerFor([{ error: '일부 파일 실패', kind: 'other', key: 'partial', code: 'PARTIAL' }, success]);
     try {
+      setLocale('ko');
       const ko = await controller.check();
-      expect(ko.lastFailure).toMatchObject({ code: 'HTTP 401', title: 'Google 로그인을 확인하지 못했어요' });
+      expect(ko.lastFailure).toMatchObject({ code: 'PARTIAL', title: '일부 파일을 동기화하지 못했어요' });
+
+      // 언어를 바꾸고 성공 응답을 받아도 남는 실패 문구는 지금 언어로 다시 그린다
       setLocale('en');
       const en = await controller.check();
-      expect(en.lastFailure).toMatchObject({ code: 'HTTP 401', title: 'Could not verify the Google sign-in' });
+      expect(en.folder.exists).toBe(true);
+      expect(en.lastFailure).toMatchObject({ code: 'PARTIAL', title: 'Some files could not be synced' });
+      expect(`${en.lastFailure?.title ?? ''} ${en.lastFailure?.action ?? ''}`).not.toMatch(/[가-힣]/);
+
       setLocale('ko');
+      const back = await controller.check();
+      expect(back.lastFailure).toMatchObject({ title: '일부 파일을 동기화하지 못했어요' });
+    } finally {
+      setLocale('ko');
+      await controller.detachVault();
+    }
+  });
+
+  it('성공 응답이 연결 실패를 지우면 lastFailure 는 null 이다', async () => {
+    const success = {
+      result: {
+        checkedAt: 2,
+        pendingChanges: 0,
+        folder: { exists: true, id: 'f1', name: 'v', checkedAt: 2 },
+        accountEmail: null,
+        tokenExpiresAt: Date.now() + 600_000,
+      },
+    };
+    setLocale('ko');
+    const { controller } = await controllerFor([{ error: 'Drive 인증 실패', kind: 'auth', key: 'auth', code: 'HTTP 401' }, success]);
+    try {
+      expect((await controller.check()).lastFailure).toMatchObject({ code: 'HTTP 401' });
+      const after = await controller.check();
+      expect(after.folder.exists).toBe(true);
+      expect(after.lastFailure).toBeNull();
     } finally {
       await controller.detachVault();
-      setLocale('ko');
     }
   });
 });

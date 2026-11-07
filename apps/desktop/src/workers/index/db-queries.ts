@@ -78,7 +78,9 @@ export interface DatabaseInfo {
   issues: number;
 }
 
-export function listDatabases(db: Database.Database, root: string): DatabaseInfo[] {
+export function listDatabases(db: Database.Database, root: string, locale?: 'ko' | 'en'): DatabaseInfo[] {
+  // 워커 스레드는 요청마다 지금 언어를 받아 문구를 만든다.
+  if (locale) setLocale(locale);
   const folders = dbFolders(db);
   const out: DatabaseInfo[] = [];
   for (const folder of folders) {

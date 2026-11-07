@@ -3,6 +3,7 @@ import { t } from '@nopsidian/i18n';
 import { CsvImportDialog } from './CsvImportDialog';
 import { DatabaseIcon } from '../icons';
 import { userMessage } from '../user-message';
+import { createReload } from '../db-refresh';
 
 interface Props {
   onOpen: (folder: string) => void;
@@ -19,15 +20,16 @@ export function DbList({ onOpen }: Props) {
   useEffect(() => {
     const load = () => void window.nops.db.list().then(setDbs).catch(() => undefined);
     load();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const again = () => {
-      clearTimeout(timer);
-      timer = setTimeout(load, 500);
-    };
-    // 언어가 바뀌면 제목 없는 데이터베이스의 기본 이름도 새 언어로 다시 읽는다.
-    const offs = [window.nops.on('note.changed', again), window.nops.on('asset.changed', again), window.nops.on('language.changed', again)];
+    const reload = createReload(500, load);
+    // 언어가 바뀌면 제목 없는 데이터베이스의 기본 이름도 새 언어로 즉시 다시 읽는다
+    // (노트·첨부 변경은 잠깐 모아 읽는다 — DatabaseScreen 과 같은 체감).
+    const offs = [
+      window.nops.on('note.changed', reload.schedule),
+      window.nops.on('asset.changed', reload.schedule),
+      window.nops.on('language.changed', reload.now),
+    ];
     return () => {
-      clearTimeout(timer);
+      reload.cancel();
       offs.forEach((o) => o());
     };
   }, []);

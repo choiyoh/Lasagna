@@ -196,7 +196,9 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         if (!src) return setWriterSelected(null);
         const { from, to } = src.view.state.selection.main;
         if (from === to) return setWriterSelected(null);
-        setWriterSelected(countMarkdownRange(src.getText(), from, to));
+        const part = countMarkdownRange(src.getText(), from, to);
+        // 보이는 글자가 하나도 없는 선택(URL·이미지 경로·펜스 표식)은 선택 표시를 띄우지 않는다.
+        setWriterSelected(part.chars === 0 && part.charsNoSpace === 0 ? null : part);
         return;
       }
       const root = rootRef.current;
@@ -650,7 +652,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   }, []);
 
   return (
-    <div className="note-editor" data-mode={mode} ref={rootRef}>
+    <div className={writer ? 'note-editor note-editor--writer' : 'note-editor'} data-mode={mode} ref={rootRef}>
       {find && mode === 'edit' && editorRef.current && (
         <FindBar
           view={editorRef.current.getView()}

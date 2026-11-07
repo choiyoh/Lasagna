@@ -111,3 +111,50 @@ describe('columns·toggle 표식과 선택 구간', () => {
     }
   });
 });
+
+describe('코드 구간은 마크다운을 해석하지 않는다(회귀)', () => {
+  it('펜스 코드 안의 마크다운·HTML·속성·콜아웃·파이프를 그대로 센다', () => {
+    expect(stats('```\n[x](y)\n```')).toEqual({ chars: 6, charsNoSpace: 6, words: 1 });
+    expect(stats('```\n{.toggle}\n```')).toEqual({ chars: 9, charsNoSpace: 9, words: 1 });
+    expect(stats('```\n[!note]\n```')).toEqual({ chars: 7, charsNoSpace: 7, words: 1 });
+    expect(stats('```\n<b>\n```')).toEqual({ chars: 3, charsNoSpace: 3, words: 1 });
+    expect(stats('```\na|b\n```')).toEqual({ chars: 3, charsNoSpace: 3, words: 1 });
+    expect(stats('```md\n# 제목\n- 항목\n**굵게**\n```')).toEqual({ chars: 14, charsNoSpace: 12, words: 5 });
+  });
+
+  it('인라인 코드 안의 표식도 그대로 센다', () => {
+    expect(stats('`[x](y)`')).toEqual({ chars: 6, charsNoSpace: 6, words: 1 });
+    expect(stats('`{.toggle}`')).toEqual({ chars: 9, charsNoSpace: 9, words: 1 });
+    expect(stats('`[!note]`')).toEqual({ chars: 7, charsNoSpace: 7, words: 1 });
+    expect(stats('`<b>`')).toEqual({ chars: 3, charsNoSpace: 3, words: 1 });
+    expect(stats('`a|b`')).toEqual({ chars: 3, charsNoSpace: 3, words: 1 });
+  });
+});
+
+describe('본문 중간의 리터럴은 보이는 글자다', () => {
+  it('중괄호·콜아웃 모양 문자열도 본문에서는 그대로 센다', () => {
+    const attr = '그는 {이상한} 표정';
+    expect(visibleText(attr)).toBe(attr);
+    expect(stats(attr)).toEqual({ chars: 11, charsNoSpace: 9, words: 3 });
+    const callout = '기호 [!note] 텍스트';
+    expect(visibleText(callout)).toBe(callout);
+    expect(stats(callout)).toEqual({ chars: 14, charsNoSpace: 12, words: 3 });
+  });
+});
+
+describe('성능(마스크 캐시)', () => {
+  it('12만 자 전체 계산 ≤ 50ms, 캐시된 마스크의 선택 질의는 아주 빠르다', () => {
+    const big = ('문장 하나를 길게 씁니다. 대사 "안녕" 그리고 **강조** [링크](https://x.y/z)\n').repeat(2200).slice(0, 120_000);
+    const t0 = performance.now();
+    const total = countMarkdown(big);
+    const ms = performance.now() - t0;
+    expect(total.chars).toBeGreaterThan(50_000);
+    expect(ms).toBeLessThanOrEqual(50);
+
+    // 두 번째 호출은 캐시를 쓴다 → 선택 질의(임의 구간) 1ms 이내
+    const q0 = performance.now();
+    for (let k = 0; k < 50; k += 1) countMarkdownRange(big, 1000 + k, 1200 + k);
+    const qms = (performance.now() - q0) / 50;
+    expect(qms).toBeLessThanOrEqual(1);
+  });
+});

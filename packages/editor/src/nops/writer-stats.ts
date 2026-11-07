@@ -11,17 +11,29 @@ export function editorTotalStats(doc: PMNode, baseline: Baseline | null): TextSt
   return countMarkdown(serializeDocument(doc, baseline));
 }
 
-/** 선택 구간 글자수 — 총계와 같은 계열(노드 값)로 세고, 전체 선택은 총계와 항등. */
+/** 선택이 한 텍스트블록(문단·제목·목록 항목 등) 안에 있으면 그 텍스트만 돌려준다. */
+export function singleTextblockText(doc: PMNode, from: number, to: number): string | null {
+  const from$ = doc.resolve(from);
+  const to$ = doc.resolve(to);
+  if (from$.parent !== to$.parent || !from$.parent.isTextblock) return null;
+  return doc.textBetween(from, to, '\n', '');
+}
+
+/**
+ * 선택 구간 글자수.
+ * - 전체 선택은 총계와 항등
+ * - **한 텍스트블록 안 선택은 직렬화하지 않고** 그 텍스트를 같은 글자수 함수로 센다(작가의 가장 흔한 선택 — 정확해야 한다)
+ * - 여러 블록에 걸친 선택만 블록 구분자 텍스트 + 클램프
+ */
 export function editorSelectionStats(doc: PMNode, from: number, to: number, total: TextStats | null): TextStats | null {
   const size = doc.content.size;
   if (from === to) return null;
-  // 전체 선택은 총계와 항등(특수 케이스)
   if (from <= 0 && to >= size && total) return total;
-  // 구간에 걸친 텍스트만(블록 구분자 `\n`) — 컨테이너 표식은 텍스트가 아니라 자동 제외
   // 총계가 아직 없으면 선택 표시도 하지 않는다(클램프를 우회한 큰 수가 보이지 않게).
   if (!total) return null;
-  const stats = countPlain(doc.textBetween(from, to, '\n', ''));
-  // 블록 경계를 가로지르는 선택은 컨테이너 일부가 텍스트로 잡혀 총계보다 커질 수 있어 클램프한다.
+  const inline = singleTextblockText(doc, from, to);
+  const stats = countPlain(inline ?? doc.textBetween(from, to, '\n', ''));
+  // 블록 경계를 가로지르는 선택은 컨테이너 일부가 텍스트로 잡혀 총계보다 커질 수 있어 클램프한다(안전장치).
   return {
     chars: Math.min(stats.chars, total.chars),
     charsNoSpace: Math.min(stats.charsNoSpace, total.charsNoSpace),

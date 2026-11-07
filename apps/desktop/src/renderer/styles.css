@@ -112,7 +112,7 @@ button.link { color: var(--muted); }
 .note-editor__status { color: var(--muted); pointer-events: none; padding-right: 6px; }
 /* 작가 모드 글자수 상태줄 — 작가 모드일 때만 그린다(일반 모드 픽셀 불변) */
 /* 작가 모드에서만 에디터 열을 flex column 으로 만들어, 짧은 노트에서도 상태줄이 열 하단에 붙는다. */
-.note-editor--writer { display: flex; flex-direction: column; min-height: 100%; }
+.note-editor--writer { display: flex; flex-direction: column; min-height: 100%; padding-bottom: 24px; }
 .note-editor--writer .note-editor__host,
 .note-editor--writer .note-editor__source { flex: 1 1 auto; }
 /* 작가 모드 글자수 상태줄 — 긴 문서에서는 스크롤과 무관하게 뷰포트 하단에 머문다. */

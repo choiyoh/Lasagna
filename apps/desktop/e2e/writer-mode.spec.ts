@@ -139,7 +139,15 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
   writeFileSync(other, '# Other\n\n짧은 글\n');
   await expect(again.locator('aside.sidebar').getByRole('button', { name: 'Other', exact: true })).toBeVisible({ timeout: 20_000 });
   await again.locator('aside.sidebar').getByRole('button', { name: 'Other', exact: true }).click();
+  const otherCount = await again.getByTestId('writer-chars').innerText();
   await expect(again.getByTestId('writer-chars')).toHaveText(/\d+자 · 공백 포함$/);
+
+  // 빠른 전환기로 노트를 바꿔도 상태줄이 새 노트 값으로 갱신된다
+  await again.keyboard.press('ControlOrMeta+o');
+  await again.keyboard.type('Hello');
+  await again.keyboard.press('Enter');
+  await expect(again.locator('.ProseMirror')).toHaveText(/Hello/);
+  await expect(again.getByTestId('writer-chars')).not.toHaveText(otherCount);
 
   // 영어로 바꾸면 characters · words
   await again.getByTestId('settings-btn').click();

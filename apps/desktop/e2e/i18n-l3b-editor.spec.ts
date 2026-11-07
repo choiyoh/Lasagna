@@ -55,7 +55,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
   }
 }
 
-test('English smoke: switching language while editing keeps the draft and localizes the menus', async () => {
+test('English smoke: switching language while editing keeps the draft and localizes the menus @foreground', async () => {
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
 
@@ -177,7 +177,7 @@ test('저장이 실패하면 언어를 바꿔도 미저장 편집을 잃지 않�
   await expect.poll(() => readFileSync(path.join(vaultDir, 'Hello.md'), 'utf8'), { timeout: 10_000 }).toContain('저장 실패 초안!');
 });
 
-test('설정에서 언어를 바꿔도 대화상자 포커스를 훔치지 않고, 에디터에서 바꾸면 커서 자리에서 이어 쓴다', async () => {
+test('설정에서 언어를 바꿔도 대화상자 포커스를 훔치지 않고, 에디터에서 바꾸면 커서 자리에서 이어 쓴다 @foreground', async () => {
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   await page.locator('aside.sidebar').getByRole('button', { name: 'Hello', exact: true }).click();

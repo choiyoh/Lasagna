@@ -204,6 +204,27 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
               />
             </label>
             {language.writerMode === true && (
+              <label className="settings__row">
+                <span>
+                  {t('settings.writerDailyGoal')}
+                  <small className="muted">{t('settings.writerDailyGoalHint')}</small>
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  className="settings__input"
+                  data-testid="writer-daily-goal"
+                  aria-label={t('settings.writerDailyGoal')}
+                  value={language.writerDailyGoal ?? ''}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    void changeWriterSettings({ dailyGoal: Number.isFinite(value) && value > 0 ? Math.floor(value) : null }).catch(() => setWriterError(true));
+                  }}
+                />
+              </label>
+            )}
+            {language.writerMode === true && (
               <div className="settings__row">
                 <span>{t('settings.writerSpacing')}</span>
                 <RadioSeg

@@ -926,3 +926,20 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
 .emptystate__suggestion-count { color: var(--muted); }
 .emptystate__reset { margin-top: 2px; padding: 0; border: 0; background: none; color: var(--accent); font-size: 12.5px; line-height: 1.5; text-align: center; }
 .emptystate__reset:hover { text-decoration: underline; }
+/* 작가 모드 상태줄: 문서 목표 진행 · 오늘 쓴 글자수 (일반 모드에는 DOM 자체가 없다) */
+.note-editor__goal { display: inline-flex; align-items: center; gap: 7px; }
+.note-editor__goalbar { width: 96px; height: 4px; border-radius: 99px; background: var(--border); overflow: hidden; }
+.note-editor__goalbar i { display: block; height: 100%; background: var(--accent); }
+.note-editor__goal[data-over='1'] .note-editor__goalbar i { background: var(--warn); }
+.note-editor__goalnum { font-variant-numeric: tabular-nums; }
+.note-editor__goalover { color: var(--warn); font-variant-numeric: tabular-nums; }
+.note-editor__goalset { color: var(--muted); border: 0; background: none; padding: 0; font: inherit; cursor: pointer; text-decoration: underline dotted; }
+.note-editor__goalbtn { color: var(--muted); border: 0; background: none; padding: 0 2px; font: inherit; cursor: pointer; }
+.note-editor__goalbtn:hover { color: var(--fg); }
+.note-editor__goalform { display: inline-flex; align-items: center; gap: 6px; }
+.note-editor__goalinput { width: 92px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; font-variant-numeric: tabular-nums; }
+.note-editor__today { color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 920px) {
+  .note-editor__goalbar { width: 64px; }
+  .note-editor__today { display: none; }
+}

@@ -207,6 +207,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     setNoteIcon,
     renameNoteTitle,
     setNoteCover,
+    setNoteGoal,
     moveEntries,
     moveRelative,
     deleteEntry,
@@ -556,6 +557,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                     onSetIcon={(ic) => void setNoteIcon(p, ic)}
                     cover={notes.find((n) => n.path === p)?.cover ?? null}
                     onSetCover={(c) => void setNoteCover(p, c)}
+                    onSetGoal={(g) => void setNoteGoal(p, g)}
                   />
                 </ErrorBoundary>
               )}
@@ -619,6 +621,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                   onSetIcon={(ic) => void setNoteIcon(p, ic)}
                   cover={notes.find((n) => n.path === p)?.cover ?? null}
                   onSetCover={(c) => void setNoteCover(p, c)}
+                  onSetGoal={(g) => void setNoteGoal(p, g)}
                 />
               </ErrorBoundary>
             )}

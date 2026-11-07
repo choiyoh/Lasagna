@@ -13,9 +13,11 @@ export interface AppSettings {
   writerMode?: boolean;
   /** 글자수 기준. 기본 공백 포함(잠정) */
   writerSpacing?: WriterSpacing;
+  /** 일일 목표 글자수(작가 모드 전역). 없거나 0 이하면 목표 없음 */
+  writerDailyGoal?: number | null;
 }
 
-export const DEFAULT_APP_SETTINGS: AppSettings = { version: 1, language: 'system', writerMode: false, writerSpacing: 'include' };
+export const DEFAULT_APP_SETTINGS: AppSettings = { version: 1, language: 'system', writerMode: false, writerSpacing: 'include', writerDailyGoal: null };
 const WRITER_SPACINGS: readonly WriterSpacing[] = ['include', 'exclude'];
 
 const LANGUAGES: readonly LanguageSetting[] = ['system', 'ko', 'en'];
@@ -29,12 +31,14 @@ export function parseAppSettings(raw: string): AppSettings {
       return DEFAULT_APP_SETTINGS;
     }
     // 작가 모드 필드는 선택 — 없거나 이상하면 기본값(꺼짐·공백 포함)으로 읽는다.
-    const rawWriter = data as { writerMode?: unknown; writerSpacing?: unknown };
+    const rawWriter = data as { writerMode?: unknown; writerSpacing?: unknown; writerDailyGoal?: unknown };
     const writerMode = typeof rawWriter.writerMode === 'boolean' ? rawWriter.writerMode : false;
     const writerSpacing = WRITER_SPACINGS.includes(rawWriter.writerSpacing as WriterSpacing)
       ? (rawWriter.writerSpacing as WriterSpacing)
       : 'include';
-    return { version: 1, language: data.language as LanguageSetting, writerMode, writerSpacing };
+    const goal = rawWriter.writerDailyGoal;
+    const writerDailyGoal = typeof goal === 'number' && Number.isFinite(goal) && goal > 0 ? Math.floor(goal) : null;
+    return { version: 1, language: data.language as LanguageSetting, writerMode, writerSpacing, writerDailyGoal };
   } catch {
     return DEFAULT_APP_SETTINGS;
   }
@@ -76,11 +80,12 @@ export class AppSettingsStore {
   }
 
   /** 작가 모드 설정 — 준 값만 바꾸고 나머지는 그대로 둔다. */
-  setWriter(next: { mode?: boolean; spacing?: WriterSpacing }): AppSettings {
+  setWriter(next: { mode?: boolean; spacing?: WriterSpacing; dailyGoal?: number | null }): AppSettings {
     const merged: AppSettings = {
       ...this.current,
       ...(next.mode === undefined ? {} : { writerMode: next.mode }),
       ...(next.spacing === undefined ? {} : { writerSpacing: next.spacing }),
+      ...(next.dailyGoal === undefined ? {} : { writerDailyGoal: next.dailyGoal === null || next.dailyGoal <= 0 ? null : Math.floor(next.dailyGoal) }),
     };
     writeAppSettings(this.file, merged);
     this.current = merged;

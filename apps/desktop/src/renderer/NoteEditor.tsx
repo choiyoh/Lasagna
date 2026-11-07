@@ -1,4 +1,4 @@
-import { formatNumber, t } from '@nopsidian/i18n';
+import { t } from '@nopsidian/i18n';
 import { useLanguage, useLocale } from './useLocale';
 import { useEffect, useRef, useState } from 'react';
 import type { Editor, NopsPeekHost } from '@nopsidian/editor/nops';
@@ -11,6 +11,7 @@ import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
 import { countMarkdown, type TextStats } from '@nopsidian/core';
+import { writerCountsText, writerSelectionText } from './writer-status';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
 import type { DbEmbedHost } from './db/EmbeddedDb';
@@ -763,26 +764,12 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       <div ref={sourceHostRef} className="note-editor__source" data-testid="source-editor" hidden={mode === 'edit'} />
       {writer && writerStats && (
         <div className="note-editor__writer" data-testid="writer-status" aria-live="off">
-          <span data-testid="writer-chars">
-            {t(
-              narrow && locale === 'ko'
-                ? // 좁은 창(920px 이하)에서는 '공백 포함' → '포함' 으로 줄인다
-                  spacing === 'include'
-                  ? 'writer.charsShort'
-                  : 'writer.charsNoSpaceShort'
-                : spacing === 'include'
-                  ? 'writer.chars'
-                  : 'writer.charsNoSpace',
-              { count: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace) },
-            )}
-            {locale === 'en' && <> · {t('writer.words', { words: formatNumber(writerStats.words) })}</>}
-          </span>
-          {writerSelected !== null && (
+          {writerSelected === null ? (
+            <span data-testid="writer-chars">{writerCountsText({ locale, spacing, stats: writerStats, narrow })}</span>
+          ) : (
+            // 선택 중에는 선택/전체만 보여 준다(글자수 줄은 숨긴다).
             <span className="note-editor__writer-sel" data-testid="writer-selection">
-              {t('writer.selection', {
-                selected: formatNumber(spacing === 'include' ? writerSelected.chars : writerSelected.charsNoSpace),
-                total: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace),
-              })}
+              {writerSelectionText({ locale, spacing, stats: writerStats, selected: writerSelected })}
             </span>
           )}
         </div>

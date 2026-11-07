@@ -99,6 +99,8 @@ test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은
   // 선택 영역 표시
   for (let i = 0; i < 5; i += 1) await page.keyboard.press('Shift+ArrowLeft');
   await expect(page.getByTestId('writer-selection')).toContainText(/선택 5 \/ 전체 13/);
+  // 선택 중에는 글자수 줄을 숨긴다(선택/전체만)
+  await expect(page.getByTestId('writer-chars')).toHaveCount(0);
 
   // 공백 제외로 바꾸면 기준 표기가 바뀐다
   await page.getByTestId('settings-btn').click();
@@ -163,4 +165,29 @@ test('소스 모드에서도 같은 규칙으로 세고, 공백만 선택하면 
   await page.keyboard.press('ControlOrMeta+End');
   for (let i = 0; i < 2; i += 1) await page.keyboard.press('Shift+ArrowLeft');
   await expect(page.getByTestId('writer-selection')).toHaveCount(0);
+});
+
+test('긴 회차에서도 글자수 상태줄은 화면 하단에 붙어 있다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  const longPath = path.join(vaultDir, 'Long.md');
+  writeFileSync(longPath, `# Long\n\n${'문장 하나입니다. '.repeat(4000)}\n`);
+  // 파일 감시가 목록에 반영될 때까지 기다린 뒤 연다
+  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Long', exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.locator('aside.sidebar').getByRole('button', { name: 'Long', exact: true }).click();
+  await toggleWriter(page, true);
+
+  const bar = page.getByTestId('writer-status');
+  await expect(bar).toBeVisible();
+  // 스크롤을 문서 끝/중간으로 옮겨도 상태줄은 뷰포트 안(하단)에 있다
+  const viewport = page.viewportSize() ?? { width: 1200, height: 800 };
+  for (const where of ['middle', 'end']) {
+    if (where === 'end') await page.keyboard.press('ControlOrMeta+End');
+    else await page.keyboard.press('ControlOrMeta+Home');
+    await page.waitForTimeout(300);
+    const box = await bar.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 1);
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+  }
 });

@@ -111,7 +111,8 @@ button.link { color: var(--muted); }
 [data-platform='mac'] .note-editor__bar { top: 30px; }
 .note-editor__status { color: var(--muted); pointer-events: none; padding-right: 6px; }
 /* 작가 모드 글자수 상태줄 — 작가 모드일 때만 그린다(일반 모드 픽셀 불변) */
-.note-editor__writer { display: flex; gap: 12px; align-items: center; margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+/* 작가 모드 글자수 상태줄 — 스크롤과 무관하게 에디터 열 하단에 붙어 있는다(작가 모드에서만 렌더). */
+.note-editor__writer { position: sticky; bottom: 0; z-index: 4; display: flex; justify-content: flex-end; gap: 10px; align-items: center; margin-top: 24px; padding: 8px 0 10px; border-top: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .note-editor__writer-sel { color: var(--fg); }
 .note-editor__mode { padding: 3px 8px; border: 0; border-radius: var(--radius); color: var(--muted); background: transparent; }
 .note-editor__mode:hover { color: var(--fg); background: var(--hover); }

@@ -36,6 +36,7 @@ import { resolveLocale, setLocale, t } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
+import { e2eBackground } from './e2e-mode';
 import { runMcpStdio } from './mcp-stdio';
 import { installProtocols, registerSchemes } from './protocols';
 import {
@@ -98,8 +99,17 @@ if (mcpStdio) {
   void runMcpStdio(mcpStdioArgs(process.argv), { packaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath() }).then((code) => app.exit(code));
 }
 
+/** 테스트 빌드에서만 켜지는 '창을 띄우지 않는' 모드(배포 앱은 항상 false). */
+const BACKGROUND_E2E = e2eBackground();
+
 if (!mcpStdio) {
   registerSchemes();
+
+  // macOS: 테스트 중에는 독 아이콘·전면 앱 전환도 하지 않는다(사용자 화면을 건드리지 않게).
+  if (BACKGROUND_E2E) {
+    app.dock?.hide();
+    app.setActivationPolicy?.('accessory');
+  }
 
   if (!app.requestSingleInstanceLock()) app.quit();
 }
@@ -119,7 +129,18 @@ function createWindow(openPath?: string) {
   });
   registerWebContents(win.webContents);
   hardenWebContents(win.webContents, devServerUrl);
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    if (!BACKGROUND_E2E) {
+      win.show();
+      return;
+    }
+    // e2e: 화면 밖에 두고 비활성으로만 띄운다 — 포커스를 가져오지 않아 사용자가 쓰는 창이 그대로 남는다.
+    // (브라우저 창 자체는 존재해야 Playwright 가 붙을 수 있다.)
+    win.setBounds({ x: -20000, y: -20000, width: 1200, height: 800 });
+    win.showInactive();
+    // 창이 비활성이어도 DOM 포커스·입력은 되도록 webContents 에 포커스를 준다.
+    win.webContents.focus();
+  });
   const query = openPath ? `?open=${encodeURIComponent(openPath)}` : '';
   void win.loadURL(`${devServerUrl ?? `${APP_ORIGIN}/index.html`}${query}`);
   if (!app.isPackaged && process.env.NOPS_DEVTOOLS === '1') win.webContents.openDevTools({ mode: 'detach' });

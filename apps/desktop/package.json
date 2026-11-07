@@ -13,6 +13,7 @@
     "e2e": "NOPS_E2E=1 electron-forge package && node scripts/check-builtin-secrets.mjs && playwright test",
     "check:builtin": "node scripts/check-builtin-secrets.mjs",
     "e2e:run": "playwright test",
+    "e2e:fg": "NOPS_E2E=1 electron-forge package && node scripts/check-builtin-secrets.mjs && NOPS_E2E_BACKGROUND=0 playwright test",
     "make": "electron-forge make && node scripts/check-builtin-secrets.mjs"
   },
   "devDependencies": {

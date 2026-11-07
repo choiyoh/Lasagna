@@ -23,6 +23,36 @@ export function writerDelay(chars: number): number {
   return Math.min(1000, Math.max(150, Math.round(chars / 150)));
 }
 
+/** 선택 표시 갱신기 — 연속 이벤트(드래그·Shift+화살표)는 **마지막 값**만 반영한다(trailing). */
+export function createSelectionReader<T>(read: () => T, onChange: (value: T) => void, delay = 100) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let last: string | undefined;
+  const run = () => {
+    timer = undefined;
+    const value = read();
+    const key = JSON.stringify(value);
+    if (key === last) return; // 선택이 그대로면 다시 그리지 않는다
+    last = key;
+    onChange(value);
+  };
+  return {
+    /** 연속 이벤트: 마지막 것만 delay 뒤에 반영 */
+    schedule() {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = setTimeout(run, delay);
+    },
+    /** 마우스 업·키 업·총계 준비: 대기 중인 마지막 선택을 즉시 반영 */
+    flush() {
+      if (timer !== undefined) clearTimeout(timer);
+      run();
+    },
+    cancel() {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+    },
+  };
+}
+
 /** 아직 계산 중일 때 보여 주는 표시(0 으로 보이지 않게). */
 export const WRITER_PENDING = '…';
 

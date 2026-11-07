@@ -265,3 +265,37 @@ test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('writer-chars')).toContainText('characters');
 });
+
+test('키보드·마우스로 문단 안 일부를 선택하면 선택 글자수가 DOM 선택과 일치한다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  const selPath = path.join(vaultDir, 'Select.md');
+  writeFileSync(selPath, '# Select\n\n가나다라마바사아자차\n');
+  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Select', exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.locator('aside.sidebar').getByRole('button', { name: 'Select', exact: true }).click();
+  await toggleWriter(page, true);
+
+  // 키보드: 문단 끝에서 Shift+← 3자·5자
+  const para = page.locator('.ProseMirror p').last();
+  await para.click();
+  await page.keyboard.press('ControlOrMeta+End');
+  for (const n of [3, 5]) {
+    for (let i = 0; i < n; i += 1) await page.keyboard.press('Shift+ArrowLeft');
+    const dom = await page.evaluate(() => window.getSelection()?.toString().length ?? 0);
+    expect(dom).toBe(n);
+    await expect(page.getByTestId('writer-selection')).toContainText(String(n));
+  }
+
+  // 마우스 드래그: 문단 안 5자(연속 selectionchange 후 마지막 값)
+  const box = await para.boundingBox();
+  if (!box) throw new Error('no paragraph box');
+  await page.mouse.move(box.x + 4, box.y + box.height / 2);
+  await page.mouse.down();
+  for (let step = 1; step <= 6; step += 1) {
+    await page.mouse.move(box.x + 4 + step * 12, box.y + box.height / 2, { steps: 2 });
+  }
+  await page.mouse.up();
+  const dom = await page.evaluate(() => window.getSelection()?.toString().length ?? 0);
+  expect(dom).toBeGreaterThan(0);
+  await expect(page.getByTestId('writer-selection')).toContainText(`선택 ${dom}`);
+});

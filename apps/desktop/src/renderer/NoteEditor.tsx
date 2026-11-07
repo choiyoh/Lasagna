@@ -11,7 +11,7 @@ import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
 import { countMarkdown, type TextStats } from '@nopsidian/core';
-import { WRITER_PENDING, writerCountsText, writerDelay, writerSelectionText } from './writer-status';
+import { WRITER_PENDING, createSelectionReader, writerCountsText, writerDelay, writerSelectionText } from './writer-status';
 import { editorSelectionStats, editorTotalStats } from '@nopsidian/editor/nops';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
@@ -224,21 +224,35 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     };
   }, [writer, docTick, epoch, spacing, path, mode]);
 
-  // 선택 영역 글자수 — 선택이 바뀔 때만(문서 변경과 별개로) 다시 센다.
+  const writerStatsRef = useRef<TextStats | null>(null);
+  writerStatsRef.current = writerStats;
+  // 선택 영역 글자수 — 드래그·Shift+화살표의 **마지막 선택**을 반드시 반영한다.
   useEffect(() => {
     if (!writer) return;
     const read = () => {
       // 소스 모드에서는 선택 글자수를 표시하지 않는다(마크다운 문맥이 잘려 '선택 ≤ 전체'를 지키기 어렵다).
-      if (modeRef.current === 'source') return setWriterSelected(null);
+      if (modeRef.current === 'source') return null;
       const view = editorRef.current?.getView();
-      if (!view) return setWriterSelected(null);
+      if (!view) return null;
       const { from, to } = view.state.selection;
-      if (from === to) return setWriterSelected(null);
+      if (from === to) return null;
       // 전체 선택은 총계와 항등, 그 밖에는 같은 직렬화기로 센 값(클램프 포함).
-      setWriterSelected(editorSelectionStats(view.state.doc, from, to, writerStats));
+      return editorSelectionStats(view.state.doc, from, to, writerStatsRef.current);
     };
-    document.addEventListener('selectionchange', read);
-    return () => document.removeEventListener('selectionchange', read);
+    const reader = createSelectionReader(read, setWriterSelected);
+    const onSelection = () => reader.schedule();
+    // 드래그/키보드 선택이 끝나면 대기 중인 마지막 선택을 즉시 반영한다.
+    const onEnd = () => reader.flush();
+    document.addEventListener('selectionchange', onSelection);
+    window.addEventListener('mouseup', onEnd, true);
+    window.addEventListener('keyup', onEnd, true);
+    reader.flush(); // 총계가 새로 준비된 뒤에도 현재 선택을 바로 다시 센다
+    return () => {
+      document.removeEventListener('selectionchange', onSelection);
+      window.removeEventListener('mouseup', onEnd, true);
+      window.removeEventListener('keyup', onEnd, true);
+      reader.cancel();
+    };
   }, [writer, epoch, path, mode, writerStats]);
   useEffect(() => {
     restoreSel.current = null;

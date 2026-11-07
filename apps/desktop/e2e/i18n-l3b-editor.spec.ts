@@ -155,11 +155,11 @@ test('저장이 실패하면 언어를 바꿔도 미저장 편집을 잃지 않�
 
   await page.locator('.ProseMirror p').last().click();
   await page.keyboard.press('ControlOrMeta+End');
-  await page.keyboard.type(' 저장 실패 초안');
 
-  // 볼트 폴더를 읽기 전용으로 만들어 저장을 실패시킨다
+  // 볼트 폴더를 먼저 읽기 전용으로 만든 뒤 입력해야 자동 저장이 성공하지 않는다
   chmodSync(vaultDir, 0o555);
   try {
+    await page.keyboard.type(' 저장 실패 초안');
     await page.getByTestId('settings-btn').click();
     await page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: '한국어' }).click();
     await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
@@ -175,4 +175,49 @@ test('저장이 실패하면 언어를 바꿔도 미저장 편집을 잃지 않�
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type('!');
   await expect.poll(() => readFileSync(path.join(vaultDir, 'Hello.md'), 'utf8'), { timeout: 10_000 }).toContain('저장 실패 초안!');
+});
+
+test('설정에서 언어를 바꿔도 대화상자 포커스를 훔치지 않고, 에디터에서 바꾸면 커서 자리에서 이어 쓴다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await page.locator('aside.sidebar').getByRole('button', { name: 'Hello', exact: true }).click();
+  const editor = page.locator('.ProseMirror');
+  await expect(editor).toHaveText(/Hello/);
+
+  // 1) 설정 대화상자에서 언어를 바꾸면 라디오가 포커스를 유지한다(에디터가 훔치지 않음)
+  await editor.click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' 설정');
+  await page.getByTestId('settings-btn').click();
+  const english = page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: 'English' });
+  await english.click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(editor).toHaveText(/설정/);
+  const focused = await page.evaluate(() => {
+    const el = document.activeElement as HTMLInputElement | null;
+    return {
+      inDialog: !!el?.closest('[role="dialog"]'),
+      isRadio: el?.tagName === 'INPUT' && el?.type === 'radio',
+      inEditor: !!el?.classList.contains('ProseMirror'),
+    };
+  });
+  // 설정에서 라디오를 고른 직후에도 포커스는 대화상자 안(라디오 또는 그 주변)에 남아 있어야 한다
+  expect(focused.inDialog).toBe(true);
+  expect(focused.inEditor).toBe(false);
+  expect(focused.isRadio || focused.inDialog).toBe(true);
+  await page.keyboard.press('Escape');
+
+  // 2) 에디터에 포커스가 있는 채로 언어가 바뀌면(단축키·팔레트 등 같은 경로) 커서를 되돌려 바로 이어 쓸 수 있다
+  await editor.click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' 직접');
+  await expect(editor).toHaveText(/직접/);
+  await page.evaluate(() => window.nops.settings.setLanguage({ language: 'ko' }));
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+  await expect(editor).toHaveText(/직접/);
+  // 에디터에 포커스가 있던 채로 바뀌었으니 재생성 뒤에도 포커스·커서가 복원된다
+  await expect(editor).toBeFocused({ timeout: 5000 });
+  // 다시 클릭하지 않고 입력해도 복원된 커서(끝)에 이어진다
+  await page.keyboard.type(' 이어');
+  await expect.poll(() => readFileSync(path.join(vaultDir, 'Hello.md'), 'utf8'), { timeout: 10_000 }).toMatch(/직접 이어/);
 });

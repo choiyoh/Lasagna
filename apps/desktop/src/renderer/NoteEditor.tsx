@@ -156,6 +156,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const [writerSelected, setWriterSelected] = useState<TextStats | null>(null);
   /** 지금 모드(편집/소스)의 마크다운 원문을 돌려주는 함수. 재생성될 때마다 새로 꽂는다. */
   const writerTextRef = useRef<(() => string) | null>(null);
+  /** 글자수 초기화 기준(노트·모드·기준이 바뀔 때만 비운다) */
+  const resetKey = useRef('');
   /** 소스 모드에서도 글자수가 갱신되도록 소스 편집도 같은 tick 을 올린다. */
   const bumpDocTick = () => setDocTick((t) => t + 1);
   /** 소스 모드 편집기(선택 구간 오프셋을 얻기 위해) */
@@ -172,19 +174,37 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const [docTick, setDocTick] = useState(0);
   // 작가 모드 상태줄: 입력 중에는 150ms 모아서 계산한다(5만 자에서도 입력이 끊기지 않게).
   useEffect(() => {
-    // 노트·모드가 바뀌면 이전 숫자·선택을 남기지 않는다(로딩 중에는 비운다).
+    // 노트·모드가 바뀔 때만 이전 숫자를 비운다(같은 문서의 재계산 중에는 이전 값을 유지해 깜빡이지 않게).
     setWriterSelected(null);
     if (!writer) {
       setWriterStats(null);
+      resetKey.current = '';
       return;
     }
-    setWriterStats(null);
-    const timer = setTimeout(() => {
+    const key = `${path}|${mode}|${spacing}`;
+    if (resetKey.current !== key) {
+      resetKey.current = key;
+      setWriterStats(null);
+    }
+    // 문서가 크면 계산을 더 모아서 한다(입력 지연 방지). idle 에서 계산하고, 그동안 이전 값을 보여 준다.
+    const size = writerStats?.chars ?? 0;
+    const delay = Math.min(1000, Math.max(150, Math.round(size / 150)));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let idle: number | undefined;
+    const run = () => {
       const text = writerTextRef.current?.() ?? '';
       setWriterStats(countMarkdown(text));
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [writer, docTick, epoch, spacing, path]);
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      idle = window.requestIdleCallback(run, { timeout: delay });
+    } else {
+      timer = setTimeout(run, delay);
+    }
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      if (idle !== undefined) window.cancelIdleCallback(idle);
+    };
+  }, [writer, docTick, epoch, spacing, path, mode]);
 
   // 선택 영역 글자수 — 선택이 바뀔 때만(문서 변경과 별개로) 다시 센다.
   useEffect(() => {

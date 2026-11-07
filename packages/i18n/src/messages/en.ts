@@ -951,7 +951,7 @@ export const en: Record<MessageKey, string> = {
   'editor.turn.h2': 'Heading 2',
   'editor.turn.h3': 'Heading 3',
   'editor.turn.bullet': 'Bullet list',
-  'editor.turn.ordered': 'Numbered list',
+  'editor.turn.ordered': 'Ordered list',
   'editor.turn.todo': 'To-do',
   'editor.turn.quote': 'Blockquote',
   'editor.turn.code': 'Code block',

@@ -193,8 +193,18 @@ test('설정에서 언어를 바꿔도 대화상자 포커스를 훔치지 않�
   await english.click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(editor).toHaveText(/설정/);
-  const focusedInDialog = await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]') && !document.activeElement?.classList.contains('ProseMirror'));
-  expect(focusedInDialog).toBe(true);
+  const focused = await page.evaluate(() => {
+    const el = document.activeElement as HTMLInputElement | null;
+    return {
+      inDialog: !!el?.closest('[role="dialog"]'),
+      isRadio: el?.tagName === 'INPUT' && el?.type === 'radio',
+      inEditor: !!el?.classList.contains('ProseMirror'),
+    };
+  });
+  // 설정에서 라디오를 고른 직후에도 포커스는 대화상자 안(라디오 또는 그 주변)에 남아 있어야 한다
+  expect(focused.inDialog).toBe(true);
+  expect(focused.inEditor).toBe(false);
+  expect(focused.isRadio || focused.inDialog).toBe(true);
   await page.keyboard.press('Escape');
 
   // 2) 에디터에 포커스가 있는 채로 언어가 바뀌면(단축키·팔레트 등 같은 경로) 커서를 되돌려 바로 이어 쓸 수 있다

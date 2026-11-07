@@ -25,7 +25,6 @@ export const ko = {
   'writer.charsShort': "{count}자 · 포함",
   'writer.charsNoSpaceShort': "{count}자 · 제외",
   'writer.words': "{words}",
-  'writer.selection': "선택 {selected} / 전체 {total}",
   'settings.writer.error': "작가 모드 설정을 저장하지 못했어요",
   'settings.writer': "작가 모드",
   'settings.writerMode': "글자수 상태줄",

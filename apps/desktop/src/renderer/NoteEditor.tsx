@@ -11,8 +11,8 @@ import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
 import { countMarkdown, type TextStats } from '@nopsidian/core';
-import { WRITER_PENDING, createSelectionReader, writerCountsText, writerDelay, writerSelectionText } from './writer-status';
-import { editorTotalStats, readEditorSelection } from '@nopsidian/editor/nops';
+import { WRITER_PENDING, writerCountsText, writerDelay } from './writer-status';
+import { editorTotalStats } from '@nopsidian/editor/nops';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
 import type { DbEmbedHost } from './db/EmbeddedDb';
@@ -154,7 +154,6 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     return () => mq.removeEventListener('change', onChange);
   }, []);
   /** 선택 영역도 전체와 같은 규칙(보이는 글자·줄바꿈 제외·공백 기준)으로 센다. */
-  const [writerSelected, setWriterSelected] = useState<TextStats | null>(null);
   /** 지금 모드(편집/소스)의 마크다운 원문을 돌려주는 함수. 재생성될 때마다 새로 꽂는다. */
   const writerTextRef = useRef<(() => string) | null>(null);
   /** 글자수 초기화 기준(노트·모드·기준이 바뀔 때만 비운다) */
@@ -183,7 +182,6 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   // 작가 모드 상태줄: 입력 중에는 150ms 모아서 계산한다(5만 자에서도 입력이 끊기지 않게).
   useEffect(() => {
     // 노트·모드가 바뀔 때만 이전 숫자를 비운다(같은 문서의 재계산 중에는 이전 값을 유지해 깜빡이지 않게).
-    setWriterSelected(null);
     if (!writer) {
       setWriterStats(null);
       resetKey.current = '';
@@ -224,34 +222,6 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     };
   }, [writer, docTick, epoch, spacing, path, mode]);
 
-  const writerStatsRef = useRef<TextStats | null>(null);
-  writerStatsRef.current = writerStats;
-  // 선택 영역 글자수 — 드래그·Shift+화살표의 **마지막 선택**을 반드시 반영한다.
-  useEffect(() => {
-    if (!writer) return;
-    const read = () => {
-      // 소스 모드에서는 선택 글자수를 표시하지 않는다(마크다운 문맥이 잘려 '선택 ≤ 전체'를 지키기 어렵다).
-      if (modeRef.current === 'source') return null;
-      const view = editorRef.current?.getView();
-      if (!view) return null;
-      // PM 이 DOM 선택을 반영한 뒤의 상태로 센다(한 이벤트 뒤처짐 방지).
-      return readEditorSelection(view, writerStatsRef.current);
-    };
-    const reader = createSelectionReader(read, setWriterSelected);
-    const onSelection = () => reader.schedule();
-    // 드래그/키보드 선택이 끝나면 대기 중인 마지막 선택을 즉시 반영한다.
-    const onEnd = () => reader.flush();
-    document.addEventListener('selectionchange', onSelection);
-    window.addEventListener('mouseup', onEnd, true);
-    window.addEventListener('keyup', onEnd, true);
-    reader.flush(); // 총계가 새로 준비된 뒤에도 현재 선택을 바로 다시 센다
-    return () => {
-      document.removeEventListener('selectionchange', onSelection);
-      window.removeEventListener('mouseup', onEnd, true);
-      window.removeEventListener('keyup', onEnd, true);
-      reader.cancel();
-    };
-  }, [writer, epoch, path, mode, writerStats]);
   useEffect(() => {
     restoreSel.current = null;
   }, [path]);
@@ -825,14 +795,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       <div ref={sourceHostRef} className="note-editor__source" data-testid="source-editor" hidden={mode === 'edit'} />
       {writer && (
         <div className="note-editor__writer" data-testid="writer-status" aria-live="off">
-          {writerSelected === null ? (
-            <span data-testid="writer-chars">{writerStats ? writerCountsText({ locale, spacing, stats: writerStats, narrow }) : WRITER_PENDING}</span>
-          ) : (
-            // 선택 중에는 선택/전체만 보여 준다(글자수 줄은 숨긴다).
-            <span className="note-editor__writer-sel" data-testid="writer-selection">
-              {writerStats && writerSelectionText({ locale, spacing, stats: writerStats, selected: writerSelected })}
-            </span>
-          )}
+          <span data-testid="writer-chars">{writerStats ? writerCountsText({ locale, spacing, stats: writerStats, narrow }) : WRITER_PENDING}</span>
         </div>
       )}
     </div>

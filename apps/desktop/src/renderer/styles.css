@@ -117,7 +117,6 @@ button.link { color: var(--muted); }
 .note-editor--writer .note-editor__source { flex: 1 1 auto; }
 /* 작가 모드 글자수 상태줄 — 긴 문서에서는 스크롤과 무관하게 뷰포트 하단에 머문다. */
 .note-editor__writer { position: sticky; bottom: 0; z-index: 4; display: flex; justify-content: flex-end; gap: 10px; align-items: center; margin-top: auto; padding: 8px 0 10px; border-top: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.note-editor__writer-sel { color: var(--fg); }
 .note-editor__mode { padding: 3px 8px; border: 0; border-radius: var(--radius); color: var(--muted); background: transparent; }
 .note-editor__mode:hover { color: var(--fg); background: var(--hover); }
 .note-editor__mode[aria-pressed='true'] { color: var(--accent); background: var(--hover); }

@@ -24,7 +24,6 @@ export const en: Record<MessageKey, string> = {
   'writer.charsShort': "{count} characters",
   'writer.charsNoSpaceShort': "{count} characters (no spaces)",
   'writer.words': "{words} words",
-  'writer.selection': "{selected} / {total} selected",
   'settings.writer.error': "Could not save writer mode settings",
   'settings.writer': "Writer mode",
   'settings.writerMode': "Character count bar",

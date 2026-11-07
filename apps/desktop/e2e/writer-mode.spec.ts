@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-// 작가 모드(W1): 토글·글자수 상태줄·선택 영역·공백 기준·언어 전환·재시작 유지, 그리고 노트 파일 불변.
+// 작가 모드(W1): 토글·글자수 상태줄(총계)·공백 기준·언어 전환·재시작 유지, 그리고 노트 파일 불변.
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
 
 function packagedExecutable(): string {
@@ -98,12 +98,6 @@ test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은
   await page.keyboard.type(' world');
   await expect(page.getByTestId('writer-chars')).toHaveText(/^13자 · 공백 포함$/);
 
-  // 선택 영역 표시
-  for (let i = 0; i < 5; i += 1) await page.keyboard.press('Shift+ArrowLeft');
-  await expect(page.getByTestId('writer-selection')).toContainText(/선택 5 \/ 전체 13/);
-  // 선택 중에는 글자수 줄을 숨긴다(선택/전체만)
-  await expect(page.getByTestId('writer-chars')).toHaveCount(0);
-
   // 공백 제외로 바꾸면 기준 표기가 바뀐다
   await page.getByTestId('settings-btn').click();
   await page.getByRole('radiogroup', { name: '글자수 기준' }).getByRole('radio', { name: '공백 제외' }).click();
@@ -160,7 +154,7 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
   expect(en).not.toMatch(HANGUL);
 });
 
-test('소스 모드에서도 같은 규칙으로 세고, 공백만 선택하면 선택 표시가 없다', async () => {
+test('소스 모드에서도 같은 규칙으로 센다', async () => {
   const page = await app.firstWindow();
   await openNote(page);
   await toggleWriter(page, true);
@@ -177,12 +171,6 @@ test('소스 모드에서도 같은 규칙으로 세고, 공백만 선택하면 
   await expect(page.getByTestId('writer-chars')).not.toHaveText(editCount);
   await page.keyboard.press('ControlOrMeta+e');
   await expect(page.getByTestId('note-editor')).toBeVisible();
-
-  // 공백만 선택하면 선택/전체 표시를 띄우지 않는다
-  await page.locator('.ProseMirror').click();
-  await page.keyboard.press('ControlOrMeta+End');
-  for (let i = 0; i < 2; i += 1) await page.keyboard.press('Shift+ArrowLeft');
-  await expect(page.getByTestId('writer-selection')).toHaveCount(0);
 });
 
 test('긴 회차에서도 글자수 상태줄은 화면 하단에 붙어 있다', async () => {
@@ -210,7 +198,7 @@ test('긴 회차에서도 글자수 상태줄은 화면 하단에 붙어 있다'
   }
 });
 
-test('소스 모드에서 링크 주소만 선택하면 0자이고, columns 문서도 표식 없이 센다', async () => {
+test('columns 문서도 표식 없이 센다(소스 모드 포함)', async () => {
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   const colsPath = path.join(vaultDir, 'Columns.md');
@@ -221,14 +209,10 @@ test('소스 모드에서 링크 주소만 선택하면 0자이고, columns 문�
   // 표식(:::columns 등)은 세지 않는다: 보이는 글자 '첫째둘째' + '보기' = 6자
   await expect(page.getByTestId('writer-chars')).toHaveText(/^6자 · 공백 포함$/);
 
-  // 소스 모드에서는 선택 글자수를 표시하지 않는다(문맥 손실·불변식 문제로 단순화)
+  // 소스 모드에서도 같은 값(직렬화 원문 기준)
   await page.keyboard.press('ControlOrMeta+e');
   await expect(page.getByTestId('source-editor')).toBeVisible();
-  await page.locator('.cm-content').click();
-  await page.keyboard.press('ControlOrMeta+End');
-  for (let i = 0; i < 4; i += 1) await page.keyboard.press('Shift+ArrowLeft');
-  await expect(page.getByTestId('writer-selection')).toHaveCount(0);
-  await expect(page.getByTestId('writer-chars')).toHaveText(/자 · 공백 포함$/);
+  await expect(page.getByTestId('writer-chars')).toHaveText(/^6자 · 공백 포함$/);
 });
 
 test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상태줄은 현재 문서 값이다', async () => {
@@ -264,88 +248,4 @@ test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('writer-chars')).toContainText('characters');
-});
-
-test('키보드·마우스로 문단 안 일부를 선택하면 선택 글자수가 DOM 선택과 일치한다', async () => {
-  const page = await app.firstWindow();
-  await openVaultIfNeeded(page);
-  const selPath = path.join(vaultDir, 'Select.md');
-  writeFileSync(selPath, '# Select\n\n가나다라마바사아자차\n');
-  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Select', exact: true })).toBeVisible({ timeout: 20_000 });
-  await page.locator('aside.sidebar').getByRole('button', { name: 'Select', exact: true }).click();
-  await toggleWriter(page, true);
-
-  // 키보드: 문단 끝에서 Shift+← 3자·5자
-  const para = page.locator('.ProseMirror p').last();
-  await para.click();
-  await page.keyboard.press('ControlOrMeta+End');
-  for (const n of [3, 5]) {
-    for (let i = 0; i < n; i += 1) await page.keyboard.press('Shift+ArrowLeft');
-    const dom = await page.evaluate(() => window.getSelection()?.toString().length ?? 0);
-    expect(dom).toBe(n);
-    await expect(page.getByTestId('writer-selection')).toContainText(String(n));
-  }
-
-  // 마우스 드래그: 문단 안 5자(연속 selectionchange 후 마지막 값)
-  const box = await para.boundingBox();
-  if (!box) throw new Error('no paragraph box');
-  await page.mouse.move(box.x + 4, box.y + box.height / 2);
-  await page.mouse.down();
-  for (let step = 1; step <= 6; step += 1) {
-    await page.mouse.move(box.x + 4 + step * 12, box.y + box.height / 2, { steps: 2 });
-  }
-  await page.mouse.up();
-  const dom = await page.evaluate(() => window.getSelection()?.toString().length ?? 0);
-  expect(dom).toBeGreaterThan(0);
-  await expect(page.getByTestId('writer-selection')).toContainText(`선택 ${dom}`);
-});
-
-test('위키링크가 든 문단을 선택하면 별칭 글자수로 표시된다', async () => {
-  const page = await app.firstWindow();
-  await openVaultIfNeeded(page);
-  const wikiPath = path.join(vaultDir, 'Wiki.md');
-  writeFileSync(wikiPath, '# Wiki\n\n가 [[노트|별칭]] 나\n');
-  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Wiki', exact: true })).toBeVisible({ timeout: 20_000 });
-  await page.locator('aside.sidebar').getByRole('button', { name: 'Wiki', exact: true }).click();
-  await toggleWriter(page, true);
-
-  const para = page.locator('.ProseMirror p').last();
-  await para.click();
-  await page.keyboard.press('ControlOrMeta+a');
-  const dom = await page.evaluate(() => window.getSelection()?.toString().length ?? 0);
-  expect(dom).toBeGreaterThan(0);
-  // 상태줄 선택 값은 화면(DOM) 선택 글자수와 같다(위키링크는 별칭 글자수)
-  await expect(page.getByTestId('writer-selection')).toContainText(`선택 ${dom}`);
-});
-
-test('위키링크 별칭 단어만 선택해도 선택 글자수가 보인다', async () => {
-  const page = await app.firstWindow();
-  await openVaultIfNeeded(page);
-  const aliasPath = path.join(vaultDir, 'Alias.md');
-  writeFileSync(aliasPath, '# Alias\n\n가 [[노트|별칭]] 나\n');
-  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Alias', exact: true })).toBeVisible({ timeout: 20_000 });
-  await page.locator('aside.sidebar').getByRole('button', { name: 'Alias', exact: true }).click();
-  await toggleWriter(page, true);
-
-  // 별칭 텍스트(2자)만 더블클릭으로 선택 — NodeView 안쪽 선택
-  await page.locator('.ProseMirror .nops-wikilink').last().dblclick();
-  const dom = await page.evaluate(() => window.getSelection()?.toString() ?? '');
-  expect(dom).toContain('별칭');
-  await expect(page.getByTestId('writer-selection')).toContainText(`선택 ${dom.replace(/\s/g, '').length}`);
-});
-
-test('표 셀·행을 선택해도 상태줄 선택 글자수가 셀 텍스트와 같다', async () => {
-  const page = await app.firstWindow();
-  await openVaultIfNeeded(page);
-  const tablePath = path.join(vaultDir, 'Table.md');
-  writeFileSync(tablePath, '# Table\n\n| 12 | 34 |\n|---|---|\n| 5 | 6 |\n');
-  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Table', exact: true })).toBeVisible({ timeout: 20_000 });
-  await page.locator('aside.sidebar').getByRole('button', { name: 'Table', exact: true }).click();
-  await toggleWriter(page, true);
-
-  // 셀 하나(2자)를 더블클릭으로 선택
-  await page.locator('.ProseMirror table td').first().dblclick();
-  const dom = await page.evaluate(() => window.getSelection()?.toString() ?? '');
-  expect(dom.replace(/\s/g, '').length).toBe(2);
-  await expect(page.getByTestId('writer-selection')).toContainText('선택 2');
 });

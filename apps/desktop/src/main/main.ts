@@ -37,6 +37,7 @@ import { AppSettingsStore, readAppSettings } from './app-settings';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
 import { e2eBackground } from './e2e-mode';
+import { presentBackgroundWindow } from './e2e-window';
 import { runMcpStdio } from './mcp-stdio';
 import { installProtocols, registerSchemes } from './protocols';
 import {
@@ -140,14 +141,8 @@ function createWindow(openPath?: string) {
       win.show();
       return;
     }
-    // e2e: 화면 밖 좌표 + **투명(opacity 0)** + 비활성 표시.
-    // macOS 는 창 좌표를 화면 안으로 clamp 하므로 좌표만으로는 화면에 보인다 — 투명도를 0 으로 두어
-    // 실제로 보이지 않게 하고, showInactive 로 포커스를 가져오지 않는다(사용자 창이 그대로 유지).
-    win.setBounds({ x: -20000, y: -20000, width: 1200, height: 800 });
-    win.setOpacity(0);
-    win.showInactive();
-    // 창이 비활성이어도 DOM 포커스·입력은 되도록 webContents 에 포커스를 준다.
-    win.webContents.focus();
+    // e2e: 투명 + 클릭 통과 + 포커스 불가 + 비활성 표시(사용자 화면·클릭을 방해하지 않는다).
+    presentBackgroundWindow(win);
   });
   const query = openPath ? `?open=${encodeURIComponent(openPath)}` : '';
   void win.loadURL(`${devServerUrl ?? `${APP_ORIGIN}/index.html`}${query}`);

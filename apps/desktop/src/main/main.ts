@@ -660,8 +660,11 @@ function registerHandlers() {
     return undefined;
   });
   handle('settings.language', () => currentLanguage());
-  handle('settings.setLanguage', ({ language }) => {
-    settingsStore().setLanguage(language);
+  handle('settings.setLanguage', ({ language, writerMode, writerSpacing }) => {
+    if (language !== undefined) settingsStore().setLanguage(language);
+    if (writerMode !== undefined || writerSpacing !== undefined) {
+      settingsStore().setWriter({ ...(writerMode === undefined ? {} : { mode: writerMode }), ...(writerSpacing === undefined ? {} : { spacing: writerSpacing }) });
+    }
     const current = currentLanguage();
     // 메인에서 만드는 기본값(새 행 제목·볼트 기본 폴더 등)도 앱 언어를 따르게 한다.
     setLocale(current.locale);
@@ -692,8 +695,8 @@ function systemLanguages(): readonly string[] {
 }
 
 function currentLanguage(): AppLanguage {
-  const { language } = settingsStore().value;
-  return { setting: language, locale: resolveLocale(language, systemLanguages()) };
+  const { language, writerMode, writerSpacing } = settingsStore().value;
+  return { setting: language, locale: resolveLocale(language, systemLanguages()), writerMode, writerSpacing };
 }
 
 app.whenReady().then(() => {

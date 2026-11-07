@@ -4,7 +4,7 @@ import type { LanguageSetting } from '@nopsidian/ipc-contract';
 import { applyPrefs, FONT_SIZES, loadPrefs, type Prefs } from './prefs';
 import { applyTheme, THEME_KEY, type ThemeChoice } from './theme';
 import { keys } from './keys';
-import { changeLanguage } from './language';
+import { changeLanguage, changeWriterSettings } from './language';
 import { useLanguage } from './useLocale';
 import { McpSettings } from './McpSettings';
 
@@ -186,6 +186,33 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
                 ))}
               </div>
             </div>
+          </section>
+          <section>
+            <h3>{t('settings.writer')}</h3>
+            <label className="settings__row">
+              <span>
+                {t('settings.writerMode')}
+                <small className="muted">{t('settings.writerModeHint')}</small>
+              </span>
+              <input
+                type="checkbox"
+                data-testid="writer-mode"
+                checked={language.writerMode === true}
+                onChange={(e) => void changeWriterSettings({ mode: e.target.checked }).catch(() => setLanguageError(true))}
+                aria-label={t('settings.writerMode')}
+              />
+            </label>
+            {language.writerMode === true && (
+              <div className="settings__row">
+                <span>{t('settings.writerSpacing')}</span>
+                <RadioSeg
+                  label={t('settings.writerSpacing')}
+                  value={language.writerSpacing ?? 'include'}
+                  options={(['include', 'exclude'] as const).map((option) => ({ value: option, label: t(`settings.writerSpacing.${option}`) }))}
+                  onSelect={(option) => void changeWriterSettings({ spacing: option }).catch(() => setLanguageError(true))}
+                />
+              </div>
+            )}
           </section>
           <section>
             <h3>{t('settings.editing')}</h3>

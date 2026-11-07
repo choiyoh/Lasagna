@@ -1,5 +1,5 @@
-import { t } from '@nopsidian/i18n';
-import { useLocale } from './useLocale';
+import { formatNumber, t } from '@nopsidian/i18n';
+import { useLanguage, useLocale } from './useLocale';
 import { useEffect, useRef, useState } from 'react';
 import type { Editor, NopsPeekHost } from '@nopsidian/editor/nops';
 import { createDbViewHost } from './db/dbview-host';
@@ -10,6 +10,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
+import { countMarkdown, graphemeCount, type TextStats } from '@nopsidian/core';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
 import type { DbEmbedHost } from './db/EmbeddedDb';
@@ -134,6 +135,14 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const onTitleRenameRef = useRef(onTitleRename);
   onTitleRenameRef.current = onTitleRename;
   const locale = useLocale();
+  // 작가 모드 — 꺼져 있으면 상태줄도 계산도 없다(일반 모드 화면·동작 동일).
+  const language = useLanguage();
+  const writer = language.writerMode === true;
+  const spacing = language.writerSpacing ?? 'include';
+  const [writerStats, setWriterStats] = useState<TextStats | null>(null);
+  const [writerSelected, setWriterSelected] = useState<number | null>(null);
+  /** 지금 모드(편집/소스)의 마크다운 원문을 돌려주는 함수. 재생성될 때마다 새로 꽂는다. */
+  const writerTextRef = useRef<(() => string) | null>(null);
   /** 언어가 바뀌면 에디터를 새로 만든다(문구는 만들 때 잡힌다) — 그 전에 저장하고 커서를 옮겨 둔다 */
   const localeRef = useRef(locale);
   const restoreSel = useRef<{ anchor: number; head: number } | null>(null);
@@ -143,6 +152,35 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   /** 미저장 편집을 지금 저장하고 성공 여부를 돌려준다(언어 전환 전 flush 용) */
   const flushRef = useRef<(() => Promise<boolean>) | null>(null);
   const [epoch, setEpoch] = useState(0);
+  const [docTick, setDocTick] = useState(0);
+  // 작가 모드 상태줄: 입력 중에는 150ms 모아서 계산한다(5만 자에서도 입력이 끊기지 않게).
+  useEffect(() => {
+    if (!writer) {
+      setWriterStats(null);
+      setWriterSelected(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      const text = writerTextRef.current?.() ?? '';
+      setWriterStats(countMarkdown(text));
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [writer, docTick, epoch, spacing]);
+
+  // 선택 영역 글자수 — 선택이 바뀔 때만(문서 변경과 별개로) 다시 센다.
+  useEffect(() => {
+    if (!writer) return;
+    const read = () => {
+      const root = rootRef.current;
+      const selection = window.getSelection();
+      if (!root || !selection || selection.rangeCount === 0 || selection.isCollapsed) return setWriterSelected(null);
+      if (!root.contains(selection.anchorNode)) return setWriterSelected(null);
+      const text = selection.toString();
+      setWriterSelected(text.trim() === '' ? null : graphemeCount(text));
+    };
+    document.addEventListener('selectionchange', read);
+    return () => document.removeEventListener('selectionchange', read);
+  }, [writer, epoch]);
   useEffect(() => {
     restoreSel.current = null;
   }, [path]);
@@ -161,7 +199,6 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   modeRef.current = mode;
   /** 찾기 막대: 열린 상태·처음 채울 말·초점 다시 주기·문서 변경 횟수 */
   const [find, setFindState] = useState<{ initial: string; tick: number } | null>(null);
-  const [docTick, setDocTick] = useState(0);
 
   useEffect(() => {
     if (localeRef.current === locale) return;
@@ -393,6 +430,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     };
     editor.on('change', markDirty);
     editor.on('change', () => setDocTick((t) => t + 1));
+    // 작가 모드 글자수는 **저장과 같은 원문**으로 센다 — 편집 모드와 소스 모드가 같은 결과를 내야 한다.
+    writerTextRef.current = () => (current === 'source' && source ? source.getText() : serializeDocument(editor.getDocument(), baseline));
 
     // ── 개요 패널: 제목 목록을 알리고, 누르면 그 제목으로 이동 ──
     let outlineTimer: ReturnType<typeof setTimeout> | undefined;
@@ -693,6 +732,24 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         />
       )}
       <div ref={sourceHostRef} className="note-editor__source" data-testid="source-editor" hidden={mode === 'edit'} />
+      {writer && writerStats && (
+        <div className="note-editor__writer" data-testid="writer-status" aria-live="off">
+          <span data-testid="writer-chars">
+            {t(spacing === 'include' ? 'writer.chars' : 'writer.charsNoSpace', {
+              count: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace),
+              words: formatNumber(writerStats.words),
+            })}
+          </span>
+          {writerSelected !== null && (
+            <span className="note-editor__writer-sel" data-testid="writer-selection">
+              {t('writer.selection', {
+                selected: formatNumber(writerSelected),
+                total: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace),
+              })}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

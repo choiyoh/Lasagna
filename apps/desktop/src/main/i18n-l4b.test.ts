@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '@nopsidian/i18n';
-import { syncFailureFor } from './sync';
+import { localizedFailure, syncFailureFor } from './sync';
 import { errorDetails } from '../workers/sync/error-info';
 import { syncBusyError } from '../workers/sync/errors';
 import { executePlan } from '@nopsidian/sync-gdrive';
@@ -25,6 +25,24 @@ describe('메인 프로세스 문구의 로캘', () => {
     // 문서 링크는 앱 언어를 따른다(L5): 영어는 영어 문서·영어 앵커
     expect(ko.docs).toBe('https://github.com/choiyoh/Lasagna/blob/main/docs/sync-setup.md#2-앱에서-연결');
     expect(en.docs).toBe('https://github.com/choiyoh/Lasagna/blob/main/docs/sync-setup.en.md#2-connect-in-the-app');
+  });
+
+  it('저장된 실패를 성공 응답에서 다시 그릴 때도 지금 언어를 따른다(성공 경로)', () => {
+    // check() 성공 경로는 워커를 거치지 않고 저장된 실패를 localizedFailure 로 다시 만든다.
+    setLocale('ko');
+    const stored = syncFailureFor({ key: 'network', kind: 'network' });
+    setLocale('en');
+    const shown = localizedFailure(stored)!;
+    expect(shown.title).toBe('No internet connection');
+    expect(shown.action).toBe('Check the connection and try again');
+    expect(`${shown.title} ${shown.action}`).not.toMatch(/[가-힣]/);
+    expect(shown.docs).toBe('https://github.com/choiyoh/Lasagna/blob/main/docs/sync-setup.en.md#troubleshooting');
+    setLocale('ko');
+    const back = localizedFailure(stored)!;
+    expect(back.title).toBe('인터넷에 연결되지 않았어요');
+    // kind 가 없는 옛 기록은 그대로 둔다
+    expect(localizedFailure({ ...stored, kind: undefined })).toMatchObject({ title: stored.title });
+    expect(localizedFailure(null)).toBeNull();
   });
 
   it('사본 파일 이름: ko 는 base, en 은 copy', () => {

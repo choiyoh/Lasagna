@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { setLocale } from '@nopsidian/i18n';
 import { Indexer } from './indexer';
 
 let root: string;
@@ -49,6 +50,19 @@ describe('데이터베이스 질의(인덱서)', () => {
     ]);
     expect(ix.databaseFolders()).toEqual(['다른', '독서']);
     expect(ix.databaseRowPaths('독서')).toEqual(['독서/리팩터링.md', '독서/메모.md', '독서/클린 코드.md']);
+  });
+
+  it('제목 없는 데이터베이스의 기본 이름은 요청 언어를 따른다(db.list 경로)', () => {
+    // 볼트 루트에 제목 없는 `_db.yaml` 을 둔다(폴더 이름이 없어 기본 이름을 쓴다)
+    writeFileSync(path.join(root, '_db.yaml'), 'version: 1\nproperties: {}\nviews: []\n');
+    ix.scan();
+    const pick = (locale: 'ko' | 'en') => ix.databases(locale).find((d) => d.folder === '')!;
+    const ko = pick('ko');
+    const en = pick('en');
+    expect(ko.title).toBe('데이터베이스');
+    expect(en.title).toBe('Database');
+    // 이후 요청은 마지막 언어를 따른다(워커도 요청마다 언어를 받는다)
+    setLocale('ko');
   });
 
   it('저장된 뷰로 정렬·필터한다', () => {

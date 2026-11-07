@@ -105,6 +105,8 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   // 폭이 바뀌면 접힌 메뉴는 닫는다
   useEffect(() => setMoreOpen(false), [narrow]);
 
+  const locale = useLocale();
+
   const load = useCallback(
     async (override?: View | null) => {
       const n = ++seq.current;
@@ -119,7 +121,8 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         if (n === seq.current) setError(userMessage(e));
       }
     },
-    [folder, viewId, draft],
+    // locale 이 바뀌면 스키마 문제·기본 이름 문구가 옛 언어로 남지 않게 다시 읽는다.
+    [folder, viewId, draft, locale],
   );
 
   useEffect(() => {
@@ -177,7 +180,6 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   }, [folder, suggestable, view]);
 
   // 조건 라벨은 지금 언어의 t() 결과라, 언어가 바뀌면 다시 만든다.
-  const locale = useLocale();
   const suggestions = useMemo(() => {
     if (!suggestable || !allRows || !view || !data) return [];
     const started = performance.now();

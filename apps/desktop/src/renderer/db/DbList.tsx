@@ -24,7 +24,8 @@ export function DbList({ onOpen }: Props) {
       clearTimeout(timer);
       timer = setTimeout(load, 500);
     };
-    const offs = [window.nops.on('note.changed', again), window.nops.on('asset.changed', again)];
+    // 언어가 바뀌면 제목 없는 데이터베이스의 기본 이름도 새 언어로 다시 읽는다.
+    const offs = [window.nops.on('note.changed', again), window.nops.on('asset.changed', again), window.nops.on('language.changed', again)];
     return () => {
       clearTimeout(timer);
       offs.forEach((o) => o());

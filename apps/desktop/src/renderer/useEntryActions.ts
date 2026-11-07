@@ -12,6 +12,7 @@ import type { TreeNode } from './sidebar/build-tree';
 import { topLevel, type Entry } from './sidebar/selection';
 import type { TabsAction } from './tabs';
 import { userMessage } from './user-message';
+import { renameFailureText } from './rename-error';
 
 /** 노트·폴더를 만들고, 이름을 바꾸고, 옮기고, 지우는 동작들. 앱 상태는 인자로 받는다. */
 export interface EntryActionDeps {
@@ -165,11 +166,8 @@ export function useEntryActions(deps: EntryActionDeps) {
         },
       });
     } catch (e) {
-      setToast({
-        message: opts.auto
-          ? t('entry.renameKeptFile')
-          : t('entry.renameFailed', { message: userMessage(e) }),
-      });
+      // 이미 있는 이름이면 그 사실을 분명히 알려 준다(확인창만 닫히고 조용히 끝나지 않게).
+      setToast({ message: renameFailureText(e, !!opts.auto, target) });
     }
   }, [refresh, applyMovedState]);
   const renameCurrent = useCallback(async () => {

@@ -153,7 +153,6 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
   }, []);
-  /** 선택 영역도 전체와 같은 규칙(보이는 글자·줄바꿈 제외·공백 기준)으로 센다. */
   /** 지금 모드(편집/소스)의 마크다운 원문을 돌려주는 함수. 재생성될 때마다 새로 꽂는다. */
   const writerTextRef = useRef<(() => string) | null>(null);
   /** 글자수 초기화 기준(노트·모드·기준이 바뀔 때만 비운다) */
@@ -162,12 +161,11 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const docSizeRef = useRef(0);
   /** 이 노트를 다 읽었는지(읽기 전에는 글자수를 예약하지 않는다) */
   const loadedPathRef = useRef<string | null>(null);
-  /** 현재 에디터 문서와 저장 기준(총계를 직렬화 원문으로 세기 위해) */
   /** 현재 에디터의 저장 기준(총계를 '지금 문서'로 직렬화하기 위해) */
   const baselineRef = useRef<Parameters<typeof editorTotalStats>[1]>(null);
   /** 소스 모드에서도 글자수가 갱신되도록 소스 편집도 같은 tick 을 올린다. */
   const bumpDocTick = () => setDocTick((t) => t + 1);
-  /** 소스 모드 편집기(선택 구간 오프셋을 얻기 위해) */
+  /** 소스 모드 편집기 */
   const sourceRef = useRef<SourceEditor | null>(null);
   /** 언어가 바뀌면 에디터를 새로 만든다(문구는 만들 때 잡힌다) — 그 전에 저장하고 커서를 옮겨 둔다 */
   const localeRef = useRef(locale);

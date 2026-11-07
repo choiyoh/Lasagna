@@ -66,16 +66,25 @@ export function editorSelectionStats(doc: PMNode, from: number, to: number, tota
   };
 }
 
-/** 화면 선택 텍스트에서 숨은 장식(제로폭 문자)만 제거한다. */
-function visibleSelectionText(text: string): string {
-  return text.replace(/[\u200B-\u200D\uFEFF]/g, '');
+/** 화면에서만 보이는 숨은 장식(제로폭 스페이스·BOM)만 제거한다. ZWJ·variation selector 는 grapheme 일부라 남긴다. */
+function cleanSelectionText(text: string): string {
+  return text.replace(/[\u200B\uFEFF]/g, '');
+}
+
+/** 선택 끝점이 원자 NodeView(위키링크·임베드·수식·각주·이미지) 안쪽인지 */
+function atomHost(node: Node, root: HTMLElement): HTMLElement | null {
+  let el: Element | null = node.nodeType === 1 ? (node as Element) : node.parentElement;
+  while (el && el !== root) {
+    if (el.matches('.nops-wikilink, .nops-embed, .nops-footnote-ref, .nops-math, img[data-inline]')) return el as HTMLElement;
+    el = el.parentElement;
+  }
+  return null;
 }
 
 /**
- * 지금 화면의 선택 글자수 — **화면(DOM 선택) 텍스트를 그대로** 센다.
- * 위키링크처럼 atom NodeView 내부를 선택하면 `posAtDOM` 이 노드 시작 위치로 접혀 from==to 가 되므로,
- * DOM 에 보이는 글자(별칭/대상 표기)를 같은 글자수 함수로 세는 것이 화면과 정확히 일치한다.
- * 총계(직렬화 기준)와의 일관성은 클램프로 지킨다.
+ * 지금 화면의 선택 글자수.
+ * - 기본은 **PM 경로**(posAtDOM→문서 위치→`textBetween(..., atomDisplayText)`): 표·이미지·각주·수식이 총계와 같은 규칙이고 탭·행 구분자가 끼지 않는다.
+ * - DOM 선택이 접히지 않았는데 위치 변환이 접히거나(from==to) 원자 NodeView 안쪽이면 **DOM 선택 텍스트**로 센다(별칭 등 화면 글자).
  */
 export function readEditorSelection(view: EditorView, total: TextStats | null): TextStats | null {
   type WithObserver = { domObserver?: { flush?: () => void } };
@@ -85,24 +94,41 @@ export function readEditorSelection(view: EditorView, total: TextStats | null): 
     // 관찰자 flush 실패는 무시하고 아래 경로로 센다.
   }
   const domSel = typeof window === 'undefined' ? null : window.getSelection();
-  if (domSel && domSel.rangeCount > 0 && !domSel.isCollapsed) {
-    const anchor = domSel.anchorNode;
-    const focus = domSel.focusNode;
-    if (anchor && focus && view.dom.contains(anchor) && view.dom.contains(focus)) {
-      const text = visibleSelectionText(domSel.toString());
-      if (text.trim() !== '') {
-        const stats = countPlain(text);
-        if (!total) return null;
-        // 블록 경계·장식이 섞여 총계보다 커질 수 있어 클램프(안전장치).
-        return {
-          chars: Math.min(stats.chars, total.chars),
-          charsNoSpace: Math.min(stats.charsNoSpace, total.charsNoSpace),
-          words: stats.words,
-        };
-      }
-      return null;
-    }
+  const fromState = () => {
+    const { from, to } = view.state.selection;
+    return editorSelectionStats(view.state.doc, from, to, total);
+  };
+  if (!domSel || domSel.rangeCount === 0 || domSel.isCollapsed) return fromState();
+  const anchor = domSel.anchorNode;
+  const focus = domSel.focusNode;
+  if (!anchor || !focus || !view.dom.contains(anchor) || !view.dom.contains(focus)) return fromState();
+
+  const anchorAtom = atomHost(anchor, view.dom);
+  const focusAtom = atomHost(focus, view.dom);
+  const sameAtom = anchorAtom !== null && anchorAtom === focusAtom;
+  let mapped: { from: number; to: number } | null = null;
+  try {
+    const a = view.posAtDOM(anchor, domSel.anchorOffset);
+    const b = view.posAtDOM(focus, domSel.focusOffset);
+    mapped = { from: Math.min(a, b), to: Math.max(a, b) };
+  } catch {
+    mapped = null;
   }
-  const { from, to } = view.state.selection;
-  return editorSelectionStats(view.state.doc, from, to, total);
+  // 원자 안쪽이 아니고 위치 변환이 살아 있으면 PM 경로(표·각주·수식·이미지가 총계와 일치).
+  if (!anchorAtom && !focusAtom && mapped && mapped.from !== mapped.to) {
+    return editorSelectionStats(view.state.doc, mapped.from, mapped.to, total);
+  }
+  if (sameAtom) {
+    // 위키링크만 글자를 가진다(임베드·수식·각주·이미지는 총계 규칙과 같이 0자 → 숨김).
+    if (!anchorAtom.classList.contains('nops-wikilink')) return null;
+    const text = cleanSelectionText(domSel.toString());
+    if (text.trim() === '') return null;
+    const stats = countPlain(text);
+    return total ? { chars: Math.min(stats.chars, total.chars), charsNoSpace: Math.min(stats.charsNoSpace, total.charsNoSpace), words: stats.words } : null;
+  }
+  // 원자와 일반 텍스트에 걸친 혼합 선택: 화면 텍스트에서 탭·행 구분자만 지우고 총계로 클램프.
+  const text = cleanSelectionText(domSel.toString()).replace(/[\t\r\n]/g, '');
+  if (text.trim() === '') return null;
+  const stats = countPlain(text);
+  return total ? { chars: Math.min(stats.chars, total.chars), charsNoSpace: Math.min(stats.charsNoSpace, total.charsNoSpace), words: stats.words } : null;
 }

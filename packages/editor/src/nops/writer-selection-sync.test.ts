@@ -185,3 +185,75 @@ describe('위키링크 NodeView 안쪽 DOM 선택', () => {
     expect(readEditorSelection(view, { chars: 1, charsNoSpace: 1, words: 1 })?.chars).toBe(1);
   });
 });
+
+describe('표·이미지·각주·수식 선택은 PM 경로(총계와 같은 규칙)', () => {
+  function editorFor(markdown: string) {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const editor = createNopsEditor(host, { onOpenLink: () => undefined });
+    editor.setDocument(parseDocument(markdown).doc, { silent: true });
+    return { view: editor.getView() as EditorView, host };
+  }
+  /** Chromium 처럼 표 셀 사이에 탭·행 사이에 개행을 넣는 DOM 선택을 흉내낸다. */
+  function selectNodeText(root: Node, node: Node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    return { root, range };
+  }
+  const total = { chars: 1000, charsNoSpace: 1000, words: 10 };
+
+  it('표 셀 하나를 선택하면 셀 글자수(탭 없음)', () => {
+    const { view, host } = editorFor('| 12 | 34 |\n|---|---|\n| 5 | 6 |\n');
+    const cell = host.querySelector('.ProseMirror table td, .ProseMirror table th');
+    if (!cell) throw new Error('no cell');
+    selectNodeText(host, cell);
+    expect(readEditorSelection(view, total)?.chars).toBe(2);
+  });
+
+  it('Chromium 처럼 탭이 섞인 DOM 문자열이어도 PM 경로라 부풀지 않는다', () => {
+    const { view, host } = editorFor('| 12 | 34 |\n|---|---|\n| 5 | 6 |\n');
+    const cell = host.querySelector('.ProseMirror table td, .ProseMirror table th');
+    if (!cell) throw new Error('no cell');
+    selectNodeText(host, cell);
+    const original = window.getSelection()?.toString.bind(window.getSelection());
+    // Chromium 은 표 선택 시 탭·개행을 넣는다. PM 경로를 쓰므로 값이 변하면 안 된다.
+    Object.defineProperty(window.getSelection()!, 'toString', { value: () => '12\t34\n5\t6', configurable: true });
+    try {
+      expect(readEditorSelection(view, total)?.chars).toBe(2);
+    } finally {
+      if (original) Object.defineProperty(window.getSelection()!, 'toString', { value: original, configurable: true });
+    }
+  });
+
+  it('ZWJ 가족 이모지는 1자(ZWJ 제거 금지)', () => {
+    const { view, host } = editorFor('가족 👨‍👩‍👧 끝\n');
+    const p = host.querySelector('p');
+    if (!p) throw new Error('no paragraph');
+    selectNodeText(host, p);
+    expect(readEditorSelection(view, total)?.chars).toBe(6); // '가족 ' + 1 + ' 끝'
+    expect(readEditorSelection(view, total)?.chars).toBeLessThan(8); // ZWJ 를 지우면 8자가 된다
+  });
+
+  it('이미지 alt·각주 참조·수식이 든 문단은 총계 규칙대로 센다', () => {
+    const { view, host } = editorFor('가 ![대체](a.png) 나\n');
+    const p = host.querySelector('p');
+    if (!p) throw new Error('no paragraph');
+    selectNodeText(host, p);
+    expect(readEditorSelection(view, total)?.chars).toBe(4); // '가 ' + ' 나' (이미지 0자)
+  });
+
+  it('50k 자 선택 계산 비용 ≤ 100ms', async () => {
+    const markdown = '문장 하나를 길게 씁니다. **강조** 그리고 [링크](https://x.y)\n\n'.repeat(600);
+    const { view } = editorFor(markdown);
+    const { TextSelection } = await import('prosemirror-state');
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 0, view.state.doc.content.size)));
+    const started = performance.now();
+    const stats = readEditorSelection(view, { chars: 100000, charsNoSpace: 100000, words: 1 });
+    const elapsed = performance.now() - started;
+    expect(stats).not.toBeNull();
+    expect(elapsed).toBeLessThan(100);
+  });
+});

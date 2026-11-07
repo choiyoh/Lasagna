@@ -333,3 +333,19 @@ test('위키링크 별칭 단어만 선택해도 선택 글자수가 보인다',
   expect(dom).toContain('별칭');
   await expect(page.getByTestId('writer-selection')).toContainText(`선택 ${dom.replace(/\s/g, '').length}`);
 });
+
+test('표 셀·행을 선택해도 상태줄 선택 글자수가 셀 텍스트와 같다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  const tablePath = path.join(vaultDir, 'Table.md');
+  writeFileSync(tablePath, '# Table\n\n| 12 | 34 |\n|---|---|\n| 5 | 6 |\n');
+  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Table', exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.locator('aside.sidebar').getByRole('button', { name: 'Table', exact: true }).click();
+  await toggleWriter(page, true);
+
+  // 셀 하나(2자)를 더블클릭으로 선택
+  await page.locator('.ProseMirror table td').first().dblclick();
+  const dom = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+  expect(dom.replace(/\s/g, '').length).toBe(2);
+  await expect(page.getByTestId('writer-selection')).toContainText('선택 2');
+});

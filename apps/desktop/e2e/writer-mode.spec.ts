@@ -299,3 +299,21 @@ test('키보드·마우스로 문단 안 일부를 선택하면 선택 글자수
   expect(dom).toBeGreaterThan(0);
   await expect(page.getByTestId('writer-selection')).toContainText(`선택 ${dom}`);
 });
+
+test('위키링크가 든 문단을 선택하면 별칭 글자수로 표시된다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  const wikiPath = path.join(vaultDir, 'Wiki.md');
+  writeFileSync(wikiPath, '# Wiki\n\n가 [[노트|별칭]] 나\n');
+  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Wiki', exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.locator('aside.sidebar').getByRole('button', { name: 'Wiki', exact: true }).click();
+  await toggleWriter(page, true);
+
+  const para = page.locator('.ProseMirror p').last();
+  await para.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  const dom = await page.evaluate(() => window.getSelection()?.toString().length ?? 0);
+  expect(dom).toBeGreaterThan(0);
+  // 상태줄 선택 값은 화면(DOM) 선택 글자수와 같다(위키링크는 별칭 글자수)
+  await expect(page.getByTestId('writer-selection')).toContainText(`선택 ${dom}`);
+});

@@ -17,12 +17,28 @@ export function editorTotalStats(doc: PMNode, baseline: Baseline | null): TextSt
   }
 }
 
-/** 선택이 한 텍스트블록(문단·제목·목록 항목 등) 안에 있으면 그 텍스트만 돌려준다. */
+/** atom(inline) 노드가 화면에 보이는 글자 — 위키링크는 별칭/대상, 그 밖의 atom 은 총계 규칙과 같게 0자. */
+export function atomDisplayText(node: PMNode): string {
+  const a = node.attrs as Record<string, unknown>;
+  switch (node.type.name) {
+    case 'wikilink': {
+      const target = String(a.target ?? '');
+      const label = a.alias ? String(a.alias) : `${target}${a.heading ? `#${String(a.heading)}` : ''}${a.block ? `#^${String(a.block)}` : ''}`;
+      return label;
+    }
+    case 'raw_inline':
+      return String(a.source ?? '');
+    default:
+      return ''; // embed·수식·이미지·각주 참조는 총계와 같이 0자
+  }
+}
+
+/** 선택이 한 텍스트블록(문단·제목·목록 항목 등) 안에 있으면 그 텍스트만 돌려준다(atom 은 화면 글자로). */
 export function singleTextblockText(doc: PMNode, from: number, to: number): string | null {
   const from$ = doc.resolve(from);
   const to$ = doc.resolve(to);
   if (from$.parent !== to$.parent || !from$.parent.isTextblock) return null;
-  return doc.textBetween(from, to, '\n', '');
+  return doc.textBetween(from, to, '\n', atomDisplayText);
 }
 
 /**
@@ -38,7 +54,7 @@ export function editorSelectionStats(doc: PMNode, from: number, to: number, tota
   // 총계가 아직 없으면 선택 표시도 하지 않는다(클램프를 우회한 큰 수가 보이지 않게).
   if (!total) return null;
   const inline = singleTextblockText(doc, from, to);
-  const text = inline ?? doc.textBetween(from, to, '\n', '');
+  const text = inline ?? doc.textBetween(from, to, '\n', atomDisplayText);
   // 이미지 atom 등 보이는 글자가 없는 선택은 표시하지 않는다.
   if (text.trim() === '') return null;
   const stats = countPlain(text);

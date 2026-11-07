@@ -23,12 +23,17 @@ export function writerDelay(chars: number): number {
   return Math.min(1000, Math.max(150, Math.round(chars / 150)));
 }
 
-/** 선택 표시 갱신기 — 연속 이벤트(드래그·Shift+화살표)는 **마지막 값**만 반영한다(trailing). */
+/**
+ * 선택 표시 갱신기 — **leading + trailing**: 첫 이벤트는 즉시, 이후 연속 이벤트는 delay 간격으로 마지막 값을 반영한다.
+ * (드래그·Shift 확장 중에도 100ms 안에 갱신되고, 마지막 선택은 반드시 반영된다.)
+ */
 export function createSelectionReader<T>(read: () => T, onChange: (value: T) => void, delay = 100) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let last: string | undefined;
+  let lastRunAt = 0;
   const run = () => {
     timer = undefined;
+    lastRunAt = Date.now();
     const value = read();
     const key = JSON.stringify(value);
     if (key === last) return; // 선택이 그대로면 다시 그리지 않는다
@@ -36,10 +41,12 @@ export function createSelectionReader<T>(read: () => T, onChange: (value: T) => 
     onChange(value);
   };
   return {
-    /** 연속 이벤트: 마지막 것만 delay 뒤에 반영 */
+    /** 첫 이벤트는 즉시, 이후에는 delay 간격으로 마지막 값을 반영 */
     schedule() {
+      const wait = delay - (Date.now() - lastRunAt);
+      if (timer === undefined && wait <= 0) return run();
       if (timer !== undefined) clearTimeout(timer);
-      timer = setTimeout(run, delay);
+      timer = setTimeout(run, Math.max(0, wait));
     },
     /** 마우스 업·키 업·총계 준비: 대기 중인 마지막 선택을 즉시 반영 */
     flush() {

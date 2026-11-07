@@ -10,8 +10,9 @@ import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
-import { countMarkdown, countPlain, type TextStats } from '@nopsidian/core';
-import { editorSelectionStats, WRITER_PENDING, writerCountsText, writerDelay, writerSelectionText } from './writer-status';
+import { countMarkdown, type TextStats } from '@nopsidian/core';
+import { WRITER_PENDING, writerCountsText, writerDelay, writerSelectionText } from './writer-status';
+import { editorSelectionStats, editorTotalStats } from '@nopsidian/editor/nops';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
 import type { DbEmbedHost } from './db/EmbeddedDb';
@@ -162,6 +163,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const docSizeRef = useRef(0);
   /** 이 노트를 다 읽었는지(읽기 전에는 글자수를 예약하지 않는다) */
   const loadedPathRef = useRef<string | null>(null);
+  /** 현재 에디터 문서와 저장 기준(총계를 직렬화 원문으로 세기 위해) */
+  const editStatsRef = useRef<{ doc: import('prosemirror-model').Node; baseline: Parameters<typeof editorTotalStats>[1] } | null>(null);
   /** 소스 모드에서도 글자수가 갱신되도록 소스 편집도 같은 tick 을 올린다. */
   const bumpDocTick = () => setDocTick((t) => t + 1);
   /** 소스 모드 편집기(선택 구간 오프셋을 얻기 위해) */
@@ -200,12 +203,13 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     let idle: number | undefined;
     const run = () => {
       const view = editorRef.current?.getView();
-      if (modeRef.current === 'source' || !view) {
+      const editStats = editStatsRef.current;
+      if (modeRef.current === 'source' || !view || !editStats) {
         setWriterStats(countMarkdown(writerTextRef.current?.() ?? ''));
         return;
       }
-      // 에디터 모드: 선택과 **같은 정의**(PM 문서 텍스트, 블록 구분자만)로 총계를 센다.
-      setWriterStats(countPlain(view.state.doc.textBetween(0, view.state.doc.content.size, '\n')));
+      // 에디터 모드: **저장될 마크다운 원문**을 직렬화해 소스 모드와 같은 함수로 센다.
+      setWriterStats(editorTotalStats(editStats.doc, editStats.baseline));
     };
     if (typeof window.requestIdleCallback === 'function') {
       idle = window.requestIdleCallback(run, { timeout: delay });
@@ -228,9 +232,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       if (!view) return setWriterSelected(null);
       const { from, to } = view.state.selection;
       if (from === to) return setWriterSelected(null);
-      // 블록 구분자만 넣어 센다(브라우저 선택 문자열의 탭·렌더 공백은 세지 않는다).
-      const text = view.state.doc.textBetween(from, to, '\n');
-      setWriterSelected(editorSelectionStats(text, writerStats));
+      // 전체 선택은 총계와 항등, 그 밖에는 같은 직렬화기로 센 값(클램프 포함).
+      setWriterSelected(editorSelectionStats(view.state.doc, from, to, writerStats));
     };
     document.addEventListener('selectionchange', read);
     return () => document.removeEventListener('selectionchange', read);
@@ -491,7 +494,10 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       schedule();
     };
     editor.on('change', markDirty);
-    editor.on('change', () => setDocTick((t) => t + 1));
+    editor.on('change', () => {
+      editStatsRef.current = { doc: editor.getDocument(), baseline };
+      setDocTick((t) => t + 1);
+    });
     // 작가 모드 글자수는 **저장과 같은 원문**으로 센다 — 편집 모드와 소스 모드가 같은 결과를 내야 한다.
     writerTextRef.current = () =>
       modeRef.current === 'source' && source ? source.getText() : serializeDocument(editor.getDocument(), baseline);

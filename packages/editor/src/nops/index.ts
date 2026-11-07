@@ -2,6 +2,7 @@ export { createNopsEditor, nopsSlashItems } from './create-editor';
 export type { NopsEditorOptions } from './create-editor';
 export { nopsSchema, createNopsSchema } from './schema';
 export * from './md';
+export * from './writer-stats';
 export { insertCallout, insertToggle, insertColumns, insertMathBlock, insertMarkdown } from './commands';
 export type { WikiLinkTarget } from './plugins';
 export * from './blocks';

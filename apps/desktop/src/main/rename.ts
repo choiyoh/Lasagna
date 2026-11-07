@@ -1,7 +1,6 @@
-import { t } from '@nopsidian/i18n';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { atomicWrite, planMoves, resolveInVault, sha256, type Move, type MovePlan, relocateComments } from '@nopsidian/core';
+import { atomicWrite, CodedError, planMoves, resolveInVault, sha256, type Move, type MovePlan, relocateComments } from '@nopsidian/core';
 
 /** 볼트 안의 이동 대상(파일 하나 또는 폴더 안의 모든 파일)을 파일 단위 이동 목록으로 펼친다. */
 export function expandMoves(root: string, from: string, to: string): Move[] {
@@ -9,12 +8,13 @@ export function expandMoves(root: string, from: string, to: string): Move[] {
   const isDir = existsSync(fromFull) && statSync(fromFull).isDirectory();
   // 노트는 확장자를 생략해도 .md를 유지한다
   const target = !isDir && from.toLowerCase().endsWith('.md') && !to.toLowerCase().endsWith('.md') ? `${to}.md` : to;
-  if (!existsSync(fromFull)) throw new Error(t('main.err.missingPath', { path: from }));
-  if (from === target) throw new Error(t('main.err.sameName'));
+  // 코드+params 로 던진다 — IPC 경계가 지금 언어로 번역하고, 화면은 key 로 충돌을 구분한다.
+  if (!existsSync(fromFull)) throw new CodedError('main.err.missingPath', { path: from });
+  if (from === target) throw new CodedError('main.err.sameName');
   const toFull = resolveInVault(root, target);
-  if (existsSync(toFull) && from.toLowerCase() !== target.toLowerCase()) throw new Error(t('main.err.pathExists', { path: target }));
-  if (isDir && (target + '/').startsWith(from + '/')) throw new Error(t('main.err.intoItself'));
-  if (target.split('/').some((s) => s.startsWith('.') || s === '')) throw new Error(t('main.err.badName'));
+  if (existsSync(toFull) && from.toLowerCase() !== target.toLowerCase()) throw new CodedError('main.err.pathExists', { path: target });
+  if (isDir && (target + '/').startsWith(from + '/')) throw new CodedError('main.err.intoItself');
+  if (target.split('/').some((s) => s.startsWith('.') || s === '')) throw new CodedError('main.err.badName');
 
   if (!isDir) return [{ from, to: target }];
   const moves: Move[] = [];
@@ -125,7 +125,7 @@ function pruneEmptyDirs(dirs: string[]) {
 /** 이름 변경을 되돌린다. 그 뒤에 사용자가 같은 노트를 또 고쳤다면 그 노트의 내용은 덮어쓰지 않고 건너뛴다. */
 export function undoRename(root: string, id: string): { restored: number; skipped: string[] } {
   const file = undoPath(root, id);
-  if (!existsSync(file)) throw new Error(t('main.err.noRevertRecord'));
+  if (!existsSync(file)) throw new CodedError('main.err.noRevertRecord');
   const record = JSON.parse(readFileSync(file, 'utf8')) as UndoRecord;
   const skipped: string[] = [];
   let restored = 0;

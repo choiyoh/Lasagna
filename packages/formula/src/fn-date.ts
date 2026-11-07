@@ -196,6 +196,10 @@ interface Parts {
 
 const WEEKDAY_LONG = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 const WEEKDAY_SHORT = ['일', '월', '화', '수', '목', '금', '토'];
+const WEEKDAY_LONG_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const WEEKDAY_SHORT_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_LONG_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTH_SHORT_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const TOKEN_FMT: Record<string, (p: Parts) => string> = {
   YYYY: (p) => pad(p.year, 4),
@@ -219,8 +223,20 @@ const TOKEN_FMT: Record<string, (p: Parts) => string> = {
   A: (p) => (p.hour < 12 ? '오전' : '오후'),
   a: (p) => (p.hour < 12 ? 'am' : 'pm'),
 };
+/** 영어 형식(선택 인자 'en'). 날짜·시각 토큰은 같고 월·요일·오전/오후만 영어다. */
+const TOKEN_FMT_EN: Record<string, (p: Parts) => string> = {
+  ...TOKEN_FMT,
+  MMMM: (p) => MONTH_LONG_EN[p.month - 1]!,
+  MMM: (p) => MONTH_SHORT_EN[p.month - 1]!,
+  dddd: (p) => WEEKDAY_LONG_EN[p.weekday]!,
+  ddd: (p) => WEEKDAY_SHORT_EN[p.weekday]!,
+  A: (p) => (p.hour < 12 ? 'AM' : 'PM'),
+};
 /** 긴 토큰이 먼저 매칭되게 길이 내림차순으로 둔다(YYYY → MMMM/dddd → … → M) */
 const TOKEN_ORDER = Object.keys(TOKEN_FMT).sort((a, b) => b.length - a.length);
+
+/** 표시용 raw 값의 작은따옴표를 안전한 글자로 바꾼다(문구의 따옴표와 섞이지 않게). */
+const displayRaw = (value: unknown): string => String(value).replace(/'/g, '\u2019');
 
 function formatImpl(args: FValue[]): FValue {
   const v = args[0]!;
@@ -228,6 +244,12 @@ function formatImpl(args: FValue[]): FValue {
   const d = asDate(v, 'formatDate');
   const format = args[1]!;
   if (typeof format !== 'string') throw formulaError('formula.err.formatString');
+  // 선택 인자: 표시 언어('en'). 생략하면 지금까지와 같은 한국어 값이다(기존 수식 결과 불변).
+  const localeArg = args[2];
+  if (localeArg !== undefined && localeArg !== 'en' && localeArg !== 'ko') {
+    throw formulaError('formula.err.formatLocale', { value: displayRaw(localeArg) });
+  }
+  const fmt = localeArg === 'en' ? TOKEN_FMT_EN : TOKEN_FMT;
   const t = new Date(d.ms);
   const p: Parts = {
     year: t.getFullYear(),
@@ -252,7 +274,7 @@ function formatImpl(args: FValue[]): FValue {
     }
     const name = TOKEN_ORDER.find((n) => format.startsWith(n, i));
     if (name) {
-      out += TOKEN_FMT[name]!(p);
+      out += fmt[name]!(p);
       i += name.length;
     } else {
       out += ch;
@@ -326,7 +348,7 @@ export const DATE_FNS: Record<string, FunctionDef> = {
   dateAdd: { min: 3, max: 3, impl: (args) => addImpl('dateAdd', 1, args) },
   dateSubtract: { min: 3, max: 3, impl: (args) => addImpl('dateSubtract', -1, args) },
   dateBetween: { min: 3, max: 3, impl: (args) => betweenImpl(args) },
-  formatDate: { min: 2, max: 2, impl: (args) => formatImpl(args) },
+  formatDate: { min: 2, max: 3, impl: (args) => formatImpl(args) },
   year: partDef('year', (t) => t.getFullYear()),
   month: partDef('month', (t) => t.getMonth() + 1),
   date: partDef('date', (t) => t.getDate()),
@@ -348,7 +370,7 @@ export const DATE_FNS: Record<string, FunctionDef> = {
     impl: (args) => {
       const v = args[0]!;
       if (v === null) return null;
-      if (typeof v !== 'number') throw formulaError('formula.err.fromTimestampArg', { value: String(v) });
+      if (typeof v !== 'number') throw formulaError('formula.err.fromTimestampArg', { value: displayRaw(v) });
       return mkDate(v, true);
     },
   },

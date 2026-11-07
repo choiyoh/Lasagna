@@ -429,6 +429,12 @@ const cases: Case[] = [
     render: (n) => t(n === 1 ? 'formula.err.arityExact.one' : 'formula.err.arityExact.other', { name: 'round', n, count: n }),
   },
   {
+    // '() 의' → '()의' 공백 정리(승인된 한국어 변경)
+    name: 'formula.err.arityMismatch',
+    base: (n) => `concat${n}()의 인자 개수가 맞지 않아요`,
+    render: (n) => t('formula.err.arityMismatch', { name: `concat${n}` }),
+  },
+  {
     name: 'formula.err.arityAtLeast',
     base: (n) => `concat()는 인자가 ${n}개 이상 필요해요(지금 ${n}개)`,
     render: (n) => t(n === 1 ? 'formula.err.arityAtLeast.one' : 'formula.err.arityAtLeast.other', { name: 'concat', min: n, count: n }),

@@ -13,7 +13,7 @@ import { LEGACY_GLOBAL_KEY, loadLayout, saveLayout } from './layout-cache';
 import { SETTLE_WINDOW_MS, SPINNER_DELAY_MS, isSettled, statsText } from './settle';
 import { webglAvailable } from './webgl';
 import { EmptyState } from '../components/EmptyState';
-import { drawBaseLabelUnlessHovered, resetHover } from './hover-label';
+import { clampLabelX, clearHover, drawBaseLabelUnlessHovered, resetHover, wireHover } from './hover-label';
 
 interface Props {
   data: GraphData;
@@ -108,6 +108,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     const el = host.current;
     if (!el) return;
     settledRef.current = false;
+    const cleanups: (() => void)[] = [];
     // 그래프를 다시 만들면 새 sigma 에는 hover 가 없다 — 이전 hover 를 지워야 기본 라벨이 숨은 채로 남지 않는다.
     resetHover({ hover, hoverNode });
     settleBase.current = null;
@@ -177,7 +178,9 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
           const p = pal.current;
           const size = settings.labelSize;
           ctx.font = `${settings.labelWeight} ${size}px ${settings.labelFont}`;
-          const x = data.x + data.size + 4;
+          // 오른쪽 끝 노드의 긴 라벨이 잘리지 않게 안쪽으로 당긴다(위치는 표시만 조정).
+          const width = el.clientWidth || 0;
+          const x = clampLabelX(data.x + data.size + 4, ctx.measureText(data.label).width, width, 0);
           const y = data.y + size / 3;
           // 배경색 테두리(후광)로 선·점 위에서도 글자가 또렷하게 보인다
           ctx.lineWidth = 3;
@@ -197,7 +200,8 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
           if (data.label) {
             const size = settings.labelSize + 1;
             ctx.font = `600 ${size}px ${settings.labelFont}`;
-            const x = data.x + data.size + 8;
+            const width = el.clientWidth || 0;
+            const x = clampLabelX(data.x + data.size + 8, ctx.measureText(data.label).width, width, 0);
             const y = data.y + size / 3;
             ctx.lineWidth = 4;
             ctx.lineJoin = 'round';
@@ -299,15 +303,16 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
       if (node.startsWith('#') || node.startsWith('?')) return;
       live.current.onOpen(node);
     });
-    sigma.on('enterNode', ({ node }) => {
-      hover.current = node;
-      hoverNode.current = node;
-      sigma.refresh({ skipIndexation: true });
-    });
-    sigma.on('leaveNode', () => {
-      hover.current = null;
-      hoverNode.current = null;
-      sigma.refresh({ skipIndexation: true });
+    // hover 배선은 테스트 가능한 함수로 뺐다(enter/leave → refs 갱신 + 다시 그리기).
+    wireHover(sigma, { hover, hoverNode }, () => sigma?.refresh({ skipIndexation: true }));
+
+    // 중간 mousemove 없이 캔버스 밖으로 나가도 hover 잔상이 남지 않게 정리한다.
+    const onLeave = () => clearHover({ hover, hoverNode }, () => sigma?.refresh({ skipIndexation: true }));
+    el.addEventListener('mouseleave', onLeave);
+    el.addEventListener('blur', onLeave);
+    cleanups.push(() => {
+      el.removeEventListener('mouseleave', onLeave);
+      el.removeEventListener('blur', onLeave);
     });
 
     // 레이아웃 워커
@@ -444,6 +449,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
 
     return () => {
       cancelAnimationFrame(raf);
+      cleanups.forEach((fn) => fn());
       view.current = { bbox: sigma.getCustomBBox() ?? sigma.getBBox(), camera: sigma.getCamera().getState() };
       // 도중에 닫아도 다음 진입이 콜드가 되지 않게, 계산된 마지막 자리를 수렴 여부와 함께 남긴다.
       // (수렴 전이면 done:false 로 저장돼 다음에는 고정 없이 이어서 다듬는다)

@@ -324,6 +324,9 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
             ? TextSelection.near(view.state.doc.resolve(Math.min(restored.head, size)))
             : TextSelection.create(view.state.doc, Math.min(restored.anchor, size), Math.min(restored.head, size));
         view.dispatch(view.state.tr.setSelection(sel));
+        // 커서를 상태로만 되돌리면 DOM selection 이 비어, 다음 클릭·입력이 커서를 덮어쓴다.
+        // 설정 창을 닫은 뒤 바로 이어 쓸 수 있게 포커스도 함께 돌려준다.
+        editor.focus();
       } else if (carried) {
         // 제목 동기화로 이름이 바뀌어 다시 열린 경우: 커서를 그대로
         const sel =

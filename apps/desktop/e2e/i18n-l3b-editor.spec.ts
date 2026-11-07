@@ -155,11 +155,11 @@ test('저장이 실패하면 언어를 바꿔도 미저장 편집을 잃지 않�
 
   await page.locator('.ProseMirror p').last().click();
   await page.keyboard.press('ControlOrMeta+End');
-  await page.keyboard.type(' 저장 실패 초안');
 
-  // 볼트 폴더를 읽기 전용으로 만들어 저장을 실패시킨다
+  // 볼트 폴더를 먼저 읽기 전용으로 만든 뒤 입력해야 자동 저장이 성공하지 않는다
   chmodSync(vaultDir, 0o555);
   try {
+    await page.keyboard.type(' 저장 실패 초안');
     await page.getByTestId('settings-btn').click();
     await page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: '한국어' }).click();
     await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
@@ -175,4 +175,28 @@ test('저장이 실패하면 언어를 바꿔도 미저장 편집을 잃지 않�
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type('!');
   await expect.poll(() => readFileSync(path.join(vaultDir, 'Hello.md'), 'utf8'), { timeout: 10_000 }).toContain('저장 실패 초안!');
+});
+
+test('언어를 바꿔 에디터를 다시 만들어도 커서 자리에서 바로 이어 쓸 수 있다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await page.locator('aside.sidebar').getByRole('button', { name: 'Hello', exact: true }).click();
+  const editor = page.locator('.ProseMirror');
+  await expect(editor).toHaveText(/Hello/);
+
+  await editor.click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' 앞');
+
+  // 언어를 바꾸면 에디터가 다시 만들어진다(저장 성공 경로)
+  await page.getByTestId('settings-btn').click();
+  const english = page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: 'English' });
+  await english.click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.keyboard.press('Escape');
+  await expect(editor).toHaveText(/앞/);
+
+  // 다시 클릭하지 않고 바로 입력해도 커서가 복원된 자리(끝)에 들어간다
+  await page.keyboard.type(' 뒤');
+  await expect.poll(() => readFileSync(path.join(vaultDir, 'Hello.md'), 'utf8'), { timeout: 10_000 }).toMatch(/앞 뒤/);
 });

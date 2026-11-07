@@ -10,8 +10,8 @@ import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
-import { countMarkdown, countPlain, type TextStats } from '@nopsidian/core';
-import { WRITER_PENDING, writerCountsText, writerDelay, writerSelectionText } from './writer-status';
+import { countMarkdown, type TextStats } from '@nopsidian/core';
+import { editorSelectionStats, WRITER_PENDING, writerCountsText, writerDelay, writerSelectionText } from './writer-status';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
 import type { DbEmbedHost } from './db/EmbeddedDb';
@@ -160,6 +160,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const resetKey = useRef('');
   /** 파일 크기(지연 시간 산정용) — 첫 로드에서도 큰 문서는 계산을 미룬다 */
   const docSizeRef = useRef(0);
+  /** 이 노트를 다 읽었는지(읽기 전에는 글자수를 예약하지 않는다) */
+  const loadedPathRef = useRef<string | null>(null);
   /** 소스 모드에서도 글자수가 갱신되도록 소스 편집도 같은 tick 을 올린다. */
   const bumpDocTick = () => setDocTick((t) => t + 1);
   /** 소스 모드 편집기(선택 구간 오프셋을 얻기 위해) */
@@ -189,7 +191,9 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       setWriterStats(null);
     }
     // 문서가 크면 계산을 더 모아서 한다(입력 지연 방지). idle 에서 계산하고, 그동안 이전 값을 보여 준다.
-    // 첫 로드·노트 전환에는 파일 크기(있으면)로 지연을 정한다 — 0 으로 보이지 않게 '…' 을 보여 준다.
+    // 아직 노트를 다 읽지 않았으면 계산하지 않는다(읽은 뒤 docTick 으로 다시 예약된다).
+    if (loadedPathRef.current !== path) return;
+    // 첫 로드·노트 전환에는 파일 크기로 지연을 정한다 — 0 으로 보이지 않게 '…' 을 보여 준다.
     const size = writerStats?.chars ?? docSizeRef.current;
     const delay = writerDelay(size);
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -215,14 +219,13 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     const read = () => {
       // 소스 모드에서는 선택 글자수를 표시하지 않는다(마크다운 문맥이 잘려 '선택 ≤ 전체'를 지키기 어렵다).
       if (modeRef.current === 'source') return setWriterSelected(null);
-      const root = rootRef.current;
-      const selection = window.getSelection();
-      if (!root || !selection || selection.rangeCount === 0 || selection.isCollapsed) return setWriterSelected(null);
-      if (!root.contains(selection.anchorNode)) return setWriterSelected(null);
-      const text = selection.toString();
-      if (text.trim() === '') return setWriterSelected(null);
-      // 에디터 모드는 화면에 보이는 텍스트 그대로 센다(마크다운 해석 없음).
-      setWriterSelected(countPlain(text));
+      const view = editorRef.current?.getView();
+      if (!view) return setWriterSelected(null);
+      const { from, to } = view.state.selection;
+      if (from === to) return setWriterSelected(null);
+      // 블록 구분자만 넣어 센다(브라우저 선택 문자열의 탭·렌더 공백은 세지 않는다).
+      const text = view.state.doc.textBetween(from, to, '\n');
+      setWriterSelected(editorSelectionStats(text, writerStats));
     };
     document.addEventListener('selectionchange', read);
     return () => document.removeEventListener('selectionchange', read);
@@ -389,6 +392,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       const r = await window.nops.note.read({ path });
       if (disposed) return;
       docSizeRef.current = r.content.length;
+      loadedPathRef.current = path;
       // 이미 같은 내용이면(우리가 방금 쓴 파일의 감시 이벤트 등) 아무것도 바꾸지 않는다 — 커서가 튀지 않게
       if (loaded && r.hash === hash) return;
       const view = editor.getView();
@@ -792,14 +796,14 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         />
       )}
       <div ref={sourceHostRef} className="note-editor__source" data-testid="source-editor" hidden={mode === 'edit'} />
-      {writer && writerStats && (
+      {writer && (
         <div className="note-editor__writer" data-testid="writer-status" aria-live="off">
           {writerSelected === null ? (
             <span data-testid="writer-chars">{writerStats ? writerCountsText({ locale, spacing, stats: writerStats, narrow }) : WRITER_PENDING}</span>
           ) : (
             // 선택 중에는 선택/전체만 보여 준다(글자수 줄은 숨긴다).
             <span className="note-editor__writer-sel" data-testid="writer-selection">
-              {writerSelectionText({ locale, spacing, stats: writerStats, selected: writerSelected })}
+              {writerStats && writerSelectionText({ locale, spacing, stats: writerStats, selected: writerSelected })}
             </span>
           )}
         </div>

@@ -86,7 +86,7 @@ test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은
   await toggleWriter(page, true);
   const status = page.getByTestId('writer-status');
   await expect(status).toBeVisible();
-  // 계산이 끝나기 전에는 0 이 아니라 … 을 보여 준다
+  // 계산이 끝나기 전에는 0 이 아니라 … 을 보여 준다(짧은 노트는 곧 숫자로 바뀐다)
   await expect(page.getByTestId('writer-chars')).toHaveText(/^(…|\d+자 · 공백 포함)$/);
   // "# Hello" → 보이는 글자 'Hello' 5자
   // '# Hello' + '본문' → 보이는 글자 7자

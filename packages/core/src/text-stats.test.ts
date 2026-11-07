@@ -163,6 +163,8 @@ describe('AST 경계 회귀(코드리뷰봇 사례)', () => {
     expect(stats('    들여쓴 코드\n')).toEqual({ chars: 6, charsNoSpace: 5, words: 2 });
     expect(visibleText('    들여쓴 코드\n').trim()).toBe('들여쓴 코드');
     expect(stats('> ```\n> 코드\n> ```\n')).toEqual({ chars: 2, charsNoSpace: 2, words: 1 });
+    // 인용 안 코드의 `> ` 도 코드 내용이다
+    expect(stats('> ```\n> > x\n> ```')).toEqual({ chars: 3, charsNoSpace: 2, words: 2 });
   });
 
   it('frontmatter 안의 펜스는 본문에 영향을 주지 않는다', () => {
@@ -174,5 +176,22 @@ describe('AST 경계 회귀(코드리뷰봇 사례)', () => {
     expect(visibleText(md)).not.toContain('[!note]');
     expect(visibleText(md).trim()).toBe('제목\n내용'.trim());
     expect(stats(md)).toEqual({ chars: 4, charsNoSpace: 4, words: 2 });
+  });
+});
+
+describe('인용 콜아웃·하드 브레이크·위키 대상 코드', () => {
+  it('콜아웃 표식은 인용 첫 문단 첫 줄에서만 빠진다', () => {
+    expect(visibleText('> 첫 문단\n>\n> [!note] 둘째')).toContain('[!note] 둘째');
+    expect(visibleText('> first\n> second\n>\n> [!note] third')).toContain('[!note] third');
+    expect(visibleText('> [!note] 제목')).toBe('제목');
+  });
+
+  it('하드 브레이크는 단어 구분자다', () => {
+    expect(stats('줄1  \n줄2')).toEqual({ chars: 4, charsNoSpace: 4, words: 2 });
+  });
+
+  it('위키링크 대상에 인라인 코드가 있어도 별칭만 보인다', () => {
+    expect(visibleText('[[`target`|별칭]]')).toBe('별칭');
+    expect(stats('[[`target`|별칭]]')).toEqual({ chars: 2, charsNoSpace: 2, words: 1 });
   });
 });

@@ -50,7 +50,7 @@ const BLOCK = new Set([
   'thematicBreak',
 ]);
 
-const HIDDEN = new Set(['math', 'inlineMath', 'html', 'image', 'yaml', 'definition', 'footnoteReference', 'break']);
+const HIDDEN = new Set(['math', 'inlineMath', 'html', 'image', 'yaml', 'definition', 'footnoteReference']);
 
 /** 커스텀 표식(위키링크·콜아웃·columns·toggle)을 **코드가 아닌 텍스트**에서만 제거한다. */
 function stripCustomMarkers(parts: Part[], ctx: { callout: boolean; heading: boolean }): string {
@@ -65,6 +65,10 @@ function stripCustomMarkers(parts: Part[], ctx: { callout: boolean; heading: boo
   const inProtected = (from: number, to: number) => protectedRanges.some(([a, b]) => from < b && to > a);
   const hidden: [number, number][] = [];
   const hide = (from: number, to: number) => {
+    if (to > from) hidden.push([from, to]);
+  };
+  /** 코드 내용을 건드리면 안 되는 규칙(콜아웃·columns·toggle)용 */
+  const hideOutsideCode = (from: number, to: number) => {
     if (to > from && !inProtected(from, to)) hidden.push([from, to]);
   };
 
@@ -85,7 +89,7 @@ function stripCustomMarkers(parts: Part[], ctx: { callout: boolean; heading: boo
   // 콜아웃 표식은 인용 블록 첫 줄 맨 앞에서만
   if (ctx.callout) {
     const m = /^[ \t]*\[![^\]]+\][ \t]?/.exec(joined);
-    if (m) hide(0, m[0].length);
+    if (m) hideOutsideCode(0, m[0].length);
   }
   // columns 표식은 줄 전체가 표식일 때만(코드 구간이면 건드리지 않는다)
   let lineStart = 0;
@@ -93,14 +97,14 @@ function stripCustomMarkers(parts: Part[], ctx: { callout: boolean; heading: boo
     const nl = joined.indexOf('\n', lineStart);
     const lineEnd = nl < 0 ? joined.length : nl;
     const line = joined.slice(lineStart, lineEnd);
-    if (/^[ \t]*:{3,}[a-zA-Z-]*[ \t]*$/.test(line) && !inProtected(lineStart, lineEnd)) hide(lineStart, lineEnd + (nl < 0 ? 0 : 1));
+    if (/^[ \t]*:{3,}[a-zA-Z-]*[ \t]*$/.test(line) && !inProtected(lineStart, lineEnd)) hideOutsideCode(lineStart, lineEnd + (nl < 0 ? 0 : 1));
     if (nl < 0) break;
     lineStart = nl + 1;
   }
   // 제목 끝의 {…} 속성만
   if (ctx.heading) {
     const m = /\{[^{}]*\}[ \t]*$/.exec(joined);
-    if (m && !inProtected(m.index ?? 0, joined.length)) hide(m.index ?? 0, joined.length);
+    if (m) hideOutsideCode(m.index ?? 0, joined.length);
   }
 
   hidden.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -127,6 +131,11 @@ function collectInline(node: MdNode, parts: Part[]): void {
     parts.push({ text: node.value ?? '', code: true });
     return;
   }
+  // 하드 브레이크는 줄바꿈 — 글자수는 0 이지만 단어 구분자로는 남긴다.
+  if (node.type === 'break') {
+    parts.push({ text: '\n', code: false });
+    return;
+  }
   if (HIDDEN.has(node.type)) return;
   for (const child of node.children ?? []) collectInline(child, parts);
 }
@@ -138,7 +147,8 @@ function documentText(tree: MdNode, inQuote = false): string {
   if (tree.type === 'table' || tree.type === 'tableRow' || tree.type === 'list' || tree.type === 'listItem' || tree.type === 'blockquote' || tree.type === 'footnoteDefinition') {
     const children = tree.children ?? [];
     if (tree.type === 'blockquote') {
-      return children.map((c, i) => documentText({ ...c, type: c.type === 'paragraph' && i === 0 ? 'paragraph' : c.type }, true).trimEnd()).join('\n');
+      // 콜아웃 표식은 인용 블록의 **첫 문단 첫 줄 맨 앞**에서만 제외한다(중첩 인용의 첫 문단도 동일).
+      return children.map((c, i) => documentText(c, i === 0)).join('\n');
     }
     return children.map((c) => documentText(c, inQuote)).join('\n');
   }

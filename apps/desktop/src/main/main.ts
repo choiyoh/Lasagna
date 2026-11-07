@@ -36,6 +36,8 @@ import { resolveLocale, setLocale, t } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
+import { e2eBackground } from './e2e-mode';
+import { presentBackgroundWindow } from './e2e-window';
 import { runMcpStdio } from './mcp-stdio';
 import { installProtocols, registerSchemes } from './protocols';
 import {
@@ -98,8 +100,21 @@ if (mcpStdio) {
   void runMcpStdio(mcpStdioArgs(process.argv), { packaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath() }).then((code) => app.exit(code));
 }
 
+/** 테스트 빌드에서만 켜지는 '창을 띄우지 않는' 모드(배포 앱은 항상 false). */
+const BACKGROUND_E2E = e2eBackground();
+
 if (!mcpStdio) {
   registerSchemes();
+
+  // macOS: 테스트 중에는 독 아이콘·전면 앱 전환도 하지 않는다(사용자 화면을 건드리지 않게).
+  if (BACKGROUND_E2E) {
+    app.dock?.hide();
+    app.setActivationPolicy?.('accessory');
+    // 투명·비활성 창은 Chromium 이 백그라운드로 보고 렌더·타이머를 늦춘다 → e2e 에서만 끈다.
+    app.commandLine.appendSwitch('disable-renderer-backgrounding');
+    app.commandLine.appendSwitch('disable-background-timer-throttling');
+    app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+  }
 
   if (!app.requestSingleInstanceLock()) app.quit();
 }
@@ -115,11 +130,20 @@ function createWindow(openPath?: string) {
     webPreferences: {
       ...SECURE_WEB_PREFERENCES,
       preload: path.join(__dirname, 'preload.cjs'),
+      // e2e 백그라운드(투명·비활성) 창도 렌더·타이머가 느려지지 않게 한다(배포 앱은 기본값).
+      ...(BACKGROUND_E2E ? { backgroundThrottling: false } : {}),
     },
   });
   registerWebContents(win.webContents);
   hardenWebContents(win.webContents, devServerUrl);
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    if (!BACKGROUND_E2E) {
+      win.show();
+      return;
+    }
+    // e2e: 투명 + 클릭 통과 + 포커스 불가 + 비활성 표시(사용자 화면·클릭을 방해하지 않는다).
+    presentBackgroundWindow(win);
+  });
   const query = openPath ? `?open=${encodeURIComponent(openPath)}` : '';
   void win.loadURL(`${devServerUrl ?? `${APP_ORIGIN}/index.html`}${query}`);
   if (!app.isPackaged && process.env.NOPS_DEVTOOLS === '1') win.webContents.openDevTools({ mode: 'detach' });

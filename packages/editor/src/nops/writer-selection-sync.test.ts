@@ -127,3 +127,61 @@ describe('위키링크(atom) 선택은 화면에 보이는 글자로 센다', ()
     expect(editorSelectionStats(view.state.doc, a.from, b.to, total)?.chars).toBe(11); // '강태공 그리고 낙양성'
   });
 });
+
+describe('위키링크 NodeView 안쪽 DOM 선택', () => {
+  function wikiEditor(markdown: string) {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const editor = createNopsEditor(host, { onOpenLink: () => undefined });
+    editor.setDocument(parseDocument(markdown).doc, { silent: true });
+    return { view: editor.getView() as EditorView, host };
+  }
+  /** 위키링크 NodeView 안의 텍스트 노드 */
+  function aliasTextNode(host: HTMLElement, n = 0): Text {
+    const spans = host.querySelectorAll<HTMLElement>('.nops-wikilink');
+    const el = spans[n];
+    if (!el) throw new Error('no wikilink');
+    const node = el.firstChild;
+    if (!node || node.nodeType !== 3) throw new Error('no alias text');
+    return node as Text;
+  }
+  const total = { chars: 100, charsNoSpace: 100, words: 1 };
+
+  it('별칭 전체를 DOM 으로 선택하면 별칭 글자수', () => {
+    const { view, host } = wikiEditor('가 [[노트|별칭]] 나\n');
+    const node = aliasTextNode(host);
+    window.getSelection()?.setBaseAndExtent(node, 0, node, 2);
+    expect(readEditorSelection(view, total)?.chars).toBe(2);
+  });
+
+  it('별칭 일부(같은 텍스트 노드)만 선택', () => {
+    const { view, host } = wikiEditor('가 [[노트|강태공]] 나\n');
+    const node = aliasTextNode(host);
+    window.getSelection()?.setBaseAndExtent(node, 1, node, 2);
+    expect(readEditorSelection(view, total)?.chars).toBe(1);
+  });
+
+  it('별칭 없는 위키의 대상 표기를 선택', () => {
+    const { view, host } = wikiEditor('[[노트이름]]\n');
+    const node = aliasTextNode(host);
+    window.getSelection()?.setBaseAndExtent(node, 0, node, (node.textContent ?? '').length);
+    expect(readEditorSelection(view, total)?.chars).toBe(4);
+  });
+
+  it('문단 일부 + 별칭에 걸친 선택도 화면 글자수와 일치', () => {
+    const { view, host } = wikiEditor('가나 [[노트|별칭]] 다라\n');
+    const para = host.querySelector('p');
+    const first = para?.firstChild;
+    const alias = aliasTextNode(host);
+    if (!first || first.nodeType !== 3) throw new Error('no leading text');
+    window.getSelection()?.setBaseAndExtent(first, 1, alias, 2); // '나 ' + '별칭'
+    expect(readEditorSelection(view, total)?.chars).toBe(4);
+  });
+
+  it('총계보다 큰 선택은 클램프(선택 ≤ 전체)', () => {
+    const { view, host } = wikiEditor('[[노트|별칭]]\n');
+    const node = aliasTextNode(host);
+    window.getSelection()?.setBaseAndExtent(node, 0, node, 2);
+    expect(readEditorSelection(view, { chars: 1, charsNoSpace: 1, words: 1 })?.chars).toBe(1);
+  });
+});

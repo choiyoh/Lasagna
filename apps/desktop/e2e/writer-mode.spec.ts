@@ -317,3 +317,19 @@ test('위키링크가 든 문단을 선택하면 별칭 글자수로 표시된�
   // 상태줄 선택 값은 화면(DOM) 선택 글자수와 같다(위키링크는 별칭 글자수)
   await expect(page.getByTestId('writer-selection')).toContainText(`선택 ${dom}`);
 });
+
+test('위키링크 별칭 단어만 선택해도 선택 글자수가 보인다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  const aliasPath = path.join(vaultDir, 'Alias.md');
+  writeFileSync(aliasPath, '# Alias\n\n가 [[노트|별칭]] 나\n');
+  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Alias', exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.locator('aside.sidebar').getByRole('button', { name: 'Alias', exact: true }).click();
+  await toggleWriter(page, true);
+
+  // 별칭 텍스트(2자)만 더블클릭으로 선택 — NodeView 안쪽 선택
+  await page.locator('.ProseMirror .nops-wikilink').last().dblclick();
+  const dom = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+  expect(dom).toContain('별칭');
+  await expect(page.getByTestId('writer-selection')).toContainText(`선택 ${dom.replace(/\s/g, '').length}`);
+});

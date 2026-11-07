@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { clampLabelX, clearHover, drawBaseLabelUnlessHovered, drawsBaseLabel, resetHover, wireHover } from './hover-label';
+import { clearHover, drawBaseLabelUnlessHovered, drawsBaseLabel, labelX, resetHover, wireHover } from './hover-label';
 
 describe('drawsBaseLabel', () => {
   it('skips the base label only for the node under the pointer', () => {
@@ -67,22 +67,44 @@ describe('wireHover / clearHover', () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
-  it('캔버스를 바로 벗어나면 hover 를 지우고 한 번 다시 그린다', () => {
+  it('캔버스를 바로 벗어나면 sigma 의 hoveredNode 까지 지우고 한 번 다시 그린다', () => {
     const refs = { hover: { current: 'note-a' }, hoverNode: { current: 'note-a' } };
-    const refresh = vi.fn();
-    clearHover(refs, refresh);
+    const sigma = { hoveredNode: 'note-a' as string | null, refresh: vi.fn() };
+    clearHover(refs, sigma);
     expect(refs).toMatchObject({ hover: { current: null }, hoverNode: { current: null } });
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(sigma.hoveredNode).toBeNull(); // sigma 내부 상태도 정리(잔상 방지)
+    expect(sigma.refresh).toHaveBeenCalledTimes(1);
     // 이미 hover 가 없으면 다시 그리지 않는다
-    clearHover(refs, refresh);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    clearHover(refs, sigma);
+    expect(sigma.refresh).toHaveBeenCalledTimes(1);
+    // refs 는 비었지만 sigma 만 hover 인 경우에도 지우고 다시 그린다
+    const stale = { hoveredNode: 'note-b' as string | null, refresh: vi.fn() };
+    clearHover({ hover: { current: null }, hoverNode: { current: null } }, stale);
+    expect(stale.hoveredNode).toBeNull();
+    expect(stale.refresh).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('clampLabelX', () => {
-  it('오른쪽으로 넘치면 안쪽으로 당기고, 왼쪽 여백보다 앞으로는 가지 않는다', () => {
-    expect(clampLabelX(100, 50, 400, 0)).toBe(100); // 넘치지 않음
-    expect(clampLabelX(380, 100, 400, 0)).toBe(292); // 400-8-100
-    expect(clampLabelX(10, 500, 400, 0)).toBe(8); // 아주 긴 라벨은 왼쪽 여백에 붙는다
+describe('labelX', () => {
+  const place = (nodeX: number, nodeSize: number, textWidth: number, width: number) => labelX({ nodeX, nodeSize, textWidth, width });
+  it('오른쪽 공간이 있으면 노드 오른쪽에 둔다', () => {
+    expect(place(100, 5, 50, 400)).toBe(109);
+  });
+  it('오른쪽이 좁으면 노드와 겹치지 않게 왼쪽으로 옮긴다', () => {
+    // 노드 오른쪽 380+5+4=389 에 라벨 100 → 넘침. 왼쪽: 380-5-4-100=271 (겹치지 않음)
+    expect(place(380, 5, 100, 400)).toBe(271);
+    // 왼쪽도 좁으면 잘리지 않게 오른쪽 정렬(왼쪽 여백 8)로 붙인다
+    expect(place(200, 60, 500, 400)).toBe(8);
+    // 노드가 아주 왼쪽이면 오른쪽 공간이 넉넉해 그대로 쓴다
+    expect(place(10, 5, 50, 400)).toBe(19);
+  });
+  it('경계 조합에서 라벨이 노드 사각형과 겹치지 않는다', () => {
+    const nodeX = 380;
+    const nodeSize = 5;
+    const textWidth = 100;
+    const x = place(nodeX, nodeSize, textWidth, 400);
+    const overlapsRight = x >= nodeX - nodeSize && x <= nodeX + nodeSize;
+    const overlapsLeft = x + textWidth >= nodeX - nodeSize && x <= nodeX + nodeSize;
+    expect(overlapsRight || overlapsLeft).toBe(false);
   });
 });

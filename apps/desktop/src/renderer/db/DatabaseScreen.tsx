@@ -440,7 +440,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         )}
         {renderNote && (
           <label className="dbscreen__peek small">
-            {!narrow && <span className="muted">{t('db.openRow')}</span>}{' '}
+            {!narrow && <span className="muted">{t('db.openRow')} </span>}
             <select
               value={peekMode}
               onChange={(e) => {

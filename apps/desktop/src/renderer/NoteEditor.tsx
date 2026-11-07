@@ -152,6 +152,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   peekRef.current = peek;
   const toggleRef = useRef<() => void>(() => undefined);
   const rootRef = useRef<HTMLDivElement>(null);
+  /** 재생성 전에 에디터가 포커스를 갖고 있었는지(설정 대화상자 조작 중이면 false) — 포커스 복원 판단용 */
+  const restoreFocus = useRef(false);
   const editorRef = useRef<Editor | null>(null);
   /** 에디터가 노트를 다 읽었는가(바깥 효과가 화면 이동을 해도 되는지 가리는 데 쓴다) */
   const loadedRef = useRef(false);
@@ -167,12 +169,15 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     const at = path;
     const view = editorRef.current?.getView();
     const sel = view ? { anchor: view.state.selection.anchor, head: view.state.selection.head } : null;
+    // 지금 에디터가 포커스를 갖고 있는지 — 대화상자에서 언어를 바꿨다면 false 라 포커스를 훔치지 않는다.
+    const focused = view?.hasFocus() ?? false;
     void (async () => {
       // 미저장 편집을 먼저 저장한다. 실패하면 화면 내용이 사라지지 않도록 에디터를 다시 만들지 않는다
       // (앱 언어는 이미 바뀌었고, 이 에디터의 문구는 다음에 노트를 열 때 새 언어가 된다).
       const ok = await (flushRef.current?.() ?? Promise.resolve(true));
       if (!ok || pathRef.current !== at) return;
       restoreSel.current = sel;
+      restoreFocus.current = focused;
       // 새 에디터는 편집 모드로 시작한다 — 소스 모드였다면 화면 모드도 편집으로 맞춘다(빈 화면 방지).
       if (modeRef.current === 'source') setModeState('edit');
       setEpoch((e) => e + 1);
@@ -273,6 +278,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     let baseline: Baseline | null = null;
     let hash: string | null = null;
     let dirty = false;
+    // 재생성 직전에 에디터가 포커스를 갖고 있었을 때만 되돌린다(대화상자 포커스를 훔치지 않게).
+    const hadFocus = restoreFocus.current;
     let saving = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let loaded = false;
@@ -324,9 +331,9 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
             ? TextSelection.near(view.state.doc.resolve(Math.min(restored.head, size)))
             : TextSelection.create(view.state.doc, Math.min(restored.anchor, size), Math.min(restored.head, size));
         view.dispatch(view.state.tr.setSelection(sel));
-        // 커서를 상태로만 되돌리면 DOM selection 이 비어, 다음 클릭·입력이 커서를 덮어쓴다.
-        // 설정 창을 닫은 뒤 바로 이어 쓸 수 있게 포커스도 함께 돌려준다.
-        editor.focus();
+        // 커서를 상태로만 되돌리면 DOM selection 이 비어, 다음 입력이 커서를 덮어쓴다.
+        // 에디터가 포커스를 갖고 있던 경우에만 돌려준다(대화상자 조작 중이면 건드리지 않는다).
+        if (hadFocus) editor.focus();
       } else if (carried) {
         // 제목 동기화로 이름이 바뀌어 다시 열린 경우: 커서를 그대로
         const sel =

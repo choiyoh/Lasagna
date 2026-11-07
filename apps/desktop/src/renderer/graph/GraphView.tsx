@@ -13,7 +13,7 @@ import { LEGACY_GLOBAL_KEY, loadLayout, saveLayout } from './layout-cache';
 import { SETTLE_WINDOW_MS, SPINNER_DELAY_MS, isSettled, statsText } from './settle';
 import { webglAvailable } from './webgl';
 import { EmptyState } from '../components/EmptyState';
-import { clampLabelX, clearHover, drawBaseLabelUnlessHovered, resetHover, wireHover } from './hover-label';
+import { clearHover, drawBaseLabelUnlessHovered, labelX, resetHover, wireHover } from './hover-label';
 
 interface Props {
   data: GraphData;
@@ -179,8 +179,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
           const size = settings.labelSize;
           ctx.font = `${settings.labelWeight} ${size}px ${settings.labelFont}`;
           // 오른쪽 끝 노드의 긴 라벨이 잘리지 않게 안쪽으로 당긴다(위치는 표시만 조정).
-          const width = el.clientWidth || 0;
-          const x = clampLabelX(data.x + data.size + 4, ctx.measureText(data.label).width, width, 0);
+          const x = labelX({ nodeX: data.x, nodeSize: data.size, textWidth: ctx.measureText(data.label).width, width: el.clientWidth || 0 });
           const y = data.y + size / 3;
           // 배경색 테두리(후광)로 선·점 위에서도 글자가 또렷하게 보인다
           ctx.lineWidth = 3;
@@ -200,8 +199,7 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
           if (data.label) {
             const size = settings.labelSize + 1;
             ctx.font = `600 ${size}px ${settings.labelFont}`;
-            const width = el.clientWidth || 0;
-            const x = clampLabelX(data.x + data.size + 8, ctx.measureText(data.label).width, width, 0);
+            const x = labelX({ nodeX: data.x, nodeSize: data.size + 4, textWidth: ctx.measureText(data.label).width, width: el.clientWidth || 0, pad: 8 });
             const y = data.y + size / 3;
             ctx.lineWidth = 4;
             ctx.lineJoin = 'round';
@@ -307,7 +305,8 @@ export function GraphView({ data, settings, current, onOpen, testId, cacheKey, f
     wireHover(sigma, { hover, hoverNode }, () => sigma?.refresh({ skipIndexation: true }));
 
     // 중간 mousemove 없이 캔버스 밖으로 나가도 hover 잔상이 남지 않게 정리한다.
-    const onLeave = () => clearHover({ hover, hoverNode }, () => sigma?.refresh({ skipIndexation: true }));
+    // sigma 내부 hover 상태(hoveredNode)까지 지워, 중간 mousemove 없이 나가도 잔상이 남지 않게 한다.
+    const onLeave = () => clearHover({ hover, hoverNode }, sigma as unknown as { hoveredNode?: string | null; refresh?: () => void });
     el.addEventListener('mouseleave', onLeave);
     el.addEventListener('blur', onLeave);
     cleanups.push(() => {

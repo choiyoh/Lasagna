@@ -109,6 +109,10 @@ if (!mcpStdio) {
   if (BACKGROUND_E2E) {
     app.dock?.hide();
     app.setActivationPolicy?.('accessory');
+    // 투명·비활성 창은 Chromium 이 백그라운드로 보고 렌더·타이머를 늦춘다 → e2e 에서만 끈다.
+    app.commandLine.appendSwitch('disable-renderer-backgrounding');
+    app.commandLine.appendSwitch('disable-background-timer-throttling');
+    app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
   }
 
   if (!app.requestSingleInstanceLock()) app.quit();
@@ -125,6 +129,8 @@ function createWindow(openPath?: string) {
     webPreferences: {
       ...SECURE_WEB_PREFERENCES,
       preload: path.join(__dirname, 'preload.cjs'),
+      // e2e 백그라운드(투명·비활성) 창도 렌더·타이머가 느려지지 않게 한다(배포 앱은 기본값).
+      ...(BACKGROUND_E2E ? { backgroundThrottling: false } : {}),
     },
   });
   registerWebContents(win.webContents);
@@ -134,9 +140,11 @@ function createWindow(openPath?: string) {
       win.show();
       return;
     }
-    // e2e: 화면 밖에 두고 비활성으로만 띄운다 — 포커스를 가져오지 않아 사용자가 쓰는 창이 그대로 남는다.
-    // (브라우저 창 자체는 존재해야 Playwright 가 붙을 수 있다.)
+    // e2e: 화면 밖 좌표 + **투명(opacity 0)** + 비활성 표시.
+    // macOS 는 창 좌표를 화면 안으로 clamp 하므로 좌표만으로는 화면에 보인다 — 투명도를 0 으로 두어
+    // 실제로 보이지 않게 하고, showInactive 로 포커스를 가져오지 않는다(사용자 창이 그대로 유지).
     win.setBounds({ x: -20000, y: -20000, width: 1200, height: 800 });
+    win.setOpacity(0);
     win.showInactive();
     // 창이 비활성이어도 DOM 포커스·입력은 되도록 webContents 에 포커스를 준다.
     win.webContents.focus();

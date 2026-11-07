@@ -19,13 +19,18 @@ const DOCS: [string, string][] = [
   ['table', '| a | b |\n|---|---|\n| 1 | 2 |\n'],
   ['math', '수식 $x^2$ 와 $$y$$\n'],
   ['image', '![[사진.png]] ![대체](a.png)\n'],
+  ['code block', '```ts\nconst a = 1;\n```\n'],
+  ['inline code', '본문 `const a = 1;` 코드\n'],
+  ['list', '- 하나\n- 둘\n- 셋\n'],
+  ['callout', '> [!note] 제목\n> 내용\n'],
+  ['escape', '\\*별표\\* 와 \\# 제목\n'],
 ];
 
 describe('에디터 총계 == 소스 총계(UI 함수 대상)', () => {
   it('여러 문서 모양에서 같은 값을 낸다', () => {
     const diffs: string[] = [];
     for (const [name, markdown] of DOCS) {
-      const editor = editorTotalStats(docOf(markdown), null);
+      const editor = editorTotalStats(docOf(markdown), null)!;
       const source = countMarkdown(markdown);
       if (editor.chars !== source.chars || editor.charsNoSpace !== source.charsNoSpace) {
         diffs.push(`${name}: editor=${JSON.stringify(editor)} source=${JSON.stringify(source)}`);
@@ -38,7 +43,7 @@ describe('에디터 총계 == 소스 총계(UI 함수 대상)', () => {
     for (const [name, markdown] of DOCS) {
       const doc = docOf(markdown);
       const size = doc.content.size;
-      const total = editorTotalStats(doc, null);
+      const total = editorTotalStats(doc, null)!;
       expect(editorSelectionStats(doc, 0, size, total)).toEqual(total);
       for (let from = 0; from <= size; from += 2) {
         for (let to = from; to <= size; to += 3) {
@@ -78,7 +83,7 @@ describe('부분 선택 글자수(UI 함수) — 한 문단 안은 직렬화 없
   };
   const sel = (markdown: string, needle: string, total?: ReturnType<typeof editorTotalStats>) => {
     const doc = docOf(markdown);
-    const t = total ?? editorTotalStats(doc, null);
+    const t = total ?? editorTotalStats(doc, null)!;
     const { from, to } = posOf(doc, needle);
     return { stats: editorSelectionStats(doc, from, to, t), total: t, from, to };
   };
@@ -118,7 +123,7 @@ describe('부분 선택 글자수(UI 함수) — 한 문단 안은 직렬화 없
   it('전체 선택 후 일부만 남기기 — 남긴 글자수 그대로', () => {
     const md = '가나다라마바사아자차\\n';
     const doc = docOf(md);
-    const total = editorTotalStats(doc, null);
+    const total = editorTotalStats(doc, null)!;
     expect(editorSelectionStats(doc, 0, doc.content.size, total)).toEqual(total);
     const { from, to } = posOf(doc, '가나다');
     expect(editorSelectionStats(doc, from, to, total)?.chars).toBe(3);
@@ -127,7 +132,7 @@ describe('부분 선택 글자수(UI 함수) — 한 문단 안은 직렬화 없
   it('퍼징: 문단 안 임의 구간의 선택 글자수 == 그 텍스트의 글자수', () => {
     const md = '가나다라 마바사 **굵게** [링크](https://x.y) 😀 abc\\n';
     const doc = docOf(md);
-    const total = editorTotalStats(doc, null);
+    const total = editorTotalStats(doc, null)!;
     const size = doc.content.size;
     for (let from = 0; from < size - 4; from += 1) {
       for (let len = 1; len <= 5; len += 1) {

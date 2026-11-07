@@ -164,7 +164,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   /** 이 노트를 다 읽었는지(읽기 전에는 글자수를 예약하지 않는다) */
   const loadedPathRef = useRef<string | null>(null);
   /** 현재 에디터 문서와 저장 기준(총계를 직렬화 원문으로 세기 위해) */
-  const editStatsRef = useRef<{ doc: import('prosemirror-model').Node; baseline: Parameters<typeof editorTotalStats>[1] } | null>(null);
+  /** 현재 에디터의 저장 기준(총계를 '지금 문서'로 직렬화하기 위해) */
+  const baselineRef = useRef<Parameters<typeof editorTotalStats>[1]>(null);
   /** 소스 모드에서도 글자수가 갱신되도록 소스 편집도 같은 tick 을 올린다. */
   const bumpDocTick = () => setDocTick((t) => t + 1);
   /** 소스 모드 편집기(선택 구간 오프셋을 얻기 위해) */
@@ -202,14 +203,15 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     let timer: ReturnType<typeof setTimeout> | undefined;
     let idle: number | undefined;
     const run = () => {
+      // 항상 **지금** 에디터 문서를 읽는다(재생성·무음 reload·소스 왕복 뒤에도 최신).
       const view = editorRef.current?.getView();
-      const editStats = editStatsRef.current;
-      if (modeRef.current === 'source' || !view || !editStats) {
+      if (modeRef.current === 'source' || !view) {
         setWriterStats(countMarkdown(writerTextRef.current?.() ?? ''));
         return;
       }
-      // 에디터 모드: **저장될 마크다운 원문**을 직렬화해 소스 모드와 같은 함수로 센다.
-      setWriterStats(editorTotalStats(editStats.doc, editStats.baseline));
+      // 에디터 모드: 현재 문서를 **저장될 마크다운 원문**으로 직렬화해 소스 모드와 같은 함수로 센다.
+      const next = editorTotalStats(view.state.doc, baselineRef.current);
+      if (next) setWriterStats(next); // 직렬화 실패 시 이전 값을 유지('…' 로 되돌리지 않는다)
     };
     if (typeof window.requestIdleCallback === 'function') {
       idle = window.requestIdleCallback(run, { timeout: delay });
@@ -392,6 +394,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     const showContent = (content: string) => {
       const parsed = parseDocument(content);
       baseline = parsed.baseline;
+      baselineRef.current = baseline;
       editor.setDocument(parsed.doc, { silent: true });
       source?.setText(content);
     };
@@ -467,6 +470,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
           dirty = false;
         } else {
           baseline = parseDocument(r.content).baseline;
+          baselineRef.current = baseline;
           dirty = snapshot() !== atSave; // 저장하는 동안 더 편집했으면 다시 저장
         }
         setState(dirty ? 'dirty' : 'saved');
@@ -494,10 +498,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       schedule();
     };
     editor.on('change', markDirty);
-    editor.on('change', () => {
-      editStatsRef.current = { doc: editor.getDocument(), baseline };
-      setDocTick((t) => t + 1);
-    });
+    editor.on('change', () => setDocTick((t) => t + 1));
     // 작가 모드 글자수는 **저장과 같은 원문**으로 센다 — 편집 모드와 소스 모드가 같은 결과를 내야 한다.
     writerTextRef.current = () =>
       modeRef.current === 'source' && source ? source.getText() : serializeDocument(editor.getDocument(), baseline);
@@ -581,6 +582,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         const text = source.getText();
         const parsed = parseDocument(text);
         baseline = parsed.baseline; // 소스에서 고친 내용이 기준이 되므로 안 바뀐 블록은 바이트 그대로 유지된다
+        baselineRef.current = baseline;
         editor.setDocument(parsed.doc, { silent: true });
         current = 'edit';
         setModeState('edit');

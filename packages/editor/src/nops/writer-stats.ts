@@ -7,8 +7,13 @@ import { serializeDocument, type Baseline } from './md/document.js';
  * 에디터 문서를 직렬화해 `countMarkdown` 에 넣으므로 columns·위키링크·토글·각주·하드브레이크가
  * 소스 모드와 구조적으로 같은 값이 된다.
  */
-export function editorTotalStats(doc: PMNode, baseline: Baseline | null): TextStats {
-  return countMarkdown(serializeDocument(doc, baseline));
+export function editorTotalStats(doc: PMNode, baseline: Baseline | null): TextStats | null {
+  try {
+    return countMarkdown(serializeDocument(doc, baseline));
+  } catch {
+    // 직렬화가 실패하면 화면은 이전 값을 유지한다(0·'…' 로 깜빡이지 않게).
+    return null;
+  }
 }
 
 /** 선택이 한 텍스트블록(문단·제목·목록 항목 등) 안에 있으면 그 텍스트만 돌려준다. */
@@ -32,7 +37,10 @@ export function editorSelectionStats(doc: PMNode, from: number, to: number, tota
   // 총계가 아직 없으면 선택 표시도 하지 않는다(클램프를 우회한 큰 수가 보이지 않게).
   if (!total) return null;
   const inline = singleTextblockText(doc, from, to);
-  const stats = countPlain(inline ?? doc.textBetween(from, to, '\n', ''));
+  const text = inline ?? doc.textBetween(from, to, '\n', '');
+  // 이미지 atom 등 보이는 글자가 없는 선택은 표시하지 않는다.
+  if (text.trim() === '') return null;
+  const stats = countPlain(text);
   // 블록 경계를 가로지르는 선택은 컨테이너 일부가 텍스트로 잡혀 총계보다 커질 수 있어 클램프한다(안전장치).
   return {
     chars: Math.min(stats.chars, total.chars),

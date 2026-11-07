@@ -230,3 +230,38 @@ test('소스 모드에서 링크 주소만 선택하면 0자이고, columns 문�
   await expect(page.getByTestId('writer-selection')).toHaveCount(0);
   await expect(page.getByTestId('writer-chars')).toHaveText(/자 · 공백 포함$/);
 });
+
+test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상태줄은 현재 문서 값이다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  const livePath = path.join(vaultDir, 'Live.md');
+  writeFileSync(livePath, '# Live\n\n처음\n');
+  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Live', exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.locator('aside.sidebar').getByRole('button', { name: 'Live', exact: true }).click();
+  await toggleWriter(page, true);
+  await expect(page.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 포함$/);
+
+  // 편집으로 총계를 바꾼다
+  await page.locator('.ProseMirror p').last().click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type('추가 문장');
+  await expect(page.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 포함$/);
+
+  // 밖에서 파일을 통째로 바꾸면(무음 reload) 상태줄도 새 내용 기준이어야 한다
+  writeFileSync(livePath, '# Live\n\n짧\n');
+  await expect(page.locator('.ProseMirror')).toHaveText(/짧/);
+  const shortCount = await page.getByTestId('writer-chars').innerText();
+  expect(shortCount).toMatch(/^\d+자 · 공백 포함$/);
+
+  // 소스 모드 왕복·언어 전환 뒤에도 값이 현재 문서와 일치한다
+  await page.keyboard.press('ControlOrMeta+e');
+  await expect(page.getByTestId('source-editor')).toBeVisible();
+  await page.keyboard.press('ControlOrMeta+e');
+  await expect(page.locator('.ProseMirror')).toBeVisible();
+  await expect(page.getByTestId('writer-chars')).toHaveText(shortCount);
+  await page.getByTestId('settings-btn').click();
+  await page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: 'English' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('writer-chars')).toContainText('characters');
+});

@@ -213,19 +213,36 @@ describe('표·이미지·각주·수식 선택은 PM 경로(총계와 같은 �
     expect(readEditorSelection(view, total)?.chars).toBe(2);
   });
 
-  it('Chromium 처럼 탭이 섞인 DOM 문자열이어도 PM 경로라 부풀지 않는다', () => {
-    const { view, host } = editorFor('| 12 | 34 |\n|---|---|\n| 5 | 6 |\n');
-    const cell = host.querySelector('.ProseMirror table td, .ProseMirror table th');
-    if (!cell) throw new Error('no cell');
-    selectNodeText(host, cell);
-    const original = window.getSelection()?.toString.bind(window.getSelection());
-    // Chromium 은 표 선택 시 탭·개행을 넣는다. PM 경로를 쓰므로 값이 변하면 안 된다.
-    Object.defineProperty(window.getSelection()!, 'toString', { value: () => '12\t34\n5\t6', configurable: true });
+  it('Chromium 표 선택 문자열(TAB·개행 포함)이어도 PM 경로라 부풀지 않는다', () => {
+    // 실제 headless Chromium(1248) 증거: 셀 사이 TAB(U+0009), 행 사이 개행
+    const chromiumRow = '1\t2\n3\t4';
+    const { view, host } = editorFor('| 1 | 2 |\n|---|---|\n| 3 | 4 |\n');
+    const cells = host.querySelectorAll<HTMLElement>('.ProseMirror table th, .ProseMirror table td');
+    if (cells.length < 4) throw new Error('no cells');
+    const textOf = (el: HTMLElement) => el.firstChild as Text | null;
+    const a = textOf(cells[0]);
+    const b = textOf(cells[1]);
+    if (!a || !b) throw new Error('no cell text');
+    // 행 선택(두 셀에 걸침) — Chromium 은 toString() 에 TAB 을 넣는다
+    window.getSelection()?.setBaseAndExtent(a, 0, b, (b.textContent ?? '').length);
+    const original = window.getSelection()!.toString.bind(window.getSelection());
+    Object.defineProperty(window.getSelection()!, 'toString', { value: () => chromiumRow, configurable: true });
     try {
-      expect(readEditorSelection(view, total)?.chars).toBe(2);
+      expect(readEditorSelection(view, total)?.chars).toBe(2); // '1' + '2' (TAB 제외)
     } finally {
-      if (original) Object.defineProperty(window.getSelection()!, 'toString', { value: original, configurable: true });
+      Object.defineProperty(window.getSelection()!, 'toString', { value: original, configurable: true });
     }
+  });
+
+  it('표 전체를 셀 끝점으로 선택하면 셀 텍스트 합(탭 없음)', () => {
+    const { view, host } = editorFor('| 1 | 2 |\n|---|---|\n| 3 | 4 |\n');
+    const cells = host.querySelectorAll<HTMLElement>('.ProseMirror table th, .ProseMirror table td');
+    const first = cells[0]?.firstChild as Text | null;
+    const lastCell = cells[cells.length - 1];
+    const last = lastCell?.firstChild as Text | null;
+    if (!first || !last) throw new Error('no cell text');
+    window.getSelection()?.setBaseAndExtent(first, 0, last, (last.textContent ?? '').length);
+    expect(readEditorSelection(view, total)?.chars).toBe(4); // 1 2 3 4
   });
 
   it('ZWJ 가족 이모지는 1자(ZWJ 제거 금지)', () => {

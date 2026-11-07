@@ -72,18 +72,21 @@ function stripCustomMarkers(parts: Part[], ctx: { callout: boolean; heading: boo
     if (to > from && !inProtected(from, to)) hidden.push([from, to]);
   };
 
-  // 위키링크: 별칭이 있으면 대상·괄호, 없으면 괄호만. 임베드는 통째로.
+  // 위키링크: 링크 **전체가 코드 조각 안**에 있으면 손대지 않는다(인라인 코드 내용 보호).
+  const entirelyInCode = (from: number, to: number) => protectedRanges.some(([a, b]) => from >= a && to <= b);
   for (const m of joined.matchAll(/!?\[\[([^\]|#]*)(#[^\]|]*)?(\|([^\]]*))?\]\]/g)) {
     const at = m.index ?? 0;
+    const end = at + m[0].length;
+    if (entirelyInCode(at, end)) continue;
     if (m[0].startsWith('!')) {
-      hide(at, at + m[0].length);
+      hide(at, end);
     } else if (m[4] !== undefined) {
       const aliasAt = at + m[0].indexOf('|') + 1;
       hide(at, aliasAt);
-      hide(aliasAt + m[4].length, at + m[0].length);
+      hide(aliasAt + m[4].length, end);
     } else {
       hide(at, at + 2);
-      hide(at + m[0].length - 2, at + m[0].length);
+      hide(end - 2, end);
     }
   }
   // 콜아웃 표식은 인용 블록 첫 줄 맨 앞에서만

@@ -131,7 +131,15 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
   const again = await app.firstWindow();
   await openNote(again);
   await expect(again.getByTestId('writer-status')).toBeVisible();
-  await expect(again.getByTestId('writer-chars')).toHaveText(/\d+자/);
+  // 설정이 저장된 채 앱을 다시 열면 노트를 열자마자 숫자가 나온다('…' 로 남지 않음)
+  await expect(again.getByTestId('writer-chars')).toHaveText(/\d+자 · 공백 포함$/);
+
+  // 다른 노트로 바꾸면 숫자도 그 노트 기준으로 갱신된다
+  const other = path.join(vaultDir, 'Other.md');
+  writeFileSync(other, '# Other\n\n짧은 글\n');
+  await expect(again.locator('aside.sidebar').getByRole('button', { name: 'Other', exact: true })).toBeVisible({ timeout: 20_000 });
+  await again.locator('aside.sidebar').getByRole('button', { name: 'Other', exact: true }).click();
+  await expect(again.getByTestId('writer-chars')).toHaveText(/\d+자 · 공백 포함$/);
 
   // 영어로 바꾸면 characters · words
   await again.getByTestId('settings-btn').click();

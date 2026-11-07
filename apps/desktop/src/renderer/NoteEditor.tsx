@@ -10,7 +10,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
-import { countMarkdown, type TextStats } from '@nopsidian/core';
+import { countMarkdown, countPlain, type TextStats } from '@nopsidian/core';
 import { editorSelectionStats, WRITER_PENDING, writerCountsText, writerDelay, writerSelectionText } from './writer-status';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
@@ -199,8 +199,13 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     let timer: ReturnType<typeof setTimeout> | undefined;
     let idle: number | undefined;
     const run = () => {
-      const text = writerTextRef.current?.() ?? '';
-      setWriterStats(countMarkdown(text));
+      const view = editorRef.current?.getView();
+      if (modeRef.current === 'source' || !view) {
+        setWriterStats(countMarkdown(writerTextRef.current?.() ?? ''));
+        return;
+      }
+      // 에디터 모드: 선택과 **같은 정의**(PM 문서 텍스트, 블록 구분자만)로 총계를 센다.
+      setWriterStats(countPlain(view.state.doc.textBetween(0, view.state.doc.content.size, '\n')));
     };
     if (typeof window.requestIdleCallback === 'function') {
       idle = window.requestIdleCallback(run, { timeout: delay });
@@ -229,7 +234,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     };
     document.addEventListener('selectionchange', read);
     return () => document.removeEventListener('selectionchange', read);
-  }, [writer, epoch, path, mode]);
+  }, [writer, epoch, path, mode, writerStats]);
   useEffect(() => {
     restoreSel.current = null;
   }, [path]);
@@ -393,6 +398,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       if (disposed) return;
       docSizeRef.current = r.content.length;
       loadedPathRef.current = path;
+      // 첫 로드·노트 전환에서도 상태줄이 '…' 로 남지 않게 즉시 재계산을 예약한다.
+      bumpDocTick();
       // 이미 같은 내용이면(우리가 방금 쓴 파일의 감시 이벤트 등) 아무것도 바꾸지 않는다 — 커서가 튀지 않게
       if (loaded && r.hash === hash) return;
       const view = editor.getView();

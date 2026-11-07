@@ -26,6 +26,8 @@ export const ko = {
   'settings.writerSpacing': "글자수 기준",
   'settings.writerSpacing.include': "공백 포함",
   'settings.writerSpacing.exclude': "공백 제외",
+  'writer.charsOnly': "글자수 {count} · 공백 포함",
+  'writer.charsNoSpaceOnly': "글자수 {count} · 공백 제외",
   'writer.chars': "글자수 {count} · 공백 포함 · {words} 단어",
   'writer.charsNoSpace': "글자수 {count} · 공백 제외 · {words} 단어",
   'writer.selection': "선택 {selected} / 전체 {total}",

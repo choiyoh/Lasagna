@@ -735,10 +735,15 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       {writer && writerStats && (
         <div className="note-editor__writer" data-testid="writer-status" aria-live="off">
           <span data-testid="writer-chars">
-            {t(spacing === 'include' ? 'writer.chars' : 'writer.charsNoSpace', {
-              count: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace),
-              words: formatNumber(writerStats.words),
-            })}
+            {locale === 'ko'
+              ? // 한국어(웹소설 기준)는 글자수만 — 단어 수는 넣지 않는다
+                t(spacing === 'include' ? 'writer.charsOnly' : 'writer.charsNoSpaceOnly', {
+                  count: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace),
+                })
+              : t(spacing === 'include' ? 'writer.chars' : 'writer.charsNoSpace', {
+                  count: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace),
+                  words: formatNumber(writerStats.words),
+                })}
           </span>
           {writerSelected !== null && (
             <span className="note-editor__writer-sel" data-testid="writer-selection">

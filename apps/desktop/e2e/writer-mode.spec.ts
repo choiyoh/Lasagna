@@ -88,13 +88,13 @@ test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은
   await expect(status).toBeVisible();
   // "# Hello" → 보이는 글자 'Hello' 5자
   // '# Hello' + '본문' → 보이는 글자 7자
-  await expect(page.getByTestId('writer-chars')).toHaveText(/글자수 7 · 공백 포함/);
+  await expect(page.getByTestId('writer-chars')).toHaveText(/^글자수 7 · 공백 포함$/);
 
   // 입력하면 150ms 디바운스 뒤 갱신
   await page.locator('.ProseMirror p').last().click();
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type(' world');
-  await expect(page.getByTestId('writer-chars')).toHaveText(/글자수 13 · 공백 포함/);
+  await expect(page.getByTestId('writer-chars')).toHaveText(/^글자수 13 · 공백 포함$/);
 
   // 선택 영역 표시
   for (let i = 0; i < 5; i += 1) await page.keyboard.press('Shift+ArrowLeft');
@@ -104,7 +104,7 @@ test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은
   await page.getByTestId('settings-btn').click();
   await page.getByRole('radiogroup', { name: '글자수 기준' }).getByRole('radio', { name: '공백 제외' }).click();
   await page.keyboard.press('Escape');
-  await expect(page.getByTestId('writer-chars')).toHaveText(/글자수 12 · 공백 제외/);
+  await expect(page.getByTestId('writer-chars')).toHaveText(/^글자수 12 · 공백 제외$/);
 
   // 끄면 사라지고, 토글 전후 노트 파일은 바이트 단위로 같다(입력으로 바뀐 내용은 그대로)
   await expect.poll(() => readFileSync(notePath, 'utf8'), { timeout: 10_000 }).toContain('world');

@@ -25,6 +25,8 @@ export const en: Record<MessageKey, string> = {
   'settings.writerSpacing': "Count spaces",
   'settings.writerSpacing.include': "Include spaces",
   'settings.writerSpacing.exclude': "Exclude spaces",
+  'writer.charsOnly': "{count} characters",
+  'writer.charsNoSpaceOnly': "{count} characters (no spaces)",
   'writer.chars': "{count} characters · {words} words",
   'writer.charsNoSpace': "{count} characters (no spaces) · {words} words",
   'writer.selection': "Selected {selected} / {total}",

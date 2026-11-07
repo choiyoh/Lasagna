@@ -22,161 +22,150 @@ export function graphemeCount(text: string): number {
   return n;
 }
 
-/** mdast 노드(위치는 body 기준) */
+/** mdast 노드(파서가 만든 값·구조만 쓴다 — 원문 오프셋에 의존하지 않는다) */
 interface MdNode {
   type: string;
   value?: string;
-  position?: { start: { offset?: number }; end: { offset?: number } };
   children?: MdNode[];
 }
 
-const rangeOf = (node: MdNode): [number, number] | null => {
-  const s = node.position?.start.offset;
-  const e = node.position?.end.offset;
-  return typeof s === 'number' && typeof e === 'number' && e > s ? [s, e] : null;
-};
-
-/** 본문 텍스트 안의 위키링크 표식(괄호·대상)을 뺀 구간. 임베드(`![[…]]`)는 통째로 숨긴다. */
-function wikiHidden(text: string, base: number): [number, number][] {
-  const hidden: [number, number][] = [];
-  for (const m of text.matchAll(/!\[\[[^\]]*\]\]/g)) {
-    const at = base + (m.index ?? 0);
-    hidden.push([at, at + m[0].length]);
-  }
-  for (const m of text.matchAll(/\[\[([^\]|#]*)(#[^\]|]*)?(\|([^\]]*))?\]\]/g)) {
-    const at = base + (m.index ?? 0);
-    if (m[4] !== undefined) {
-      const aliasAt = at + m[0].indexOf('|') + 1;
-      hidden.push([at, aliasAt], [aliasAt + m[4].length, at + m[0].length]);
-    } else {
-      hidden.push([at, at + 2], [at + m[0].length - 2, at + m[0].length]);
-    }
-  }
-  return hidden;
+/** 인라인 조각: 코드 내용인지(코드에는 마크다운 규칙을 적용하지 않는다) */
+interface Part {
+  text: string;
+  code: boolean;
 }
 
-/** 보이는 글자 마스크(1 = 보임). 표준 마크다운 구조는 mdast 파서에 맡기고, 커스텀 표식만 줄 단위로 뺀다. */
-export function visibleMask(markdown: string): Uint8Array {
-  const source = markdown.replace(/\r\n?/g, '\n');
-  const mask = new Uint8Array(source.length); // 0 = 숨김, 1 = 보임
-  const frontmatter = splitFrontmatter(source);
-  const bodyOffset = frontmatter?.end ?? 0;
-  const body = source.slice(bodyOffset);
-  /** 코드(펜스·인라인) 내용 구간 — 줄 단위 커스텀 표식 규칙을 적용하지 않는다 */
-  const codeRanges: [number, number][] = [];
-  const hide = (from: number, to: number) => {
-    for (let i = Math.max(0, from); i < Math.min(mask.length, to); i += 1) mask[i] = 0;
-  };
-  const show = (from: number, to: number) => {
-    for (let i = Math.max(0, from); i < Math.min(mask.length, to); i += 1) mask[i] = 1;
-  };
+const BLOCK = new Set([
+  'paragraph',
+  'heading',
+  'blockquote',
+  'list',
+  'listItem',
+  'code',
+  'table',
+  'tableRow',
+  'footnoteDefinition',
+  'math',
+  'html',
+  'thematicBreak',
+]);
 
-  if (body !== '') {
-    const tree = parseTree(body) as unknown as MdNode;
-    const walk = (node: MdNode): void => {
-      const range = rangeOf(node);
-      if (node.type === 'text' && range) {
-        const [s, e] = range;
-        show(bodyOffset + s, bodyOffset + e);
-        for (const [h1, h2] of wikiHidden(body.slice(s, e), bodyOffset + s)) hide(h1, h2);
-        return;
-      }
-      if (node.type === 'inlineCode' && range) {
-        const raw = body.slice(range[0], range[1]);
-        const ticks = /^`+/.exec(raw)?.[0].length ?? 1;
-        const from = bodyOffset + range[0] + ticks;
-        const to = bodyOffset + range[1] - ticks;
-        show(from, to);
-        codeRanges.push([from, to]);
-        return;
-      }
-      if (node.type === 'code' && range) {
-        const raw = body.slice(range[0], range[1]);
-        const value = node.value ?? '';
-        const at = raw.indexOf(value);
-        if (at >= 0) {
-          const from = bodyOffset + range[0] + at;
-          const to = from + value.length;
-          show(from, to);
-          codeRanges.push([from, to]);
-        }
-        return;
-      }
-      // 수식·HTML·이미지·yaml·definition·thematicBreak·break 는 보이는 글자가 아니다
-      if (['math', 'inlineMath', 'html', 'image', 'yaml', 'definition', 'thematicBreak', 'break'].includes(node.type)) return;
-      for (const child of node.children ?? []) walk(child);
-    };
-    walk(tree);
+const HIDDEN = new Set(['math', 'inlineMath', 'html', 'image', 'yaml', 'definition', 'footnoteReference', 'break']);
+
+/** 커스텀 표식(위키링크·콜아웃·columns·toggle)을 **코드가 아닌 텍스트**에서만 제거한다. */
+function stripCustomMarkers(parts: Part[], ctx: { callout: boolean; heading: boolean }): string {
+  // 붙여 놓고, 코드 구간은 보호 목록으로 표시한다.
+  let joined = '';
+  const protectedRanges: [number, number][] = [];
+  for (const part of parts) {
+    const start = joined.length;
+    joined += part.text;
+    if (part.code) protectedRanges.push([start, joined.length]);
   }
+  const inProtected = (from: number, to: number) => protectedRanges.some(([a, b]) => from < b && to > a);
+  const hidden: [number, number][] = [];
+  const hide = (from: number, to: number) => {
+    if (to > from && !inProtected(from, to)) hidden.push([from, to]);
+  };
 
-  // 줄바꿈은 단어 구분자로 남긴다(글자수에서는 countPlain 이 뺀다).
-  for (let i = 0; i < source.length; i += 1) if (source[i] === '\n') mask[i] = 1;
-
-  const inCode = (at: number) => codeRanges.some(([a, b]) => at >= a && at < b);
-  // 커스텀 표식 — 줄 단위(코드 구간은 건너뛴다)
-  let lineStart = 0;
-  while (lineStart <= source.length) {
-    const nl = source.indexOf('\n', lineStart);
-    const lineEnd = nl < 0 ? source.length : nl;
-    const line = source.slice(lineStart, lineEnd);
-    if (!inCode(lineStart)) {
-      // columns 표식은 줄 전체가 표식일 때만
-      if (/^[ \t]*:{3,}[a-zA-Z-]*[ \t]*$/.test(line)) hide(lineStart, lineEnd);
-      // 인용 표식(`>`)은 구조라 보이지 않는다(lazy continuation 으로 텍스트에 섞인 경우까지)
-      const quote = /^[ \t]*(?:>[ \t]?)+/.exec(line);
-      if (quote) hide(lineStart, lineStart + quote[0].length);
-      // 콜아웃 표식은 인용 줄 맨 앞에서만(제목·내용은 보인다)
-      const callout = /^[ \t]*(?:>[ \t]?)+\[![^\]]+\][ \t]?/.exec(line);
-      if (callout) {
-        const at = line.indexOf('[!');
-        if (at >= 0) hide(lineStart + at, lineStart + callout[0].length);
-      }
-      // 위키링크/임베드(인라인 코드 등으로 text 노드가 쪼개져도 줄 단위로 처리)
-      for (const m of line.matchAll(/!?\[\[([^\]|#]*)(#[^\]|]*)?(\|([^\]]*))?\]\]/g)) {
-        const at = lineStart + (m.index ?? 0);
-        if (m[0].startsWith('!')) {
-          hide(at, at + m[0].length);
-        } else if (m[4] !== undefined) {
-          const aliasAt = at + m[0].indexOf('|') + 1;
-          hide(at, aliasAt);
-          hide(aliasAt + m[4].length, at + m[0].length);
-        } else {
-          hide(at, at + 2);
-          hide(at + m[0].length - 2, at + m[0].length);
-        }
-      }
-      // 제목 줄 끝의 {…} 속성만
-      if (/^[ \t]*#{1,6}[ \t]+/.test(line)) {
-        const attr = /\{[^{}]*\}[ \t]*$/.exec(line);
-        if (attr) hide(lineStart + (attr.index ?? 0), lineEnd);
-      }
+  // 위키링크: 별칭이 있으면 대상·괄호, 없으면 괄호만. 임베드는 통째로.
+  for (const m of joined.matchAll(/!?\[\[([^\]|#]*)(#[^\]|]*)?(\|([^\]]*))?\]\]/g)) {
+    const at = m.index ?? 0;
+    if (m[0].startsWith('!')) {
+      hide(at, at + m[0].length);
+    } else if (m[4] !== undefined) {
+      const aliasAt = at + m[0].indexOf('|') + 1;
+      hide(at, aliasAt);
+      hide(aliasAt + m[4].length, at + m[0].length);
+    } else {
+      hide(at, at + 2);
+      hide(at + m[0].length - 2, at + m[0].length);
     }
+  }
+  // 콜아웃 표식은 인용 블록 첫 줄 맨 앞에서만
+  if (ctx.callout) {
+    const m = /^[ \t]*\[![^\]]+\][ \t]?/.exec(joined);
+    if (m) hide(0, m[0].length);
+  }
+  // columns 표식은 줄 전체가 표식일 때만(코드 구간이면 건드리지 않는다)
+  let lineStart = 0;
+  while (lineStart <= joined.length) {
+    const nl = joined.indexOf('\n', lineStart);
+    const lineEnd = nl < 0 ? joined.length : nl;
+    const line = joined.slice(lineStart, lineEnd);
+    if (/^[ \t]*:{3,}[a-zA-Z-]*[ \t]*$/.test(line) && !inProtected(lineStart, lineEnd)) hide(lineStart, lineEnd + (nl < 0 ? 0 : 1));
     if (nl < 0) break;
     lineStart = nl + 1;
   }
-  return mask;
-}
-
-/** 보이는 글자만 이어 붙인 문자열 */
-export function visibleText(markdown: string): string {
-  return textFromMask(markdown, visibleMask(markdown));
-}
-
-/** 마스크를 이용해 보이는 문자열을 만든다(파싱을 다시 하지 않는다). */
-function textFromMask(markdown: string, mask: Uint8Array): string {
-  const source = markdown.replace(/\r\n?/g, '\n');
-  const runs: string[] = [];
-  let start = -1;
-  for (let i = 0; i <= source.length; i += 1) {
-    const visibleHere = i < source.length && mask[i] === 1;
-    if (visibleHere) {
-      if (start < 0) start = i;
-    } else if (start >= 0) {
-      runs.push(source.slice(start, i));
-      start = -1;
-    }
+  // 제목 끝의 {…} 속성만
+  if (ctx.heading) {
+    const m = /\{[^{}]*\}[ \t]*$/.exec(joined);
+    if (m && !inProtected(m.index ?? 0, joined.length)) hide(m.index ?? 0, joined.length);
   }
-  return runs.join('');
+
+  hidden.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  let out = '';
+  let cursor = 0;
+  for (const [from, to] of hidden) {
+    if (from > cursor) out += joined.slice(cursor, from);
+    cursor = Math.max(cursor, to);
+  }
+  out += joined.slice(cursor);
+  return out;
+}
+
+/** 이스케이프된 기호는 기호만 보인다(`\*별표\*` → `*별표*`). 코드 내용은 그대로. */
+const unescape = (text: string): string => text.replace(/\\([\\`*_{}[\]()#+\-.!>~|])/g, '$1');
+
+/** 인라인 노드들을 코드 여부를 유지한 조각으로 모은다. */
+function collectInline(node: MdNode, parts: Part[]): void {
+  if (node.type === 'text') {
+    parts.push({ text: unescape(node.value ?? ''), code: false });
+    return;
+  }
+  if (node.type === 'inlineCode') {
+    parts.push({ text: node.value ?? '', code: true });
+    return;
+  }
+  if (HIDDEN.has(node.type)) return;
+  for (const child of node.children ?? []) collectInline(child, parts);
+}
+
+/** 문서 전체를 블록 단위로 순회하며 보이는 문자열을 만든다. */
+function documentText(tree: MdNode, inQuote = false): string {
+  if (tree.type === 'code') return tree.value ?? '';
+  if (HIDDEN.has(tree.type)) return '';
+  if (tree.type === 'table' || tree.type === 'tableRow' || tree.type === 'list' || tree.type === 'listItem' || tree.type === 'blockquote' || tree.type === 'footnoteDefinition') {
+    const children = tree.children ?? [];
+    if (tree.type === 'blockquote') {
+      return children.map((c, i) => documentText({ ...c, type: c.type === 'paragraph' && i === 0 ? 'paragraph' : c.type }, true).trimEnd()).join('\n');
+    }
+    return children.map((c) => documentText(c, inQuote)).join('\n');
+  }
+  if (BLOCK.has(tree.type)) {
+    const parts: Part[] = [];
+    collectInline(tree, parts);
+    return stripCustomMarkers(parts, { callout: inQuote && tree.type === 'paragraph', heading: tree.type === 'heading' });
+  }
+  if (tree.type === 'root') {
+    const chunks = (tree.children ?? []).map((c) => documentText(c, inQuote));
+    return chunks.join('\n');
+  }
+  // 그 밖의 인라인 컨테이너(link·emphasis·strong·delete·footnoteDefinition 안 등)
+  const parts: Part[] = [];
+  collectInline(tree, parts);
+  return stripCustomMarkers(parts, { callout: false, heading: false });
+}
+
+/** 마크다운 원문의 보이는 문자열(파서 값 기반) */
+export function visibleText(markdown: string): string {
+  const source = markdown.replace(/\r\n?/g, '\n');
+  const frontmatter = splitFrontmatter(source);
+  const body = source.slice(frontmatter?.end ?? 0);
+  if (body === '') return '';
+  const tree = parseTree(body) as unknown as MdNode;
+  // 블록 사이는 줄바꿈 하나로 잇는다(단어 구분자)
+  return documentText(tree);
 }
 
 /** 이미 보이는 텍스트(에디터 선택 등)의 글자수 — 마크다운 해석 없이 그대로 센다. */
@@ -188,46 +177,9 @@ export function countPlain(text: string): TextStats {
   return { chars, charsNoSpace, words };
 }
 
-export interface TextCounter {
-  stats: TextStats;
-  /** 원문의 [from,to) 구간에 보이는 글자수(선택 구간 질의) */
-  range(from: number, to: number): TextStats;
-}
+const cache = new Map<string, TextStats>();
 
-/** 문서 하나를 한 번만 파싱해 보이는 문자열·위치 색인을 만든다. */
-export function createTextCounter(markdown: string): TextCounter {
-  const source = markdown.replace(/\r\n?/g, '\n');
-  const mask = visibleMask(markdown);
-  // 원문 위치 → 보이는 문자열 오프셋(한 번 훑는다)
-  const index = new Int32Array(source.length + 1);
-  const runs: string[] = [];
-  let visLen = 0;
-  let runStart = -1;
-  for (let i = 0; i <= source.length; i += 1) {
-    const visibleHere = i < source.length && mask[i] === 1;
-    index[i] = visLen;
-    if (visibleHere) {
-      if (runStart < 0) runStart = i;
-      visLen += 1;
-    } else if (runStart >= 0) {
-      runs.push(source.slice(runStart, i));
-      runStart = -1;
-    }
-  }
-  const visible = runs.join('');
-  return {
-    stats: countPlain(visible),
-    range(from, to) {
-      const a = index[Math.max(0, Math.min(source.length, from))] ?? 0;
-      const b = index[Math.max(0, Math.min(source.length, to))] ?? 0;
-      return countPlain(visible.slice(Math.min(a, b), Math.max(a, b)));
-    },
-  };
-}
-
-const cache = new Map<string, TextCounter>();
-
-function counterFor(markdown: string): TextCounter {
+function statsFor(markdown: string): TextStats {
   const hit = cache.get(markdown);
   if (hit) {
     // LRU: 히트 시 맨 뒤로
@@ -235,7 +187,7 @@ function counterFor(markdown: string): TextCounter {
     cache.set(markdown, hit);
     return hit;
   }
-  const made = createTextCounter(markdown);
+  const made = countPlain(visibleText(markdown));
   if (cache.size >= 4) cache.delete(cache.keys().next().value as string);
   cache.set(markdown, made);
   return made;
@@ -243,10 +195,5 @@ function counterFor(markdown: string): TextCounter {
 
 /** 마크다운 원문의 글자수(작가 모드 상태줄) — 같은 원문은 한 번만 계산한다. */
 export function countMarkdown(markdown: string): TextStats {
-  return counterFor(markdown).stats;
-}
-
-/** 마크다운 원문의 선택 구간 글자수 — 문서 마스크를 재사용한다(O(log n)). */
-export function countMarkdownRange(markdown: string, from: number, to: number): TextStats {
-  return counterFor(markdown).range(from, to);
+  return statsFor(markdown);
 }

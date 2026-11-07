@@ -1,6 +1,6 @@
 import { setLocale } from '@nopsidian/i18n';
 import { afterEach, describe, expect, it } from 'vitest';
-import { writerCountsText, writerSelectionText } from './writer-status';
+import { WRITER_PENDING, writerCountsText, writerDelay, writerSelectionText } from './writer-status';
 
 const stats = { chars: 12340, charsNoSpace: 10982, words: 2010 };
 const selected = { chars: 120, charsNoSpace: 100, words: 20 };
@@ -24,5 +24,19 @@ describe('작가 모드 상태줄 문구', () => {
     expect(writerSelectionText({ locale: 'ko', spacing: 'include', stats, selected })).toBe('선택 120 / 전체 12,340');
     expect(writerSelectionText({ locale: 'ko', spacing: 'exclude', stats, selected })).toBe('선택 100 / 전체 10,982');
     expect(writerSelectionText({ locale: 'en', spacing: 'include', stats, selected })).toBe('120 / 12,340 selected');
+  });
+});
+
+describe('계산 지연·로딩 표시', () => {
+  it('문서가 크면 지연을 키우고(최대 1초), 작은 문서는 150ms', () => {
+    expect(writerDelay(0)).toBe(150);
+    expect(writerDelay(10_000)).toBe(150);
+    expect(writerDelay(60_000)).toBe(400);
+    expect(writerDelay(120_000)).toBe(800);
+    expect(writerDelay(500_000)).toBe(1000);
+  });
+
+  it('계산 중에는 0 대신 … 을 보여 준다', () => {
+    expect(WRITER_PENDING).toBe('…');
   });
 });

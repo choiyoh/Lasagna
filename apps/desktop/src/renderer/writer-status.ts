@@ -18,6 +18,14 @@ export function writerCountsText(opts: { locale: 'ko' | 'en'; spacing: 'include'
   return locale === 'en' ? `${head} · ${translate(locale, 'writer.words', { words: formatNumber(stats.words, locale) })}` : head;
 }
 
+/** 글자수 계산을 미루는 시간 — 문서가 크면 더 모아서(입력 지연 방지) idle 에서 계산한다. */
+export function writerDelay(chars: number): number {
+  return Math.min(1000, Math.max(150, Math.round(chars / 150)));
+}
+
+/** 아직 계산 중일 때 보여 주는 표시(0 으로 보이지 않게). */
+export const WRITER_PENDING = '…';
+
 /** 선택 영역이 있을 때는 선택/전체만 보여 준다(글자수 줄은 숨긴다). */
 export function writerSelectionText(opts: {
   locale: 'ko' | 'en';

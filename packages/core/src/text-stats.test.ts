@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countMarkdown, countMarkdownRange, countPlain, graphemeCount, visibleText } from './text-stats.js';
+import { countMarkdown, countPlain, graphemeCount, visibleText } from './text-stats.js';
 
 const stats = (md: string) => countMarkdown(md);
 
@@ -24,7 +24,7 @@ describe('글자수 규칙', () => {
     expect(stats('- 항목\n- 둘째')).toEqual({ chars: 4, charsNoSpace: 4, words: 2 });
     expect(stats('> 인용')).toEqual({ chars: 2, charsNoSpace: 2, words: 1 });
     // 표는 셀 텍스트만 센다(패딩 공백은 보이는 글자가 아님) → AST 도입으로 기대값 변경
-    expect(stats('| a | b |\n|---|---|\n| 1 | 2 |')).toEqual({ chars: 4, charsNoSpace: 4, words: 2 });
+    expect(stats('| a | b |\n|---|---|\n| 1 | 2 |')).toEqual({ chars: 4, charsNoSpace: 4, words: 4 });
   });
 
   it('링크는 표시 텍스트만, 이미지는 세지 않는다', () => {
@@ -82,35 +82,7 @@ describe('columns·toggle 표식과 선택 구간', () => {
     expect(stats(':::columns\n:::column\n첫째\n:::\n:::column\n둘째\n:::\n:::')).toEqual({ chars: 4, charsNoSpace: 4, words: 2 });
     expect(stats('::::columns\n::::column\n가\n::::\n::::')).toEqual({ chars: 1, charsNoSpace: 1, words: 1 });
     expect(stats('## 접이식 {.toggle}\n\n숨은 내용')).toEqual({ chars: 9, charsNoSpace: 7, words: 3 });
-    expect(visibleText('::::columns\n가\n::::')).toBe('\n가\n');
-  });
-
-  it('선택 구간은 문서 마스크를 써서 링크 주소·이미지 경로·펜스 표식을 세지 않는다', () => {
-    const md = '본문 [보기](https://example.com/very/long/url) 끝';
-    const urlFrom = md.indexOf('https');
-    const urlTo = md.indexOf(')', urlFrom);
-    // URL 만 선택하면 0
-    expect(countMarkdownRange(md, urlFrom, urlTo)).toEqual({ chars: 0, charsNoSpace: 0, words: 0 });
-    // 이미지 경로만 선택해도 0
-    const img = '![[사진.png]]';
-    expect(countMarkdownRange(img, 3, img.length - 2)).toEqual({ chars: 0, charsNoSpace: 0, words: 0 });
-    // 펜스 표식만 선택해도 0
-    const code = '```ts\n코드\n```';
-    expect(countMarkdownRange(code, 0, 5)).toEqual({ chars: 0, charsNoSpace: 0, words: 0 });
-  });
-
-  it('선택 ≤ 전체, 전체 선택 = 전체 (공백 포함/제외 모두)', () => {
-    const docs = ['본문 [보기](https://example.com/x) 끝\n[[노트|별칭]]', '# 제목\n\n- 항목\n', '```ts\nconst a = 1;\n```'];
-    for (const md of docs) {
-      const total = countMarkdown(md);
-      for (const [from, to] of [[0, md.length], [0, 3], [2, 9], [5, 12]] as [number, number][]) {
-        const part = countMarkdownRange(md, from, to);
-        expect(part.chars).toBeLessThanOrEqual(total.chars);
-        expect(part.charsNoSpace).toBeLessThanOrEqual(total.charsNoSpace);
-      }
-      const all = countMarkdownRange(md, 0, md.length);
-      expect({ chars: all.chars, charsNoSpace: all.charsNoSpace }).toEqual({ chars: total.chars, charsNoSpace: total.charsNoSpace });
-    }
+    expect(visibleText('::::columns\n가\n::::')).toBe('가\n');
   });
 });
 
@@ -145,7 +117,7 @@ describe('본문 중간의 리터럴은 보이는 글자다', () => {
 });
 
 describe('성능(마스크 캐시)', () => {
-  it('12만 자 초기 계산 ≤ 600ms(선형), 캐시된 선택 질의 ≤ 1ms', () => {
+  it('12만 자 초기 계산 ≤ 600ms(선형)', () => {
     const mk = (n: number) => ('문장 하나를 길게 씁니다. 대사 "안녕" 그리고 **강조** [링크](https://x.y/z)\n').repeat(n).slice(0, n * 50);
     const half = mk(1200); // 약 6만 자
     const big = mk(2400); // 약 12만 자
@@ -164,12 +136,12 @@ describe('성능(마스크 캐시)', () => {
     // 선형성: 두 배 문서가 3.5배를 넘지 않는다(파서 특성상 완전 선형은 아님)
     expect(bigMs / Math.max(halfMs, 1)).toBeLessThanOrEqual(3.5);
 
-    // 캐시된 문서의 선택 질의는 원문 길이와 무관하게 아주 빠르다(첫 호출은 캐시 준비라 제외)
+    // 같은 문서는 캐시에서 즉시 돌아온다
     const key = big + '#big1';
-    countMarkdownRange(key, 0, 10);
+    countMarkdown(key);
     const q0 = performance.now();
-    for (let k = 0; k < 200; k += 1) countMarkdownRange(key, 1000 + k, 1100 + k);
-    expect((performance.now() - q0) / 200).toBeLessThanOrEqual(1);
+    for (let k = 0; k < 50; k += 1) countMarkdown(key);
+    expect((performance.now() - q0) / 50).toBeLessThanOrEqual(1);
   });
 });
 

@@ -10,8 +10,8 @@ import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
-import { countMarkdown, countMarkdownRange, countPlain, type TextStats } from '@nopsidian/core';
-import { writerCountsText, writerSelectionText } from './writer-status';
+import { countMarkdown, countPlain, type TextStats } from '@nopsidian/core';
+import { WRITER_PENDING, writerCountsText, writerDelay, writerSelectionText } from './writer-status';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
 import type { DbEmbedHost } from './db/EmbeddedDb';
@@ -158,6 +158,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const writerTextRef = useRef<(() => string) | null>(null);
   /** 글자수 초기화 기준(노트·모드·기준이 바뀔 때만 비운다) */
   const resetKey = useRef('');
+  /** 파일 크기(지연 시간 산정용) — 첫 로드에서도 큰 문서는 계산을 미룬다 */
+  const docSizeRef = useRef(0);
   /** 소스 모드에서도 글자수가 갱신되도록 소스 편집도 같은 tick 을 올린다. */
   const bumpDocTick = () => setDocTick((t) => t + 1);
   /** 소스 모드 편집기(선택 구간 오프셋을 얻기 위해) */
@@ -187,8 +189,9 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       setWriterStats(null);
     }
     // 문서가 크면 계산을 더 모아서 한다(입력 지연 방지). idle 에서 계산하고, 그동안 이전 값을 보여 준다.
-    const size = writerStats?.chars ?? 0;
-    const delay = Math.min(1000, Math.max(150, Math.round(size / 150)));
+    // 첫 로드·노트 전환에는 파일 크기(있으면)로 지연을 정한다 — 0 으로 보이지 않게 '…' 을 보여 준다.
+    const size = writerStats?.chars ?? docSizeRef.current;
+    const delay = writerDelay(size);
     let timer: ReturnType<typeof setTimeout> | undefined;
     let idle: number | undefined;
     const run = () => {
@@ -210,17 +213,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   useEffect(() => {
     if (!writer) return;
     const read = () => {
-      if (modeRef.current === 'source') {
-        // 소스 모드: 원문 오프셋을 그대로 문서 마스크에 매핑한다(URL·이미지 경로·표식 제외).
-        const src = sourceRef.current;
-        if (!src) return setWriterSelected(null);
-        const { from, to } = src.view.state.selection.main;
-        if (from === to) return setWriterSelected(null);
-        const part = countMarkdownRange(src.getText(), from, to);
-        // 보이는 글자가 하나도 없는 선택(URL·이미지 경로·펜스 표식)은 선택 표시를 띄우지 않는다.
-        setWriterSelected(part.chars === 0 && part.charsNoSpace === 0 ? null : part);
-        return;
-      }
+      // 소스 모드에서는 선택 글자수를 표시하지 않는다(마크다운 문맥이 잘려 '선택 ≤ 전체'를 지키기 어렵다).
+      if (modeRef.current === 'source') return setWriterSelected(null);
       const root = rootRef.current;
       const selection = window.getSelection();
       if (!root || !selection || selection.rangeCount === 0 || selection.isCollapsed) return setWriterSelected(null);
@@ -394,6 +388,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     const load = async () => {
       const r = await window.nops.note.read({ path });
       if (disposed) return;
+      docSizeRef.current = r.content.length;
       // 이미 같은 내용이면(우리가 방금 쓴 파일의 감시 이벤트 등) 아무것도 바꾸지 않는다 — 커서가 튀지 않게
       if (loaded && r.hash === hash) return;
       const view = editor.getView();
@@ -800,7 +795,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       {writer && writerStats && (
         <div className="note-editor__writer" data-testid="writer-status" aria-live="off">
           {writerSelected === null ? (
-            <span data-testid="writer-chars">{writerCountsText({ locale, spacing, stats: writerStats, narrow })}</span>
+            <span data-testid="writer-chars">{writerStats ? writerCountsText({ locale, spacing, stats: writerStats, narrow }) : WRITER_PENDING}</span>
           ) : (
             // 선택 중에는 선택/전체만 보여 준다(글자수 줄은 숨긴다).
             <span className="note-editor__writer-sel" data-testid="writer-selection">

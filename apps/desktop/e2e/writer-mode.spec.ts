@@ -86,6 +86,8 @@ test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은
   await toggleWriter(page, true);
   const status = page.getByTestId('writer-status');
   await expect(status).toBeVisible();
+  // 계산이 끝나기 전에는 0 이 아니라 … 을 보여 준다
+  await expect(page.getByTestId('writer-chars')).toHaveText(/^(…|\d+자 · 공백 포함)$/);
   // "# Hello" → 보이는 글자 'Hello' 5자
   // '# Hello' + '본문' → 보이는 글자 7자
   await expect(page.getByTestId('writer-chars')).toHaveText(/^7자 · 공백 포함$/);
@@ -203,11 +205,12 @@ test('소스 모드에서 링크 주소만 선택하면 0자이고, columns 문�
   // 표식(:::columns 등)은 세지 않는다: 보이는 글자 '첫째둘째' + '보기' = 6자
   await expect(page.getByTestId('writer-chars')).toHaveText(/^6자 · 공백 포함$/);
 
-  // 소스 모드에서 URL 부분만 선택 → 선택 표시가 0/전체가 아니라 아예 없어야 한다(선택 ≤ 전체)
+  // 소스 모드에서는 선택 글자수를 표시하지 않는다(문맥 손실·불변식 문제로 단순화)
   await page.keyboard.press('ControlOrMeta+e');
   await expect(page.getByTestId('source-editor')).toBeVisible();
   await page.locator('.cm-content').click();
   await page.keyboard.press('ControlOrMeta+End');
   for (let i = 0; i < 4; i += 1) await page.keyboard.press('Shift+ArrowLeft');
   await expect(page.getByTestId('writer-selection')).toHaveCount(0);
+  await expect(page.getByTestId('writer-chars')).toHaveText(/자 · 공백 포함$/);
 });

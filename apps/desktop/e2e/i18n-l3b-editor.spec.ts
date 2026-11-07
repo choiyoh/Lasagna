@@ -121,14 +121,14 @@ test('English smoke: switching language while editing keeps the draft and locali
 
 test('소스 모드에서 언어를 바꿔도 빈 화면이 되지 않는다', async () => {
   const page = await app.firstWindow();
+  // 앞 테스트(@foreground)가 제외돼도 단독으로 돌 수 있게 볼트를 직접 연다
+  await openVaultIfNeeded(page);
   await page.locator('aside.sidebar').getByRole('button', { name: 'Hello', exact: true }).click();
   await expect(page.locator('.ProseMirror')).toHaveText(/Hello/);
 
-  // 한국어로 되돌려 소스 모드에서 전환한다
-  await page.getByTestId('settings-btn').click();
-  await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: '한국어' }).click();
+  // 앞 테스트가 제외돼도 결정적이도록 언어를 먼저 한국어로 맞춘다(UI 문구에 의존하지 않는다).
+  await page.evaluate(() => window.nops.settings.setLanguage({ language: 'ko' }));
   await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
-  await page.keyboard.press('Escape');
   await page.locator('.ProseMirror').click();
   await page.keyboard.press('ControlOrMeta+e');
   await expect(page.locator('.cm-content')).toBeVisible();
@@ -149,6 +149,7 @@ test('소스 모드에서 언어를 바꿔도 빈 화면이 되지 않는다', a
 
 test('저장이 실패하면 언어를 바꿔도 미저장 편집을 잃지 않는다', async () => {
   const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
   await page.locator('aside.sidebar').getByRole('button', { name: 'Hello', exact: true }).click();
   const editor = page.locator('.ProseMirror');
   await expect(editor).toHaveText(/Hello/);

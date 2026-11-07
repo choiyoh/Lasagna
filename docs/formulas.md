@@ -16,7 +16,7 @@
 - **문자열·변환**: concat join length lower upper trim replace replaceAll(정규식) test match contains startsWith endsWith slice substring split repeat padStart padEnd format toNumber empty boolean
 - **수학·집계**: abs ceil floor round(0에서 먼 쪽으로) sqrt cbrt exp ln log10 log2 sign pow mod e pi min max sum mean median clamp (집계는 목록도 받는다)
 - **목록**: at first last sort reverse unique flat includes indexOf range count countValues
-- **날짜**: now today parseDate dateAdd dateSubtract dateBetween formatDate(형식, 선택 언어 `'en'`) year month date day(월=1…일=7) hour minute second timestamp fromTimestamp dateRange dateStart dateEnd startOf — 단위 `years quarters months weeks days hours minutes seconds`(단수형 가능), 달력 연산은 로컬 시간대.
+- **날짜**: now today parseDate dateAdd dateSubtract dateBetween formatDate(날짜, 형식[, 언어]) year month date day(월=1…일=7) hour minute second timestamp fromTimestamp dateRange dateStart dateEnd startOf — 단위 `years quarters months weeks days hours minutes seconds`(단수형 가능), 달력 연산은 로컬 시간대.
 - 지원하지 않는 함수는 정의할 때 위치와 함께 "알 수 없는 함수" 오류가 난다.
 
 ## 롤업

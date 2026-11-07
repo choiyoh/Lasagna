@@ -220,8 +220,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       if (!writer || !edited || !before) return;
       const delta = basisChars(next, spacing) - basisChars(before, spacing);
       if (delta === 0) return;
-      window.nops.writer
-        .addDelta({ vaultId, path, delta })
+      window.nops.settings
+        .writerAddDelta({ vaultId, path, delta })
         .then((r) => setToday(r.chars))
         .catch(() => {
           // 통계 쓰기 실패는 집필을 막지 않는다(표시 값은 마지막 성공 값 유지).
@@ -256,8 +256,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   useEffect(() => {
     if (!writer) return;
     let alive = true;
-    window.nops.writer
-      .today({ vaultId })
+    window.nops.settings
+      .writerToday({ vaultId })
       .then((r) => {
         if (alive) setToday(r.chars);
       })

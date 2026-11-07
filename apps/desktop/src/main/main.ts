@@ -685,8 +685,8 @@ function registerHandlers() {
     return undefined;
   });
   handle('settings.language', () => currentLanguage());
-  handle('writer.today', ({ vaultId }) => writerStatsStore().todayStats(vaultId));
-  handle('writer.addDelta', ({ vaultId, path: notePath, delta }) => writerStatsStore().add(vaultId, notePath, delta));
+  handle('settings.writerToday', ({ vaultId }) => writerStatsStore().todayStats(vaultId));
+  handle('settings.writerAddDelta', ({ vaultId, path: notePath, delta }) => writerStatsStore().add(vaultId, notePath, delta));
   handle('settings.setLanguage', ({ language, writerMode, writerSpacing, writerDailyGoal }) => {
     if (language !== undefined) settingsStore().setLanguage(language);
     if (writerMode !== undefined || writerSpacing !== undefined || writerDailyGoal !== undefined) {

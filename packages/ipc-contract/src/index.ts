@@ -647,12 +647,12 @@ export const contract = {
     output: appLanguage,
   },
   /** 작가 모드 '오늘 쓴 글자수' — 오늘 날짜(로컬)와 볼트 합계. 통계는 userData/writer-stats.json 에만 있다. */
-  'writer.today': {
+  'settings.writerToday': {
     input: z.object({ vaultId: z.string().max(200) }),
     output: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), chars: z.number().int().min(0) }),
   },
   /** 에디터에서 입력·삭제한 문서 순변화를 오늘 합계에 더한다(외부 편집은 보내지 않는다). */
-  'writer.addDelta': {
+  'settings.writerAddDelta': {
     input: z.object({ vaultId: z.string().max(200), path: relPath, delta: z.number().int().min(-10_000_000).max(10_000_000) }),
     output: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), chars: z.number().int().min(0) }),
   },

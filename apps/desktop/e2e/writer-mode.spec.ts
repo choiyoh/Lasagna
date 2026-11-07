@@ -126,7 +126,8 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
   await openNote(again);
   await expect(again.getByTestId('writer-status')).toBeVisible();
   // 설정이 저장된 채 앱을 다시 열면 노트를 열자마자 숫자가 나온다('…' 로 남지 않음)
-  await expect(again.getByTestId('writer-chars')).toHaveText(/\d+자 · 공백 포함$/);
+  // 앞 테스트에서 '공백 제외'로 바꿨을 수 있다 — 기준은 저장된 값을 따른다.
+  await expect(again.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 (포함|제외)$/);
 
   // 다른 노트로 바꾸면 숫자도 그 노트 기준으로 갱신된다
   const other = path.join(vaultDir, 'Other.md');
@@ -232,8 +233,11 @@ test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상
   await expect(page.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 포함$/);
 
   // 밖에서 파일을 통째로 바꾸면(무음 reload) 상태줄도 새 내용 기준이어야 한다
+  const editedCount = await page.getByTestId('writer-chars').innerText();
   writeFileSync(livePath, '# Live\n\n짧\n');
   await expect(page.locator('.ProseMirror')).toHaveText(/짧/);
+  // 디바운스 뒤 값이 새 내용으로 바뀔 때까지 기다린다(이전 값과 다름)
+  await expect(page.getByTestId('writer-chars')).not.toHaveText(editedCount);
   const shortCount = await page.getByTestId('writer-chars').innerText();
   expect(shortCount).toMatch(/^\d+자 · 공백 포함$/);
 

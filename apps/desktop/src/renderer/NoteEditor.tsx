@@ -10,7 +10,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
-import { countMarkdown, type TextStats } from '@nopsidian/core';
+import { countMarkdown, countMarkdownRange, countPlain, type TextStats } from '@nopsidian/core';
 import { writerCountsText, writerSelectionText } from './writer-status';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
@@ -158,6 +158,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const writerTextRef = useRef<(() => string) | null>(null);
   /** 소스 모드에서도 글자수가 갱신되도록 소스 편집도 같은 tick 을 올린다. */
   const bumpDocTick = () => setDocTick((t) => t + 1);
+  /** 소스 모드 편집기(선택 구간 오프셋을 얻기 위해) */
+  const sourceRef = useRef<SourceEditor | null>(null);
   /** 언어가 바뀌면 에디터를 새로 만든다(문구는 만들 때 잡힌다) — 그 전에 저장하고 커서를 옮겨 둔다 */
   const localeRef = useRef(locale);
   const restoreSel = useRef<{ anchor: number; head: number } | null>(null);
@@ -170,10 +172,10 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const [docTick, setDocTick] = useState(0);
   // 작가 모드 상태줄: 입력 중에는 150ms 모아서 계산한다(5만 자에서도 입력이 끊기지 않게).
   useEffect(() => {
-    // 노트를 바꾸면 이전 노트의 숫자를 남기지 않는다(로딩 중에는 비운다).
+    // 노트·모드가 바뀌면 이전 숫자·선택을 남기지 않는다(로딩 중에는 비운다).
+    setWriterSelected(null);
     if (!writer) {
       setWriterStats(null);
-      setWriterSelected(null);
       return;
     }
     setWriterStats(null);
@@ -188,18 +190,27 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   useEffect(() => {
     if (!writer) return;
     const read = () => {
+      if (modeRef.current === 'source') {
+        // 소스 모드: 원문 오프셋을 그대로 문서 마스크에 매핑한다(URL·이미지 경로·표식 제외).
+        const src = sourceRef.current;
+        if (!src) return setWriterSelected(null);
+        const { from, to } = src.view.state.selection.main;
+        if (from === to) return setWriterSelected(null);
+        setWriterSelected(countMarkdownRange(src.getText(), from, to));
+        return;
+      }
       const root = rootRef.current;
       const selection = window.getSelection();
       if (!root || !selection || selection.rangeCount === 0 || selection.isCollapsed) return setWriterSelected(null);
       if (!root.contains(selection.anchorNode)) return setWriterSelected(null);
       const text = selection.toString();
       if (text.trim() === '') return setWriterSelected(null);
-      // 전체와 같은 규칙으로 센다(마크다운 기호·링크 주소·줄바꿈 제외, 공백 기준 동일).
-      setWriterSelected(countMarkdown(text));
+      // 에디터 모드는 화면에 보이는 텍스트 그대로 센다(마크다운 해석 없음).
+      setWriterSelected(countPlain(text));
     };
     document.addEventListener('selectionchange', read);
     return () => document.removeEventListener('selectionchange', read);
-  }, [writer, epoch, path]);
+  }, [writer, epoch, path, mode]);
   useEffect(() => {
     restoreSel.current = null;
   }, [path]);
@@ -524,6 +535,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
               bumpDocTick();
             },
           });
+          sourceRef.current = source;
         } else {
           source.setText(currentContent());
         }
@@ -591,6 +603,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       editorRef.current = null;
       loadedRef.current = false;
       setFindState(null);
+      sourceRef.current = null;
       source?.destroy();
       editor.destroy();
     };

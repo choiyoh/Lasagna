@@ -18,7 +18,9 @@ const CASES: [string, string][] = [
   ['math', '수식 $x^2$ 과 $$y = 2$$\n'],
   ['link', '[보기](https://example.com/very/long/url) 와 [[노트|별칭]]\n'],
   ['image', '![[사진.png]] ![대체](a.png)\n'],
-  ['toggle/columns', '## 접이식 {.toggle}\n\n숨은 내용\n'],
+  ['toggle', '## 접이식 {.toggle}\n\n숨은 내용\n'],
+  ['columns', ':::columns\n:::column\n첫째 열\n:::\n:::column\n둘째 열\n:::\n:::\n'],
+  ['nested columns', '::::columns\n::::column\n바깥\n:::columns\n:::column\n안쪽\n:::\n:::\n::::\n::::\n'],
   ['footnote', '본문[^1]\n\n[^1]: 각주 내용\n'],
 ];
 

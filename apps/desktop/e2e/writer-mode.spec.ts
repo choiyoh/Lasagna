@@ -191,3 +191,23 @@ test('긴 회차에서도 글자수 상태줄은 화면 하단에 붙어 있다'
     expect(box!.y).toBeGreaterThanOrEqual(0);
   }
 });
+
+test('소스 모드에서 링크 주소만 선택하면 0자이고, columns 문서도 표식 없이 센다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  const colsPath = path.join(vaultDir, 'Columns.md');
+  writeFileSync(colsPath, ':::columns\n:::column\n첫째\n:::\n:::column\n둘째\n:::\n:::\n\n[보기](https://example.com/very/long/url)\n');
+  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Columns', exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.locator('aside.sidebar').getByRole('button', { name: 'Columns', exact: true }).click();
+  await toggleWriter(page, true);
+  // 표식(:::columns 등)은 세지 않는다: 보이는 글자 '첫째둘째' + '보기' = 6자
+  await expect(page.getByTestId('writer-chars')).toHaveText(/^6자 · 공백 포함$/);
+
+  // 소스 모드에서 URL 부분만 선택 → 선택 표시가 0/전체가 아니라 아예 없어야 한다(선택 ≤ 전체)
+  await page.keyboard.press('ControlOrMeta+e');
+  await expect(page.getByTestId('source-editor')).toBeVisible();
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('Shift+ArrowLeft');
+  await expect(page.getByTestId('writer-selection')).toHaveCount(0);
+});

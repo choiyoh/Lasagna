@@ -14,9 +14,11 @@ describe('목표 진행·오늘 쓴 글자수 문구', () => {
     expect(goalProgress(1200, 0)).toEqual({ ratio: 0, over: 0 });
   });
 
-  it('한국어·영어 진행 표기', () => {
+  it('한국어·영어 진행 표기(920px 이하는 단위 없이)', () => {
     expect(goalText({ locale: 'ko', chars: 3200, goal: 5000 })).toBe('3,200/5,000자');
     expect(goalText({ locale: 'en', chars: 3200, goal: 5000 })).toBe('3,200/5,000 characters');
+    expect(goalText({ locale: 'ko', chars: 3200, goal: 5000, narrow: true })).toBe('3,200/5,000');
+    expect(goalText({ locale: 'en', chars: 3200, goal: 5000, narrow: true })).toBe('3,200/5,000');
   });
 
   it('오늘 표기: 목표가 있으면 /목표, 없으면 글자수만', () => {

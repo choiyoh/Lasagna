@@ -29,6 +29,7 @@ export const ko = {
   'writer.goalProgress': "{count}/{goal}자",
   'writer.today': "오늘 {count}자",
   'writer.todayGoal': "오늘 {count}/{goal}자",
+  'writer.goalProgressShort': "{count}/{goal}",
   'writer.setGoal': "목표 설정",
   'writer.goalLabel': "목표 글자수",
   'writer.goalPlaceholder': "예: 5000",

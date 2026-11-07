@@ -856,7 +856,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
                 <i style={{ width: `${Math.round(goalProgress(basisChars(writerStats, spacing), noteGoal).ratio * 100)}%` }} />
               </span>
               <span className="note-editor__goalnum" data-testid="writer-goal-text">
-                {goalText({ locale, chars: basisChars(writerStats, spacing), goal: noteGoal })}
+                {goalText({ locale, chars: basisChars(writerStats, spacing), goal: noteGoal, narrow })}
               </span>
               {goalProgress(basisChars(writerStats, spacing), noteGoal).over > 0 && (
                 <span className="note-editor__goalover" data-testid="writer-goal-over">

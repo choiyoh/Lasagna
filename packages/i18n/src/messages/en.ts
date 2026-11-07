@@ -28,6 +28,7 @@ export const en: Record<MessageKey, string> = {
   'writer.goalProgress': "{count}/{goal} characters",
   'writer.today': "Today {count} characters",
   'writer.todayGoal': "Today {count}/{goal} characters",
+  'writer.goalProgressShort': "{count}/{goal}",
   'writer.setGoal': "Set goal",
   'writer.goalLabel': "Goal characters",
   'writer.goalPlaceholder': "e.g. 5000",

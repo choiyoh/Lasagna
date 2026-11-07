@@ -8,9 +8,11 @@ export function goalProgress(chars: number, goal: number | null): { ratio: numbe
 }
 
 /** 상태줄 진행 표기: ko `3,200/5,000자`, en `3,200/5,000 characters`. */
-export function goalText(opts: { locale: 'ko' | 'en'; chars: number; goal: number }): string {
+export function goalText(opts: { locale: 'ko' | 'en'; chars: number; goal: number; narrow?: boolean }): string {
   const count = formatNumber(opts.chars, opts.locale);
   const goal = formatNumber(opts.goal, opts.locale);
+  // 920px 이하에서는 시안대로 단위를 뺀 `n/목표` 만 보여 준다.
+  if (opts.narrow) return translate(opts.locale, 'writer.goalProgressShort', { count, goal });
   return translate(opts.locale, 'writer.goalProgress', { count, goal });
 }
 

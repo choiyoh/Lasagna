@@ -2,7 +2,7 @@ import { setLocale, type Locale } from '@nopsidian/i18n';
 import type { AppLanguage, LanguageSetting } from '@nopsidian/ipc-contract';
 
 /** main 이 들고 있는 언어 설정의 렌더러 사본. 여러 창이 같은 값을 본다. */
-let current: AppLanguage = { setting: 'system', locale: 'ko' };
+let current: AppLanguage = { setting: 'system', locale: 'ko', writerMode: false, writerSpacing: 'include' };
 const listeners = new Set<() => void>();
 
 export function getLanguage(): AppLanguage {
@@ -44,6 +44,19 @@ export async function initLanguage(): Promise<void> {
  */
 export async function changeLanguage(language: LanguageSetting): Promise<void> {
   apply(await window.nops.settings.setLanguage({ language }));
+}
+
+/**
+ * 작가 모드 설정만 바꾼다(언어는 그대로). main 이 저장·브로드캐스트하고 돌아온 값으로 즉시 반영한다.
+ * 저장에 실패하면 그대로 던져 설정 화면이 이전 값을 유지한다.
+ */
+export async function changeWriterSettings(next: { mode?: boolean; spacing?: 'include' | 'exclude' }): Promise<void> {
+  apply(
+    await window.nops.settings.setLanguage({
+      ...(next.mode === undefined ? {} : { writerMode: next.mode }),
+      ...(next.spacing === undefined ? {} : { writerSpacing: next.spacing }),
+    }),
+  );
 }
 
 /** 다른 창에서 바꾼 언어를 따라간다. 반환값은 구독 해제. */

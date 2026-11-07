@@ -330,7 +330,13 @@ export type McpPolicyFile = z.infer<typeof mcpPolicyFile>;
  */
 export const languageSetting = z.enum(['system', 'ko', 'en']);
 export const localeCode = z.enum(['ko', 'en']);
-export const appLanguage = z.object({ setting: languageSetting, locale: localeCode });
+export const appLanguage = z.object({
+  setting: languageSetting,
+  locale: localeCode,
+  // 작가 모드 — 예전 렌더러/설정 파일과 호환되도록 선택 필드로만 더한다.
+  writerMode: z.boolean().optional(),
+  writerSpacing: z.enum(['include', 'exclude']).optional(),
+});
 export type LanguageSetting = z.infer<typeof languageSetting>;
 export type AppLanguage = z.infer<typeof appLanguage>;
 
@@ -629,7 +635,15 @@ export const contract = {
   /** 지금 언어 설정과 실제 로캘. */
   'settings.language': { input: z.undefined(), output: appLanguage },
   /** 언어 설정을 저장하고 모든 창에 알린다. */
-  'settings.setLanguage': { input: z.object({ language: languageSetting }), output: appLanguage },
+  'settings.setLanguage': {
+    // language 를 주지 않고 작가 모드 설정만 바꿀 수도 있다(기존 호출은 language 만 넘긴다).
+    input: z.object({
+      language: languageSetting.optional(),
+      writerMode: z.boolean().optional(),
+      writerSpacing: z.enum(['include', 'exclude']).optional(),
+    }),
+    output: appLanguage,
+  },
 } as const;
 
 export type Contract = typeof contract;

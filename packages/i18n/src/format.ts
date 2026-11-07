@@ -87,3 +87,8 @@ export function formatMonthTitle(date: Date, locale: Locale = getLocale()): stri
 export function formatWeekdayLong(date: Date, locale: Locale = getLocale()): string {
   return new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', { weekday: 'long' }).format(date)
 }
+
+/** 숫자에 자릿수 구분을 넣는다(1,234). 언어에 맞는 서식. */
+export function formatNumber(value: number, locale: Locale = getLocale()): string {
+  return new Intl.NumberFormat(locale).format(value);
+}

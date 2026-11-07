@@ -1,5 +1,5 @@
 import { t } from '@nopsidian/i18n';
-import { useLocale } from './useLocale';
+import { useLanguage, useLocale } from './useLocale';
 import { useEffect, useRef, useState } from 'react';
 import type { Editor, NopsPeekHost } from '@nopsidian/editor/nops';
 import { createDbViewHost } from './db/dbview-host';
@@ -10,6 +10,9 @@ import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
+import { countMarkdown, type TextStats } from '@nopsidian/core';
+import { WRITER_PENDING, writerCountsText, writerDelay } from './writer-status';
+import { editorTotalStats } from '@nopsidian/editor/nops';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
 import type { DbEmbedHost } from './db/EmbeddedDb';
@@ -134,6 +137,36 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const onTitleRenameRef = useRef(onTitleRename);
   onTitleRenameRef.current = onTitleRename;
   const locale = useLocale();
+  // 작가 모드 — 꺼져 있으면 상태줄도 계산도 없다(일반 모드 화면·동작 동일).
+  const language = useLanguage();
+  const writer = language.writerMode === true;
+  const spacing = language.writerSpacing ?? 'include';
+  const [writerStats, setWriterStats] = useState<TextStats | null>(null);
+  /** 좁은 창(920px 이하)에서는 한국어 기준 표기를 '포함/제외'로 줄인다(디자이너 시안). */
+  const [narrow, setNarrow] = useState(() => window.innerWidth <= 920);
+  useEffect(() => {
+    // 테스트 환경(jsdom)에는 matchMedia 가 없을 수 있다 — 없으면 창 폭으로만 판단한다.
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(max-width: 920px)');
+    const onChange = () => setNarrow(mq.matches);
+    setNarrow(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  /** 지금 모드(편집/소스)의 마크다운 원문을 돌려주는 함수. 재생성될 때마다 새로 꽂는다. */
+  const writerTextRef = useRef<(() => string) | null>(null);
+  /** 글자수 초기화 기준(노트·모드·기준이 바뀔 때만 비운다) */
+  const resetKey = useRef('');
+  /** 파일 크기(지연 시간 산정용) — 첫 로드에서도 큰 문서는 계산을 미룬다 */
+  const docSizeRef = useRef(0);
+  /** 이 노트를 다 읽었는지(읽기 전에는 글자수를 예약하지 않는다) */
+  const loadedPathRef = useRef<string | null>(null);
+  /** 현재 에디터의 저장 기준(총계를 '지금 문서'로 직렬화하기 위해) */
+  const baselineRef = useRef<Parameters<typeof editorTotalStats>[1]>(null);
+  /** 소스 모드에서도 글자수가 갱신되도록 소스 편집도 같은 tick 을 올린다. */
+  const bumpDocTick = () => setDocTick((t) => t + 1);
+  /** 소스 모드 편집기 */
+  const sourceRef = useRef<SourceEditor | null>(null);
   /** 언어가 바뀌면 에디터를 새로 만든다(문구는 만들 때 잡힌다) — 그 전에 저장하고 커서를 옮겨 둔다 */
   const localeRef = useRef(locale);
   const restoreSel = useRef<{ anchor: number; head: number } | null>(null);
@@ -143,9 +176,57 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   /** 미저장 편집을 지금 저장하고 성공 여부를 돌려준다(언어 전환 전 flush 용) */
   const flushRef = useRef<(() => Promise<boolean>) | null>(null);
   const [epoch, setEpoch] = useState(0);
+  const [docTick, setDocTick] = useState(0);
+  // 작가 모드 상태줄: 입력 중에는 150ms 모아서 계산한다(5만 자에서도 입력이 끊기지 않게).
+  useEffect(() => {
+    // 노트·모드가 바뀔 때만 이전 숫자를 비운다(같은 문서의 재계산 중에는 이전 값을 유지해 깜빡이지 않게).
+    if (!writer) {
+      setWriterStats(null);
+      resetKey.current = '';
+      return;
+    }
+    const key = `${path}|${mode}|${spacing}`;
+    if (resetKey.current !== key) {
+      resetKey.current = key;
+      setWriterStats(null);
+    }
+    // 문서가 크면 계산을 더 모아서 한다(입력 지연 방지). idle 에서 계산하고, 그동안 이전 값을 보여 준다.
+    // 아직 노트를 다 읽지 않았으면 계산하지 않는다(읽은 뒤 docTick 으로 다시 예약된다).
+    if (loadedPathRef.current !== path) return;
+    // 첫 로드·노트 전환에는 파일 크기로 지연을 정한다 — 0 으로 보이지 않게 '…' 을 보여 준다.
+    const size = writerStats?.chars ?? docSizeRef.current;
+    const delay = writerDelay(size);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let idle: number | undefined;
+    const run = () => {
+      // 항상 **지금** 에디터 문서를 읽는다(재생성·무음 reload·소스 왕복 뒤에도 최신).
+      const view = editorRef.current?.getView();
+      if (modeRef.current === 'source' || !view) {
+        setWriterStats(countMarkdown(writerTextRef.current?.() ?? ''));
+        return;
+      }
+      // 에디터 모드: 현재 문서를 **저장될 마크다운 원문**으로 직렬화해 소스 모드와 같은 함수로 센다.
+      const next = editorTotalStats(view.state.doc, baselineRef.current);
+      if (next) setWriterStats(next); // 직렬화 실패 시 이전 값을 유지('…' 로 되돌리지 않는다)
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      idle = window.requestIdleCallback(run, { timeout: delay });
+    } else {
+      timer = setTimeout(run, delay);
+    }
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      if (idle !== undefined) window.cancelIdleCallback(idle);
+    };
+  }, [writer, docTick, epoch, spacing, path, mode]);
+
   useEffect(() => {
     restoreSel.current = null;
   }, [path]);
+  // 편집 ↔ 소스 전환은 마크다운이 같아도 경로가 달라질 수 있으니 바로 다시 센다.
+  useEffect(() => {
+    bumpDocTick();
+  }, [mode]);
   const [pickingIcon, setPickingIcon] = useState(false);
   const [pickingCover, setPickingCover] = useState(false);
   const peekRef = useRef(peek);
@@ -161,7 +242,6 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   modeRef.current = mode;
   /** 찾기 막대: 열린 상태·처음 채울 말·초점 다시 주기·문서 변경 횟수 */
   const [find, setFindState] = useState<{ initial: string; tick: number } | null>(null);
-  const [docTick, setDocTick] = useState(0);
 
   useEffect(() => {
     if (localeRef.current === locale) return;
@@ -294,6 +374,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     const showContent = (content: string) => {
       const parsed = parseDocument(content);
       baseline = parsed.baseline;
+      baselineRef.current = baseline;
       editor.setDocument(parsed.doc, { silent: true });
       source?.setText(content);
     };
@@ -301,6 +382,10 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     const load = async () => {
       const r = await window.nops.note.read({ path });
       if (disposed) return;
+      docSizeRef.current = r.content.length;
+      loadedPathRef.current = path;
+      // 첫 로드·노트 전환에서도 상태줄이 '…' 로 남지 않게 즉시 재계산을 예약한다.
+      bumpDocTick();
       // 이미 같은 내용이면(우리가 방금 쓴 파일의 감시 이벤트 등) 아무것도 바꾸지 않는다 — 커서가 튀지 않게
       if (loaded && r.hash === hash) return;
       const view = editor.getView();
@@ -365,6 +450,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
           dirty = false;
         } else {
           baseline = parseDocument(r.content).baseline;
+          baselineRef.current = baseline;
           dirty = snapshot() !== atSave; // 저장하는 동안 더 편집했으면 다시 저장
         }
         setState(dirty ? 'dirty' : 'saved');
@@ -393,6 +479,9 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     };
     editor.on('change', markDirty);
     editor.on('change', () => setDocTick((t) => t + 1));
+    // 작가 모드 글자수는 **저장과 같은 원문**으로 센다 — 편집 모드와 소스 모드가 같은 결과를 내야 한다.
+    writerTextRef.current = () =>
+      modeRef.current === 'source' && source ? source.getText() : serializeDocument(editor.getDocument(), baseline);
 
     // ── 개요 패널: 제목 목록을 알리고, 누르면 그 제목으로 이동 ──
     let outlineTimer: ReturnType<typeof setTimeout> | undefined;
@@ -454,7 +543,14 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
           // 소스 편집기(CodeMirror)는 처음 쓸 때 불러온다
           const { createSourceEditor } = await import('@nopsidian/editor/nops/source');
           if (disposed) return;
-          source = createSourceEditor(sourceHost, { text: currentContent(), onChange: markDirty });
+          source = createSourceEditor(sourceHost, {
+            text: currentContent(),
+            onChange: () => {
+              markDirty();
+              bumpDocTick();
+            },
+          });
+          sourceRef.current = source;
         } else {
           source.setText(currentContent());
         }
@@ -466,6 +562,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         const text = source.getText();
         const parsed = parseDocument(text);
         baseline = parsed.baseline; // 소스에서 고친 내용이 기준이 되므로 안 바뀐 블록은 바이트 그대로 유지된다
+        baselineRef.current = baseline;
         editor.setDocument(parsed.doc, { silent: true });
         current = 'edit';
         setModeState('edit');
@@ -522,6 +619,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       editorRef.current = null;
       loadedRef.current = false;
       setFindState(null);
+      sourceRef.current = null;
       source?.destroy();
       editor.destroy();
     };
@@ -568,7 +666,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   }, []);
 
   return (
-    <div className="note-editor" data-mode={mode} ref={rootRef}>
+    <div className={writer ? 'note-editor note-editor--writer' : 'note-editor'} data-mode={mode} ref={rootRef}>
       {find && mode === 'edit' && editorRef.current && (
         <FindBar
           view={editorRef.current.getView()}
@@ -693,6 +791,11 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         />
       )}
       <div ref={sourceHostRef} className="note-editor__source" data-testid="source-editor" hidden={mode === 'edit'} />
+      {writer && (
+        <div className="note-editor__writer" data-testid="writer-status" aria-live="off">
+          <span data-testid="writer-chars">{writerStats ? writerCountsText({ locale, spacing, stats: writerStats, narrow }) : WRITER_PENDING}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,13 +2,21 @@ import type { LanguageSetting } from '@nopsidian/i18n';
 import { atomicWrite } from '@nopsidian/core';
 import { readFileSync } from 'node:fs';
 
-/** userData/app-settings.json — 앱 전체 설정. 지금은 언어만 있다. */
+/** 글자수 기준(작가 모드) — 공백 포함/제외 */
+export type WriterSpacing = 'include' | 'exclude';
+
+/** userData/app-settings.json — 앱 전체 설정(언어 + 작가 모드). 새 필드는 선택이라 예전 파일도 그대로 읽힌다. */
 export interface AppSettings {
   version: 1;
   language: LanguageSetting;
+  /** 작가 모드(글자수 상태줄). 기본 꺼짐 */
+  writerMode?: boolean;
+  /** 글자수 기준. 기본 공백 포함(잠정) */
+  writerSpacing?: WriterSpacing;
 }
 
-export const DEFAULT_APP_SETTINGS: AppSettings = { version: 1, language: 'system' };
+export const DEFAULT_APP_SETTINGS: AppSettings = { version: 1, language: 'system', writerMode: false, writerSpacing: 'include' };
+const WRITER_SPACINGS: readonly WriterSpacing[] = ['include', 'exclude'];
 
 const LANGUAGES: readonly LanguageSetting[] = ['system', 'ko', 'en'];
 
@@ -20,7 +28,13 @@ export function parseAppSettings(raw: string): AppSettings {
     if (typeof data.language !== 'string' || !LANGUAGES.includes(data.language as LanguageSetting)) {
       return DEFAULT_APP_SETTINGS;
     }
-    return { version: 1, language: data.language as LanguageSetting };
+    // 작가 모드 필드는 선택 — 없거나 이상하면 기본값(꺼짐·공백 포함)으로 읽는다.
+    const rawWriter = data as { writerMode?: unknown; writerSpacing?: unknown };
+    const writerMode = typeof rawWriter.writerMode === 'boolean' ? rawWriter.writerMode : false;
+    const writerSpacing = WRITER_SPACINGS.includes(rawWriter.writerSpacing as WriterSpacing)
+      ? (rawWriter.writerSpacing as WriterSpacing)
+      : 'include';
+    return { version: 1, language: data.language as LanguageSetting, writerMode, writerSpacing };
   } catch {
     return DEFAULT_APP_SETTINGS;
   }
@@ -54,10 +68,22 @@ export class AppSettingsStore {
   }
 
   setLanguage(language: LanguageSetting): AppSettings {
-    const next: AppSettings = { version: 1, language };
+    const next: AppSettings = { ...this.current, language };
     // 먼저 디스크에 쓴다. 실패하면 던지고 메모리 값은 그대로다(호출자가 오류를 화면에 보여 준다).
     writeAppSettings(this.file, next);
     this.current = next;
     return next;
+  }
+
+  /** 작가 모드 설정 — 준 값만 바꾸고 나머지는 그대로 둔다. */
+  setWriter(next: { mode?: boolean; spacing?: WriterSpacing }): AppSettings {
+    const merged: AppSettings = {
+      ...this.current,
+      ...(next.mode === undefined ? {} : { writerMode: next.mode }),
+      ...(next.spacing === undefined ? {} : { writerSpacing: next.spacing }),
+    };
+    writeAppSettings(this.file, merged);
+    this.current = merged;
+    return merged;
   }
 }

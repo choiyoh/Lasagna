@@ -12,7 +12,7 @@ import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './no
 import { loadPrefs } from './prefs';
 import { countMarkdown, type TextStats } from '@nopsidian/core';
 import { WRITER_PENDING, createSelectionReader, writerCountsText, writerDelay, writerSelectionText } from './writer-status';
-import { editorSelectionStats, editorTotalStats } from '@nopsidian/editor/nops';
+import { editorTotalStats, readEditorSelection } from '@nopsidian/editor/nops';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
 import type { DbEmbedHost } from './db/EmbeddedDb';
@@ -234,10 +234,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       if (modeRef.current === 'source') return null;
       const view = editorRef.current?.getView();
       if (!view) return null;
-      const { from, to } = view.state.selection;
-      if (from === to) return null;
-      // 전체 선택은 총계와 항등, 그 밖에는 같은 직렬화기로 센 값(클램프 포함).
-      return editorSelectionStats(view.state.doc, from, to, writerStatsRef.current);
+      // PM 이 DOM 선택을 반영한 뒤의 상태로 센다(한 이벤트 뒤처짐 방지).
+      return readEditorSelection(view, writerStatsRef.current);
     };
     const reader = createSelectionReader(read, setWriterSelected);
     const onSelection = () => reader.schedule();

@@ -1,5 +1,6 @@
 import { countMarkdown, countPlain, type TextStats } from '@nopsidian/core';
 import type { Node as PMNode } from 'prosemirror-model';
+import type { EditorView } from 'prosemirror-view';
 import { serializeDocument, type Baseline } from './md/document.js';
 
 /**
@@ -47,4 +48,34 @@ export function editorSelectionStats(doc: PMNode, from: number, to: number, tota
     charsNoSpace: Math.min(stats.charsNoSpace, total.charsNoSpace),
     words: stats.words,
   };
+}
+
+/**
+ * 지금 화면의 선택 글자수 — **화면(DOM 선택)과 PM 상태 중 최신**을 쓴다.
+ * selectionchange 직후 `view.state.selection` 은 PM 옵저버가 처리하기 전 값(한 이벤트 뒤처짐)일 수 있으므로
+ * DOM 선택이 에디터 안에 있으면 그 범위를 문서 위치로 옮겨 센다.
+ */
+export function readEditorSelection(view: EditorView, total: TextStats | null): TextStats | null {
+  type WithObserver = { domObserver?: { flush?: () => void } };
+  try {
+    (view as unknown as WithObserver).domObserver?.flush?.();
+  } catch {
+    // 관찰자 flush 실패는 무시하고 아래 경로로 센다.
+  }
+  const domSel = typeof window === 'undefined' ? null : window.getSelection();
+  if (domSel && domSel.rangeCount > 0 && !domSel.isCollapsed) {
+    const anchor = domSel.anchorNode;
+    const focus = domSel.focusNode;
+    if (anchor && focus && view.dom.contains(anchor) && view.dom.contains(focus)) {
+      try {
+        const a = view.posAtDOM(anchor, domSel.anchorOffset);
+        const b = view.posAtDOM(focus, domSel.focusOffset);
+        return editorSelectionStats(view.state.doc, Math.min(a, b), Math.max(a, b), total);
+      } catch {
+        // DOM→문서 위치 변환 실패 시 PM 상태로 넘어간다.
+      }
+    }
+  }
+  const { from, to } = view.state.selection;
+  return editorSelectionStats(view.state.doc, from, to, total);
 }

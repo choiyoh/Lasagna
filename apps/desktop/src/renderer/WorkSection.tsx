@@ -6,11 +6,19 @@ interface Props {
   works: WorkSummary[];
   /** 현재 글자수 기준(공백 포함/제외) */
   spacing: 'include' | 'exclude';
+  /** 920px 이하: 칩을 숫자 없이 축약한다(작가 모드에서만) */
+  narrow: boolean;
   today: number;
   dailyGoal: number | null;
   onOpenFolder: (path: string) => void;
   onCreateWork: () => void;
   onCreateCharacter: (work: string) => void;
+}
+
+/** 칩 문구 — 920px 이하에서는 시안대로 숫자를 뺀다. */
+export function chipText(locale: 'ko' | 'en', kind: 'characters' | 'storyBible', count: number, narrow: boolean): string {
+  if (narrow) return translate(locale, kind === 'characters' ? 'work.charactersShort' : 'work.storyBibleShort');
+  return translate(locale, kind === 'characters' ? 'work.characters' : 'work.storyBible', { count: formatNumber(count, locale) });
 }
 
 /** 카드 meta 문구 — 언어·글자수 기준을 그대로 반영한다. */
@@ -25,7 +33,7 @@ export function workMetaText(locale: 'ko' | 'en', work: Pick<WorkSummary, 'episo
  * 작가용 사이드바의 '작품' 섹션. 작가 모드에서만 렌더된다(일반 모드는 이 DOM 자체가 없다).
  * 카드: 회차 수·총 글자수, 일일 목표가 있으면 오늘 진행 막대. 칩: 캐릭터/설정집(폴더 펼침).
  */
-export function WorkSection({ locale, works, spacing, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter }: Props) {
+export function WorkSection({ locale, works, spacing, narrow, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter }: Props) {
   const tr = (key: Parameters<typeof translate>[1], params?: Record<string, string | number>) => translate(locale, key, params);
   const count = (n: number) => formatNumber(n, locale);
   const ratio = dailyGoal !== null && dailyGoal > 0 ? Math.min(1, Math.max(0, today / dailyGoal)) : 0;
@@ -58,11 +66,11 @@ export function WorkSection({ locale, works, spacing, today, dailyGoal, onOpenFo
               ) : null}
               <div className="workcard__links">
                 <button className="workchip" onClick={() => onOpenFolder(work.characterFolder)} data-testid="work-chip-characters">
-                  {tr('work.characters', { count: count(work.characters) })}
+                  {chipText(locale, 'characters', work.characters, narrow)}
                 </button>
                 {work.storyBible !== null && work.storyBibleFolder !== null ? (
                   <button className="workchip" onClick={() => onOpenFolder(work.storyBibleFolder ?? work.characterFolder)} data-testid="work-chip-story">
-                    {tr('work.storyBible', { count: count(work.storyBible) })}
+                    {chipText(locale, 'storyBible', work.storyBible, narrow)}
                   </button>
                 ) : null}
               </div>
@@ -74,7 +82,7 @@ export function WorkSection({ locale, works, spacing, today, dailyGoal, onOpenFo
         </div>
       )}
       <button className="works__add" data-testid="work-add" onClick={onCreateWork}>
-        {tr('settings.workCreate')}
+        {tr('work.addWork')}
       </button>
     </section>
   );

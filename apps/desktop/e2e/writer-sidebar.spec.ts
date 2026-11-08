@@ -93,10 +93,19 @@ test('작품 카드가 0회차·0자로 보이고, 새 캐릭터가 시트로 �
 
   await page.getByTestId('new-character').click();
   await prompt(page, '서연');
-  await expect(page.locator('.ProseMirror h1')).toHaveText('캐릭터 시트');
+  await expect(page.locator('.ProseMirror h1')).toHaveText('서연');
   const file = path.join(vaultDir, '달빛 조각사', '캐릭터', '서연.md');
   expect(readFileSync(file, 'utf8')).toContain('name: 서연');
   await expect(page.getByTestId('work-chip-characters')).toHaveText(/캐릭터 1/);
+
+  // 두 번째 캐릭터를 만들면 노트 제목(첫 H1)이 각자 이름이다 — 둘 다 '캐릭터 시트'로 보이지 않는다.
+  await page.getByTestId('new-character').click();
+  await prompt(page, '도윤');
+  await expect(page.locator('.ProseMirror h1')).toHaveText('도윤');
+  expect(readFileSync(path.join(vaultDir, '달빛 조각사', '캐릭터', '도윤.md'), 'utf8')).toContain('name: 도윤');
+  await expect(page.locator('aside.sidebar [data-path="달빛 조각사/캐릭터/도윤.md"]')).toContainText('도윤');
+  await expect(page.getByTestId('work-chip-characters')).toHaveText(/캐릭터 2/);
+  await expect(page.getByTestId('work-add')).toHaveText(/\+ 작품 만들기/);
 
   // 일일 목표가 설정돼 있으면 카드에 오늘 진행 막대가 보인다(W1b 같은 값)
   await page.evaluate(() => window.nops.settings.setLanguage({ writerDailyGoal: 3000 }));
@@ -150,7 +159,8 @@ test('영어로 바꾸면 영어 문구로 보인다', async () => {
   await resetWriter(page, { locale: 'en' });
   await expect(page.getByTestId('work-section')).toContainText('Work');
   await expect(page.getByTestId('work-meta')).toHaveText(/1 episodes · 14 characters/);
-  await expect(page.getByTestId('work-chip-characters')).toHaveText(/Characters 1/);
+  await expect(page.getByTestId('work-chip-characters')).toHaveText(/Characters/);
+  await expect(page.getByTestId('work-add')).toHaveText(/\+ New work/);
 });
 
 test('한국어로 만든 작품을 영어 UI 에서 열어도 그 작품의 한국어 템플릿을 복사한다', async () => {

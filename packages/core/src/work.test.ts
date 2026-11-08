@@ -78,7 +78,9 @@ describe('새 캐릭터 노트 내용', () => {
     expect(note).toContain('name: 서연');
     expect(note).toContain('first_appears:');
     expect(note).toContain('## 외모');
-    expect(note.slice(note.indexOf('# '))).toBe(template.slice(template.indexOf('# '))); // 본문 그대로
+    // 본문은 첫 H1(제목)만 이름으로 바뀌고 나머지는 그대로다.
+    const strip = (text: string) => text.replace(/^# .*$/m, '# <name>').replace(/^name:.*$/m, 'name: <name>');
+    expect(strip(note)).toBe(strip(template));
   });
 
   it('템플릿이 없으면 기본 캐릭터 시트로 만들고 이름을 채운다', () => {
@@ -90,5 +92,26 @@ describe('새 캐릭터 노트 내용', () => {
 describe('캐릭터 템플릿 후보(작품을 만든 언어와 UI 언어가 다를 때)', () => {
   it('한국어 작품을 영어 UI 에서도 찾도록 두 언어 경로를 차례로 준다', () => {
     expect(characterTemplateCandidates('달빛')).toEqual(['달빛/템플릿/캐릭터 시트.md', '달빛/Templates/Character sheet.md']);
+  });
+});
+
+describe('새 캐릭터 노트 제목', () => {
+  it('서연·도윤을 만들면 첫 H1 만 이름으로 바뀌고 나머지 본문은 같다', () => {
+    const template = characterSheetMarkdown('ko');
+    const a = characterNoteMarkdown(template, '서연', 'ko');
+    const b = characterNoteMarkdown(template, '도윤', 'ko');
+    expect(a).toContain('# 서연');
+    expect(b).toContain('# 도윤');
+    expect(a).not.toContain('# 캐릭터 시트');
+    // 첫 H1 줄만 다르고 나머지는 바이트 동일
+    const strip = (s: string) => s.replace(/^# .*$/m, '# <name>').replace(/^name: .*$/m, 'name: <name>');
+    expect(strip(a)).toBe(strip(b));
+    expect(strip(a)).toBe(strip(characterNoteMarkdown(template, '서연', 'ko')));
+  });
+
+  it('H1 이 없으면 제목을 새로 넣지 않는다', () => {
+    const noHeading = '---\nname:\n---\n\n## 외모\n';
+    expect(characterNoteMarkdown(noHeading, '서연', 'ko')).toContain('## 외모');
+    expect(characterNoteMarkdown(noHeading, '서연', 'ko')).not.toContain('# 서연');
   });
 });

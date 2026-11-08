@@ -493,6 +493,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             locale={locale}
             works={works}
             spacing={language.writerSpacing ?? 'include'}
+            narrow={viewportWidth <= 920}
             today={workToday}
             dailyGoal={language.writerDailyGoal ?? null}
             onOpenFolder={(path) => {

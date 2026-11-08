@@ -218,6 +218,7 @@ test('외부에서 파일을 바꾸면(무음 reload) 목표·총계가 새 내�
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'Swap');
+  writeFileSync(path.join(vaultDir, 'Swap.md'), '# Swap\n\n처음\n');
   await expect(page.locator('.note-editor__status')).toHaveAttribute('data-state', 'saved', { timeout: 15_000 });
   writeFileSync(path.join(vaultDir, 'Swap.md'), '---\ngoal_chars: 100\n---\n# Swap\n\n짧\n');
   await expect(page.locator('.ProseMirror')).toHaveText(/짧/);

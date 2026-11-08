@@ -23,6 +23,11 @@ export function todayText(opts: { locale: 'ko' | 'en'; today: number; goal: numb
   return translate(opts.locale, 'writer.todayGoal', { count: today, goal: formatNumber(opts.goal, opts.locale) });
 }
 
+/** 프리셋의 기준이 현재 글자수 기준과 다르면 안내를 보여 준다(설정은 바꾸지 않는다). */
+export function presetNeedsHint(basis: 'include' | 'exclude', spacing: 'include' | 'exclude'): boolean {
+  return basis !== spacing;
+}
+
 /** 글자수 기준(공백 포함/제외)에 맞는 값 — 진행·오늘 합계 모두 같은 기준을 쓴다. */
 export function basisChars(stats: TextStats, spacing: 'include' | 'exclude'): number {
   return spacing === 'include' ? stats.chars : stats.charsNoSpace;

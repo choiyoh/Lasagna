@@ -1,4 +1,4 @@
-import { formatNumber, translate } from '@nopsidian/i18n';
+import { formatNumber, pluralCategory, translate } from '@nopsidian/i18n';
 import type { WorkSummary } from '@nopsidian/core';
 
 interface Props {
@@ -13,27 +13,33 @@ interface Props {
   onOpenFolder: (path: string) => void;
   onCreateWork: () => void;
   onCreateCharacter: (work: string) => void;
+  onCreateEpisode: (work: string) => void;
 }
 
-/** 칩 문구 — 920px 이하에서는 시안대로 숫자를 뺀다. */
+/** 칩 문구 — 920px 이하에서는 시안대로 숫자를 뺀다. 영어는 1 일 때 단수. */
 export function chipText(locale: 'ko' | 'en', kind: 'characters' | 'storyBible', count: number, narrow: boolean): string {
   if (narrow) return translate(locale, kind === 'characters' ? 'work.charactersShort' : 'work.storyBibleShort');
-  return translate(locale, kind === 'characters' ? 'work.characters' : 'work.storyBible', { count: formatNumber(count, locale) });
+  const base = kind === 'characters' ? 'work.charactersUnit' : 'work.storyBibleUnit';
+  return translate(locale, `${base}.${pluralCategory(locale, count)}`, { n: formatNumber(count, locale) });
 }
 
 /** 카드 meta 문구 — 언어·글자수 기준을 그대로 반영한다. */
 export function workMetaText(locale: 'ko' | 'en', work: Pick<WorkSummary, 'episodes' | 'chars' | 'charsNoSpace'>, spacing: 'include' | 'exclude'): string {
-  return translate(locale, 'work.meta', {
-    episodes: formatNumber(work.episodes, locale),
-    chars: formatNumber(spacing === 'include' ? work.chars : work.charsNoSpace, locale),
-  });
+  const n = work.episodes;
+  const chars = spacing === 'include' ? work.chars : work.charsNoSpace;
+  if (locale === 'en') {
+    const episodes = translate('en', `work.episodes.${pluralCategory('en', n)}`, { n: formatNumber(n, 'en') });
+    const counted = translate('en', `work.charsUnit`, { n: formatNumber(chars, 'en') });
+    return `${episodes} · ${counted}`;
+  }
+  return `${translate('ko', 'work.episodeUnit', { n: formatNumber(n, 'ko') })} · ${translate('ko', 'work.charsUnit', { n: formatNumber(chars, 'ko') })}`;
 }
 
 /**
  * 작가용 사이드바의 '작품' 섹션. 작가 모드에서만 렌더된다(일반 모드는 이 DOM 자체가 없다).
  * 카드: 회차 수·총 글자수, 일일 목표가 있으면 오늘 진행 막대. 칩: 캐릭터/설정집(폴더 펼침).
  */
-export function WorkSection({ locale, works, spacing, narrow, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter }: Props) {
+export function WorkSection({ locale, works, spacing, narrow, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter, onCreateEpisode }: Props) {
   const tr = (key: Parameters<typeof translate>[1], params?: Record<string, string | number>) => translate(locale, key, params);
   const count = (n: number) => formatNumber(n, locale);
   const ratio = dailyGoal !== null && dailyGoal > 0 ? Math.min(1, Math.max(0, today / dailyGoal)) : 0;
@@ -74,9 +80,14 @@ export function WorkSection({ locale, works, spacing, narrow, today, dailyGoal, 
                   </button>
                 ) : null}
               </div>
-              <button className="workcard__new" data-testid="new-character" onClick={() => onCreateCharacter(work.name)}>
-                {tr('work.newCharacter')}
-              </button>
+              <div className="workcard__newrow">
+                <button className="workcard__new" data-testid="new-episode" onClick={() => onCreateEpisode(work.name)}>
+                  {tr('work.newEpisode')}
+                </button>
+                <button className="workcard__new" data-testid="new-character" onClick={() => onCreateCharacter(work.name)}>
+                  {tr('work.newCharacter')}
+                </button>
+              </div>
             </div>
           ))}
         </div>

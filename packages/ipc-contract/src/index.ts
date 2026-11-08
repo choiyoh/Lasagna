@@ -369,10 +369,18 @@ export const contract = {
         episodes: z.number().int().min(0),
         characters: z.number().int().min(0),
         storyBible: z.number().int().min(0).nullable(),
+        episodeFolder: relPath,
         characterFolder: relPath,
         storyBibleFolder: relPath.nullable(),
         chars: z.number().int().min(0),
         charsNoSpace: z.number().int().min(0),
+        episodeRows: z.array(
+          z.object({
+            path: relPath,
+            chars: z.number().int().min(0),
+            charsNoSpace: z.number().int().min(0),
+          }),
+        ),
       }),
     ),
   },

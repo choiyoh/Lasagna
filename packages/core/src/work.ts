@@ -118,6 +118,12 @@ export function isWorkTemplatePath(path: string): boolean {
  * 새 캐릭터 노트 내용 — 작품 템플릿(있으면 그 내용)을 그대로 두고 속성 `name` 만 채운다.
  * 템플릿이 없으면 W2 기본 캐릭터 시트를 쓴다. 본문은 바꾸지 않는다.
  */
+/** 새 회차 노트 내용 — 템플릿 본문을 그대로 두고 첫 H1 만 이름으로. 속성(name/goal_chars)은 넣지 않는다. */
+export function episodeNoteMarkdown(template: string | null, name: string): string {
+  return withFirstHeadingName(template ?? `# ${name}\n`, name);
+}
+
+/** 새 캐릭터 노트 내용 — 템플릿(있으면)을 그대로 두고 속성 `name` 과 첫 H1 을 채운다. */
 export function characterNoteMarkdown(template: string | null, name: string, locale: WorkLocale): string {
   return withFirstHeadingName(setFrontmatter(template ?? characterSheetMarkdown(locale), { name }), name);
 }
@@ -141,6 +147,14 @@ export function withFirstHeadingName(markdown: string, name: string): string {
  * 새 캐릭터가 복사할 캐릭터 시트 템플릿 후보 경로들 — 작품을 만든 언어와 지금 UI 언어가 다를 수 있으므로
  * **그 작품 폴더 안에 실제로 있는지** 두 언어 이름을 차례로 확인한다(있는 첫 경로를 쓴다).
  */
+/** 새 회차가 복사할 회차 템플릿 후보 경로들(작품을 만든 언어의 실제 폴더를 찾는다). */
+export function episodeTemplateCandidates(work: string): string[] {
+  return (['ko', 'en'] as const).map((locale) => {
+    const names = workNames(locale);
+    return `${work}/${names.templates}/${names.episode}.md`;
+  });
+}
+
 export function characterTemplateCandidates(work: string): string[] {
   return (['ko', 'en'] as const).map((locale) => {
     const names = workNames(locale);

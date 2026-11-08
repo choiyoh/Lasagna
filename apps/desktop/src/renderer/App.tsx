@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { t, tPlural } from '@nopsidian/i18n';
+import { formatNumber, t, tPlural } from '@nopsidian/i18n';
 import type { NoteSummary, SearchHit, SyncStatus, VaultInfo } from '@nopsidian/ipc-contract';
 import { NoteEditor } from './NoteEditor';
 import { useAssetStore } from './assets';
@@ -256,6 +256,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     setNoteGoal,
     createWork,
     createCharacter,
+    createEpisode,
     moveEntries,
     moveRelative,
     deleteEntry,
@@ -418,6 +419,14 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     onReorder: moveRelative,
     limitOf: folderLimit.limitOf,
     showMore: folderLimit.more,
+    // 작가 모드에서만 회차 행에 글자수 배지(일반 모드는 DOM 에도 없다).
+    badgeOf: writerOn
+      ? (path: string) => {
+          const side = language.writerSpacing === 'exclude' ? 'charsNoSpace' : 'chars';
+          const row = works.flatMap((w) => w.episodeRows).find((r) => r.path === path);
+          return row ? formatNumber(row[side], locale) : undefined;
+        }
+      : undefined,
   };
 
   return (
@@ -508,6 +517,13 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             onCreateWork={() => {
               void showTextPrompt(t('work.namePrompt'), '').then((name) => {
                 if (name !== null) void createWork(name);
+              });
+            }}
+            onCreateEpisode={(work) => {
+              void showTextPrompt(t('episode.namePrompt'), '').then((name) => {
+                if (name === null) return;
+                const summary = works.find((w) => w.name === work);
+                if (summary) void createEpisode(work, summary.episodeFolder, name);
               });
             }}
             onCreateCharacter={(work) => {

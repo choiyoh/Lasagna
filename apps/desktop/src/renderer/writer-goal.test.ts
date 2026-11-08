@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '@nopsidian/i18n';
-import { basisChars, goalProgress, goalText, todayText } from './writer-goal';
+import { basisChars, goalProgress, goalText, presetNeedsHint, todayText } from './writer-goal';
 
 afterEach(() => setLocale('ko'));
 
@@ -32,5 +32,13 @@ describe('목표 진행·오늘 쓴 글자수 문구', () => {
     const stats = { chars: 12340, charsNoSpace: 10982, words: 2010 };
     expect(basisChars(stats, 'include')).toBe(12340);
     expect(basisChars(stats, 'exclude')).toBe(10982);
+  });
+});
+
+describe('목표 프리셋 안내', () => {
+  it('프리셋 기준이 현재 설정과 다를 때만 안내한다', () => {
+    expect(presetNeedsHint('exclude', 'include')).toBe(true); // 리디 + 공백 포함
+    expect(presetNeedsHint('include', 'include')).toBe(false);
+    expect(presetNeedsHint('exclude', 'exclude')).toBe(false);
   });
 });

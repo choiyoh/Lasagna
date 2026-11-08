@@ -29,10 +29,13 @@ export interface WorkSummary {
   /** 설정집 폴더가 없으면 null(칩 숨김) */
   storyBible: number | null;
   /** 실제 폴더 경로(칩을 누르면 이 폴더를 펼친다) */
+  episodeFolder: string;
   characterFolder: string;
   storyBibleFolder: string | null;
   chars: number;
   charsNoSpace: number;
+  /** 회차 폴더 안 노트별 글자수(트리 행 배지용) */
+  episodeRows: { path: string; chars: number; charsNoSpace: number }[];
 }
 
 function names(locale: 'ko' | 'en') {
@@ -84,21 +87,27 @@ export function summarizeWorks(roots: WorkRoot[], notes: string[], stats: Map<st
     const story = notes.filter((p) => root.storyBibleFolders.some((folder) => under(p, folder)));
     let chars = 0;
     let charsNoSpace = 0;
+    const episodeRows: { path: string; chars: number; charsNoSpace: number }[] = [];
     for (const path of episodes) {
       const s = stats.get(path);
-      if (!s) continue;
-      chars += s.chars;
-      charsNoSpace += s.charsNoSpace;
+      const counted = s ?? { chars: 0, charsNoSpace: 0 };
+      if (s) {
+        chars += s.chars;
+        charsNoSpace += s.charsNoSpace;
+      }
+      episodeRows.push({ path, chars: counted.chars, charsNoSpace: counted.charsNoSpace });
     }
     return {
       name: root.name,
       episodes: episodes.length,
       characters: characters.length,
       storyBible: root.storyBibleFolders.length > 0 ? story.length : null,
+      episodeFolder: root.episodeFolders[0] ?? `${root.name}/`,
       characterFolder: root.characterFolders[0] ?? `${root.name}/`,
       storyBibleFolder: root.storyBibleFolders[0] ?? null,
       chars,
       charsNoSpace,
+      episodeRows,
     };
   });
 }

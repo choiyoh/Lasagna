@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isWorkTemplatePath, readGoalChars } from './index.js';
-import { characterNoteMarkdown, characterSheetMarkdown, characterTemplateCandidates, episodeMarkdown, validateWorkName, workNames, workPlan, worldbuildingMarkdown } from './work.js';
+import { characterNoteMarkdown, characterSheetMarkdown, characterTemplateCandidates, episodeNoteMarkdown, episodeTemplateCandidates, episodeMarkdown, validateWorkName, workNames, workPlan, worldbuildingMarkdown } from './work.js';
 import { splitFrontmatter } from './markdown/frontmatter.js';
 
 describe('작품 만들기 — 구조와 이름', () => {
@@ -113,5 +113,19 @@ describe('새 캐릭터 노트 제목', () => {
     const noHeading = '---\nname:\n---\n\n## 외모\n';
     expect(characterNoteMarkdown(noHeading, '서연', 'ko')).toContain('## 외모');
     expect(characterNoteMarkdown(noHeading, '서연', 'ko')).not.toContain('# 서연');
+  });
+});
+
+describe('새 회차 노트', () => {
+  it('회차 템플릿 후보는 두 언어 경로를 차례로 준다', () => {
+    expect(episodeTemplateCandidates('달빛')).toEqual(['달빛/템플릿/회차.md', '달빛/Templates/Episode.md']);
+  });
+
+  it('템플릿 본문을 복사하고 첫 H1 만 이름으로 바꾸며 goal_chars 는 넣지 않는다', () => {
+    const template = episodeMarkdown('ko');
+    const note = episodeNoteMarkdown(template, '1화 밤의 시작');
+    expect(note.startsWith('# 1화 밤의 시작\n')).toBe(true);
+    expect(note).not.toContain('goal_chars');
+    expect(note).not.toContain('name:'); // 회차는 속성을 넣지 않는다
   });
 });

@@ -74,7 +74,7 @@ async function resetWriter(page: Page, opts: { mode?: boolean } = {}): Promise<v
     { mode },
   );
   await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
-  await expect(page.getByTestId('writer-status')).toHaveCount(mode ? 1 : 0);
+  // 상태줄은 **노트를 연 뒤**에만 그려진다 — 여기서는 설정만 맞추고, 표시 확인은 각 테스트가 노트를 연 뒤 한다.
 }
 
 async function toggleWriter(page: Page, on: boolean): Promise<void> {

@@ -53,6 +53,36 @@ async function resetWriter(page: Page, opts: { mode?: boolean; locale?: 'ko' | '
   await expect(page.locator('html')).toHaveAttribute('lang', language);
 }
 
+/** 원자적 쓰기(.nops-tmp-*)가 끝나고 기대한 템플릿 3개가 다 생길 때까지 기다린다. */
+async function waitForTemplates(work: string): Promise<void> {
+  const dir = path.join(vaultDir, work, '템플릿');
+  await expect
+    .poll(
+      () => {
+        try {
+          return readdirSync(dir)
+            .filter((f) => f.endsWith('.md') && !f.includes('.nops-tmp-'))
+            .sort()
+            .join(',');
+        } catch {
+          return '';
+        }
+      },
+      { timeout: 15_000 },
+    )
+    .toBe('세계관·복선.md,캐릭터 시트.md,회차.md');
+  // rename 이 끝나 임시 파일이 남아 있지 않은 상태에서만 목록을 단언한다.
+  await expect
+    .poll(() => {
+      try {
+        return readdirSync(dir).some((f) => f.includes('.nops-tmp-'));
+      } catch {
+        return true;
+      }
+    }, { timeout: 10_000 })
+    .toBe(false);
+}
+
 async function createWork(page: Page, name: string): Promise<void> {
   await page.getByTestId('settings-btn').click();
   const button = page.getByTestId('work-create');
@@ -101,8 +131,9 @@ test('작품을 만들면 폴더 구조와 템플릿 노트가 생기고 캐릭�
   await page.keyboard.press('Escape');
 
   for (const folder of ['회차', '캐릭터', '설정집', '템플릿']) {
-    expect(statSync(path.join(vaultDir, '달빛 조각사', folder)).isDirectory()).toBe(true);
+    await expect.poll(() => statSync(path.join(vaultDir, '달빛 조각사', folder)).isDirectory(), { timeout: 15_000 }).toBe(true);
   }
+  await waitForTemplates('달빛 조각사');
   const templates = readdirSync(path.join(vaultDir, '달빛 조각사', '템플릿')).sort();
   expect(templates).toEqual(['세계관·복선.md', '캐릭터 시트.md', '회차.md'].sort());
   // 캐릭터 시트가 열리고 속성 키는 영문, 섹션은 한국어
@@ -120,6 +151,7 @@ test('같은 이름으로 다시 만들면 오류를 알리고 기존 파일은 
   await openVaultIfNeeded(page);
   await resetWriter(page);
   const file = path.join(vaultDir, '달빛 조각사', '템플릿', '캐릭터 시트.md');
+  await waitForTemplates('달빛 조각사'); // 앞 테스트가 만든 파일이라도 쓰기가 끝났는지 확인하고 읽는다
   const before = readFileSync(file);
   const stamp = statSync(file).mtimeMs;
   await createWork(page, '달빛 조각사');

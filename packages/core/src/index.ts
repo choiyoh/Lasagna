@@ -12,3 +12,5 @@ export * from './templates.js';
 export * from './comments.js';
 export * from './errors.js';
 export * from './text-stats.js';
+export * from './writer-goal.js';
+export * from './writer-daily.js';

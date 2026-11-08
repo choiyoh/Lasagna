@@ -1,4 +1,4 @@
-import { t } from '@nopsidian/i18n';
+import { formatNumber, t } from '@nopsidian/i18n';
 import { useLanguage, useLocale } from './useLocale';
 import { useEffect, useRef, useState } from 'react';
 import type { Editor, NopsPeekHost } from '@nopsidian/editor/nops';
@@ -10,8 +10,9 @@ import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
-import { countMarkdown, type TextStats } from '@nopsidian/core';
+import { countMarkdown, readGoalChars, type TextStats } from '@nopsidian/core';
 import { WRITER_PENDING, writerCountsText, writerDelay } from './writer-status';
+import { basisChars, goalProgress, goalText, todayText } from './writer-goal';
 import { editorTotalStats } from '@nopsidian/editor/nops';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
@@ -65,6 +66,8 @@ interface Props {
   noteLinkName: string;
   /** 제목(첫 H1)을 고치고 나가면 파일 이름을 맞춘다(새 경로). 없으면 동기화하지 않는다 */
   onTitleRename?: (to: string) => void;
+  /** 문서 목표 글자수를 노트 속성(`goal_chars`)에 저장/삭제한다. 없으면 목표 UI 가 없다 */
+  onSetGoal?: (goal: number | null) => void;
 }
 
 /** 저장 결과가 앱의 내용과 달라졌을 때 사용자에게 알리는 문구 */
@@ -114,7 +117,7 @@ function scrollToFocus(editor: Editor, focus: { heading: string | null; block: s
  * 열기: 읽기(hash) → 파싱 → 표시. 편집 500ms 뒤 `note.save`(baseHash로 외부 변경 감지).
  * 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다.
  */
-export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename }: Props) {
+export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename, onSetGoal }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
@@ -142,6 +145,12 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const writer = language.writerMode === true;
   const spacing = language.writerSpacing ?? 'include';
   const [writerStats, setWriterStats] = useState<TextStats | null>(null);
+  /** 이 노트의 목표 글자수(노트 속성). 없으면 null */
+  const [noteGoal, setNoteGoal] = useState<number | null>(null);
+  /** 오늘 쓴 글자수(앱 통계 파일, 볼트 단위) */
+  const [today, setToday] = useState(0);
+  const [goalEditing, setGoalEditing] = useState(false);
+  const [goalDraft, setGoalDraft] = useState('');
   /** 좁은 창(920px 이하)에서는 한국어 기준 표기를 '포함/제외'로 줄인다(디자이너 시안). */
   const [narrow, setNarrow] = useState(() => window.innerWidth <= 920);
   useEffect(() => {
@@ -163,6 +172,9 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const loadedPathRef = useRef<string | null>(null);
   /** 현재 에디터의 저장 기준(총계를 '지금 문서'로 직렬화하기 위해) */
   const baselineRef = useRef<Parameters<typeof editorTotalStats>[1]>(null);
+  /** 직전에 표시한 총계(입력 순변화를 재기 위해)과, 이번 재계산이 편집 때문인지 */
+  const prevStatsRef = useRef<TextStats | null>(null);
+  const pendingEditRef = useRef(false);
   /** 소스 모드에서도 글자수가 갱신되도록 소스 편집도 같은 tick 을 올린다. */
   const bumpDocTick = () => setDocTick((t) => t + 1);
   /** 소스 모드 편집기 */
@@ -198,16 +210,36 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     const delay = writerDelay(size);
     let timer: ReturnType<typeof setTimeout> | undefined;
     let idle: number | undefined;
+    /** 입력·삭제로 바뀐 만큼만 오늘 합계에 더한다(외부 변경·재생성·노트 전환은 세지 않는다). */
+    const recordDelta = (next: TextStats | null) => {
+      const before = prevStatsRef.current;
+      const edited = pendingEditRef.current;
+      pendingEditRef.current = false;
+      if (!next) return;
+      prevStatsRef.current = next;
+      if (!writer || !edited || !before) return;
+      const delta = basisChars(next, spacing) - basisChars(before, spacing);
+      if (delta === 0) return;
+      window.nops.settings
+        .writerAddDelta({ vaultId, path, delta })
+        .then((r) => setToday(r.chars))
+        .catch(() => {
+          // 통계 쓰기 실패는 집필을 막지 않는다(표시 값은 마지막 성공 값 유지).
+        });
+    };
     const run = () => {
       // 항상 **지금** 에디터 문서를 읽는다(재생성·무음 reload·소스 왕복 뒤에도 최신).
       const view = editorRef.current?.getView();
       if (modeRef.current === 'source' || !view) {
-        setWriterStats(countMarkdown(writerTextRef.current?.() ?? ''));
+        const nextSource = countMarkdown(writerTextRef.current?.() ?? '');
+        setWriterStats(nextSource);
+        recordDelta(nextSource);
         return;
       }
       // 에디터 모드: 현재 문서를 **저장될 마크다운 원문**으로 직렬화해 소스 모드와 같은 함수로 센다.
       const next = editorTotalStats(view.state.doc, baselineRef.current);
       if (next) setWriterStats(next); // 직렬화 실패 시 이전 값을 유지('…' 로 되돌리지 않는다)
+      recordDelta(next);
     };
     if (typeof window.requestIdleCallback === 'function') {
       idle = window.requestIdleCallback(run, { timeout: delay });
@@ -219,6 +251,23 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       if (idle !== undefined) window.cancelIdleCallback(idle);
     };
   }, [writer, docTick, epoch, spacing, path, mode]);
+
+  // 오늘 쓴 글자수 — 앱 통계(userData)에서 볼트 합계를 읽는다. 볼트·노트는 건드리지 않는다.
+  useEffect(() => {
+    if (!writer) return;
+    let alive = true;
+    window.nops.settings
+      .writerToday({ vaultId })
+      .then((r) => {
+        if (alive) setToday(r.chars);
+      })
+      .catch(() => {
+        // 통계를 못 읽어도 화면은 그대로(0 으로 시작) — 집필을 막지 않는다.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [writer, vaultId, path]);
 
   useEffect(() => {
     restoreSel.current = null;
@@ -375,6 +424,10 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       const parsed = parseDocument(content);
       baseline = parsed.baseline;
       baselineRef.current = baseline;
+      // 외부 변경·다시 불러오기는 '쓴 글자수'가 아니다 — 순변화 기준점과 목표를 새 내용에서 다시 잡는다.
+      pendingEditRef.current = false;
+      prevStatsRef.current = null;
+      setNoteGoal(readGoalChars(content));
       editor.setDocument(parsed.doc, { silent: true });
       source?.setText(content);
     };
@@ -477,8 +530,11 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       setState('dirty');
       schedule();
     };
-    editor.on('change', markDirty);
-    editor.on('change', () => setDocTick((t) => t + 1));
+    editor.on('change', () => {
+      pendingEditRef.current = true;
+      markDirty();
+      setDocTick((t) => t + 1);
+    });
     // 작가 모드 글자수는 **저장과 같은 원문**으로 센다 — 편집 모드와 소스 모드가 같은 결과를 내야 한다.
     writerTextRef.current = () =>
       modeRef.current === 'source' && source ? source.getText() : serializeDocument(editor.getDocument(), baseline);
@@ -546,6 +602,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
           source = createSourceEditor(sourceHost, {
             text: currentContent(),
             onChange: () => {
+              pendingEditRef.current = true;
               markDirty();
               bumpDocTick();
             },
@@ -793,7 +850,86 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       <div ref={sourceHostRef} className="note-editor__source" data-testid="source-editor" hidden={mode === 'edit'} />
       {writer && (
         <div className="note-editor__writer" data-testid="writer-status" aria-live="off">
+          {noteGoal !== null && writerStats ? (
+            <span className="note-editor__goal" data-testid="writer-goal">
+              <span className="note-editor__goalbar" aria-hidden>
+                <i style={{ width: `${Math.round(goalProgress(basisChars(writerStats, spacing), noteGoal).ratio * 100)}%` }} />
+              </span>
+              <span className="note-editor__goalnum" data-testid="writer-goal-text">
+                {goalText({ locale, chars: basisChars(writerStats, spacing), goal: noteGoal, narrow })}
+              </span>
+              {goalProgress(basisChars(writerStats, spacing), noteGoal).over > 0 && (
+                <span className="note-editor__goalover" data-testid="writer-goal-over">
+                  +{formatNumber(goalProgress(basisChars(writerStats, spacing), noteGoal).over, locale)}
+                </span>
+              )}
+              <button
+                className="note-editor__goalbtn"
+                data-testid="writer-goal-edit"
+                title={t('writer.setGoal')}
+                aria-label={t('writer.setGoal')}
+                onClick={() => {
+                  setGoalDraft(String(noteGoal));
+                  setGoalEditing(true);
+                }}
+              >
+                ✎
+              </button>
+            </span>
+          ) : onSetGoal ? (
+            <button
+              className="note-editor__goalset"
+              data-testid="writer-goal-set"
+              onClick={() => {
+                setGoalDraft('');
+                setGoalEditing(true);
+              }}
+            >
+              {t('writer.setGoal')}
+            </button>
+          ) : null}
+          {goalEditing && onSetGoal && (
+            <form
+              className="note-editor__goalform"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const value = Number(goalDraft.replace(/[^\d]/g, ''));
+                const next = Number.isFinite(value) && value > 0 ? value : null;
+                setGoalEditing(false);
+                setNoteGoal(next);
+                onSetGoal(next);
+              }}
+            >
+              <input
+                className="note-editor__goalinput"
+                data-testid="writer-goal-input"
+                inputMode="numeric"
+                autoFocus
+                value={goalDraft}
+                placeholder={t('writer.goalPlaceholder')}
+                aria-label={t('writer.goalLabel')}
+                onChange={(e) => setGoalDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setGoalEditing(false);
+                  }
+                }}
+              />
+              <button type="submit" className="note-editor__goalbtn" data-testid="writer-goal-save">
+                {t('writer.goalSave')}
+              </button>
+              <button type="button" className="note-editor__goalbtn" onClick={() => setGoalEditing(false)}>
+                {t('writer.goalCancel')}
+              </button>
+            </form>
+          )}
           <span data-testid="writer-chars">{writerStats ? writerCountsText({ locale, spacing, stats: writerStats, narrow }) : WRITER_PENDING}</span>
+          {writerStats && (
+            <span className="note-editor__today" data-testid="writer-today">
+              {todayText({ locale, today, goal: language.writerDailyGoal ?? null })}
+            </span>
+          )}
         </div>
       )}
     </div>

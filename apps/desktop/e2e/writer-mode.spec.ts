@@ -66,6 +66,17 @@ async function openNote(page: Page): Promise<void> {
   await expect(page.locator('.ProseMirror')).toHaveText(/Hello/);
 }
 
+/** 테스트마다 전제조건을 스스로 맞춘다(앞 테스트가 남긴 언어·기준·토글 상태에 기대지 않는다). */
+async function resetWriter(page: Page, opts: { mode?: boolean } = {}): Promise<void> {
+  const mode = opts.mode ?? true;
+  await page.evaluate(
+    (next) => window.nops.settings.setLanguage({ language: 'ko', writerMode: next.mode, writerSpacing: 'include' }),
+    { mode },
+  );
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+  // 상태줄은 **노트를 연 뒤**에만 그려진다 — 여기서는 설정만 맞추고, 표시 확인은 각 테스트가 노트를 연 뒤 한다.
+}
+
 async function toggleWriter(page: Page, on: boolean): Promise<void> {
   await page.getByTestId('settings-btn').click();
   const box = page.getByTestId('writer-mode');
@@ -77,6 +88,7 @@ async function toggleWriter(page: Page, on: boolean): Promise<void> {
 
 test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은 바뀌지 않는다', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page, { mode: false });
   await openNote(page);
   const before = readFileSync(notePath);
 
@@ -115,8 +127,8 @@ test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은
 
 test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 characters·words 로 보인다', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page);
   await openNote(page);
-  await toggleWriter(page, true);
   await expect(page.getByTestId('writer-chars')).toHaveText(/\d+자 · 공백/);
 
   // 재시작해도 켜져 있다
@@ -126,7 +138,8 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
   await openNote(again);
   await expect(again.getByTestId('writer-status')).toBeVisible();
   // 설정이 저장된 채 앱을 다시 열면 노트를 열자마자 숫자가 나온다('…' 로 남지 않음)
-  await expect(again.getByTestId('writer-chars')).toHaveText(/\d+자 · 공백 포함$/);
+  // 앞 테스트에서 '공백 제외'로 바꿨을 수 있다 — 기준은 저장된 값을 따른다.
+  await expect(again.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 (포함|제외)$/);
 
   // 다른 노트로 바꾸면 숫자도 그 노트 기준으로 갱신된다
   const other = path.join(vaultDir, 'Other.md');
@@ -134,7 +147,8 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
   await expect(again.locator('aside.sidebar').getByRole('button', { name: 'Other', exact: true })).toBeVisible({ timeout: 20_000 });
   await again.locator('aside.sidebar').getByRole('button', { name: 'Other', exact: true }).click();
   const otherCount = await again.getByTestId('writer-chars').innerText();
-  await expect(again.getByTestId('writer-chars')).toHaveText(/\d+자 · 공백 포함$/);
+  // 기준(공백 포함/제외)은 앞에서 저장된 값을 따른다
+  await expect(again.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 (포함|제외)$/);
 
   // 빠른 전환기로 노트를 바꿔도 상태줄이 새 노트 값으로 갱신된다
   await again.keyboard.press('ControlOrMeta+o');
@@ -156,6 +170,7 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
 
 test('소스 모드에서도 같은 규칙으로 센다', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page);
   await openNote(page);
   await toggleWriter(page, true);
   const editCount = await page.getByTestId('writer-chars').innerText();
@@ -175,6 +190,7 @@ test('소스 모드에서도 같은 규칙으로 센다', async () => {
 
 test('긴 회차에서도 글자수 상태줄은 화면 하단에 붙어 있다', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page);
   await openVaultIfNeeded(page);
   const longPath = path.join(vaultDir, 'Long.md');
   writeFileSync(longPath, `# Long\n\n${'문장 하나입니다. '.repeat(4000)}\n`);
@@ -200,6 +216,7 @@ test('긴 회차에서도 글자수 상태줄은 화면 하단에 붙어 있다'
 
 test('columns 문서도 표식 없이 센다(소스 모드 포함)', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page);
   await openVaultIfNeeded(page);
   const colsPath = path.join(vaultDir, 'Columns.md');
   writeFileSync(colsPath, ':::columns\n:::column\n첫째\n:::\n:::column\n둘째\n:::\n:::\n\n[보기](https://example.com/very/long/url)\n');
@@ -217,6 +234,7 @@ test('columns 문서도 표식 없이 센다(소스 모드 포함)', async () =>
 
 test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상태줄은 현재 문서 값이다', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page);
   await openVaultIfNeeded(page);
   const livePath = path.join(vaultDir, 'Live.md');
   writeFileSync(livePath, '# Live\n\n처음\n');
@@ -230,10 +248,15 @@ test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type('추가 문장');
   await expect(page.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 포함$/);
+  // 편집분이 저장될 때까지 기다린다(저장 전에 밖에서 바꾸면 3-way 병합이 일어난다).
+  await expect(page.locator('.note-editor__status')).toHaveAttribute('data-state', 'saved', { timeout: 15_000 });
 
   // 밖에서 파일을 통째로 바꾸면(무음 reload) 상태줄도 새 내용 기준이어야 한다
+  const editedCount = await page.getByTestId('writer-chars').innerText();
   writeFileSync(livePath, '# Live\n\n짧\n');
   await expect(page.locator('.ProseMirror')).toHaveText(/짧/);
+  // 디바운스 뒤 값이 새 내용으로 바뀔 때까지 기다린다(이전 값과 다름)
+  await expect(page.getByTestId('writer-chars')).not.toHaveText(editedCount);
   const shortCount = await page.getByTestId('writer-chars').innerText();
   expect(shortCount).toMatch(/^\d+자 · 공백 포함$/);
 

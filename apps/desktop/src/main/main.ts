@@ -34,6 +34,7 @@ import { readPolicyFile, writePolicyFile } from '@nopsidian/mcp/policy-file';
 import { events, graphLayout, graphSettings, workspaceLayout, type AppLanguage, type EventName } from '@nopsidian/ipc-contract';
 import { resolveLocale, setLocale, t } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
+import { WriterStatsStore } from './writer-stats-store';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
 import { e2eBackground } from './e2e-mode';
@@ -684,10 +685,16 @@ function registerHandlers() {
     return undefined;
   });
   handle('settings.language', () => currentLanguage());
-  handle('settings.setLanguage', ({ language, writerMode, writerSpacing }) => {
+  handle('settings.writerToday', ({ vaultId }) => writerStatsStore().todayStats(vaultId));
+  handle('settings.writerAddDelta', ({ vaultId, path: notePath, delta }) => writerStatsStore().add(vaultId, notePath, delta));
+  handle('settings.setLanguage', ({ language, writerMode, writerSpacing, writerDailyGoal }) => {
     if (language !== undefined) settingsStore().setLanguage(language);
-    if (writerMode !== undefined || writerSpacing !== undefined) {
-      settingsStore().setWriter({ ...(writerMode === undefined ? {} : { mode: writerMode }), ...(writerSpacing === undefined ? {} : { spacing: writerSpacing }) });
+    if (writerMode !== undefined || writerSpacing !== undefined || writerDailyGoal !== undefined) {
+      settingsStore().setWriter({
+        ...(writerMode === undefined ? {} : { mode: writerMode }),
+        ...(writerSpacing === undefined ? {} : { spacing: writerSpacing }),
+        ...(writerDailyGoal === undefined ? {} : { dailyGoal: writerDailyGoal }),
+      });
     }
     const current = currentLanguage();
     // 메인에서 만드는 기본값(새 행 제목·볼트 기본 폴더 등)도 앱 언어를 따르게 한다.
@@ -719,8 +726,15 @@ function systemLanguages(): readonly string[] {
 }
 
 function currentLanguage(): AppLanguage {
-  const { language, writerMode, writerSpacing } = settingsStore().value;
-  return { setting: language, locale: resolveLocale(language, systemLanguages()), writerMode, writerSpacing };
+  const { language, writerMode, writerSpacing, writerDailyGoal } = settingsStore().value;
+  return { setting: language, locale: resolveLocale(language, systemLanguages()), writerMode, writerSpacing, writerDailyGoal: writerDailyGoal ?? null };
+}
+
+/** 작가 모드 통계(오늘 쓴 글자수) — userData 에만 쓰고 볼트는 건드리지 않는다. */
+let writerStats: WriterStatsStore | null = null;
+function writerStatsStore(): WriterStatsStore {
+  writerStats ??= new WriterStatsStore(path.join(app.getPath('userData'), 'writer-stats.json'));
+  return writerStats;
 }
 
 app.whenReady().then(() => {

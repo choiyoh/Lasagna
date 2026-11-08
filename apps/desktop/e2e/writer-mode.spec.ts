@@ -66,6 +66,17 @@ async function openNote(page: Page): Promise<void> {
   await expect(page.locator('.ProseMirror')).toHaveText(/Hello/);
 }
 
+/** 테스트마다 전제조건을 스스로 맞춘다(앞 테스트가 남긴 언어·기준·토글 상태에 기대지 않는다). */
+async function resetWriter(page: Page, opts: { mode?: boolean } = {}): Promise<void> {
+  const mode = opts.mode ?? true;
+  await page.evaluate(
+    (next) => window.nops.settings.setLanguage({ language: 'ko', writerMode: next.mode, writerSpacing: 'include' }),
+    { mode },
+  );
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+  await expect(page.getByTestId('writer-status')).toHaveCount(mode ? 1 : 0);
+}
+
 async function toggleWriter(page: Page, on: boolean): Promise<void> {
   await page.getByTestId('settings-btn').click();
   const box = page.getByTestId('writer-mode');
@@ -77,6 +88,7 @@ async function toggleWriter(page: Page, on: boolean): Promise<void> {
 
 test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은 바뀌지 않는다', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page, { mode: false });
   await openNote(page);
   const before = readFileSync(notePath);
 
@@ -115,8 +127,8 @@ test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은
 
 test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 characters·words 로 보인다', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page);
   await openNote(page);
-  await toggleWriter(page, true);
   await expect(page.getByTestId('writer-chars')).toHaveText(/\d+자 · 공백/);
 
   // 재시작해도 켜져 있다
@@ -158,6 +170,7 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
 
 test('소스 모드에서도 같은 규칙으로 센다', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page);
   await openNote(page);
   await toggleWriter(page, true);
   const editCount = await page.getByTestId('writer-chars').innerText();
@@ -177,6 +190,7 @@ test('소스 모드에서도 같은 규칙으로 센다', async () => {
 
 test('긴 회차에서도 글자수 상태줄은 화면 하단에 붙어 있다', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page);
   await openVaultIfNeeded(page);
   const longPath = path.join(vaultDir, 'Long.md');
   writeFileSync(longPath, `# Long\n\n${'문장 하나입니다. '.repeat(4000)}\n`);
@@ -202,6 +216,7 @@ test('긴 회차에서도 글자수 상태줄은 화면 하단에 붙어 있다'
 
 test('columns 문서도 표식 없이 센다(소스 모드 포함)', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page);
   await openVaultIfNeeded(page);
   const colsPath = path.join(vaultDir, 'Columns.md');
   writeFileSync(colsPath, ':::columns\n:::column\n첫째\n:::\n:::column\n둘째\n:::\n:::\n\n[보기](https://example.com/very/long/url)\n');
@@ -219,6 +234,7 @@ test('columns 문서도 표식 없이 센다(소스 모드 포함)', async () =>
 
 test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상태줄은 현재 문서 값이다', async () => {
   const page = await app.firstWindow();
+  await resetWriter(page);
   await openVaultIfNeeded(page);
   const livePath = path.join(vaultDir, 'Live.md');
   writeFileSync(livePath, '# Live\n\n처음\n');

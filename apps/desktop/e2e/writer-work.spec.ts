@@ -1,0 +1,171 @@
+import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+// 작가 모드(W2): '작품 만들기' — 폴더 구조·템플릿 노트·중복/이름 검증·일반 모드 불변.
+function packagedExecutable(): string {
+  const override = process.env.NOPS_E2E_EXECUTABLE;
+  if (override) return override;
+  const dir = path.join(__dirname, `../out/Lasagna-${process.platform}-${process.arch}`);
+  if (process.platform === 'darwin') return path.join(dir, 'Lasagna.app/Contents/MacOS/Lasagna');
+  return path.join(dir, process.platform === 'win32' ? 'lasagna.exe' : 'lasagna');
+}
+
+let app: ElectronApplication;
+let base = '';
+let vaultDir = '';
+
+async function launch(): Promise<ElectronApplication> {
+  const launched = await electron.launch({
+    executablePath: packagedExecutable(),
+    env: { ...process.env, NOPS_E2E: '1' },
+    args: [
+      '--use-mock-keychain',
+      `--user-data-dir=${path.join(base, 'userdata')}`,
+      ...(process.platform === 'linux' ? ['--no-sandbox', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] : []),
+    ],
+  });
+  await launched.firstWindow({ timeout: 90_000 });
+  await launched.evaluate(({ dialog }, dir) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as typeof dialog.showOpenDialog;
+  }, vaultDir);
+  return launched;
+}
+
+async function openVaultIfNeeded(page: Page): Promise<void> {
+  const cta = page.locator('.start__cta');
+  await expect(cta.or(page.locator('aside.sidebar'))).toBeVisible({ timeout: 60_000 });
+  if (await cta.isVisible()) {
+    await cta.click();
+    await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
+  }
+}
+
+/** 테스트마다 언어와 작가 모드를 스스로 맞춘다. */
+async function resetWriter(page: Page, opts: { mode?: boolean; locale?: 'ko' | 'en' } = {}): Promise<void> {
+  const mode = opts.mode ?? true;
+  const language = opts.locale ?? 'ko';
+  await page.evaluate(
+    (next) => window.nops.settings.setLanguage({ language: next.language, writerMode: next.mode, writerSpacing: 'include' }),
+    { mode, language },
+  );
+  await expect(page.locator('html')).toHaveAttribute('lang', language);
+}
+
+async function createWork(page: Page, name: string): Promise<void> {
+  await page.getByTestId('settings-btn').click();
+  const button = page.getByTestId('work-create');
+  await expect(button).toBeVisible();
+  await button.click();
+  const input = page.locator('.nops-prompt input');
+  await expect(input).toBeVisible();
+  await input.fill(name);
+  await input.press('Enter');
+}
+
+test.beforeAll(async () => {
+  test.setTimeout(240_000);
+  base = mkdtempSync(path.join(tmpdir(), 'nops-work-'));
+  vaultDir = path.join(base, 'Demo');
+  mkdirSync(vaultDir, { recursive: true });
+  writeFileSync(path.join(vaultDir, '메모.md'), '# 메모\n\n본문\n');
+  app = await launch();
+});
+
+test.afterAll(async () => {
+  await app?.close().catch(() => undefined);
+  if (base) rmSync(base, { recursive: true, force: true });
+});
+
+test('작가 모드 토글만으로는 볼트에 아무 파일도 생기지 않는다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  const before = readdirSync(vaultDir).sort();
+  await resetWriter(page, { mode: true });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
+  expect(readdirSync(vaultDir).sort()).toEqual(before);
+  // 일반 모드에는 작품 만들기 버튼이 없다
+  await resetWriter(page, { mode: false });
+  await page.getByTestId('settings-btn').click();
+  await expect(page.getByTestId('work-create')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+});
+
+test('작품을 만들면 폴더 구조와 템플릿 노트가 생기고 캐릭터 시트가 열린다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page);
+  await createWork(page, '달빛 조각사');
+  await page.keyboard.press('Escape');
+
+  for (const folder of ['회차', '캐릭터', '설정집', '템플릿']) {
+    expect(statSync(path.join(vaultDir, '달빛 조각사', folder)).isDirectory()).toBe(true);
+  }
+  const templates = readdirSync(path.join(vaultDir, '달빛 조각사', '템플릿')).sort();
+  expect(templates).toEqual(['세계관·복선.md', '캐릭터 시트.md', '회차.md'].sort());
+  // 캐릭터 시트가 열리고 속성 키는 영문, 섹션은 한국어
+  const sheet = readFileSync(path.join(vaultDir, '달빛 조각사', '템플릿', '캐릭터 시트.md'), 'utf8');
+  expect(sheet).toContain('name:');
+  expect(sheet).toContain('first_appears:');
+  expect(sheet).toContain('## 외모');
+  await expect(page.locator('.ProseMirror h1')).toHaveText('캐릭터 시트');
+  // 회차 템플릿에는 goal_chars 가 없다
+  expect(readFileSync(path.join(vaultDir, '달빛 조각사', '템플릿', '회차.md'), 'utf8')).not.toContain('goal_chars');
+});
+
+test('같은 이름으로 다시 만들면 오류를 알리고 기존 파일은 바이트 그대로다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page);
+  const file = path.join(vaultDir, '달빛 조각사', '템플릿', '캐릭터 시트.md');
+  const before = readFileSync(file);
+  const stamp = statSync(file).mtimeMs;
+  await createWork(page, '달빛 조각사');
+  await expect(page.locator('.toast')).toContainText(/이미 있어요|already exists/);
+  await page.keyboard.press('Escape');
+  expect(readFileSync(file).equals(before)).toBe(true);
+  expect(statSync(file).mtimeMs).toBe(stamp);
+});
+
+test('쓸 수 없는 이름은 거부하고 아무것도 만들지 않는다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page);
+  const before = readdirSync(vaultDir).sort();
+  await createWork(page, '가/나');
+  await expect(page.locator('.toast')).toContainText(/쓸 수 없는 문자|characters/);
+  await page.keyboard.press('Escape');
+  expect(readdirSync(vaultDir).sort()).toEqual(before);
+});
+
+test('영어로 바꾼 뒤 만들면 영어 폴더·템플릿 이름으로 만들어진다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page, { locale: 'en' });
+  await createWork(page, 'Moonlight');
+  await page.keyboard.press('Escape');
+  for (const folder of ['Episodes', 'Characters', 'Story bible', 'Templates']) {
+    expect(statSync(path.join(vaultDir, 'Moonlight', folder)).isDirectory()).toBe(true);
+  }
+  // 저장은 원자적 쓰기(임시 파일 → rename)라 목록이 잠깐 임시 파일을 포함할 수 있다 — 세 노트가 다 보일 때까지 기다린다.
+  const templatesDir = path.join(vaultDir, 'Moonlight', 'Templates');
+  await expect
+    .poll(() => readdirSync(templatesDir).filter((f) => f.endsWith('.md')).sort().join(','), { timeout: 10_000 })
+    .toBe('Character sheet.md,Episode.md,Worldbuilding.md');
+  const sheet = readFileSync(path.join(vaultDir, 'Moonlight', 'Templates', 'Character sheet.md'), 'utf8');
+  expect(sheet).toContain('## Appearance');
+  expect(sheet).toContain('first_appears:');
+});
+
+test('일반 모드에서는 작품 만들기 버튼도, 폴더도 생기지 않는다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page, { mode: false });
+  const before = readdirSync(vaultDir).sort();
+  await page.getByTestId('settings-btn').click();
+  await expect(page.getByTestId('work-create')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  expect(readdirSync(vaultDir).sort()).toEqual(before); // 일반 모드 조작으로는 아무 폴더도 생기지 않는다
+});

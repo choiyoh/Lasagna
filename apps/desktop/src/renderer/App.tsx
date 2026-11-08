@@ -208,6 +208,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     renameNoteTitle,
     setNoteCover,
     setNoteGoal,
+    createWork,
     moveEntries,
     moveRelative,
     deleteEntry,
@@ -687,6 +688,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           theme={theme}
           onTheme={setTheme}
           onClose={() => setSettingsOpen(false)}
+          onCreateWork={(name) => void createWork(name)}
           onOpenSync={() => {
             setSettingsOpen(false);
             setSyncOpen(true);

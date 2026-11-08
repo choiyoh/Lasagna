@@ -26,6 +26,7 @@ import {
   removeComment,
   setCommentResolved,
   SELF_AUTHOR,
+  isWorkTemplatePath,
 } from '@nopsidian/core';
 import { existsSync, readFileSync } from 'node:fs';
 import { readAudit } from '@nopsidian/mcp/audit';
@@ -356,7 +357,10 @@ function registerHandlers() {
     const v = requireVault();
     await v.index.ready;
     const folder = readVaultConfig(v.info.path).templatesFolder;
-    return (await v.index.list()).filter((n) => n.path.startsWith(`${folder}/`)).map((n) => ({ path: n.path, title: n.title }));
+    // 볼트 공용 템플릿 + 작품별 `<작품>/템플릿/…` 노트를 함께 보여 준다(W2).
+    return (await v.index.list())
+      .filter((n) => n.path.startsWith(`${folder}/`) || isWorkTemplatePath(n.path))
+      .map((n) => ({ path: n.path, title: n.title }));
   });
   handle('template.read', ({ path: rel, title }) => {
     const v = requireVault();

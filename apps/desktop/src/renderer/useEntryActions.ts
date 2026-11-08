@@ -2,11 +2,12 @@ import { useCallback } from 'react';
 import { t, tPlural } from '@nopsidian/i18n';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { showTextPrompt } from '@nopsidian/editor/nops';
+import { getLanguage } from './language';
 import type { NoteSummary } from '@nopsidian/ipc-contract';
 import type { ConfirmState, Toast } from './app-types';
 import { flushAll } from './flush';
 import { withNoteCover, withNoteIcon } from './note-icon';
-import { withGoalChars } from '@nopsidian/core';
+import { validateWorkName, workPlan, withGoalChars } from '@nopsidian/core';
 import { freshNotes, untitledPath } from './note-title';
 import { placeGroupInOrder, remapOrder, type SidebarOrder } from './sidebar-order';
 import type { TreeNode } from './sidebar/build-tree';
@@ -191,6 +192,45 @@ export function useEntryActions(deps: EntryActionDeps) {
       }
     },
     [refresh],
+  );
+
+  /**
+   * 작품(폴더+템플릿) 만들기 — 작가 모드 설정의 버튼에서 부른다.
+   * 같은 이름의 폴더가 있으면 덮어쓰지 않고 알린다. 실패해도 이미 만든 것만 남는다.
+   */
+  const createWork = useCallback(
+    async (rawName: string) => {
+      const problem = validateWorkName(rawName);
+      if (problem) {
+        setToast({ message: t(`work.err.${problem}`) });
+        return;
+      }
+      const plan = workPlan(rawName, getLanguage().locale);
+      if (!plan) return;
+      try {
+        const folders = await window.nops.folder.list();
+        if (folders.includes(plan.name)) {
+          setToast({ message: t('work.err.exists', { name: plan.name }) });
+          return;
+        }
+        for (const folder of plan.folders) {
+          const created = await window.nops.folder.create({ path: folder });
+          // 동시에 같은 이름이 생겼으면 기존 폴더를 건드리지 않고 멈춘다(create 는 중복 시 이름을 바꾼다).
+          if (created.path !== folder) {
+            setToast({ message: t('work.err.exists', { name: plan.name }) });
+            refresh();
+            return;
+          }
+        }
+        for (const file of plan.files) await window.nops.note.save({ path: file.path, content: file.content, baseHash: null });
+        setSelected(plan.files[0]?.path ?? plan.name);
+        refresh();
+      } catch (e) {
+        setToast({ message: t('work.err.failed', { message: userMessage(e) }) });
+        refresh();
+      }
+    },
+    [refresh, setSelected],
   );
 
   /** 문서 목표 글자수를 프런트매터 `goal_chars` 에 쓰거나 지운다. 열려 있는 에디터는 다시 불러온다. */
@@ -417,5 +457,5 @@ export function useEntryActions(deps: EntryActionDeps) {
   );
 
 
-  return { createNote, quickNote, newFolder, openDaily, renameEntry, renameCurrent, setNoteIcon, setNoteCover, setNoteGoal, renameNoteTitle, moveMany, moveEntries, moveRelative, deleteEntry, deleteEntries };
+  return { createNote, quickNote, newFolder, openDaily, createWork, renameEntry, renameCurrent, setNoteIcon, setNoteCover, setNoteGoal, renameNoteTitle, moveMany, moveEntries, moveRelative, deleteEntry, deleteEntries };
 }

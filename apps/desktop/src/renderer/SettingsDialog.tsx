@@ -7,6 +7,7 @@ import { keys } from './keys';
 import { changeLanguage, changeWriterSettings } from './language';
 import { useLanguage } from './useLocale';
 import { McpSettings } from './McpSettings';
+import { showTextPrompt } from '@nopsidian/editor/nops';
 
 interface Props {
   theme: ThemeChoice;
@@ -17,6 +18,8 @@ interface Props {
   onOpenTrash: () => void;
   onOpenNote: (path: string) => void;
   onReverted: (path: string, kind: 'restored' | 'trashed') => void;
+  /** 작품(폴더+템플릿) 만들기 — 작가 모드에서만 버튼이 보인다 */
+  onCreateWork?: (name: string) => void;
 }
 
 const LANGUAGE_KEY: Record<LanguageSetting, Parameters<typeof t>[0]> = {
@@ -105,7 +108,7 @@ function RadioSeg<T extends string>({
 }
 
 /** 설정(⌘,): 모양·편집·동기화·도움말. 값은 이 기기에만 저장된다. */
-export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShortcuts, onOpenTrash, onOpenNote, onReverted }: Props) {
+export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShortcuts, onOpenTrash, onOpenNote, onReverted, onCreateWork }: Props) {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [languageError, setLanguageError] = useState(false);
   const [writerError, setWriterError] = useState(false);
@@ -235,6 +238,24 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
                 />
               </div>
             )}
+            {language.writerMode === true && onCreateWork ? (
+              <div className="settings__row">
+                <span>
+                  {t('settings.workCreate')}
+                  <small className="muted">{t('settings.workCreateHint')}</small>
+                </span>
+                <button
+                  data-testid="work-create"
+                  onClick={() => {
+                    void showTextPrompt(t('work.namePrompt'), '').then((name) => {
+                      if (name !== null) onCreateWork(name);
+                    });
+                  }}
+                >
+                  {t('settings.workCreate')}
+                </button>
+              </div>
+            ) : null}
             {writerError ? <p className="error" role="alert">{t('settings.writer.error')}</p> : null}
           </section>
           <section>

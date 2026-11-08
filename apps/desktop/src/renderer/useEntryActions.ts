@@ -7,7 +7,7 @@ import type { NoteSummary } from '@nopsidian/ipc-contract';
 import type { ConfirmState, Toast } from './app-types';
 import { flushAll } from './flush';
 import { withNoteCover, withNoteIcon } from './note-icon';
-import { characterNoteMarkdown, validateWorkName, workPlan, workNames, withGoalChars } from '@nopsidian/core';
+import { characterNoteMarkdown, characterTemplateCandidates, validateWorkName, workPlan, withGoalChars } from '@nopsidian/core';
 import { freshNotes, untitledPath } from './note-title';
 import { placeGroupInOrder, remapOrder, type SidebarOrder } from './sidebar-order';
 import type { TreeNode } from './sidebar/build-tree';
@@ -212,13 +212,15 @@ export function useEntryActions(deps: EntryActionDeps) {
         return;
       }
       try {
-        const names = workNames(getLanguage().locale);
-        const templatePath = `${work}/${names.templates}/${names.characterSheet}.md`;
+        // 작품을 만든 언어와 지금 UI 언어가 다를 수 있다 — 그 작품에 실제로 있는 템플릿을 먼저 찾는다.
         let template: string | null = null;
-        try {
-          template = (await window.nops.note.read({ path: templatePath })).content;
-        } catch {
-          // 작품 템플릿이 없으면 기본 캐릭터 시트를 쓴다(W2 기본값).
+        for (const candidate of characterTemplateCandidates(work)) {
+          try {
+            template = (await window.nops.note.read({ path: candidate })).content;
+            break;
+          } catch {
+            // 다음 후보(다른 언어 이름)를 시도한다.
+          }
         }
         const content = characterNoteMarkdown(template, name, getLanguage().locale);
         const saved = await window.nops.note.save({ path, content, baseHash: null });

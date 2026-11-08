@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isWorkTemplatePath, readGoalChars } from './index.js';
-import { characterNoteMarkdown, characterSheetMarkdown, episodeMarkdown, validateWorkName, workNames, workPlan, worldbuildingMarkdown } from './work.js';
+import { characterNoteMarkdown, characterSheetMarkdown, characterTemplateCandidates, episodeMarkdown, validateWorkName, workNames, workPlan, worldbuildingMarkdown } from './work.js';
 import { splitFrontmatter } from './markdown/frontmatter.js';
 
 describe('작품 만들기 — 구조와 이름', () => {
@@ -84,5 +84,11 @@ describe('새 캐릭터 노트 내용', () => {
   it('템플릿이 없으면 기본 캐릭터 시트로 만들고 이름을 채운다', () => {
     expect(characterNoteMarkdown(null, '서연', 'en')).toContain('name: 서연');
     expect(characterNoteMarkdown(null, '서연', 'en')).toContain('## Appearance');
+  });
+});
+
+describe('캐릭터 템플릿 후보(작품을 만든 언어와 UI 언어가 다를 때)', () => {
+  it('한국어 작품을 영어 UI 에서도 찾도록 두 언어 경로를 차례로 준다', () => {
+    expect(characterTemplateCandidates('달빛')).toEqual(['달빛/템플릿/캐릭터 시트.md', '달빛/Templates/Character sheet.md']);
   });
 });

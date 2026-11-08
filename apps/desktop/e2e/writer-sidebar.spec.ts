@@ -152,3 +152,18 @@ test('영어로 바꾸면 영어 문구로 보인다', async () => {
   await expect(page.getByTestId('work-meta')).toHaveText(/1 episodes · 14 characters/);
   await expect(page.getByTestId('work-chip-characters')).toHaveText(/Characters 1/);
 });
+
+test('한국어로 만든 작품을 영어 UI 에서 열어도 그 작품의 한국어 템플릿을 복사한다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page, { locale: 'en' });
+  await page.getByTestId('new-character').click();
+  await prompt(page, 'Ha-eun');
+  const file = path.join(vaultDir, '달빛 조각사', '캐릭터', 'Ha-eun.md');
+  await expect.poll(() => readFileSync(file, 'utf8').includes('name: Ha-eun'), { timeout: 10_000 }).toBe(true);
+  const content = readFileSync(file, 'utf8');
+  // 작품 템플릿(한국어)을 그대로 복사 — 영어 기본 시트(Appearance)로 대체되지 않는다
+  expect(content).toContain('## 외모');
+  expect(content).not.toContain('## Appearance');
+  expect(content).toContain('first_appears:');
+});

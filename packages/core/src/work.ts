@@ -120,3 +120,14 @@ export function isWorkTemplatePath(path: string): boolean {
 export function characterNoteMarkdown(template: string | null, name: string, locale: WorkLocale): string {
   return setFrontmatter(template ?? characterSheetMarkdown(locale), { name });
 }
+
+/**
+ * 새 캐릭터가 복사할 캐릭터 시트 템플릿 후보 경로들 — 작품을 만든 언어와 지금 UI 언어가 다를 수 있으므로
+ * **그 작품 폴더 안에 실제로 있는지** 두 언어 이름을 차례로 확인한다(있는 첫 경로를 쓴다).
+ */
+export function characterTemplateCandidates(work: string): string[] {
+  return (['ko', 'en'] as const).map((locale) => {
+    const names = workNames(locale);
+    return `${work}/${names.templates}/${names.characterSheet}.md`;
+  });
+}

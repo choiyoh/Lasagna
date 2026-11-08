@@ -360,6 +360,22 @@ export const contract = {
    * baseHash = 앱이 마지막으로 읽거나 저장한 디스크 내용의 해시(새 노트는 null).
    * 디스크가 그 사이 바뀌었으면 main이 3-way 병합하거나 충돌 사본을 만든다.
    */
+  /** 작가용 사이드바: 볼트 루트의 작품(회차+캐릭터 폴더를 가진 폴더)과 회차 수·글자수 합(메인 캐시). */
+  'note.workList': {
+    input: z.undefined(),
+    output: z.array(
+      z.object({
+        name: relPath,
+        episodes: z.number().int().min(0),
+        characters: z.number().int().min(0),
+        storyBible: z.number().int().min(0).nullable(),
+        characterFolder: relPath,
+        storyBibleFolder: relPath.nullable(),
+        chars: z.number().int().min(0),
+        charsNoSpace: z.number().int().min(0),
+      }),
+    ),
+  },
   'note.save': {
     input: z.object({
       path: relPath,

@@ -943,3 +943,25 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
   .note-editor__goalbar { width: 64px; }
   .note-editor__today { display: none; }
 }
+/* 작가 모드 '작품' 섹션 — 일반 모드에서는 렌더되지 않는다 */
+.works { padding: 8px 10px 4px; border-bottom: 1px solid var(--border); }
+.works__head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 2px 4px 6px; letter-spacing: .02em; }
+.works__list { display: flex; flex-direction: column; gap: 6px; max-height: 34vh; overflow: auto; }
+.workcard { border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; background: var(--bg); display: flex; flex-direction: column; gap: 5px; }
+.workcard__title { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workcard__meta { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.workcard__goal { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.workcard__goal .note-editor__goalbar { flex: 0 0 64px; }
+.workcard__goalnum { font-variant-numeric: tabular-nums; }
+.workcard__links { display: flex; gap: 6px; flex-wrap: wrap; }
+.workchip { font-size: 11px; border: 1px solid var(--border); border-radius: 99px; padding: 1px 8px; background: none; color: var(--fg); cursor: pointer; }
+.workchip:hover { background: var(--hover); }
+.workcard__new { align-self: flex-start; font-size: 11.5px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.works__add { width: 100%; margin-top: 6px; font-size: 11.5px; color: var(--muted); background: none; border: 1px dashed var(--border); border-radius: 8px; padding: 6px; cursor: pointer; }
+.works__add:hover { color: var(--fg); border-color: var(--accent); }
+@media (max-width: 920px) {
+  .works { padding: 6px 8px 2px; }
+  .workcard { padding: 7px 8px; }
+  .workcard__today { display: none; }
+  .workcard__goal .note-editor__goalbar { flex-basis: 48px; }
+}

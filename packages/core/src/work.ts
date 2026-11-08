@@ -1,4 +1,6 @@
 import { translate } from '@nopsidian/i18n';
+import { setFrontmatter } from './db/yaml-edit.js';
+import { splitFrontmatter } from './markdown/frontmatter.js';
 
 /**
  * 작품(폴더) 만들기 — 폴더 구조·템플릿 노트 내용·이름 검증의 순수 함수.
@@ -110,4 +112,38 @@ export function workTemplateFolders(): string[] {
 export function isWorkTemplatePath(path: string): boolean {
   const parts = path.split('/');
   return parts.length >= 3 && workTemplateFolders().includes(parts[1] ?? '');
+}
+
+/**
+ * 새 캐릭터 노트 내용 — 작품 템플릿(있으면 그 내용)을 그대로 두고 속성 `name` 만 채운다.
+ * 템플릿이 없으면 W2 기본 캐릭터 시트를 쓴다. 본문은 바꾸지 않는다.
+ */
+export function characterNoteMarkdown(template: string | null, name: string, locale: WorkLocale): string {
+  return withFirstHeadingName(setFrontmatter(template ?? characterSheetMarkdown(locale), { name }), name);
+}
+
+/**
+ * 본문의 **첫 H1 한 줄만** `# <name>` 으로 바꾼다(탭·파일 트리 제목이 캐릭터 이름으로 보이게).
+ * H1 이 없으면 아무것도 추가하지 않고 그대로 둔다. 프런트매터와 나머지 본문 바이트는 그대로다.
+ */
+export function withFirstHeadingName(markdown: string, name: string): string {
+  const bodyStart = splitFrontmatter(markdown)?.end ?? 0;
+  const before = markdown.slice(0, bodyStart);
+  const body = markdown.slice(bodyStart);
+  const match = /^#[ \t]+.*$/m.exec(body);
+  if (!match) return markdown;
+  const at = match.index;
+  const line = `# ${name}`;
+  return before + body.slice(0, at) + line + body.slice(at + match[0].length);
+}
+
+/**
+ * 새 캐릭터가 복사할 캐릭터 시트 템플릿 후보 경로들 — 작품을 만든 언어와 지금 UI 언어가 다를 수 있으므로
+ * **그 작품 폴더 안에 실제로 있는지** 두 언어 이름을 차례로 확인한다(있는 첫 경로를 쓴다).
+ */
+export function characterTemplateCandidates(work: string): string[] {
+  return (['ko', 'en'] as const).map((locale) => {
+    const names = workNames(locale);
+    return `${work}/${names.templates}/${names.characterSheet}.md`;
+  });
 }

@@ -12,7 +12,7 @@ import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './no
 import { loadPrefs } from './prefs';
 import { countMarkdown, readGoalChars, type TextStats } from '@nopsidian/core';
 import { WRITER_PENDING, writerCountsText, writerDelay } from './writer-status';
-import { basisChars, goalProgress, goalText, presetNeedsHint, todayText } from './writer-goal';
+import { basisChars, goalProgress, goalText, presetHintBasis, todayText } from './writer-goal';
 import { editorTotalStats } from '@nopsidian/editor/nops';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
@@ -158,8 +158,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const [today, setToday] = useState(0);
   const [goalEditing, setGoalEditing] = useState(false);
   const [goalDraft, setGoalDraft] = useState('');
-  /** 기준이 다른 프리셋을 골랐을 때의 안내(플랫폼 키). 저장·기준 변경에는 관여하지 않는다. */
-  const [goalPresetHint, setGoalPresetHint] = useState<'naver' | 'kakao' | 'ridi' | null>(null);
+  /** 기준이 다른 프리셋을 골랐을 때의 안내(플랫폼 키 + 그 프리셋의 기준). 저장·기준 변경에는 관여하지 않는다. */
+  const [goalPresetHint, setGoalPresetHint] = useState<{ key: 'naver' | 'kakao' | 'ridi'; basis: 'include' | 'exclude' } | null>(null);
   /** 좁은 창(920px 이하)에서는 한국어 기준 표기를 '포함/제외'로 줄인다(디자이너 시안). */
   const [narrow, setNarrow] = useState(() => window.innerWidth <= 920);
   useEffect(() => {
@@ -924,7 +924,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
                     data-testid={`writer-goal-preset-${preset.key}`}
                     onClick={() => {
                       setGoalDraft(String(preset.chars));
-                      setGoalPresetHint(presetNeedsHint(preset.basis, spacing) ? preset.key : null);
+                      const hintBasis = presetHintBasis(preset.basis, spacing);
+                      setGoalPresetHint(hintBasis ? { key: preset.key, basis: hintBasis } : null);
                     }}
                   >
                     {t(`writer.preset.${preset.key}` as Parameters<typeof t>[0])}
@@ -955,7 +956,9 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
               </button>
               {goalPresetHint && (
                 <span className="note-editor__presethint" data-testid="writer-goal-preset-hint">
-                  {t('writer.preset.hint', { platform: t(`writer.presetName.${goalPresetHint}` as Parameters<typeof t>[0]) })}
+                  {t(`writer.preset.hint.${goalPresetHint.basis}` as Parameters<typeof t>[0], {
+                    platform: t(`writer.presetName.${goalPresetHint.key}` as Parameters<typeof t>[0]),
+                  })}
                 </span>
               )}
             </form>

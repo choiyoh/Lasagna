@@ -25,6 +25,7 @@ describe('작품 칩 문구', () => {
 
 describe('영어 단수/복수', () => {
   it('1/0/2 회차·캐릭터', () => {
+    expect(workMetaText('en', { episodes: 1, chars: 1, charsNoSpace: 1 }, 'include')).toBe('1 episode · 1 character');
     expect(workMetaText('en', { episodes: 1, chars: 10, charsNoSpace: 10 }, 'include')).toBe('1 episode · 10 characters');
     expect(workMetaText('en', { episodes: 2, chars: 10, charsNoSpace: 10 }, 'include')).toBe('2 episodes · 10 characters');
     expect(chipText('en', 'characters', 1, false)).toBe('1 character');

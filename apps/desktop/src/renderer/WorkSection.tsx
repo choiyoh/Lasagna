@@ -29,10 +29,10 @@ export function workMetaText(locale: 'ko' | 'en', work: Pick<WorkSummary, 'episo
   const chars = spacing === 'include' ? work.chars : work.charsNoSpace;
   if (locale === 'en') {
     const episodes = translate('en', `work.episodes.${pluralCategory('en', n)}`, { n: formatNumber(n, 'en') });
-    const counted = translate('en', `work.charsUnit`, { n: formatNumber(chars, 'en') });
+    const counted = translate('en', `work.charsUnit.${pluralCategory('en', chars)}`, { n: formatNumber(chars, 'en') });
     return `${episodes} · ${counted}`;
   }
-  return `${translate('ko', 'work.episodeUnit', { n: formatNumber(n, 'ko') })} · ${translate('ko', 'work.charsUnit', { n: formatNumber(chars, 'ko') })}`;
+  return `${translate('ko', 'work.episodeUnit', { n: formatNumber(n, 'ko') })} · ${translate('ko', 'work.charsUnit.other', { n: formatNumber(chars, 'ko') })}`;
 }
 
 /**

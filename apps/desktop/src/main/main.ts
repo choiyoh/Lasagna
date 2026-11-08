@@ -28,7 +28,7 @@ import {
   SELF_AUTHOR,
   isWorkTemplatePath,
 } from '@nopsidian/core';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { readAudit } from '@nopsidian/mcp/audit';
 import { RevertError, applyRestore, logRevert, planRevert } from '@nopsidian/mcp/revert';
 import { readPolicyFile, writePolicyFile } from '@nopsidian/mcp/policy-file';
@@ -36,6 +36,8 @@ import { events, graphLayout, graphSettings, workspaceLayout, type AppLanguage, 
 import { resolveLocale, setLocale, t } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
 import { WriterStatsStore } from './writer-stats-store';
+import { detectWorkRoots, summarizeWorks } from '@nopsidian/core';
+import { countMarkdown } from '@nopsidian/core';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
 import { e2eBackground } from './e2e-mode';
@@ -276,6 +278,39 @@ function registerHandlers() {
   });
   handle('note.duplicate', ({ path: rel }) => ({ path: duplicateNote(requireVault().info.path, rel) }));
   handle('folder.list', () => listFolders(requireVault().info.path));
+  handle('note.workList', async () => {
+    const v = requireVault();
+    const folders = listFolders(v.info.path);
+    const roots = detectWorkRoots(folders);
+    if (roots.length === 0) return [];
+    // 색인 준비를 기다리지 않고 파일 시스템에서 직접 센다(앱을 막 열었을 때도 카드가 바로 보인다).
+    const stats = new Map<string, { chars: number; charsNoSpace: number }>();
+    const all: string[] = [];
+    for (const root of roots) {
+      for (const folder of root.episodeFolders) {
+        for (const rel of walkMarkdown(v.info.path, folder)) {
+          all.push(rel);
+          try {
+            const full = resolveInVault(v.info.path, rel);
+            const st = statSync(full);
+            const cached = workCharCache.get(rel);
+            if (cached && cached.mtime === st.mtimeMs && cached.size === st.size) {
+              stats.set(rel, { chars: cached.chars, charsNoSpace: cached.charsNoSpace });
+              continue;
+            }
+            const counted = countMarkdown(readFileSync(full, 'utf8'));
+            workCharCache.set(rel, { mtime: st.mtimeMs, size: st.size, chars: counted.chars, charsNoSpace: counted.charsNoSpace });
+            stats.set(rel, counted);
+          } catch {
+            // 읽기 실패(삭제 경합 등)는 이번 계산에서만 건너뛴다.
+          }
+        }
+      }
+      // 캐릭터·설정집 수도 색인 없이 파일 시스템에서 센다.
+      for (const folder of [...root.characterFolders, ...root.storyBibleFolders]) all.push(...walkMarkdown(v.info.path, folder));
+    }
+    return summarizeWorks(roots, all, stats);
+  });
   handle('folder.create', ({ path: rel }) => ({ path: createFolder(requireVault().info.path, rel) }));
   handle('trash.list', () => listTrash(requireVault().info.path));
   handle('trash.purge', ({ trashId }) => ({ removed: purgeTrash(requireVault().info.path, trashId) }));
@@ -710,7 +745,31 @@ function registerHandlers() {
   });
 }
 
+
+/** 볼트 안 폴더의 마크다운 노트 경로(하위 폴더 포함, 숨김 제외). */
+function walkMarkdown(root: string, relDir: string): string[] {
+  const out: string[] = [];
+  const walk = (rel: string) => {
+    let entries;
+    try {
+      entries = readdirSync(resolveInVault(root, rel), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const ent of entries) {
+      if (ent.name.startsWith('.') || ent.name === 'node_modules') continue;
+      const child = `${rel}/${ent.name}`;
+      if (ent.isDirectory()) walk(child);
+      else if (/\.md$/i.test(ent.name)) out.push(child);
+    }
+  };
+  walk(relDir);
+  return out;
+}
+
 let settings: AppSettingsStore | null = null;
+/** 작품 카드 글자수 캐시(노트 경로 → mtime·size·글자수). 파일이 바뀌면 그 노트만 다시 센다. */
+const workCharCache = new Map<string, { mtime: number; size: number; chars: number; charsNoSpace: number }>();
 
 const settingsFile = () => path.join(app.getPath('userData'), 'app-settings.json');
 

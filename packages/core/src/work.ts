@@ -1,4 +1,5 @@
 import { translate } from '@nopsidian/i18n';
+import { setFrontmatter } from './db/yaml-edit.js';
 
 /**
  * 작품(폴더) 만들기 — 폴더 구조·템플릿 노트 내용·이름 검증의 순수 함수.
@@ -110,4 +111,12 @@ export function workTemplateFolders(): string[] {
 export function isWorkTemplatePath(path: string): boolean {
   const parts = path.split('/');
   return parts.length >= 3 && workTemplateFolders().includes(parts[1] ?? '');
+}
+
+/**
+ * 새 캐릭터 노트 내용 — 작품 템플릿(있으면 그 내용)을 그대로 두고 속성 `name` 만 채운다.
+ * 템플릿이 없으면 W2 기본 캐릭터 시트를 쓴다. 본문은 바꾸지 않는다.
+ */
+export function characterNoteMarkdown(template: string | null, name: string, locale: WorkLocale): string {
+  return setFrontmatter(template ?? characterSheetMarkdown(locale), { name });
 }

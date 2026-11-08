@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isWorkTemplatePath, readGoalChars } from './index.js';
-import { characterSheetMarkdown, episodeMarkdown, validateWorkName, workNames, workPlan, worldbuildingMarkdown } from './work.js';
+import { characterNoteMarkdown, characterSheetMarkdown, episodeMarkdown, validateWorkName, workNames, workPlan, worldbuildingMarkdown } from './work.js';
 import { splitFrontmatter } from './markdown/frontmatter.js';
 
 describe('작품 만들기 — 구조와 이름', () => {
@@ -68,5 +68,21 @@ describe('작품 만들기 — 구조와 이름', () => {
     expect(isWorkTemplatePath('템플릿/회차.md')).toBe(false); // 볼트 공용 템플릿 폴더는 작품 템플릿이 아니다
     expect(isWorkTemplatePath('달빛/회차/1화.md')).toBe(false);
     expect(workNames('ko').characters).toBe('캐릭터');
+  });
+});
+
+describe('새 캐릭터 노트 내용', () => {
+  it('작품 템플릿 내용을 그대로 복사하고 name 속성만 채운다', () => {
+    const template = characterSheetMarkdown('ko');
+    const note = characterNoteMarkdown(template, '서연', 'ko');
+    expect(note).toContain('name: 서연');
+    expect(note).toContain('first_appears:');
+    expect(note).toContain('## 외모');
+    expect(note.slice(note.indexOf('# '))).toBe(template.slice(template.indexOf('# '))); // 본문 그대로
+  });
+
+  it('템플릿이 없으면 기본 캐릭터 시트로 만들고 이름을 채운다', () => {
+    expect(characterNoteMarkdown(null, '서연', 'en')).toContain('name: 서연');
+    expect(characterNoteMarkdown(null, '서연', 'en')).toContain('## Appearance');
   });
 });

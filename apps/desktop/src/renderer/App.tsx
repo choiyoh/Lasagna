@@ -10,6 +10,7 @@ import { HistoryPanel } from './HistoryPanel';
 import { keys } from './keys';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { SettingsDialog } from './SettingsDialog';
+import { WorkSection } from './WorkSection';
 import { OutlinePanel } from './OutlinePanel';
 import { CommentsPanel } from './CommentsPanel';
 import { TrashDialog } from './TrashDialog';
@@ -30,7 +31,9 @@ import { useAppShortcuts } from './useAppShortcuts';
 import { useLinkHosts } from './useLinkHosts';
 import { useImportExport } from './useImportExport';
 import { applyTheme, loadTheme, nextTheme, THEME_ICON, THEME_KEY, type ThemeChoice } from './theme';
-import { useLocale } from './useLocale';
+import { useLanguage, useLocale } from './useLocale';
+import { showTextPrompt } from '@nopsidian/editor/nops';
+import type { WorkSummary } from '@nopsidian/core';
 import { initialTabs, parseTabs, selectedOf, tabsReducer } from './tabs';
 import { DatabaseScreen } from './db/DatabaseScreen';
 import { DbList } from './db/DbList';
@@ -66,6 +69,12 @@ export function App() {
 
 function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }) {
   const locale = useLocale();
+  const language = useLanguage();
+  const writerOn = language.writerMode === true;
+  /** 작가 모드 '작품' 카드(메인이 mtime 캐시로 집계). 일반 모드에서는 비어 있다. */
+  const [works, setWorks] = useState<WorkSummary[]>([]);
+  /** 오늘 쓴 글자수(작품 카드 진행 막대) — W1b 통계와 같은 값 */
+  const [workToday, setWorkToday] = useState(0);
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   /** 빈 폴더도 보이게 따로 받는 폴더 목록 */
   const [folders, setFolders] = useState<string[]>([]);
@@ -126,6 +135,43 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       return next;
     });
   }, []);
+  useEffect(() => {
+    if (!writerOn) {
+      setWorks([]);
+      return;
+    }
+    let alive = true;
+    // 노트 목록이 바뀔 때마다(저장·외부 변경·생성) 조금 모아서 다시 센다 — 타이핑을 막지 않는다.
+    const timer = setTimeout(() => {
+      void window.nops.note
+        .workList()
+        .then((list) => {
+          if (alive) setWorks(list);
+        })
+        .catch(() => {
+          // 집계 실패는 카드만 비워 둔다(집필을 막지 않는다).
+        });
+    }, 200);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [writerOn, notes, folders]);
+
+  useEffect(() => {
+    if (!writerOn) return;
+    void window.nops.settings
+      .writerToday({ vaultId: vault.id })
+      .then((r) => setWorkToday(r.chars))
+      .catch(() => undefined);
+  }, [writerOn, vault.id]);
+
+  useEffect(() => {
+    const onToday = (e: Event) => setWorkToday((e as CustomEvent<number>).detail ?? 0);
+    window.addEventListener('nops:writer-today', onToday);
+    return () => window.removeEventListener('nops:writer-today', onToday);
+  }, []);
+
   const [panelOpenMode, setPanelOpenMode] = useState<DockMode>(loadDockMode);
   /** 창 폭이 바뀌면 도크 기본값이 달라진다(1,340px 이하 접힘) */
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
@@ -209,6 +255,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     setNoteCover,
     setNoteGoal,
     createWork,
+    createCharacter,
     moveEntries,
     moveRelative,
     deleteEntry,
@@ -440,6 +487,36 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           <p className="muted small">
             {t('app.indexing', { done: progress.done, total: progress.total })}
           </p>
+        )}
+        {writerOn && sideTab === 'files' && (
+          <WorkSection
+            locale={locale}
+            works={works}
+            spacing={language.writerSpacing ?? 'include'}
+            today={workToday}
+            dailyGoal={language.writerDailyGoal ?? null}
+            onOpenFolder={(path) => {
+              // 상위 폴더까지 펼쳐야 트리에 보인다.
+              setSideTab('files');
+              const parts = path.split('/');
+              for (let i = 1; i <= parts.length; i += 1) folderOpen.setOpen(parts.slice(0, i).join('/'), true);
+              requestAnimationFrame(() => {
+                document.querySelector(`[data-path="${CSS.escape(path)}"]`)?.scrollIntoView({ block: 'nearest' });
+              });
+            }}
+            onCreateWork={() => {
+              void showTextPrompt(t('work.namePrompt'), '').then((name) => {
+                if (name !== null) void createWork(name);
+              });
+            }}
+            onCreateCharacter={(work) => {
+              void showTextPrompt(t('character.namePrompt'), '').then((name) => {
+                if (name === null) return;
+                const summary = works.find((w) => w.name === work);
+                if (summary) void createCharacter(work, summary.characterFolder, name);
+              });
+            }}
+          />
         )}
         <nav
           className="list"

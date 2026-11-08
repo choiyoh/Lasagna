@@ -222,7 +222,11 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       if (delta === 0) return;
       window.nops.settings
         .writerAddDelta({ vaultId, path, delta })
-        .then((r) => setToday(r.chars))
+        .then((r) => {
+          setToday(r.chars);
+          // 사이드바 작품 카드의 '오늘' 막대도 같은 값을 본다.
+          window.dispatchEvent(new CustomEvent('nops:writer-today', { detail: r.chars }));
+        })
         .catch(() => {
           // 통계 쓰기 실패는 집필을 막지 않는다(표시 값은 마지막 성공 값 유지).
         });

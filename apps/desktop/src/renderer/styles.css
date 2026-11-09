@@ -1034,3 +1034,18 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
 @media (max-width: 920px) {
   .snapshots { padding: 6px 8px; }
 }
+/* W4e: 작품 목표선·목표 대화상자·복사 미리보기 */
+.workcard__goal-line { align-self: flex-start; font-size: 11.5px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; }
+.workchip.active { border-color: var(--accent); color: var(--accent); }
+.workgoaldlg { width: min(720px, 94vw); }
+.workgoaldlg__presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.workgoaldlg__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0; }
+.workgoaldlg__grid select, .workdlg__field select { padding: 7px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--fg); font: inherit; }
+.workgoaldlg__summary { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: var(--muted); margin: 8px 0; }
+.workgoaldlg__summary span:last-child { color: var(--warn); }
+@media (max-width: 920px) { .workgoaldlg__grid { grid-template-columns: 1fr; } }
+.copydlg { width: min(680px, 94vw); }
+.copydlg__tabs { display: flex; gap: 8px; margin: 6px 0; }
+.copydlg__tabs button.active { border-color: var(--accent); color: var(--accent); }
+.copydlg__pre { max-height: 44vh; overflow: auto; white-space: pre-wrap; word-break: break-word; background: var(--bg-side); border-radius: 8px; padding: 10px; font-size: 12.5px; margin: 6px 0 10px; }
+.note-editor__mode--accent { color: var(--accent); }

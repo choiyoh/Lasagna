@@ -10,7 +10,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
-import { countMarkdown, readGoalChars, type TextStats } from '@nopsidian/core';
+import { countMarkdown, platformText, readGoalChars, type TextStats } from '@nopsidian/core';
 import { WRITER_PENDING, writerCountsText, writerDelay } from './writer-status';
 import { basisChars, goalProgress, goalText, presetHintBasis, todayText } from './writer-goal';
 import { editorTotalStats } from '@nopsidian/editor/nops';
@@ -160,6 +160,9 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const [goalDraft, setGoalDraft] = useState('');
   /** 기준이 다른 프리셋을 골랐을 때의 안내(플랫폼 키 + 그 프리셋의 기준). 저장·기준 변경에는 관여하지 않는다. */
   const [goalPresetHint, setGoalPresetHint] = useState<{ key: 'naver' | 'kakao' | 'ridi'; basis: 'include' | 'exclude' } | null>(null);
+  /** 복사 미리보기(플랫폼용·원본) — 작가 모드에서만 연다 */
+  const [copyPreview, setCopyPreview] = useState<{ original: string; platform: string } | null>(null);
+  const [copyTab, setCopyTab] = useState<'platform' | 'original'>('platform');
   /** 좁은 창(920px 이하)에서는 한국어 기준 표기를 '포함/제외'로 줄인다(디자이너 시안). */
   const [narrow, setNarrow] = useState(() => window.innerWidth <= 920);
   useEffect(() => {
@@ -755,6 +758,22 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
             {t('note.rename')}
           </button>
         )}
+        {writer && (
+          <button
+            className="note-editor__mode note-editor__mode--accent"
+            data-testid="copy-open"
+            onClick={() => {
+              void (async () => {
+                await flushRef.current?.();
+                const md = writerTextRef.current?.() ?? '';
+                setCopyTab('platform');
+                setCopyPreview({ original: md, platform: platformText(md) });
+              })();
+            }}
+          >
+            {t('copy.open')}
+          </button>
+        )}
         <button
           className="note-editor__mode"
           onClick={() => toggleRef.current()}
@@ -764,6 +783,41 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
           {mode === 'source' ? t('note.editMode') : t('note.sourceMode')}
         </button>
       </div>
+      {copyPreview && (
+        <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setCopyPreview(null)}>
+          <div className="dialog copydlg" role="dialog" aria-modal="true" aria-label={t('copy.title')} data-testid="copy-dialog">
+            <h2>{t('copy.title')}</h2>
+            <div className="copydlg__tabs" role="tablist">
+              <button role="tab" aria-selected={copyTab === 'platform'} className={copyTab === 'platform' ? 'active' : ''} data-testid="copy-tab-platform" onClick={() => setCopyTab('platform')}>
+                {t('copy.platform')}
+              </button>
+              <button role="tab" aria-selected={copyTab === 'original'} className={copyTab === 'original' ? 'active' : ''} data-testid="copy-tab-original" onClick={() => setCopyTab('original')}>
+                {t('copy.original')}
+              </button>
+            </div>
+            <p className="muted small">{t('copy.hint')}</p>
+            <pre className="copydlg__pre" data-testid="copy-text">
+              {copyTab === 'platform' ? copyPreview.platform : copyPreview.original}
+            </pre>
+            <div className="dialog__actions">
+              <button onClick={() => setCopyPreview(null)}>{t('common.cancel')}</button>
+              <button
+                className="primary"
+                data-testid="copy-confirm"
+                onClick={() => {
+                  const text = copyTab === 'platform' ? copyPreview.platform : copyPreview.original;
+                  void navigator.clipboard.writeText(text).then(() => {
+                    setNotice(t('copy.copied'));
+                    setCopyPreview(null);
+                  });
+                }}
+              >
+                {t('copy.action')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {notice && (
         <div className="note-editor__notice" role="status">
           {notice}

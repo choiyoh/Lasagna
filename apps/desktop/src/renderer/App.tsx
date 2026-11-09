@@ -10,8 +10,11 @@ import { HistoryPanel } from './HistoryPanel';
 import { keys } from './keys';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { SettingsDialog } from './SettingsDialog';
+import { changeWriterSettings } from './language';
 import { WorkSection } from './WorkSection';
 import { WorkCreateDialog } from './WorkCreateDialog';
+import { WorkGoalDialog } from './WorkGoalDialog';
+import { calcWorkGoal, goalLineText, type WorkGoal } from '@nopsidian/core';
 import { OutlinePanel } from './OutlinePanel';
 import { CommentsPanel } from './CommentsPanel';
 import { TrashDialog } from './TrashDialog';
@@ -99,6 +102,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** 작품 만들기 대화상자(이름+구조). 설정·사이드바가 같은 것을 연다 */
   const [workDialog, setWorkDialog] = useState(false);
+  /** 작품 목표(앱 데이터)와 목표 대화상자 */
+  const [workGoals, setWorkGoals] = useState<Record<string, WorkGoal>>({});
+  const [goalWork, setGoalWork] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
@@ -160,6 +166,11 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       clearTimeout(timer);
     };
   }, [writerOn, notes, folders]);
+
+  useEffect(() => {
+    if (!writerOn) return;
+    void window.nops.settings.workGoals({ vaultId: vault.id }).then(setWorkGoals).catch(() => setWorkGoals({}));
+  }, [writerOn, vault.id, works]);
 
   useEffect(() => {
     if (!writerOn) return;
@@ -504,6 +515,19 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           <WorkSection
             locale={locale}
             works={works}
+            goalLines={Object.fromEntries(
+              works.map((w) => {
+                const goal = workGoals[w.name];
+                if (!goal) return [w.name, ''];
+                const progress = calcWorkGoal(
+                  goal,
+                  { episodes: w.episodes, chars: w.chars, charsNoSpace: w.charsNoSpace },
+                  new Date(),
+                );
+                return [w.name, goalLineText({ locale, episodes: w.episodes, goal: goal.episodes, perDay: progress.perDay, narrow: viewportWidth <= 920 })];
+              }),
+            )}
+            onOpenGoal={(work) => setGoalWork(work)}
             spacing={language.writerSpacing ?? 'include'}
             narrow={viewportWidth <= 920}
             today={workToday}
@@ -803,6 +827,34 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           }}
         />
       )}
+      {goalWork &&
+        (() => {
+          const summary = works.find((w) => w.name === goalWork);
+          if (!summary) return null;
+          return (
+            <WorkGoalDialog
+              work={goalWork}
+              locale={locale}
+              goal={workGoals[goalWork] ?? null}
+              current={{ episodes: summary.episodes, chars: summary.chars, charsNoSpace: summary.charsNoSpace }}
+              today={new Date()}
+              onClose={() => setGoalWork(null)}
+              onSave={(goal) => {
+                void window.nops.settings
+                  .setWorkGoal({ vaultId: vault.id, work: goalWork, goal })
+                  .then((next) => {
+                    setWorkGoals(next);
+                    setGoalWork(null);
+                  })
+                  .catch(() => setGoalWork(null));
+              }}
+              onSetDaily={(perDay) => {
+                void changeWriterSettings({ dailyGoal: perDay }).catch(() => undefined);
+                setGoalWork(null);
+              }}
+            />
+          );
+        })()}
       {workDialog && (
         <WorkCreateDialog
           locale={locale}

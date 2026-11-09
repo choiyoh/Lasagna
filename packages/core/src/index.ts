@@ -20,3 +20,4 @@ export * from './snapshots.js';
 export * from './history-move.js';
 export * from './work-goal.js';
 export * from './export-platform.js';
+export * from './focus-scroll.js';

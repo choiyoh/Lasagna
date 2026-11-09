@@ -105,6 +105,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   /** 작품 목표(앱 데이터)와 목표 대화상자 */
   const [workGoals, setWorkGoals] = useState<Record<string, WorkGoal>>({});
   const [goalWork, setGoalWork] = useState<string | null>(null);
+  /** 집중 모드(작가 모드 전용, 세션 단위) */
+  const [focusMode, setFocusMode] = useState(false);
+  const [chromeShown, setChromeShown] = useState(true);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
@@ -285,7 +288,35 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   /** 도크는 노트를 볼 때만 붙는다(DB·전체 그래프 화면은 폭을 콘텐츠에 준다) */
   const dockVisible = dockAvailable({ hasNote: !!selected, dbOpen: dbOpen !== null, graphOpen });
 
+  useEffect(() => {
+    if (!writerOn) setFocusMode(false);
+  }, [writerOn]);
+
+  // 집중 모드에서 도크·설정 등 다른 화면을 열면 집중 모드를 끝낸다.
+  useEffect(() => {
+    if (focusMode) setFocusMode(false);
+  }, [settingsOpen, trashOpen, shortcutsOpen, palette, switcher, syncOpen, graphOpen, dbOpen]);
+
+  useEffect(() => {
+    if (!focusMode) return;
+    setChromeShown(true);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onMove = () => {
+      setChromeShown(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setChromeShown(false), 2000);
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      clearTimeout(timer);
+    };
+  }, [focusMode]);
+
   useAppShortcuts({
+    focusAvailable: writerOn,
+    focusMode,
+    toggleFocus: () => setFocusMode((v) => !v),
     overlayOpen: graphOpen,
     dbOpen: dbOpen !== null,
     closeOverlay: () => {
@@ -444,7 +475,11 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   };
 
   return (
-    <div className="workspace">
+    <div
+      className={`workspace${focusMode ? ' workspace--focus' : ''}`}
+      data-font={language.writerFont ?? 'sans'}
+      data-testid="workspace"
+    >
       <aside className="sidebar">
         <header className="drag">
           <strong>{vault.name}</strong>
@@ -751,6 +786,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                   cover={notes.find((n) => n.path === p)?.cover ?? null}
                   onSetCover={(c) => void setNoteCover(p, c)}
                   onSetGoal={(g) => void setNoteGoal(p, g)}
+                  focusMode={focusMode && pane === tabs.activePane}
+                  typewriter={language.writerTypewriter !== false}
                 />
               </ErrorBoundary>
             )}
@@ -837,6 +874,27 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             setShortcutsOpen(true);
           }}
         />
+      )}
+      {focusMode && (
+        <div className={`focuschrome${chromeShown ? ' show' : ''}`} data-testid="focus-chrome">
+          <span className="focuschrome__path">{selected ?? ''}</span>
+          <span className="focuschrome__fonts" role="group" aria-label={t('writer.focus.font')}>
+            {(['sans', 'serif', 'mono'] as const).map((font) => (
+              <button
+                key={font}
+                className={language.writerFont === font ? 'active' : ''}
+                data-testid={`focus-font-${font}`}
+                aria-pressed={language.writerFont === font}
+                onClick={() => void changeWriterSettings({ font }).catch(() => undefined)}
+              >
+                {t(`writer.focus.font.${font}`)}
+              </button>
+            ))}
+          </span>
+          <button className="focuschrome__exit" data-testid="focus-exit" onClick={() => setFocusMode(false)}>
+            {t('writer.focus.exit')} (Esc)
+          </button>
+        </div>
       )}
       {goalWork &&
         (() => {

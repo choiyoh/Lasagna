@@ -1049,3 +1049,52 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
 .copydlg__tabs button.active { border-color: var(--accent); color: var(--accent); }
 .copydlg__pre { max-height: 44vh; overflow: auto; white-space: pre-wrap; word-break: break-word; background: var(--bg-side); border-radius: 8px; padding: 10px; font-size: 12.5px; margin: 6px 0 10px; }
 .note-editor__mode--accent { color: var(--accent); }
+/* W4b: 집중 모드 — 사이드바·도크·탭·왼쪽 하단 크롬을 숨기고 본문만 남긴다 */
+.workspace--focus .sidebar,
+.workspace--focus .rightdock,
+.workspace--focus .tabbar { display: none; }
+.workspace--focus .panes--multi .pane:not(.is-active) { display: none; }
+.workspace--focus .panes { border: 0; }
+.workspace--focus .content { display: flex; justify-content: center; }
+.workspace--focus .pane,
+.workspace--focus .pane__body { width: 100%; }
+.workspace--focus .ProseMirror,
+.workspace--focus .note-editor__bar,
+.workspace--focus .note-editor__writer {
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.workspace--focus[data-font='serif'] .ProseMirror { font-family: 'Apple SD Gothic Neo', 'Nanum Myeongjo', 'Noto Serif KR', 'Times New Roman', serif; }
+.workspace--focus[data-font='mono'] .ProseMirror { font-family: 'SF Mono', Menlo, 'D2Coding', monospace; }
+@media (max-width: 920px) {
+  .workspace--focus .ProseMirror,
+  .workspace--focus .note-editor__bar,
+  .workspace--focus .note-editor__writer { max-width: 560px; }
+}
+.focuschrome {
+  position: fixed;
+  top: 10px;
+  right: 14px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  color: var(--muted);
+  font-size: 11.5px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+.focuschrome.show { opacity: 1; pointer-events: auto; }
+.focuschrome__path { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focuschrome__fonts { display: flex; gap: 2px; }
+.focuschrome__fonts button,
+.focuschrome__exit { border: 0; background: none; color: var(--muted); font: inherit; cursor: pointer; padding: 2px 6px; border-radius: 999px; }
+.focuschrome__fonts button.active { color: var(--accent); background: var(--hover); }
+.focuschrome__exit:hover { color: var(--fg); }
+@media (max-width: 920px) { .focuschrome__path { display: none; } }

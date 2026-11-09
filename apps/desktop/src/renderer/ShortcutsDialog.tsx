@@ -9,6 +9,7 @@ const shortcutGroups = (): { title: MessageKey; items: [string, MessageKey][] }[
       ['⌘O', 'shortcuts.quickSwitch'],
       ['⌘P', 'shortcuts.palette'],
       ['⌘⇧F', 'shortcuts.search'],
+      ['⌘⇧M', 'shortcuts.focus'],
       ['⌘⇧\\', 'shortcuts.panel'],
       ['⌘,', 'shortcuts.settings'],
       ['⌘⌥D', 'shortcuts.daily'],

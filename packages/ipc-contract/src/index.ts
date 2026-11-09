@@ -347,6 +347,8 @@ export const appLanguage = z.object({
   writerMode: z.boolean().optional(),
   writerSpacing: z.enum(['include', 'exclude']).optional(),
   writerDailyGoal: z.number().int().min(0).nullable().optional(),
+  writerFont: z.enum(['sans', 'serif', 'mono']).optional(),
+  writerTypewriter: z.boolean().optional(),
 });
 export type LanguageSetting = z.infer<typeof languageSetting>;
 export type AppLanguage = z.infer<typeof appLanguage>;
@@ -700,6 +702,8 @@ export const contract = {
       writerMode: z.boolean().optional(),
       writerSpacing: z.enum(['include', 'exclude']).optional(),
       writerDailyGoal: z.number().int().min(0).max(10_000_000).nullable().optional(),
+      writerFont: z.enum(['sans', 'serif', 'mono']).optional(),
+      writerTypewriter: z.boolean().optional(),
     }),
     output: appLanguage,
   },

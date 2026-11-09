@@ -144,3 +144,30 @@ describe('useAppShortcuts', () => {
     expect(a.focusSearch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('집중 모드 단축키', () => {
+  it('⌘⇧M 은 작가 모드에서만 집중 모드를 토글한다', () => {
+    const on = actions({ focusAvailable: true, toggleFocus: vi.fn() });
+    render(<Host tick={0} make={() => on} />);
+    keydown({ key: 'M', code: 'KeyM', metaKey: true, shiftKey: true });
+    expect(on.toggleFocus).toHaveBeenCalledTimes(1);
+
+    // 작가 모드 OFF: 아무 일도 하지 않고 이벤트도 가로채지 않는다
+    const off = actions({ focusAvailable: false, toggleFocus: vi.fn() });
+    render(<Host tick={1} make={() => off} />);
+    const e = new KeyboardEvent('keydown', { key: 'M', code: 'KeyM', metaKey: true, shiftKey: true, cancelable: true });
+    act(() => {
+      window.dispatchEvent(e);
+    });
+    expect(off.toggleFocus).not.toHaveBeenCalled();
+    expect(e.defaultPrevented).toBe(false);
+  });
+
+  it('집중 모드에서 Esc 는 집중 모드를 먼저 끝낸다', () => {
+    const a = actions({ focusMode: true, toggleFocus: vi.fn() });
+    render(<Host tick={0} make={() => a} />);
+    keydown({ key: 'Escape' });
+    expect(a.toggleFocus).toHaveBeenCalledTimes(1);
+    expect(a.closeOverlay).not.toHaveBeenCalled();
+  });
+});

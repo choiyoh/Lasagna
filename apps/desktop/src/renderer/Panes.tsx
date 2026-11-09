@@ -16,7 +16,7 @@ interface Props {
 /** 탭 막대 + 분할 칸. 노트를 연 칸에만 탭 막대가 보인다. */
 export function Panes({ tabs, dispatch, titleOf, renderEditor, empty, onPopOut }: Props) {
   return (
-    <div className={`panes panes--${tabs.dir}`} data-testid="panes">
+    <div className={`panes panes--${tabs.dir}${tabs.panes.length > 1 ? ' panes--multi' : ''}`} data-testid="panes">
       {tabs.panes.map((pane, i) => (
         <section
           key={i}

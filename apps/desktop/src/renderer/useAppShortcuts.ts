@@ -30,7 +30,7 @@ export interface ShortcutActions {
   dbOpen: boolean;
 }
 
-const OPEN_LAYERS = '.dialog-backdrop, .dbpop, .dbscreen__menu, .ctxmenu, .dbtable__menu, .datepicker, .nops-prompt, .switcher-backdrop';
+const OPEN_LAYERS = '.dialog-backdrop, .dbpop, .dbscreen__menu, .ctxmenu, .dbtable__menu, .datepicker, .nops-prompt, .switcher-backdrop, .findbar';
 
 /** 앱 전체 단축키: ⌘O 전환기 · ⌘P 팔레트 · ⌘N 새 노트 · ⌘, 설정 · F1 단축키 · F2 이름 · ⌘W 탭 닫기 · ⌘⇧G 그래프 · ⌘⇧B 북마크 · ⌘⌥D 오늘 · ⌘⇧\ 도크 · ⌘⇧F 본문 검색 */
 export function useAppShortcuts(actions: ShortcutActions) {
@@ -51,7 +51,9 @@ export function useAppShortcuts(actions: ShortcutActions) {
       } else if (e.key === 'Escape') {
         // 집중 모드에서는 Esc 가 먼저 집중 모드를 끝낸다(에디터가 Esc 를 처리했어도).
         // 단, 팝오버·모달이 열려 있으면 그쪽이 먼저 닫히게 둔다.
-        if (a.focusMode && !document.querySelector(OPEN_LAYERS)) {
+        // 열린 레이어(찾기 막대·모달 등) 안에서 누른 Esc 는 그 레이어가 처리한다.
+        const inLayer = e.target instanceof Element && e.target.closest(OPEN_LAYERS) !== null;
+        if (a.focusMode && !inLayer && !document.querySelector(OPEN_LAYERS)) {
           e.preventDefault();
           a.toggleFocus?.();
           return;

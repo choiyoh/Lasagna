@@ -171,3 +171,18 @@ describe('집중 모드 단축키', () => {
     expect(a.closeOverlay).not.toHaveBeenCalled();
   });
 });
+
+describe('집중 모드 Esc 와 열린 레이어', () => {
+  it('찾기 막대가 열려 있으면 Esc 는 집중 모드를 끝내지 않는다', () => {
+    const a = actions({ focusMode: true, toggleFocus: vi.fn() });
+    render(<Host tick={0} make={() => a} />);
+    const bar = document.createElement('div');
+    bar.className = 'findbar';
+    document.body.append(bar);
+    keydown({ key: 'Escape' });
+    expect(a.toggleFocus).not.toHaveBeenCalled();
+    bar.remove();
+    keydown({ key: 'Escape' });
+    expect(a.toggleFocus).toHaveBeenCalledTimes(1);
+  });
+});

@@ -362,8 +362,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       timer = setTimeout(read, 80);
     };
     const onCompositionStart = () => {
+      // 조합 중에는 **갱신하지 않고** 마지막 선택 값을 그대로 둔다(깜빡임 방지).
       composingRef.current = true;
-      setWriterSelected(null);
     };
     const onCompositionEnd = () => {
       composingRef.current = false;
@@ -390,7 +390,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   // 집중 모드에 들어오거나 문서가 바뀌면 커서 줄을 42% 위치로 한 번 맞춘다(처음/끝은 클램프).
   useEffect(() => {
     if (!focusMode || !typewriter) return;
-    const raf = requestAnimationFrame(() => {
+    const stick = () => {
       const view = editorRef.current?.getView();
       if (!view || modeRef.current !== 'edit') return;
       let scroller: HTMLElement | null = view.dom.parentElement;
@@ -409,8 +409,14 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         scrollHeight: scroller.scrollHeight,
       });
       scroller.scrollTo({ top });
-    });
-    return () => cancelAnimationFrame(raf);
+    };
+    // 레이아웃(도크 숨김 등)이 끝난 뒤 한 번, 그리고 늦게 한 번 더 맞춘다.
+    const raf = requestAnimationFrame(stick);
+    const timer = setTimeout(stick, 150);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
   }, [focusMode, typewriter, docTick, path]);
 
   useEffect(() => {

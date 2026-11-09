@@ -297,6 +297,15 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     if (focusMode) setFocusMode(false);
   }, [settingsOpen, trashOpen, shortcutsOpen, palette, switcher, syncOpen, graphOpen, dbOpen]);
 
+  // 도크를 **새로 여는** 경로(단축키·팔레트·레일 클릭)에서 집중 모드를 끝낸다.
+  // (집중 모드에 들어갈 때 이미 열려 있던 도크는 숨기기만 하고, 진입을 막지는 않는다.)
+  const wasPanelOpen = useRef(panelOpen);
+  useEffect(() => {
+    const opened = !wasPanelOpen.current && panelOpen;
+    wasPanelOpen.current = panelOpen;
+    if (opened && focusMode) setFocusMode(false);
+  }, [focusMode, panelOpen]);
+
   useEffect(() => {
     if (!focusMode) return;
     setChromeShown(true);

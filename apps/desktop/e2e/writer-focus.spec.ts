@@ -124,8 +124,22 @@ test('집중 모드 타자기 스크롤은 커서 줄을 화면 위쪽으로 맞
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.press('ControlOrMeta+Shift+M');
   await expect(page.getByTestId('workspace')).toHaveClass(/workspace--focus/);
+  // 집중 모드 진입 뒤 한 번 더 커서를 움직여 타자기 스크롤을 확정한다.
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowRight');
   // 편집기 영역(.pane__body)이 실제 스크롤 컨테이너 — 타자기 스크롤로 커서 줄까지 내려간다.
-  await expect.poll(async () => page.evaluate(() => document.querySelector('.pane__body')?.scrollTop ?? 0), { timeout: 10_000 }).toBeGreaterThan(0);
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const el = document.querySelector('.ProseMirror-focused') ?? document.querySelector('.ProseMirror');
+          let p: HTMLElement | null = el instanceof HTMLElement ? el.parentElement : null;
+          while (p && p !== document.body && p.scrollHeight <= p.clientHeight + 4) p = p.parentElement;
+          return p && p !== document.body ? p.scrollTop : -1;
+        }),
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(0);
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('workspace')).not.toHaveClass(/workspace--focus/);
 });
@@ -164,4 +178,50 @@ test('집중 모드 글꼴을 바꾸면 재시작해도 유지된다', async () 
   await expect(again.getByTestId('workspace')).toHaveAttribute('data-font', 'serif');
   await again.keyboard.press('Escape');
   await expect(again.getByTestId('workspace')).not.toHaveClass(/workspace--focus/);
+});
+
+test('집중 모드에서 도크를 열면 집중 모드를 끝내고 도크를 보여 준다', async () => {
+  const page = await app.firstWindow();
+  await openNote(page);
+  await resetWriter(page);
+  await page.keyboard.press('ControlOrMeta+Shift+M');
+  await expect(page.getByTestId('workspace')).toHaveClass(/workspace--focus/);
+  await page.keyboard.press('ControlOrMeta+Shift+Backslash');
+  await expect(page.getByTestId('workspace')).not.toHaveClass(/workspace--focus/);
+  await expect(page.locator('.rightdock')).toBeVisible();
+  await expect(page.locator('aside.sidebar')).toBeVisible();
+});
+
+test('집중 모드에서 Esc 는 찾기 막대를 먼저 닫고, 다음 Esc 가 집중 모드를 끝낸다', async () => {
+  const page = await app.firstWindow();
+  await openNote(page);
+  await resetWriter(page);
+  await page.keyboard.press('ControlOrMeta+Shift+M');
+  await expect(page.getByTestId('workspace')).toHaveClass(/workspace--focus/);
+  await page.keyboard.press('ControlOrMeta+f');
+  await expect(page.getByTestId('find-bar')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('find-bar')).toHaveCount(0);
+  await expect(page.getByTestId('workspace')).toHaveClass(/workspace--focus/);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('workspace')).not.toHaveClass(/workspace--focus/);
+});
+
+test('IME 조합이 시작돼도 선택 글자수는 지워지지 않고 마지막 값을 유지한다', async () => {
+  const page = await app.firstWindow();
+  await openNote(page);
+  await resetWriter(page);
+  await page.locator('.ProseMirror p').first().click();
+  await page.keyboard.press('ControlOrMeta+End');
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('Shift+ArrowLeft');
+  const before = await page.getByTestId('writer-selection').innerText();
+  await page.evaluate(() => {
+    document.querySelector('.ProseMirror')?.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  });
+  await page.waitForTimeout(200);
+  await expect(page.getByTestId('writer-selection')).toHaveText(before); // 조합 중에도 유지
+  await page.evaluate(() => {
+    document.querySelector('.ProseMirror')?.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+  });
+  await expect(page.getByTestId('writer-selection')).toContainText('선택');
 });

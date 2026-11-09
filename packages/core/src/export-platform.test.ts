@@ -52,6 +52,15 @@ describe('플랫폼용 텍스트 변환', () => {
     expect(platformText('| A | B |\n|---|:---:|\n| 1 | 2 |\n')).toBe('A\tB\n1\t2');
     expect(platformText('| 이름 | 값 |\n| --- | --- |\n| 가 | 1 |\n')).toBe('이름\t값\n가\t1');
     expect(platformText('| a | b |\n|:--|--:|\n| 1 | 2 |\n')).toBe('a\tb\n1\t2');
+    // 대시 1개 구분행도 제거(GFM)
+    expect(platformText('| A | B |\n|-|-|\n| 1 | 2 |\n')).toBe('A\tB\n1\t2');
+    expect(platformText('| A | B |\n| - | - |\n| 1 | 2 |\n')).toBe('A\tB\n1\t2');
+    expect(platformText('| A | B |\n|:-|-:|\n| 1 | 2 |\n')).toBe('A\tB\n1\t2');
+  });
+
+  it('표 데이터 행의 셀 값이 - 여도 지우지 않는다(구분행은 둘째 줄만)', () => {
+    expect(platformText('| A | B |\n| - | - |\n| - | 2 |\n')).toBe('A\tB\n-\t2');
+    expect(platformText('| A | B |\n| 1 | 2 |\n| - | - |\n')).toBe('A\tB\n1\t2\n-\t-');
   });
 
   it('CRLF 도 같게 처리하고, 제목이 없으면 H1 만 건너뛰지 않는다', () => {

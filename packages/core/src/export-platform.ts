@@ -14,6 +14,8 @@ export function platformText(markdown: string): string {
   let titled = false;
   let inFence = false;
   let fence: string[] = [];
+  /** 표 블록 안에서 몇 번째 줄인지(헤더=1, 구분행=2). */
+  let tableLine = 0;
 
   const inline = (text: string): string =>
     text
@@ -52,12 +54,15 @@ export function platformText(markdown: string): string {
       continue;
     }
     if (/^\s*\|.*\|\s*$/.test(line)) {
+      tableLine += 1;
       const rawCells = line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
-      // 구분 줄(`---`, `:---:`)은 붙여넣으면 빈 행이 되므로 **변환 전에** 걸러 낸다.
-      if (rawCells.every((c) => /^:?-{2,}:?$/.test(c))) continue;
+      // GFM 구분행은 대시 1개부터 인정하지만, **헤더 바로 다음 줄**에서만 구분행으로 본다.
+      // (본문 데이터 행의 셀 값이 우연히 '-' 인 경우를 지우지 않기 위해)
+      if (tableLine === 2 && rawCells.every((c) => /^:?-+:?$/.test(c))) continue;
       out.push(rawCells.map((c) => inline(c)).join('\t'));
       continue;
     }
+    tableLine = 0;
     const stripped = line.replace(/^\s*#{1,6}\s+/, '').replace(/^\s*>\s?/, '').replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '');
     out.push(inline(stripped));
   }

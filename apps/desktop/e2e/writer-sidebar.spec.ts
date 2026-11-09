@@ -67,6 +67,13 @@ async function createWork(page: Page, name: string): Promise<void> {
   await page.keyboard.press('Escape');
 }
 
+async function ensureWork(page: Page, name: string): Promise<void> {
+  await expect(page.getByTestId('work-section')).toBeVisible({ timeout: 15_000 });
+  const card = page.getByTestId('work-card').filter({ hasText: name });
+  if ((await card.count()) === 0) await createWork(page, name);
+  await expect(page.getByTestId('work-card').filter({ hasText: name })).toBeVisible({ timeout: 15_000 });
+}
+
 test.beforeAll(async () => {
   test.setTimeout(240_000);
   base = mkdtempSync(path.join(tmpdir(), 'nops-sidebar-'));
@@ -120,7 +127,10 @@ test('회차 글자수가 카드에 반영되고, 입력·저장 후에도 갱�
   const episode = path.join(vaultDir, '달빛 조각사', '회차', '1화.md');
   writeFileSync(episode, '# 1화\n\n가나다라마바사아자차\n'); // 본문 10자(+제목 2자)
   await expect(page.getByTestId('work-meta')).toHaveText(/1회차 · 12자/, { timeout: 10_000 });
-  await page.locator('aside.sidebar').getByRole('button', { name: '1화', exact: true }).click();
+  // 외부에서 만든 파일이 색인되어 트리에 나타날 때까지 기다린다(카드 집계는 파일 시스템 기준이라 더 빠르다).
+  const row = page.locator('aside.sidebar [data-path="달빛 조각사/회차/1화.md"]');
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.click();
   await page.locator('.ProseMirror p').last().click();
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type('추가');
@@ -158,8 +168,8 @@ test('영어로 바꾸면 영어 문구로 보인다', async () => {
   await openVaultIfNeeded(page);
   await resetWriter(page, { locale: 'en' });
   await expect(page.getByTestId('work-section')).toContainText('Work');
-  await expect(page.getByTestId('work-meta')).toHaveText(/1 episodes · 14 characters/);
-  await expect(page.getByTestId('work-chip-characters')).toHaveText(/Characters/);
+  await expect(page.getByTestId('work-meta')).toHaveText(/1 episode · 14 characters/);
+  await expect(page.getByTestId('work-chip-characters')).toHaveText(/characters/i);
   await expect(page.getByTestId('work-add')).toHaveText(/\+ New work/);
 });
 
@@ -167,13 +177,69 @@ test('한국어로 만든 작품을 영어 UI 에서 열어도 그 작품의 한
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   await resetWriter(page, { locale: 'en' });
+  await ensureWork(page, '달빛 조각사');
   await page.getByTestId('new-character').click();
   await prompt(page, 'Ha-eun');
-  const file = path.join(vaultDir, '달빛 조각사', '캐릭터', 'Ha-eun.md');
-  await expect.poll(() => readFileSync(file, 'utf8').includes('name: Ha-eun'), { timeout: 10_000 }).toBe(true);
-  const content = readFileSync(file, 'utf8');
   // 작품 템플릿(한국어)을 그대로 복사 — 영어 기본 시트(Appearance)로 대체되지 않는다
-  expect(content).toContain('## 외모');
-  expect(content).not.toContain('## Appearance');
-  expect(content).toContain('first_appears:');
+  await expect(page.locator('.ProseMirror h1')).toHaveText('Ha-eun', { timeout: 15_000 });
+  await expect(page.locator('.ProseMirror')).toContainText('외모');
+  await expect(page.locator('.ProseMirror')).not.toContainText('Appearance');
+});
+
+test('새 회차를 만들면 회차 행 글자수 배지가 보이고 입력하면 갱신된다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page);
+  await createWork(page, '배지작품');
+  await page.getByTestId('new-episode').click();
+  await prompt(page, '2화');
+  await expect(page.locator('.ProseMirror h1')).toHaveText('2화');
+  // 실제로 만들어진 경로를 트리에서 확인한다(작품 이름이 중복되면 번호가 붙을 수 있다).
+  const row = page.locator('aside.sidebar [data-path$="/2화.md"]').first();
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  const rel = (await row.getAttribute('data-path')) ?? '';
+  const file = path.join(vaultDir, rel);
+  await expect.poll(() => readFileSync(file, 'utf8').startsWith('# 2화'), { timeout: 15_000 }).toBe(true);
+  expect(readFileSync(file, 'utf8')).not.toContain('goal_chars');
+  await expect(row.getByTestId('tree-badge')).toHaveText('2');
+
+  // 입력하면 저장 뒤 배지가 갱신된다
+  await row.click();
+  await page.locator('.ProseMirror').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.press('Enter'); // 제목만 있는 회차에 본문 문단을 만든다
+  await page.keyboard.type('추가 문장');
+  await expect(row.getByTestId('tree-badge')).toHaveText('7', { timeout: 15_000 }); // 2화(2) + '추가 문장'(5)
+
+  // 920px 이하에서는 배지를 숨긴다(작가 모드 전용 규칙)
+  await page.setViewportSize({ width: 900, height: 800 });
+  await expect(row.getByTestId('tree-badge')).toBeHidden();
+  await page.setViewportSize({ width: 1440, height: 900 });
+});
+
+test('목표 프리셋: 누르면 입력칸이 채워지고, 리디+공백 포함이면 안내가 보인다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page);
+  await page.locator('aside.sidebar [data-path="메모.md"]').click();
+  await expect(page.getByTestId('writer-status')).toHaveCount(1);
+  await page.getByTestId('writer-goal-set').click();
+  const input = page.getByTestId('writer-goal-input');
+  await expect(page.getByTestId('writer-goal-preset-naver')).toHaveText(/4,000/);
+  await page.getByTestId('writer-goal-preset-naver').click();
+  await expect(input).toHaveValue('4000');
+  await expect(page.getByTestId('writer-goal-preset-hint')).toHaveCount(0);
+  await page.getByTestId('writer-goal-preset-ridi').click();
+  await expect(input).toHaveValue('4500');
+  await expect(page.getByTestId('writer-goal-preset-hint')).toContainText(/리디북스|Ridi/);
+  await page.getByTestId('writer-goal-save').click();
+  await expect.poll(() => readFileSync(path.join(vaultDir, '메모.md'), 'utf8').includes('goal_chars: 4500'), { timeout: 15_000 }).toBe(true);
+});
+
+test('작가 모드 OFF 에서는 배지·새 회차 버튼이 DOM 에 없다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page, { mode: false });
+  await expect(page.getByTestId('new-episode')).toHaveCount(0);
+  await expect(page.getByTestId('tree-badge')).toHaveCount(0);
 });

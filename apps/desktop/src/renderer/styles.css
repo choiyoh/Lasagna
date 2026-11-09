@@ -965,3 +965,16 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
   .workcard__today { display: none; }
   .workcard__goal .note-editor__goalbar { flex-basis: 48px; }
 }
+/* 작가 모드 회차 행 글자수 배지 — 배지가 있는 행만 오른쪽 여백을 확보한다(일반 모드 불변) */
+.row:has(.tree__badge) { position: relative; padding-right: 58px; }
+.tree__badge { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
+@media (max-width: 920px) {
+  .row:has(.tree__badge) { padding-right: 8px; }
+  .tree__badge { display: none; }
+}
+.workcard__newrow { display: flex; gap: 10px; flex-wrap: wrap; }
+.note-editor__goalform { flex-wrap: wrap; row-gap: 6px; }
+.note-editor__presets { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.note-editor__preset { font-size: 11px; border: 1px dashed var(--border); border-radius: 99px; padding: 1px 8px; background: none; color: var(--muted); cursor: pointer; }
+.note-editor__preset:hover { color: var(--fg); border-color: var(--accent); }
+.note-editor__presethint { flex-basis: 100%; font-size: 11px; color: var(--warn); }

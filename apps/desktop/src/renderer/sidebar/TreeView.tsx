@@ -26,6 +26,8 @@ export interface TreeCtx {
   onReorder: (items: Entry[], target: string, pos: 'before' | 'after') => void;
   /** 이 폴더(''=맨 위)에서 지금 보여 줄 항목 수와 "더 보기" */
   limitOf: (folder: string) => number;
+  /** 작가 모드 회차 행 글자수 배지(없으면 그리지 않는다) */
+  badgeOf?: (path: string) => string | undefined;
   showMore: (folder: string) => void;
 }
 
@@ -68,6 +70,11 @@ export function TreeView({ nodes: all, ctx, depth = 0, parent = '' }: { nodes: T
             >
               {n.note.icon ? <span className="emoji">{n.note.icon}</span> : null}
               {n.note.title}
+              {ctx.badgeOf?.(n.path) ? (
+                <span className="tree__badge" data-testid="tree-badge">
+                  {ctx.badgeOf(n.path)}
+                </span>
+              ) : null}
             </button>
           ) : (
             <details

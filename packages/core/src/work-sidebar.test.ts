@@ -36,10 +36,15 @@ describe('작품 인식·집계', () => {
         episodes: 2,
         characters: 1,
         storyBible: 1,
+        episodeFolder: '달빛/회차',
         characterFolder: '달빛/캐릭터',
         storyBibleFolder: '달빛/설정집',
         chars: 200,
         charsNoSpace: 196,
+        episodeRows: [
+          { path: '달빛/회차/1화.md', chars: 120, charsNoSpace: 118 },
+          { path: '달빛/회차/2권/2화.md', chars: 80, charsNoSpace: 78 },
+        ],
       },
     ]);
   });
@@ -49,6 +54,10 @@ describe('작품 인식·집계', () => {
     expect(summarizeWorks(roots, ['W/Episodes/1.md', 'W/Episodes/2.md'], new Map([['W/Episodes/1.md', s(10)]]))[0]).toMatchObject({
       episodes: 2,
       chars: 10,
+      episodeRows: [
+        { path: 'W/Episodes/1.md', chars: 10, charsNoSpace: 8 },
+        { path: 'W/Episodes/2.md', chars: 0, charsNoSpace: 0 },
+      ],
     });
   });
 });

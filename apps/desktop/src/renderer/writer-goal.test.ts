@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '@nopsidian/i18n';
-import { basisChars, goalProgress, goalText, todayText } from './writer-goal';
+import { basisChars, goalProgress, goalText, presetHintBasis, todayText } from './writer-goal';
+import { writerCountsText } from './writer-status';
 
 afterEach(() => setLocale('ko'));
 
@@ -32,5 +33,25 @@ describe('목표 진행·오늘 쓴 글자수 문구', () => {
     const stats = { chars: 12340, charsNoSpace: 10982, words: 2010 };
     expect(basisChars(stats, 'include')).toBe(12340);
     expect(basisChars(stats, 'exclude')).toBe(10982);
+  });
+});
+
+describe('목표 프리셋 안내', () => {
+  it('기준이 다를 때만 그 프리셋 기준을 알려 준다(4가지 조합)', () => {
+    expect(presetHintBasis('include', 'exclude')).toBe('include'); // 네이버/카카오 + 공백 제외 설정
+    expect(presetHintBasis('exclude', 'include')).toBe('exclude'); // 리디 + 공백 포함 설정
+    expect(presetHintBasis('include', 'include')).toBeNull();
+    expect(presetHintBasis('exclude', 'exclude')).toBeNull();
+  });
+});
+
+describe('영어 단수/복수', () => {
+  it('글자수·오늘·목표 문구도 1 일 때 단수', () => {
+    const one = { locale: 'en' as const, spacing: 'include' as const, stats: { chars: 1, charsNoSpace: 1, words: 1 }, narrow: false };
+    expect(writerCountsText(one)).toBe('1 character · 1 word');
+    expect(todayText({ locale: 'en', today: 1, goal: null })).toBe('Today 1 character');
+    expect(todayText({ locale: 'en', today: 2, goal: 1 })).toBe('Today 2/1 character');
+    expect(goalText({ locale: 'en', chars: 1, goal: 1 })).toBe('1/1 character');
+    expect(todayText({ locale: 'en', today: 2, goal: 2 })).toBe('Today 2/2 characters');
   });
 });

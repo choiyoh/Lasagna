@@ -7,7 +7,7 @@ import type { NoteSummary } from '@nopsidian/ipc-contract';
 import type { ConfirmState, Toast } from './app-types';
 import { flushAll } from './flush';
 import { withNoteCover, withNoteIcon } from './note-icon';
-import { characterNoteMarkdown, characterTemplateCandidates, validateWorkName, workPlan, withGoalChars } from '@nopsidian/core';
+import { characterNoteMarkdown, characterTemplateCandidates, episodeNoteMarkdown, episodeTemplateCandidates, validateWorkName, workPlan, withGoalChars } from '@nopsidian/core';
 import { freshNotes, untitledPath } from './note-title';
 import { placeGroupInOrder, remapOrder, type SidebarOrder } from './sidebar-order';
 import type { TreeNode } from './sidebar/build-tree';
@@ -192,6 +192,48 @@ export function useEntryActions(deps: EntryActionDeps) {
       }
     },
     [refresh],
+  );
+
+  /**
+   * 새 회차 노트 — 작품의 회차 폴더에 만들고 연다. 내용은 작품 회차 템플릿을 복사하고 첫 H1 만 이름으로 바꾼다.
+   * `goal_chars` 는 넣지 않는다(사용자가 목표를 정할 때만 기록).
+   */
+  const createEpisode = useCallback(
+    async (work: string, episodeFolder: string, rawName: string) => {
+      const problem = validateWorkName(rawName);
+      if (problem) {
+        setToast({ message: t(`episode.err.${problem}`) });
+        return;
+      }
+      const name = rawName.trim();
+      const path = `${episodeFolder}/${name}.md`;
+      if (live.current.notes.some((n) => n.path === path)) {
+        setToast({ message: t('episode.err.exists', { name }) });
+        return;
+      }
+      try {
+        let template: string | null = null;
+        for (const candidate of episodeTemplateCandidates(work)) {
+          try {
+            template = (await window.nops.note.read({ path: candidate })).content;
+            break;
+          } catch {
+            // 다음 언어 후보를 시도한다.
+          }
+        }
+        const content = episodeNoteMarkdown(template, name);
+        const saved = await window.nops.note.save({ path, content, baseHash: null });
+        if (saved.status !== 'saved') {
+          setToast({ message: t('episode.err.exists', { name }) });
+          return;
+        }
+        setSelected(path);
+        refresh();
+      } catch (e) {
+        setToast({ message: t('episode.err.failed', { message: userMessage(e) }) });
+      }
+    },
+    [refresh, setSelected],
   );
 
   /**
@@ -500,5 +542,5 @@ export function useEntryActions(deps: EntryActionDeps) {
   );
 
 
-  return { createNote, quickNote, newFolder, openDaily, createWork, createCharacter, renameEntry, renameCurrent, setNoteIcon, setNoteCover, setNoteGoal, renameNoteTitle, moveMany, moveEntries, moveRelative, deleteEntry, deleteEntries };
+  return { createNote, quickNote, newFolder, openDaily, createWork, createCharacter, createEpisode, renameEntry, renameCurrent, setNoteIcon, setNoteCover, setNoteGoal, renameNoteTitle, moveMany, moveEntries, moveRelative, deleteEntry, deleteEntries };
 }

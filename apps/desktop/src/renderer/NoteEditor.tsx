@@ -12,7 +12,7 @@ import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './no
 import { loadPrefs } from './prefs';
 import { countMarkdown, readGoalChars, type TextStats } from '@nopsidian/core';
 import { WRITER_PENDING, writerCountsText, writerDelay } from './writer-status';
-import { basisChars, goalProgress, goalText, todayText } from './writer-goal';
+import { basisChars, goalProgress, goalText, presetHintBasis, todayText } from './writer-goal';
 import { editorTotalStats } from '@nopsidian/editor/nops';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
@@ -69,6 +69,13 @@ interface Props {
   /** 문서 목표 글자수를 노트 속성(`goal_chars`)에 저장/삭제한다. 없으면 목표 UI 가 없다 */
   onSetGoal?: (goal: number | null) => void;
 }
+
+/** 목표 빠른 선택 — 글자수와 그 플랫폼의 기준. 누르면 입력칸에 숫자만 채운다(저장은 사용자가 확인). */
+const GOAL_PRESETS = [
+  { key: 'naver', chars: 4000, basis: 'include' },
+  { key: 'kakao', chars: 4500, basis: 'include' },
+  { key: 'ridi', chars: 4500, basis: 'exclude' },
+] as const;
 
 /** 저장 결과가 앱의 내용과 달라졌을 때 사용자에게 알리는 문구 */
 const NOTICES = {
@@ -151,6 +158,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const [today, setToday] = useState(0);
   const [goalEditing, setGoalEditing] = useState(false);
   const [goalDraft, setGoalDraft] = useState('');
+  /** 기준이 다른 프리셋을 골랐을 때의 안내(플랫폼 키 + 그 프리셋의 기준). 저장·기준 변경에는 관여하지 않는다. */
+  const [goalPresetHint, setGoalPresetHint] = useState<{ key: 'naver' | 'kakao' | 'ridi'; basis: 'include' | 'exclude' } | null>(null);
   /** 좁은 창(920px 이하)에서는 한국어 기준 표기를 '포함/제외'로 줄인다(디자이너 시안). */
   const [narrow, setNarrow] = useState(() => window.innerWidth <= 920);
   useEffect(() => {
@@ -874,6 +883,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
                 aria-label={t('writer.setGoal')}
                 onClick={() => {
                   setGoalDraft(String(noteGoal));
+                  setGoalPresetHint(null);
                   setGoalEditing(true);
                 }}
               >
@@ -886,6 +896,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
               data-testid="writer-goal-set"
               onClick={() => {
                 setGoalDraft('');
+                setGoalPresetHint(null);
                 setGoalEditing(true);
               }}
             >
@@ -904,6 +915,23 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
                 onSetGoal(next);
               }}
             >
+              <span className="note-editor__presets" data-testid="writer-goal-presets">
+                {GOAL_PRESETS.map((preset) => (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    className="note-editor__preset"
+                    data-testid={`writer-goal-preset-${preset.key}`}
+                    onClick={() => {
+                      setGoalDraft(String(preset.chars));
+                      const hintBasis = presetHintBasis(preset.basis, spacing);
+                      setGoalPresetHint(hintBasis ? { key: preset.key, basis: hintBasis } : null);
+                    }}
+                  >
+                    {t(`writer.preset.${preset.key}` as Parameters<typeof t>[0])}
+                  </button>
+                ))}
+              </span>
               <input
                 className="note-editor__goalinput"
                 data-testid="writer-goal-input"
@@ -926,6 +954,13 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
               <button type="button" className="note-editor__goalbtn" onClick={() => setGoalEditing(false)}>
                 {t('writer.goalCancel')}
               </button>
+              {goalPresetHint && (
+                <span className="note-editor__presethint" data-testid="writer-goal-preset-hint">
+                  {t(`writer.preset.hint.${goalPresetHint.basis}` as Parameters<typeof t>[0], {
+                    platform: t(`writer.presetName.${goalPresetHint.key}` as Parameters<typeof t>[0]),
+                  })}
+                </span>
+              )}
             </form>
           )}
           <span data-testid="writer-chars">{writerStats ? writerCountsText({ locale, spacing, stats: writerStats, narrow }) : WRITER_PENDING}</span>

@@ -79,7 +79,7 @@ test('회차 DB 칩을 눌러야 _db.yaml 이 생기고, 자동 열이 계산된
   expect(() => readFileSync(dbFile, 'utf8')).toThrow();
 
   await page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-chip-db').click();
-  await expect.poll(() => readFileSync(dbFile, 'utf8').includes('note_chars'), { timeout: 15_000 }).toBe(true);
+  await expect.poll(() => { const y = readFileSync(dbFile, 'utf8'); return y.includes('note_chars') && y.includes('goal_met'); }, { timeout: 15_000 }).toBe(true);
   const yaml = readFileSync(dbFile, 'utf8');
   expect(yaml).toContain('goal_met');
   // DB 화면: 열 이름과 자동 배지

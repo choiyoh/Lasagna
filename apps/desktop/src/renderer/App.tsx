@@ -274,6 +274,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     createWork,
     createCharacter,
     createEpisode,
+    openEpisodeDb,
     moveEntries,
     moveRelative,
     deleteEntry,
@@ -597,6 +598,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               });
             }}
             onCreateWork={() => setWorkDialog(true)}
+            onOpenEpisodeDb={(work) => {
+              const summary = works.find((w) => w.name === work);
+              if (summary) void openEpisodeDb(summary.episodeFolder, work);
+            }}
             onCreateEpisode={(work) => {
               void showTextPrompt(t('episode.namePrompt'), '').then((name) => {
                 if (name === null) return;

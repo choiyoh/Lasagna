@@ -10,6 +10,10 @@ export interface ComputeHost {
   dbFolderOf(path: string): string | null;
   /** 관계 값(`[[이름]]`)을 노트 경로로 */
   resolve(raw: string, fromPath: string): string | undefined;
+  /** 자동 열(note_chars/goal_met)용: 노트 본문 글자수와 goal_chars. 없으면 null */
+  noteInfo?(path: string): { chars: number; charsNoSpace: number; goalChars: number | null } | null;
+  /** 글자수 기준(전역 설정 주입) */
+  spacing?: 'include' | 'exclude';
   now: Date;
 }
 
@@ -161,6 +165,12 @@ export class ComputeContext {
     return formulaToCell(
       evalFormula(f, {
         now: this.host.now,
+        noteChars: () => {
+          const info = this.host.noteInfo?.(row.path);
+          if (!info) return null;
+          return this.host.spacing === 'exclude' ? info.charsNoSpace : info.chars;
+        },
+        goalChars: () => this.host.noteInfo?.(row.path)?.goalChars ?? null,
         prop: (n) => {
           if (n === 'title') return row.title;
           const p = out.schema.properties[n];

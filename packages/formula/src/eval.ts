@@ -10,6 +10,10 @@ export interface Env {
   /** `prop("이름")` 의 값. 없는 속성이면 FormulaError 를 던진다 */
   prop(name: string): FValue;
   now?: Date;
+  /** 현재 노트 본문 글자수(B2 자동 열) — 없으면 note_chars() 는 오류 */
+  noteChars?: () => number | null;
+  /** 현재 노트 목표 글자수(goal_chars) — 없으면 goal_met() 은 null */
+  goalChars?: () => number | null;
 }
 
 export const truthy = (v: FValue): boolean => !(v === null || v === false || v === 0 || v === '' || (Array.isArray(v) && v.length === 0));
@@ -178,6 +182,17 @@ export function evaluate(root: Node, env: Env): FValue {
       case 'call':
       case 'method': {
         const argNodes = node.kind === 'method' ? [node.target, ...node.args] : node.args;
+        if (node.name === 'note_chars' && node.kind === 'call') {
+          if (!env.noteChars) throw err(node, 'formula.err.noteContext');
+          const v = env.noteChars();
+          return v === null ? null : v;
+        }
+        if (node.name === 'goal_met' && node.kind === 'call') {
+          const chars = env.noteChars?.();
+          const goal = env.goalChars?.();
+          if (chars == null || goal == null) return null;
+          return chars >= goal;
+        }
         if (node.name === 'prop' && node.kind === 'call') {
           const a = argNodes[0];
           if (!a || a.kind !== 'str') throw err(node, 'formula.err.propLiteralArg');

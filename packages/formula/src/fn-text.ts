@@ -107,6 +107,9 @@ const sliceDef = (fn: string): FunctionDef => ({
 });
 
 export const TEXT_FNS: Record<string, FunctionDef> = {
+  // 평가기가 env(본문·목표)로 직접 처리한다 — 컴파일 단계에서 이름을 알 수 있게 자리만 둔다.
+  note_chars: { min: 0, max: 0, impl: () => 0 },
+  goal_met: { min: 0, max: 0, impl: () => null },
   // ── 이어 붙이기·나누기 ───────────────────────────────────────────────
   /** `concat(…값)`: 각 값을 표기 문자열로 이어 붙인다(목록은 `toDisplayString` 그대로 → "a, b"). */
   concat: { min: 0, max: Infinity, impl: (args) => args.map((v) => toDisplayString(v)).join('') },

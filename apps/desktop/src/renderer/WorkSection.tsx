@@ -14,6 +14,8 @@ interface Props {
   onCreateWork: () => void;
   onCreateCharacter: (work: string) => void;
   onCreateEpisode: (work: string) => void;
+  /** 회차 DB 열기(없으면 그때 만든다) */
+  onOpenEpisodeDb: (work: string) => void;
   /** 작품별 목표선 문구(없으면 목표 설정 버튼) */
   goalLines: Record<string, string>;
   /** 목표선 툴팁(마감일·남은 일수) */
@@ -44,7 +46,7 @@ export function workMetaText(locale: 'ko' | 'en', work: Pick<WorkSummary, 'episo
  * 작가용 사이드바의 '작품' 섹션. 작가 모드에서만 렌더된다(일반 모드는 이 DOM 자체가 없다).
  * 카드: 회차 수·총 글자수, 일일 목표가 있으면 오늘 진행 막대. 칩: 캐릭터/설정집(폴더 펼침).
  */
-export function WorkSection({ locale, works, spacing, narrow, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter, onCreateEpisode, goalLines, goalTitles, onOpenGoal }: Props) {
+export function WorkSection({ locale, works, spacing, narrow, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter, onCreateEpisode, goalLines, goalTitles, onOpenGoal, onOpenEpisodeDb }: Props) {
   const tr = (key: Parameters<typeof translate>[1], params?: Record<string, string | number>) => translate(locale, key, params);
   const count = (n: number) => formatNumber(n, locale);
   const ratio = dailyGoal !== null && dailyGoal > 0 ? Math.min(1, Math.max(0, today / dailyGoal)) : 0;
@@ -86,6 +88,9 @@ export function WorkSection({ locale, works, spacing, narrow, today, dailyGoal, 
               <div className="workcard__links">
                 <button className="workchip" onClick={() => onOpenFolder(work.characterFolder)} data-testid="work-chip-characters">
                   {chipText(locale, 'characters', work.characters, narrow)}
+                </button>
+                <button className="workchip" onClick={() => onOpenEpisodeDb(work.name)} data-testid="work-chip-db">
+                  {tr('work.episodeDb')}
                 </button>
                 {work.storyBible !== null && work.storyBibleFolder !== null ? (
                   <button className="workchip" onClick={() => onOpenFolder(work.storyBibleFolder ?? work.characterFolder)} data-testid="work-chip-story">

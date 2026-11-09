@@ -278,6 +278,11 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
               {onSort || onHide ? (
                 <button className="dbtable__thbtn" onClick={(e) => toggleMenu(c, e.currentTarget)} aria-haspopup="menu" aria-expanded={menu?.col === c} data-testid={`th-${c}`}>
                   {c === TITLE ? t('db.title') : c}
+                  {(() => { const headerProp = c === TITLE ? undefined : data.schema.properties[c]; return headerProp?.type === 'formula' && /\b(note_chars|goal_met)\s*\(/.test(headerProp.expr); })() && (
+                    <span className="dbtable__auto" data-testid={`auto-${c}`}>
+                      {t('db.autoColumn')}
+                    </span>
+                  )}
                   {sortOf(c) && <span className="dbtable__sort" aria-hidden>{sortOf(c) === 'asc' ? ' ↑' : ' ↓'}</span>}
                 </button>
               ) : (

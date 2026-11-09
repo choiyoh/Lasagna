@@ -16,3 +16,4 @@ export * from './writer-goal.js';
 export * from './writer-daily.js';
 export * from './work.js';
 export * from './work-sidebar.js';
+export * from './snapshots.js';

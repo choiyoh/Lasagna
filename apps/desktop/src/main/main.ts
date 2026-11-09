@@ -36,6 +36,7 @@ import { events, graphLayout, graphSettings, workspaceLayout, type AppLanguage, 
 import { resolveLocale, setLocale, t } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
 import { WriterStatsStore } from './writer-stats-store';
+import { deleteSnapshot, listSnapshots, readSnapshot, renameSnapshot, saveSnapshot } from '@nopsidian/core';
 import { detectWorkRoots, summarizeWorks } from '@nopsidian/core';
 import { countMarkdown } from '@nopsidian/core';
 import { configureIpc, handle, registerWebContents } from './ipc';
@@ -499,6 +500,17 @@ function registerHandlers() {
   });
   handle('history.list', ({ path: rel }) => listHistory(requireVault().info.path, rel));
   handle('history.read', ({ path: rel, id }) => ({ content: readHistory(requireVault().info.path, rel, id) }));
+  handle('history.snapshotList', ({ path: rel }) => listSnapshots(requireVault().info.path, rel));
+  handle('history.snapshotSave', ({ path: rel, name, content }) => saveSnapshot(requireVault().info.path, rel, name, content));
+  handle('history.snapshotRead', ({ path: rel, id }) => {
+    const s = readSnapshot(requireVault().info.path, rel, id);
+    return { name: s.name, time: s.time, content: s.content };
+  });
+  handle('history.snapshotRename', ({ path: rel, id, name }) => renameSnapshot(requireVault().info.path, rel, id, name));
+  handle('history.snapshotDelete', ({ path: rel, id }) => {
+    deleteSnapshot(requireVault().info.path, rel, id);
+    return { ok: true };
+  });
   handle('bookmarks.get', () => {
     const v = requireVault();
     try {

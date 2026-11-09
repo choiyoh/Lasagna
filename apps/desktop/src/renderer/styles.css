@@ -1013,3 +1013,19 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
+/* 작가 모드: 이력 탭의 이름 붙인 스냅샷 구역 */
+.snapshots { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.snapshots__head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 0 2px 6px; }
+.snapshots__form { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 8px; }
+.snapshots__form input { flex: 1 1 100%; min-width: 0; padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--fg); font: inherit; font-size: 12px; }
+.snapshots__quick { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; }
+.snapshots__quick button { font-size: 10.5px; padding: 0 7px; border: 1px dashed var(--border); border-radius: 99px; background: none; color: var(--muted); cursor: pointer; }
+.snapshots__quick button:hover { color: var(--fg); border-color: var(--accent); }
+.snapshots__row { display: flex; align-items: center; gap: 2px; }
+.snapshots__row > button:first-child { flex: 1; min-width: 0; text-align: left; }
+.snapshots__more { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0 4px; }
+.snapshots__more:hover { color: var(--fg); }
+.snapshots__sep { padding: 6px 12px 2px; }
+@media (max-width: 920px) {
+  .snapshots { padding: 6px 8px; }
+}

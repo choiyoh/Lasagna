@@ -133,16 +133,23 @@ test('이름 바꾸기·삭제는 그 스냅샷만 바꾼다', async () => {
   await openNote(page);
   await resetSettings(page);
   await openDock(page);
+  // 이 테스트만 따로 돌아도 되게 스냅샷을 스스로 만든다.
+  if ((await page.getByTestId('snapshot-entry').count()) === 0) {
+    await page.getByTestId('snapshot-add').click();
+    await page.getByTestId('snapshot-name').fill('삭제전');
+    await page.getByTestId('snapshot-save').click();
+  }
   const entry = page.getByTestId('snapshot-entry').first();
   await expect(entry).toBeVisible();
   await page.getByTestId('snapshot-rename').first().click();
   const input = page.locator('.nops-prompt input');
   await input.fill('2교');
   await input.press('Enter');
-  await expect(page.getByTestId('snapshot-entry')).toContainText('2교');
+  await expect(page.getByTestId('snapshot-entry').filter({ hasText: '2교' })).toHaveCount(1);
+  const before = await page.getByTestId('snapshot-entry').count();
   await page.getByTestId('snapshot-delete').first().click();
   await page.locator('.dialog .danger').click();
-  await expect(page.getByTestId('snapshot-entry')).toHaveCount(0);
+  await expect(page.getByTestId('snapshot-entry')).toHaveCount(before - 1);
 });
 
 test('앱을 다시 켜도 스냅샷이 유지되고, 영어 문구로 바뀐다', async () => {
@@ -153,17 +160,52 @@ test('앱을 다시 켜도 스냅샷이 유지되고, 영어 문구로 바뀐다
   await page.getByTestId('snapshot-add').click();
   await page.getByTestId('snapshot-name').fill('수정');
   await page.getByTestId('snapshot-save').click();
-  await expect(page.getByTestId('snapshot-entry')).toHaveCount(1);
+  await expect(page.getByTestId('snapshot-entry').filter({ hasText: '수정' })).toHaveCount(1);
+  const snapCount = await page.getByTestId('snapshot-entry').count();
 
   await app.close();
   app = await launch();
   const again = await app.firstWindow();
   await openNote(again);
   await openDock(again);
-  await expect(again.getByTestId('snapshot-entry')).toHaveCount(1);
-  await expect(again.getByTestId('snapshot-entry')).toContainText('수정');
+  await expect(again.getByTestId('snapshot-entry')).toHaveCount(snapCount); // 앞 테스트 것까지 그대로
+  await expect(again.getByTestId('snapshot-entry').filter({ hasText: '수정' })).toHaveCount(1);
 
   await resetSettings(again, { locale: 'en' });
   await expect(again.getByTestId('snapshots')).toContainText('Snapshots');
   await expect(again.getByTestId('snapshot-add')).toContainText('Snapshot');
+});
+
+test('노트 이름을 바꿔도 스냅샷·자동 이력이 따라간다', async () => {
+  const page = await app.firstWindow();
+  await openNote(page);
+  await resetSettings(page);
+  await openDock(page);
+  // 스냅샷 하나 준비
+  await page.getByTestId('snapshot-add').click();
+  await page.getByTestId('snapshot-name').fill('이름유지');
+  await page.getByTestId('snapshot-save').click();
+  await expect(page.getByTestId('snapshot-entry').filter({ hasText: '이름유지' })).toHaveCount(1);
+
+  // 실제 rename IPC 로 이름 바꾸기(링크 갱신 포함 경로)
+  const before = (await page.evaluate(() => window.nops.vault.current())) as { id: string } | null;
+  expect(before).not.toBeNull();
+  await page.evaluate(async () => {
+    await window.nops.note.rename({ from: '회차.md', to: '회차-개정.md' });
+  });
+  // 새 이름 노트를 열고 스냅샷 목록 유지 확인
+  // 사이드바 라벨은 H1('회차')이므로 파일 경로로 찾는다.
+  const renamedRow = page.locator('aside.sidebar [data-path="회차-개정.md"]');
+  await expect(renamedRow).toBeVisible({ timeout: 15_000 });
+  await renamedRow.click();
+  await openDock(page);
+  await expect(page.getByTestId('snapshot-entry')).not.toHaveCount(0); // 앞 테스트의 스냅샷도 함께 남는다
+  await expect(page.getByTestId('snapshot-entry').first()).toContainText('이름유지');
+  // 자동 이력도 새 이름에서 이어진다(되돌리기용 이력이 있거나, 곧 저장으로 생긴다)
+  await page.locator('.ProseMirror p').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' 이름 바꾼 뒤');
+  await expect.poll(() => readFileSync(path.join(vaultDir, '회차-개정.md'), 'utf8'), { timeout: 15_000 }).toContain('이름 바꾼 뒤');
+  await openDock(page);
+  await expect(page.getByTestId('history-entry')).not.toHaveCount(0, { timeout: 15_000 });
 });

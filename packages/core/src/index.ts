@@ -17,3 +17,4 @@ export * from './writer-daily.js';
 export * from './work.js';
 export * from './work-sidebar.js';
 export * from './snapshots.js';
+export * from './history-move.js';

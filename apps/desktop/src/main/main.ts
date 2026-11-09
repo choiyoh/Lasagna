@@ -36,7 +36,7 @@ import { events, graphLayout, graphSettings, workspaceLayout, type AppLanguage, 
 import { resolveLocale, setLocale, t } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
 import { WriterStatsStore } from './writer-stats-store';
-import { deleteSnapshot, listSnapshots, readSnapshot, renameSnapshot, saveSnapshot } from '@nopsidian/core';
+import { deleteSnapshot, listSnapshots, moveNoteHistory, readSnapshot, renameSnapshot, saveSnapshot } from '@nopsidian/core';
 import { detectWorkRoots, summarizeWorks } from '@nopsidian/core';
 import { countMarkdown } from '@nopsidian/core';
 import { configureIpc, handle, registerWebContents } from './ipc';
@@ -327,6 +327,8 @@ function registerHandlers() {
     await v.index.ready;
     const { plan, moves } = planRename(v.info.path, await snapshotVault(v), from, to);
     const { undoId } = applyRename(v.info.path, moves, plan);
+    // 이름·폴더가 바뀐 노트의 자동 이력·스냅샷도 새 경로 키로 따라간다(실패해도 이름 바꾸기는 성공).
+    for (const m of moves) moveNoteHistory(v.info.path, m.from, m.to);
     for (const m of moves) relocateComments(v.info.path, m.from, m.to);
     // 앱이 기억하던 노트 내용(3-way 병합의 기준)은 이동·갱신 뒤에는 무효다
     v.bases.clear();

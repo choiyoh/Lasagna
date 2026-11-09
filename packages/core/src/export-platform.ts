@@ -52,9 +52,10 @@ export function platformText(markdown: string): string {
       continue;
     }
     if (/^\s*\|.*\|\s*$/.test(line)) {
-      const cells = line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => inline(c.trim()));
-      if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue; // 구분 줄
-      out.push(cells.join('\t'));
+      const rawCells = line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+      // 구분 줄(`---`, `:---:`)은 붙여넣으면 빈 행이 되므로 **변환 전에** 걸러 낸다.
+      if (rawCells.every((c) => /^:?-{2,}:?$/.test(c))) continue;
+      out.push(rawCells.map((c) => inline(c)).join('\t'));
       continue;
     }
     const stripped = line.replace(/^\s*#{1,6}\s+/, '').replace(/^\s*>\s?/, '').replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '');

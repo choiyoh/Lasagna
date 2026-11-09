@@ -867,8 +867,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                   .catch(() => setGoalWork(null));
               }}
               onSetDaily={(perDay) => {
+                // 일일 목표만 바꾼다 — 작품 목표는 사용자가 저장을 눌렀을 때만 저장하고, 대화상자는 닫지 않는다.
                 void changeWriterSettings({ dailyGoal: perDay }).catch(() => undefined);
-                setGoalWork(null);
               }}
             />
           );

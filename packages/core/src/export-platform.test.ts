@@ -48,6 +48,12 @@ describe('플랫폼용 텍스트 변환', () => {
     );
   });
 
+  it('표는 헤더·데이터 행만 탭 구분하고 구분행(---|---)은 뺀다', () => {
+    expect(platformText('| A | B |\n|---|:---:|\n| 1 | 2 |\n')).toBe('A\tB\n1\t2');
+    expect(platformText('| 이름 | 값 |\n| --- | --- |\n| 가 | 1 |\n')).toBe('이름\t값\n가\t1');
+    expect(platformText('| a | b |\n|:--|--:|\n| 1 | 2 |\n')).toBe('a\tb\n1\t2');
+  });
+
   it('CRLF 도 같게 처리하고, 제목이 없으면 H1 만 건너뛰지 않는다', () => {
     expect(platformText('# 제목\r\n\r\n본문 **강조**\r\n')).toBe('본문 강조');
     // 첫 H1 은 위치와 무관하게 제목으로 보고 뺀다(플랫폼 제목 칸에 따로 넣는다).

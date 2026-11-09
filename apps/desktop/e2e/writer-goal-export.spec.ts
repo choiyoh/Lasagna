@@ -121,6 +121,10 @@ test('일일 목표로 설정을 누르면 전역 일일 목표가 계산값으�
   expect(value).toBeGreaterThan(0);
   await page.getByTestId('work-goal-set-daily').click();
   await expect.poll(async () => (await page.evaluate(() => window.nops.settings.language())).writerDailyGoal, { timeout: 10_000 }).toBe(value);
+  // 대화상자와 입력값은 그대로(작품 목표는 저장을 눌렀을 때만 저장)
+  await expect(page.getByTestId('work-goal-dialog')).toBeVisible();
+  await expect(page.getByTestId('work-goal-episodes')).toHaveValue('80');
+  await page.keyboard.press('Escape');
   // 상태줄에도 같은 값이 반영된다(노트를 연 뒤)
   await page.locator('aside.sidebar [data-path="회차.md"]').click();
   await expect(page.getByTestId('writer-today')).toContainText(`/${new Intl.NumberFormat('ko').format(value)}`);

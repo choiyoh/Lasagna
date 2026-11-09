@@ -123,7 +123,7 @@ function pruneEmptyDirs(dirs: string[]) {
 }
 
 /** 이름 변경을 되돌린다. 그 뒤에 사용자가 같은 노트를 또 고쳤다면 그 노트의 내용은 덮어쓰지 않고 건너뛴다. */
-export function undoRename(root: string, id: string): { restored: number; skipped: string[] } {
+export function undoRename(root: string, id: string): { restored: number; skipped: string[]; moves: Move[] } {
   const file = undoPath(root, id);
   if (!existsSync(file)) throw new CodedError('main.err.noRevertRecord');
   const record = JSON.parse(readFileSync(file, 'utf8')) as UndoRecord;
@@ -154,5 +154,5 @@ export function undoRename(root: string, id: string): { restored: number; skippe
   for (const m of [...record.moves].reverse()) relocateComments(root, m.to, m.from); // 댓글도 원래 이름으로
   pruneEmptyDirs([...new Set(record.moves.map((m) => path.dirname(resolveInVault(root, m.to))))]);
   writeFileSync(file, JSON.stringify({ ...record, undone: true }));
-  return { restored, skipped };
+  return { restored, skipped, moves: record.moves };
 }

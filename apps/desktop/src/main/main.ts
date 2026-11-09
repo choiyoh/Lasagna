@@ -338,6 +338,8 @@ function registerHandlers() {
   handle('note.undoRename', ({ undoId }) => {
     const v = requireVault();
     const r = undoRename(v.info.path, undoId);
+    // 이름 바꾸기를 되돌리면 이력·스냅샷도 원래 경로 키로 돌아간다(실패해도 undo 자체는 성공).
+    for (const m of r.moves) moveNoteHistory(v.info.path, m.to, m.from);
     v.bases.clear();
     v.selfWrites.clear();
     return r;

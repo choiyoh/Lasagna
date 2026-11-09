@@ -415,7 +415,12 @@ export const contract = {
   },
   'note.undoRename': {
     input: z.object({ undoId: z.string().regex(/^[0-9a-z-]+$/) }),
-    output: z.object({ restored: z.number(), skipped: z.array(relPath) }),
+    output: z.object({
+      restored: z.number(),
+      skipped: z.array(relPath),
+      /** 이력·스냅샷을 되돌려 옮기는 데 쓰는 이동 목록(이름 바꾸기 기록) */
+      moves: z.array(z.object({ from: relPath, to: relPath })).optional(),
+    }),
   },
   /** 노트의 버전 기록(저장 때마다 이전 내용을 남긴 스냅샷), 최신 순 */
   'history.list': { input: z.object({ path: relPath }), output: z.array(z.object({ id: z.string(), time: z.string(), size: z.number() })) },

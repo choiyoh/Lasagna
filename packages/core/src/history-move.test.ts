@@ -68,3 +68,15 @@ describe('이름 바꾸기·이동 시 이력 따라가기', () => {
     expect(historyKey('a.md')).toBe(historyKey('a.md'));
   });
 });
+
+describe('이름 바꾸기 취소(undo) 역방향 이동', () => {
+  it('새 키로 옮겼던 스냅샷이 원래 키로 돌아온다', () => {
+    const dir = root();
+    const snap = saveSnapshot(dir, 'a.md', '1교', '내용');
+    moveNoteHistory(dir, 'a.md', 'b.md'); // rename
+    expect(listSnapshots(dir, 'b.md')).toHaveLength(1);
+    moveNoteHistory(dir, 'b.md', 'a.md'); // undo → 역방향
+    expect(listSnapshots(dir, 'a.md').map((s) => s.id)).toEqual([snap.id]);
+    expect(listSnapshots(dir, 'b.md')).toEqual([]);
+  });
+});

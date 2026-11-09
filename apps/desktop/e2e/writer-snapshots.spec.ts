@@ -209,3 +209,62 @@ test('노트 이름을 바꿔도 스냅샷·자동 이력이 따라간다', asyn
   await openDock(page);
   await expect(page.getByTestId('history-entry')).not.toHaveCount(0, { timeout: 15_000 });
 });
+
+test('다른 노트로 바꾸면 선택한 스냅샷·diff 가 초기화되고 이전 노트로 덮어쓰지 않는다', async () => {
+  const page = await app.firstWindow();
+  await openNote(page);
+  await resetSettings(page);
+  await openDock(page);
+  await page.getByTestId('snapshot-add').click();
+  await page.getByTestId('snapshot-name').fill('교차방지');
+  await page.getByTestId('snapshot-save').click();
+  await page.getByTestId('snapshot-entry').filter({ hasText: '교차방지' }).click();
+  await expect(page.getByTestId('snapshot-diff')).toBeVisible();
+
+  // 다른 노트를 만들어 전환한다(스냅샷이 없는 노트)
+  const other = path.join(vaultDir, '다른노트.md');
+  writeFileSync(other, '# 다른노트\n\n건드리면 안 되는 내용\n');
+  const otherRow = page.locator('aside.sidebar [data-path="다른노트.md"]');
+  await expect(otherRow).toBeVisible({ timeout: 15_000 });
+  await otherRow.click();
+  await expect(page.locator('.ProseMirror')).toContainText('건드리면 안 되는 내용');
+
+  // 선택·diff·되돌리기 버튼이 초기화되어 있다
+  await openDock(page);
+  await expect(page.getByTestId('snapshot-diff')).toHaveCount(0);
+  await expect(page.getByTestId('snapshot-restore')).toHaveCount(0);
+  await expect(page.getByTestId('snapshot-entry')).toHaveCount(0); // 다른노트에는 스냅샷 없음
+  expect(readFileSync(other, 'utf8')).toBe('# 다른노트\n\n건드리면 안 되는 내용\n');
+});
+
+test('이름 바꾸기를 취소하면 스냅샷이 원래 노트로 돌아온다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  writeFileSync(path.join(vaultDir, '취소노트.md'), '# 취소노트\n\n취소 테스트 내용\n');
+  await resetSettings(page);
+  const row = page.locator('aside.sidebar [data-path="취소노트.md"]');
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.click();
+  await expect(page.locator('.ProseMirror')).toContainText('취소 테스트 내용');
+  await openDock(page);
+  const name = '취소테스트';
+  await page.getByTestId('snapshot-add').click();
+  await page.getByTestId('snapshot-name').fill(name);
+  await page.getByTestId('snapshot-save').click();
+  await expect(page.getByTestId('snapshot-entry').filter({ hasText: name })).toHaveCount(1);
+
+  const undoId = await page.evaluate(async () => {
+    const r = await window.nops.note.rename({ from: '취소노트.md', to: '취소노트-개정.md' });
+    return r.undoId;
+  });
+  await expect(page.locator('aside.sidebar [data-path="취소노트-개정.md"]')).toBeVisible({ timeout: 15_000 });
+  await page.evaluate(async (id) => {
+    await window.nops.note.undoRename({ undoId: id });
+  }, undoId);
+
+  const original = page.locator('aside.sidebar [data-path="취소노트.md"]');
+  await expect(original).toBeVisible({ timeout: 15_000 });
+  await original.click();
+  await openDock(page);
+  await expect(page.getByTestId('snapshot-entry').filter({ hasText: name })).toHaveCount(1);
+});

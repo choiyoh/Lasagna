@@ -40,6 +40,10 @@ export function HistoryPanel({ path, onRestored }: Props) {
   const writer = language.writerMode === true;
   const [snaps, setSnaps] = useState<SnapEntry[]>([]);
   const [snapPicked, setSnapPicked] = useState<string | null>(null);
+  /** 선택한 스냅샷이 어느 노트의 것인지 — 노트가 바뀐 채 되돌리기로 다른 노트를 덮어쓰지 않게 한다. */
+  const [snapPickedFor, setSnapPickedFor] = useState<string | null>(null);
+  /** 자동 이력 선택도 같은 이유로 노트 경로를 함께 기억한다. */
+  const [pickedFor, setPickedFor] = useState<string | null>(null);
   const [snapContent, setSnapContent] = useState('');
   const [snapNaming, setSnapNaming] = useState(false);
   const [snapDraft, setSnapDraft] = useState('');
@@ -69,7 +73,16 @@ export function HistoryPanel({ path, onRestored }: Props) {
   }, [path, writer]);
 
   useEffect(() => {
+    // 노트가 바뀌면 선택·내용·확인창을 모두 비운다(다른 노트의 스냅샷으로 덮어쓰기 방지).
     setPicked(null);
+    setPickedFor(null);
+    setOld('');
+    setSnapPicked(null);
+    setSnapPickedFor(null);
+    setSnapContent('');
+    setSnapNaming(false);
+    setSnapDraft('');
+    setConfirm(null);
     void load();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const off = window.nops.on('note.changed', () => {
@@ -100,7 +113,7 @@ export function HistoryPanel({ path, onRestored }: Props) {
   }, [picked, path]);
 
   const restore = async () => {
-    if (!picked) return;
+    if (!picked || pickedFor !== path) return; // 다른 노트의 이력으로 현재 노트를 덮어쓰지 않는다
     await flushAll();
     const cur = await window.nops.note.read({ path });
     await window.nops.note.save({ path, content: old, baseHash: cur.hash });
@@ -134,6 +147,7 @@ export function HistoryPanel({ path, onRestored }: Props) {
     const r = await window.nops.history.snapshotRead({ path, id });
     setSnapContent(r.content);
     setSnapPicked(id);
+    setSnapPickedFor(path);
   };
 
   const renameSnap = async (id: string) => {
@@ -150,7 +164,7 @@ export function HistoryPanel({ path, onRestored }: Props) {
   };
 
   const restoreSnap = async () => {
-    if (!snapPicked) return;
+    if (!snapPicked || snapPickedFor !== path) return; // 노트가 바뀌었으면 되돌리지 않는다
     await flushAll();
     const cur = await window.nops.note.read({ path });
     await window.nops.note.save({ path, content: snapContent, baseHash: cur.hash });

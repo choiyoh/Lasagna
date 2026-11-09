@@ -41,6 +41,7 @@ export interface WorkSummary {
 function names(locale: 'ko' | 'en') {
   return {
     episodes: translate(locale, 'work.folder.episodes'),
+    manuscript: translate(locale, 'work.folder.manuscript'),
     characters: translate(locale, 'work.folder.characters'),
     storyBible: translate(locale, 'work.folder.storyBible'),
   };
@@ -56,23 +57,24 @@ export function detectWorkRoots(folders: string[]): WorkRoot[] {
   }
   const out: WorkRoot[] = [];
   for (const name of roots) {
-    const found: { episodes: string[]; characters: string[]; storyBible: string[]; locale: 'ko' | 'en' } = {
-      episodes: [],
-      characters: [],
-      storyBible: [],
-      locale: 'ko',
-    };
     for (const locale of ['ko', 'en'] as const) {
       const n = names(locale);
-      if (set.has(`${name}/${n.episodes}`)) found.episodes.push(`${name}/${n.episodes}`);
-      if (set.has(`${name}/${n.characters}`)) found.characters.push(`${name}/${n.characters}`);
-      if (set.has(`${name}/${n.storyBible}`)) found.storyBible.push(`${name}/${n.storyBible}`);
-      if (found.episodes.length > 0 && found.characters.length > 0 && found.locale === 'ko' && locale === 'en' && !set.has(`${name}/${names('ko').episodes}`)) {
-        found.locale = 'en';
-      }
+      // 같은 언어 안에서만 짝을 맞춘다(원고+Characters 같은 혼합은 작품이 아니다).
+      const episodes = set.has(`${name}/${n.episodes}`) ? `${name}/${n.episodes}` : null;
+      const manuscript = set.has(`${name}/${n.manuscript}`) ? `${name}/${n.manuscript}` : null;
+      const characters = set.has(`${name}/${n.characters}`) ? `${name}/${n.characters}` : null;
+      const episodeFolder = episodes ?? manuscript;
+      if (!episodeFolder || !characters) continue;
+      const storyBible = set.has(`${name}/${n.storyBible}`) ? [`${name}/${n.storyBible}`] : [];
+      out.push({
+        name,
+        episodeFolders: [episodeFolder],
+        characterFolders: [characters],
+        storyBibleFolders: storyBible,
+        locale,
+      });
+      break; // 같은 작품을 두 언어로 중복 인식하지 않는다
     }
-    if (found.episodes.length === 0 || found.characters.length === 0) continue;
-    out.push({ name, episodeFolders: found.episodes, characterFolders: found.characters, storyBibleFolders: found.storyBible, locale: found.locale });
   }
   return out;
 }

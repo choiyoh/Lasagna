@@ -978,3 +978,38 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
 .note-editor__preset { font-size: 11px; border: 1px dashed var(--border); border-radius: 99px; padding: 1px 8px; background: none; color: var(--muted); cursor: pointer; }
 .note-editor__preset:hover { color: var(--fg); border-color: var(--accent); }
 .note-editor__presethint { flex-basis: 100%; font-size: 11px; color: var(--warn); }
+/* 작품 만들기 대화상자(이름 + 구조 카드) */
+.workdlg { width: min(680px, 92vw); }
+.workdlg__field { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; font-size: 12.5px; }
+.workdlg__input { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--fg); font: inherit; }
+.workdlg__structs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 14px; }
+.workstruct { text-align: left; display: flex; flex-direction: column; gap: 5px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--fg); cursor: pointer; font: inherit; }
+.workstruct.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.workstruct__head { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; }
+.workstruct__dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border); }
+.workstruct.on .workstruct__dot { border-color: var(--accent); background: radial-gradient(circle at center, var(--accent) 0 45%, transparent 50%); }
+.workstruct__desc { color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+.workstruct__preview { font-size: 11px; color: var(--fg); background: var(--bg-side); border-radius: 6px; padding: 6px 8px; line-height: 1.5; }
+.workstruct__templates { font-size: 11px; color: var(--muted); }
+.workstruct__example { font-size: 10.5px; color: var(--muted); }
+@media (max-width: 920px) {
+  .workdlg__structs { grid-template-columns: 1fr; }
+}
+
+/* 상태줄 목표 입력은 팝오버로 띄워 바 높이를 바꾸지 않는다 */
+.note-editor__goalform {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 6px);
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: min(92vw, 560px);
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}

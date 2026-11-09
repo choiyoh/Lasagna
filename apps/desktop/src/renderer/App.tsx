@@ -11,6 +11,7 @@ import { keys } from './keys';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { WorkSection } from './WorkSection';
+import { WorkCreateDialog } from './WorkCreateDialog';
 import { OutlinePanel } from './OutlinePanel';
 import { CommentsPanel } from './CommentsPanel';
 import { TrashDialog } from './TrashDialog';
@@ -96,6 +97,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [trashOpen, setTrashOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** 작품 만들기 대화상자(이름+구조). 설정·사이드바가 같은 것을 연다 */
+  const [workDialog, setWorkDialog] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
@@ -514,11 +517,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 document.querySelector(`[data-path="${CSS.escape(path)}"]`)?.scrollIntoView({ block: 'nearest' });
               });
             }}
-            onCreateWork={() => {
-              void showTextPrompt(t('work.namePrompt'), '').then((name) => {
-                if (name !== null) void createWork(name);
-              });
-            }}
+            onCreateWork={() => setWorkDialog(true)}
             onCreateEpisode={(work) => {
               void showTextPrompt(t('episode.namePrompt'), '').then((name) => {
                 if (name === null) return;
@@ -782,7 +781,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           theme={theme}
           onTheme={setTheme}
           onClose={() => setSettingsOpen(false)}
-          onCreateWork={(name) => void createWork(name)}
+          onCreateWork={() => setWorkDialog(true)}
           onOpenSync={() => {
             setSettingsOpen(false);
             setSyncOpen(true);
@@ -801,6 +800,16 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           onOpenShortcuts={() => {
             setSettingsOpen(false);
             setShortcutsOpen(true);
+          }}
+        />
+      )}
+      {workDialog && (
+        <WorkCreateDialog
+          locale={locale}
+          onCancel={() => setWorkDialog(false)}
+          onSubmit={(name, kind) => {
+            setWorkDialog(false);
+            void createWork(name, kind);
           }}
         />
       )}

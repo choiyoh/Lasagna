@@ -61,3 +61,23 @@ describe('작품 인식·집계', () => {
     });
   });
 });
+
+describe('출판형 인식(W2b)', () => {
+  it('원고+캐릭터도 작품이고 원고가 회차 폴더다', () => {
+    const roots = detectWorkRoots(['출판작', '출판작/원고', '출판작/캐릭터', '출판작/교정']);
+    expect(roots).toHaveLength(1);
+    expect(roots[0]).toMatchObject({ name: '출판작', episodeFolders: ['출판작/원고'], characterFolders: ['출판작/캐릭터'] });
+    const notes = ['출판작/원고/1화.md', '출판작/원고/1권/2화.md', '출판작/교정/1교.md', '출판작/캐릭터/서연.md'];
+    const summary = summarizeWorks(roots, notes, new Map([['출판작/원고/1화.md', s(10)], ['출판작/교정/1교.md', s(999)]]))[0];
+    expect(summary).toMatchObject({ episodes: 2, characters: 1, chars: 10 });
+  });
+
+  it('영어 Manuscript+Characters 도 인식', () => {
+    expect(detectWorkRoots(['Moon', 'Moon/Manuscript', 'Moon/Characters'])[0]).toMatchObject({ episodeFolders: ['Moon/Manuscript'], locale: 'en' });
+  });
+
+  it('혼합 이름(원고+Characters, Manuscript+캐릭터)은 작품이 아니다', () => {
+    expect(detectWorkRoots(['A', 'A/원고', 'A/Characters'])).toEqual([]);
+    expect(detectWorkRoots(['B', 'B/Manuscript', 'B/캐릭터'])).toEqual([]);
+  });
+});

@@ -36,6 +36,7 @@ import { events, graphLayout, graphSettings, workspaceLayout, type AppLanguage, 
 import { resolveLocale, setLocale, t } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
 import { WriterStatsStore } from './writer-stats-store';
+import { WriterWorksStore } from './writer-works-store';
 import { deleteSnapshot, listSnapshots, moveNoteHistory, readSnapshot, renameSnapshot, saveSnapshot } from '@nopsidian/core';
 import { detectWorkRoots, summarizeWorks } from '@nopsidian/core';
 import { countMarkdown } from '@nopsidian/core';
@@ -741,6 +742,8 @@ function registerHandlers() {
   });
   handle('settings.language', () => currentLanguage());
   handle('settings.writerToday', ({ vaultId }) => writerStatsStore().todayStats(vaultId));
+  handle('settings.workGoals', ({ vaultId }) => writerWorksStore().all(vaultId));
+  handle('settings.setWorkGoal', ({ vaultId, work, goal }) => writerWorksStore().set(vaultId, work, goal));
   handle('settings.writerAddDelta', ({ vaultId, path: notePath, delta }) => writerStatsStore().add(vaultId, notePath, delta));
   handle('settings.setLanguage', ({ language, writerMode, writerSpacing, writerDailyGoal }) => {
     if (language !== undefined) settingsStore().setLanguage(language);
@@ -814,6 +817,13 @@ let writerStats: WriterStatsStore | null = null;
 function writerStatsStore(): WriterStatsStore {
   writerStats ??= new WriterStatsStore(path.join(app.getPath('userData'), 'writer-stats.json'));
   return writerStats;
+}
+
+/** 작품 목표 — userData 에만 저장(볼트·노트 무기록). */
+let writerWorks: WriterWorksStore | null = null;
+function writerWorksStore(): WriterWorksStore {
+  writerWorks ??= new WriterWorksStore(path.join(app.getPath('userData'), 'writer-works.json'));
+  return writerWorks;
 }
 
 app.whenReady().then(() => {

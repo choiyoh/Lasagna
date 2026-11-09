@@ -169,7 +169,8 @@ test('렌더러는 Node에 접근할 수 없고 악성 HTML은 실행되지 않�
 test('앱 밖에서 만든 파일이 목록과 검색에 반영된다', async () => {
   const page = await app.firstWindow();
   writeFileSync(path.join(vaultDir, '외부.md'), '# 외부 편집\n다른 편집기에서 작성한 바나나우유\n');
-  await expect(page.getByRole('button', { name: '외부 편집' })).toBeVisible({ timeout: 5000 });
+  // 빈 화면(Welcome)의 최근 목록에도 같은 이름이 나오므로 사이드바 트리 행으로 한정한다.
+  await expect(page.locator('aside.sidebar').getByRole('button', { name: '외부 편집' })).toBeVisible({ timeout: 5000 });
   await page.getByPlaceholder('본문 검색').fill('바나나우유');
   await expect(page.locator('.hit', { hasText: '외부 편집' })).toBeVisible();
   await page.getByPlaceholder('본문 검색').fill('');

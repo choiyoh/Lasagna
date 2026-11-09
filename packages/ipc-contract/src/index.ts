@@ -330,6 +330,16 @@ export type McpPolicyFile = z.infer<typeof mcpPolicyFile>;
  */
 export const languageSetting = z.enum(['system', 'ko', 'en']);
 export const localeCode = z.enum(['ko', 'en']);
+export const workGoal = z.object({
+  episodes: z.number().int().min(0).max(10_000),
+  perEpisode: z.number().int().min(0).max(1_000_000),
+  basis: z.enum(['include', 'exclude']),
+  deadline: z.string().nullable(),
+  preset: z.enum(['naver', 'kakao', 'ridi', 'custom']),
+  genre: z.string().nullable().optional(),
+});
+export type WorkGoalDto = z.infer<typeof workGoal>;
+
 export const appLanguage = z.object({
   setting: languageSetting,
   locale: localeCode,
@@ -692,6 +702,12 @@ export const contract = {
       writerDailyGoal: z.number().int().min(0).max(10_000_000).nullable().optional(),
     }),
     output: appLanguage,
+  },
+  /** 작품 목표(작가 모드) — userData/writer-works.json. 볼트·노트에는 기록하지 않는다. */
+  'settings.workGoals': { input: z.object({ vaultId: z.string().max(200) }), output: z.record(z.string().max(300), workGoal) },
+  'settings.setWorkGoal': {
+    input: z.object({ vaultId: z.string().max(200), work: z.string().max(300), goal: workGoal.nullable() }),
+    output: z.record(z.string().max(300), workGoal),
   },
   /** 작가 모드 '오늘 쓴 글자수' — 오늘 날짜(로컬)와 볼트 합계. 통계는 userData/writer-stats.json 에만 있다. */
   'settings.writerToday': {

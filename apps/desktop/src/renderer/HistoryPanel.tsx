@@ -264,7 +264,16 @@ export function HistoryPanel({ path, onRestored }: Props) {
       <ul className="history__list">
         {entries.map((e) => (
           <li key={e.id}>
-            <button className={e.id === picked ? 'active' : ''} onClick={() => setPicked(e.id === picked ? null : e.id)} data-testid="history-entry">
+            <button
+              className={e.id === picked ? 'active' : ''}
+              onClick={() => {
+                // 선택 시점의 노트 경로를 함께 기록한다(노트가 바뀌면 복원 중단).
+                const next = e.id === picked ? null : e.id;
+                setPicked(next);
+                setPickedFor(next === null ? null : path);
+              }}
+              data-testid="history-entry"
+            >
               {fmt(e.time)} <span className="muted small">{e.size}B</span>
             </button>
           </li>

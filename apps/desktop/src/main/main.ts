@@ -36,6 +36,7 @@ import { events, graphLayout, graphSettings, workspaceLayout, type AppLanguage, 
 import { resolveLocale, setLocale, t } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
 import { WriterStatsStore } from './writer-stats-store';
+import { deleteSnapshot, listSnapshots, moveNoteHistory, readSnapshot, renameSnapshot, saveSnapshot } from '@nopsidian/core';
 import { detectWorkRoots, summarizeWorks } from '@nopsidian/core';
 import { countMarkdown } from '@nopsidian/core';
 import { configureIpc, handle, registerWebContents } from './ipc';
@@ -326,6 +327,8 @@ function registerHandlers() {
     await v.index.ready;
     const { plan, moves } = planRename(v.info.path, await snapshotVault(v), from, to);
     const { undoId } = applyRename(v.info.path, moves, plan);
+    // 이름·폴더가 바뀐 노트의 자동 이력·스냅샷도 새 경로 키로 따라간다(실패해도 이름 바꾸기는 성공).
+    for (const m of moves) moveNoteHistory(v.info.path, m.from, m.to);
     for (const m of moves) relocateComments(v.info.path, m.from, m.to);
     // 앱이 기억하던 노트 내용(3-way 병합의 기준)은 이동·갱신 뒤에는 무효다
     v.bases.clear();
@@ -335,6 +338,8 @@ function registerHandlers() {
   handle('note.undoRename', ({ undoId }) => {
     const v = requireVault();
     const r = undoRename(v.info.path, undoId);
+    // 이름 바꾸기를 되돌리면 이력·스냅샷도 원래 경로 키로 돌아간다(실패해도 undo 자체는 성공).
+    for (const m of r.moves) moveNoteHistory(v.info.path, m.to, m.from);
     v.bases.clear();
     v.selfWrites.clear();
     return r;
@@ -499,6 +504,17 @@ function registerHandlers() {
   });
   handle('history.list', ({ path: rel }) => listHistory(requireVault().info.path, rel));
   handle('history.read', ({ path: rel, id }) => ({ content: readHistory(requireVault().info.path, rel, id) }));
+  handle('history.snapshotList', ({ path: rel }) => listSnapshots(requireVault().info.path, rel));
+  handle('history.snapshotSave', ({ path: rel, name, content }) => saveSnapshot(requireVault().info.path, rel, name, content));
+  handle('history.snapshotRead', ({ path: rel, id }) => {
+    const s = readSnapshot(requireVault().info.path, rel, id);
+    return { name: s.name, time: s.time, content: s.content };
+  });
+  handle('history.snapshotRename', ({ path: rel, id, name }) => renameSnapshot(requireVault().info.path, rel, id, name));
+  handle('history.snapshotDelete', ({ path: rel, id }) => {
+    deleteSnapshot(requireVault().info.path, rel, id);
+    return { ok: true };
+  });
   handle('bookmarks.get', () => {
     const v = requireVault();
     try {

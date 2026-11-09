@@ -106,7 +106,8 @@ describe('undoRename', () => {
     const { undoId } = run('old.md', 'folder/new.md');
     expect(read('a.md')).toBe('[[new]]\n');
     const r = undoRename(root, undoId);
-    expect(r).toEqual({ restored: 1, skipped: [] });
+    expect(r).toMatchObject({ restored: 1, skipped: [] });
+    expect(r.moves).toEqual([{ from: 'old.md', to: 'folder/new.md' }]);
     expect(read('a.md')).toBe('[[old]]\n');
     expect(existsSync(path.join(root, 'old.md'))).toBe(true);
     expect(existsSync(path.join(root, 'folder'))).toBe(false);

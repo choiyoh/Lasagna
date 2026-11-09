@@ -415,11 +415,34 @@ export const contract = {
   },
   'note.undoRename': {
     input: z.object({ undoId: z.string().regex(/^[0-9a-z-]+$/) }),
-    output: z.object({ restored: z.number(), skipped: z.array(relPath) }),
+    output: z.object({
+      restored: z.number(),
+      skipped: z.array(relPath),
+      /** 이력·스냅샷을 되돌려 옮기는 데 쓰는 이동 목록(이름 바꾸기 기록) */
+      moves: z.array(z.object({ from: relPath, to: relPath })).optional(),
+    }),
   },
   /** 노트의 버전 기록(저장 때마다 이전 내용을 남긴 스냅샷), 최신 순 */
   'history.list': { input: z.object({ path: relPath }), output: z.array(z.object({ id: z.string(), time: z.string(), size: z.number() })) },
   'history.read': { input: z.object({ path: relPath, id: z.string().max(100) }), output: z.object({ content: z.string() }) },
+  /** 작가 모드 '이름 붙인 스냅샷' — 자동 이력과 별도 저장소(.nopsidian/snapshots). */
+  'history.snapshotList': {
+    input: z.object({ path: relPath }),
+    output: z.array(z.object({ id: z.string(), name: z.string(), time: z.string(), size: z.number() })),
+  },
+  'history.snapshotSave': {
+    input: z.object({ path: relPath, name: z.string().max(200), content: z.string().max(20_000_000) }),
+    output: z.object({ id: z.string(), name: z.string(), time: z.string(), size: z.number() }),
+  },
+  'history.snapshotRead': {
+    input: z.object({ path: relPath, id: z.string().max(100) }),
+    output: z.object({ name: z.string(), time: z.string(), content: z.string() }),
+  },
+  'history.snapshotRename': {
+    input: z.object({ path: relPath, id: z.string().max(100), name: z.string().max(200) }),
+    output: z.object({ id: z.string(), name: z.string(), time: z.string(), size: z.number() }),
+  },
+  'history.snapshotDelete': { input: z.object({ path: relPath, id: z.string().max(100) }), output: z.object({ ok: z.boolean() }) },
   /** 노트를 HTML 또는 PDF 파일로 내보낸다(저장 대화상자). 취소하면 saved 가 null */
   'export.note': { input: z.object({ path: relPath, format: z.enum(['html', 'pdf']) }), output: z.object({ saved: z.string().nullable() }) },
   /** 볼트 전체를 정적 HTML 사이트로 폴더에 내보낸다(폴더 선택 대화상자) */

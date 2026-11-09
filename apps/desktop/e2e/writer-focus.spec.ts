@@ -59,7 +59,7 @@ test.beforeAll(async () => {
   base = mkdtempSync(path.join(tmpdir(), 'nops-focus-'));
   vaultDir = path.join(base, 'Demo');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, '회차.md'), '# 1화\n\n가나다라마바사아자차\n\n' + '문단입니다. '.repeat(600) + '\n');
+  writeFileSync(path.join(vaultDir, '회차.md'), '# 1화\n\n가나다라마바사아자차\n\n' + Array.from({ length: 600 }, () => '문단입니다.').join('\n\n') + '\n');
   app = await launch();
 });
 
@@ -224,4 +224,33 @@ test('IME 조합이 시작돼도 선택 글자수는 지워지지 않고 마지�
     document.querySelector('.ProseMirror')?.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
   });
   await expect(page.getByTestId('writer-selection')).toContainText('선택');
+});
+
+test('문서 중간 문단을 클릭하고 입력해도 캐럿은 화면 42% 근처에 머문다', async () => {
+  const page = await app.firstWindow();
+  await openNote(page);
+  await resetWriter(page);
+  await page.keyboard.press('ControlOrMeta+Shift+M');
+  await expect(page.getByTestId('workspace')).toHaveClass(/workspace--focus/);
+
+  const ratio = () =>
+    page.evaluate(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return -1;
+      const caret = sel.getRangeAt(0).getBoundingClientRect();
+      const pane = document.querySelector('.pane__body')?.getBoundingClientRect();
+      if (!pane || pane.height === 0) return -1;
+      return (caret.top - pane.top) / pane.height;
+    });
+
+  await page.locator('.ProseMirror p').nth(14).click();
+  // 디바운스(60ms) 뒤 커서 줄이 42%로 내려온다.
+  await expect.poll(ratio, { timeout: 10_000 }).toBeLessThan(0.6);
+  expect(await ratio()).toBeGreaterThan(0.25);
+
+  await page.keyboard.type('입력');
+  await expect.poll(ratio, { timeout: 10_000 }).toBeLessThan(0.6);
+  expect(await ratio()).toBeGreaterThan(0.25);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('workspace')).not.toHaveClass(/workspace--focus/);
 });

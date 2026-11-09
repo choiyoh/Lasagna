@@ -19,3 +19,17 @@ describe('타자기 스크롤 계산', () => {
     expect(focusContentWidth(920)).toBe(560);
   });
 });
+
+describe('타자기 스크롤 — 클릭·입력 시나리오', () => {
+  it('문서 중간 문단을 클릭했을 때(스크롤 0, 커서 60% 지점) 42%로 내린다', () => {
+    // 컨테이너 top 100, 높이 800, 42% 지점 = 436. 커서가 화면 580(=60%) → 144px 내린다.
+    expect(typewriterScrollTop({ ...base, caretTop: 580, scrollTop: 0 })).toBe(144);
+  });
+  it('입력 뒤 커서가 화면 위로 튀었을 때(스크롤 535, 커서 106)는 그대로 둔다', () => {
+    // 커서 문서 위치 = 106-100+535 = 541, 목표 = 541-336 = 205... 화면상 42%보다 위면 위로 올린다.
+    expect(typewriterScrollTop({ ...base, caretTop: 106, scrollTop: 535 })).toBe(205);
+  });
+  it('문서 끝은 최대 스크롤로 클램프', () => {
+    expect(typewriterScrollTop({ ...base, caretTop: 900, scrollTop: 4500 })).toBe(4200);
+  });
+});

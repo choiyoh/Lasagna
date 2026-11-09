@@ -20,11 +20,17 @@ export interface ShortcutActions {
   togglePanel: () => void;
   /** 사이드바 본문 검색으로 초점(⌘⇧F) */
   focusSearch: () => void;
+  /** 집중 모드 사용 가능(작가 모드) */
+  focusAvailable?: boolean;
+  /** 지금 집중 모드인가 */
+  focusMode?: boolean;
+  /** 집중 모드 시작/종료(⌘⇧M) */
+  toggleFocus?: () => void;
   /** 열린 DB 화면의 입력창에서 누른 Esc 인가를 가리는 데 쓴다 */
   dbOpen: boolean;
 }
 
-const OPEN_LAYERS = '.dialog-backdrop, .dbpop, .dbscreen__menu, .ctxmenu, .dbtable__menu, .datepicker, .nops-prompt, .switcher-backdrop';
+const OPEN_LAYERS = '.dialog-backdrop, .dbpop, .dbscreen__menu, .ctxmenu, .dbtable__menu, .datepicker, .nops-prompt, .switcher-backdrop, .findbar';
 
 /** 앱 전체 단축키: ⌘O 전환기 · ⌘P 팔레트 · ⌘N 새 노트 · ⌘, 설정 · F1 단축키 · F2 이름 · ⌘W 탭 닫기 · ⌘⇧G 그래프 · ⌘⇧B 북마크 · ⌘⌥D 오늘 · ⌘⇧\ 도크 · ⌘⇧F 본문 검색 */
 export function useAppShortcuts(actions: ShortcutActions) {
@@ -43,6 +49,15 @@ export function useAppShortcuts(actions: ShortcutActions) {
         e.preventDefault();
         a.toggleGraph();
       } else if (e.key === 'Escape') {
+        // 집중 모드에서는 Esc 가 먼저 집중 모드를 끝낸다(에디터가 Esc 를 처리했어도).
+        // 단, 팝오버·모달이 열려 있으면 그쪽이 먼저 닫히게 둔다.
+        // 열린 레이어(찾기 막대·모달 등) 안에서 누른 Esc 는 그 레이어가 처리한다.
+        const inLayer = e.target instanceof Element && e.target.closest(OPEN_LAYERS) !== null;
+        if (a.focusMode && !inLayer && !document.querySelector(OPEN_LAYERS)) {
+          e.preventDefault();
+          a.toggleFocus?.();
+          return;
+        }
         // 하위 팝오버·모달이 자체 Escape 를 처리했거나, 아직 DOM 에 열려 있으면 상위 화면은 닫지 않는다.
         if (e.defaultPrevented || document.querySelector(OPEN_LAYERS)) return;
         if (a.overlayOpen || (a.dbOpen && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement))) {
@@ -69,6 +84,9 @@ export function useAppShortcuts(actions: ShortcutActions) {
       } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyB') {
         e.preventDefault();
         if (a.selected) a.toggleBookmark(a.selected);
+      } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyM' && a.focusAvailable) {
+        e.preventDefault();
+        a.toggleFocus?.();
       } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyF') {
         e.preventDefault();
         a.focusSearch();

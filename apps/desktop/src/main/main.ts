@@ -745,13 +745,15 @@ function registerHandlers() {
   handle('settings.workGoals', ({ vaultId }) => writerWorksStore().all(vaultId));
   handle('settings.setWorkGoal', ({ vaultId, work, goal }) => writerWorksStore().set(vaultId, work, goal));
   handle('settings.writerAddDelta', ({ vaultId, path: notePath, delta }) => writerStatsStore().add(vaultId, notePath, delta));
-  handle('settings.setLanguage', ({ language, writerMode, writerSpacing, writerDailyGoal }) => {
+  handle('settings.setLanguage', ({ language, writerMode, writerSpacing, writerDailyGoal, writerFont, writerTypewriter }) => {
     if (language !== undefined) settingsStore().setLanguage(language);
-    if (writerMode !== undefined || writerSpacing !== undefined || writerDailyGoal !== undefined) {
+    if (writerMode !== undefined || writerSpacing !== undefined || writerDailyGoal !== undefined || writerFont !== undefined || writerTypewriter !== undefined) {
       settingsStore().setWriter({
         ...(writerMode === undefined ? {} : { mode: writerMode }),
         ...(writerSpacing === undefined ? {} : { spacing: writerSpacing }),
         ...(writerDailyGoal === undefined ? {} : { dailyGoal: writerDailyGoal }),
+        ...(writerFont === undefined ? {} : { font: writerFont }),
+        ...(writerTypewriter === undefined ? {} : { typewriter: writerTypewriter }),
       });
     }
     const current = currentLanguage();
@@ -808,8 +810,16 @@ function systemLanguages(): readonly string[] {
 }
 
 function currentLanguage(): AppLanguage {
-  const { language, writerMode, writerSpacing, writerDailyGoal } = settingsStore().value;
-  return { setting: language, locale: resolveLocale(language, systemLanguages()), writerMode, writerSpacing, writerDailyGoal: writerDailyGoal ?? null };
+  const { language, writerMode, writerSpacing, writerDailyGoal, writerFont, writerTypewriter } = settingsStore().value;
+  return {
+    setting: language,
+    locale: resolveLocale(language, systemLanguages()),
+    writerMode,
+    writerSpacing,
+    writerDailyGoal: writerDailyGoal ?? null,
+    writerFont: writerFont ?? 'sans',
+    writerTypewriter: writerTypewriter ?? true,
+  };
 }
 
 /** 작가 모드 통계(오늘 쓴 글자수) — userData 에만 쓰고 볼트는 건드리지 않는다. */

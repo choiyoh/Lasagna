@@ -237,6 +237,33 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
                 />
               </div>
             )}
+            {language.writerMode === true && (
+              <>
+                <div className="settings__row">
+                  <span>{t('settings.writerFont')}</span>
+                  <RadioSeg
+                    label={t('settings.writerFont')}
+                    value={language.writerFont ?? 'sans'}
+                    options={(['sans', 'serif', 'mono'] as const).map((font) => ({ value: font, label: t(`writer.focus.font.${font}`) }))}
+                    onSelect={(font) => void changeWriterSettings({ font }).catch(() => setWriterError(true))}
+                  />
+                </div>
+                <label className="settings__row">
+                  <span>
+                    {t('settings.writerTypewriter')}
+                    <small className="muted">{t('settings.writerTypewriterHint')}</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    data-testid="writer-typewriter"
+                    checked={language.writerTypewriter !== false}
+                    onChange={(e) => void changeWriterSettings({ typewriter: e.target.checked }).catch(() => setWriterError(true))}
+                    aria-label={t('settings.writerTypewriter')}
+                  />
+                </label>
+                <p className="muted small" data-testid="writer-focus-hint">{t('settings.writerFocusHint')}</p>
+              </>
+            )}
             {language.writerMode === true && onCreateWork ? (
               <div className="settings__row">
                 <span>

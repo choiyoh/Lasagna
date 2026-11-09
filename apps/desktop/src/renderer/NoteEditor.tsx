@@ -1,4 +1,4 @@
-import { formatNumber, t } from '@nopsidian/i18n';
+import { formatNumber, t, translate } from '@nopsidian/i18n';
 import { useLanguage, useLocale } from './useLocale';
 import { useEffect, useRef, useState } from 'react';
 import type { Editor, NopsPeekHost } from '@nopsidian/editor/nops';
@@ -10,7 +10,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
-import { countMarkdown, platformText, readGoalChars, type TextStats } from '@nopsidian/core';
+import { countMarkdown, countPlain, platformText, readGoalChars, type TextStats } from '@nopsidian/core';
 import { WRITER_PENDING, writerCountsText, writerDelay } from './writer-status';
 import { basisChars, goalProgress, goalText, presetHintBasis, todayText } from './writer-goal';
 import { editorTotalStats } from '@nopsidian/editor/nops';
@@ -68,6 +68,10 @@ interface Props {
   onTitleRename?: (to: string) => void;
   /** 문서 목표 글자수를 노트 속성(`goal_chars`)에 저장/삭제한다. 없으면 목표 UI 가 없다 */
   onSetGoal?: (goal: number | null) => void;
+  /** 집중 모드(작가 모드) — 타자기 스크롤·선택 글자수 표시에 쓴다 */
+  focusMode?: boolean;
+  /** 타자기 스크롤 켜짐(설정) */
+  typewriter?: boolean;
 }
 
 /** 목표 빠른 선택 — 글자수와 그 플랫폼의 기준. 누르면 입력칸에 숫자만 채운다(저장은 사용자가 확인). */
@@ -124,7 +128,7 @@ function scrollToFocus(editor: Editor, focus: { heading: string | null; block: s
  * 열기: 읽기(hash) → 파싱 → 표시. 편집 500ms 뒤 `note.save`(baseHash로 외부 변경 감지).
  * 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다.
  */
-export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename, onSetGoal }: Props) {
+export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename, onSetGoal, focusMode = false, typewriter = true }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
@@ -152,6 +156,15 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const writer = language.writerMode === true;
   const spacing = language.writerSpacing ?? 'include';
   const [writerStats, setWriterStats] = useState<TextStats | null>(null);
+  /** 선택 영역 글자수(작가 모드) — 없으면 null */
+  const [writerSelected, setWriterSelected] = useState<TextStats | null>(null);
+  /** 한글 IME 조합 중에는 선택 글자수를 갱신하지 않는다 */
+  const composingRef = useRef(false);
+  /** 리스너가 등록된 시점과 무관하게 지금 집중 모드인지 본다 */
+  const focusModeRef = useRef(focusMode);
+  focusModeRef.current = focusMode;
+  const typewriterRef = useRef(typewriter);
+  typewriterRef.current = typewriter;
   /** 이 노트의 목표 글자수(노트 속성). 없으면 null */
   const [noteGoal, setNoteGoal] = useState<number | null>(null);
   /** 오늘 쓴 글자수(앱 통계 파일, 볼트 단위) */
@@ -284,6 +297,133 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       alive = false;
     };
   }, [writer, vaultId, path]);
+
+  // 선택 영역 글자수 — 전체와 같은 규칙(마크다운 기호·frontmatter 제외, 현재 공백 기준)로 세고,
+  // 한글 IME 조합 중에는 갱신하지 않는다. 집중 모드에서는 같은 시점에 타자기 스크롤을 맞춘다.
+  useEffect(() => {
+    if (!writer) {
+      setWriterSelected(null);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const atomLabel = (node: import('prosemirror-model').Node): string => {
+      const a = node.attrs as Record<string, unknown>;
+      switch (node.type.name) {
+        case 'wikilink': {
+          const target = String(a.target ?? '');
+          return a.alias ? String(a.alias) : `${target}${a.heading ? `#${String(a.heading)}` : ''}${a.block ? `#^${String(a.block)}` : ''}`;
+        }
+        case 'raw_inline':
+          return String(a.source ?? '');
+        default:
+          return '';
+      }
+    };
+    /** 타자기 스크롤: 커서 줄을 스크롤 영역의 42% 위치에 둔다(문서 처음/끝은 클램프). */
+    const stick = () => {
+      if (!focusModeRef.current || !typewriterRef.current || modeRef.current !== 'edit') return;
+      const view = editorRef.current?.getView();
+      if (!view) return;
+      let scroller: HTMLElement | null = view.dom.parentElement;
+      while (scroller && scroller !== document.body && scroller.scrollHeight <= scroller.clientHeight + 4) {
+        scroller = scroller.parentElement;
+      }
+      if (!scroller || scroller === document.body) scroller = document.querySelector('.content') as HTMLElement | null;
+      if (!scroller) return;
+      const coords = view.coordsAtPos(view.state.selection.head);
+      const rect = scroller.getBoundingClientRect();
+      // 캐럿의 **문서 안 세로 위치**로 계산한다(스크롤 위치·화면 오프셋 오차를 없앤다).
+      const caretInDoc = coords.top - rect.top + scroller.scrollTop;
+      const top = Math.max(0, Math.min(scroller.scrollHeight - scroller.clientHeight, Math.round(caretInDoc - rect.height * 0.42)));
+      if (Math.abs(top - scroller.scrollTop) > 2) scroller.scrollTo({ top });
+    };
+
+    const read = () => {
+      if (composingRef.current) return;
+      const total = writerStats;
+      if (modeRef.current === 'source') {
+        const src = sourceRef.current;
+        if (!src) return setWriterSelected(null);
+        const ranges = src.view.state.selection.ranges.filter((r) => !r.empty);
+        if (ranges.length === 0) return setWriterSelected(null);
+        const text = ranges.map((r) => src.view.state.sliceDoc(r.from, r.to)).join('\n');
+        const stats = countMarkdown(text);
+        setWriterSelected(total ? { ...stats, chars: Math.min(stats.chars, total.chars), charsNoSpace: Math.min(stats.charsNoSpace, total.charsNoSpace) } : stats);
+        return;
+      }
+      const view = editorRef.current?.getView();
+      if (!view) return setWriterSelected(null);
+      const { from, to } = view.state.selection;
+      // 접힌 커서(클릭·방향키)일 때도 커서 줄은 42% 로 맞춘다.
+      stick();
+      if (from === to) return setWriterSelected(null);
+      const text = view.state.doc.textBetween(from, to, '\n', atomLabel);
+      if (text.trim() === '') return setWriterSelected(null);
+      const stats = countPlain(text);
+      setWriterSelected(total ? { ...stats, chars: Math.min(stats.chars, total.chars), charsNoSpace: Math.min(stats.charsNoSpace, total.charsNoSpace) } : stats);
+    };
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const schedule = () => {
+      clearTimeout(timer);
+      for (const t of timers.splice(0)) clearTimeout(t);
+      timer = setTimeout(read, 60);
+      // 입력 직후 ProseMirror 레이아웃이 늦게 반영될 수 있어 한 번 더 맞춘다(위로 튀는 현상 방지).
+      timers.push(setTimeout(() => read(), 160));
+    };
+    const onCompositionStart = () => {
+      // 조합 중에는 **갱신하지 않고** 마지막 선택 값을 그대로 둔다(깜빡임 방지).
+      composingRef.current = true;
+    };
+    const onCompositionEnd = () => {
+      composingRef.current = false;
+      schedule();
+    };
+    const view = editorRef.current?.getView();
+    const sourceDom = sourceRef.current?.view.dom;
+    document.addEventListener('selectionchange', schedule);
+    view?.dom.addEventListener('compositionstart', onCompositionStart);
+    view?.dom.addEventListener('compositionend', onCompositionEnd);
+    sourceDom?.addEventListener('compositionstart', onCompositionStart);
+    sourceDom?.addEventListener('compositionend', onCompositionEnd);
+    schedule();
+    return () => {
+      clearTimeout(timer);
+      for (const t of timers.splice(0)) clearTimeout(t);
+      document.removeEventListener('selectionchange', schedule);
+      view?.dom.removeEventListener('compositionstart', onCompositionStart);
+      view?.dom.removeEventListener('compositionend', onCompositionEnd);
+      sourceDom?.removeEventListener('compositionstart', onCompositionStart);
+      sourceDom?.removeEventListener('compositionend', onCompositionEnd);
+    };
+  }, [writer, path, mode, epoch, spacing, writerStats, docTick, focusMode, typewriter]);
+
+  // 집중 모드에 들어오거나 문서가 바뀌면 커서 줄을 42% 위치로 맞춘다(처음/끝은 클램프).
+  useEffect(() => {
+    if (!focusMode || !typewriter) return;
+    const stick = () => {
+      const view = editorRef.current?.getView();
+      if (!view || modeRef.current !== 'edit') return;
+      let scroller: HTMLElement | null = view.dom.parentElement;
+      while (scroller && scroller !== document.body && scroller.scrollHeight <= scroller.clientHeight + 4) {
+        scroller = scroller.parentElement;
+      }
+      if (!scroller || scroller === document.body) scroller = document.querySelector('.content') as HTMLElement | null;
+      if (!scroller) return;
+      const coords = view.coordsAtPos(view.state.selection.head);
+      const rect = scroller.getBoundingClientRect();
+      const caretInDoc = coords.top - rect.top + scroller.scrollTop;
+      const top = Math.max(0, Math.min(scroller.scrollHeight - scroller.clientHeight, Math.round(caretInDoc - rect.height * 0.42)));
+      if (Math.abs(top - scroller.scrollTop) > 2) scroller.scrollTo({ top });
+    };
+    const raf = requestAnimationFrame(stick);
+    const t1 = setTimeout(stick, 120);
+    const t2 = setTimeout(stick, 320);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [focusMode, typewriter, docTick, path]);
 
   useEffect(() => {
     restoreSel.current = null;
@@ -1017,7 +1157,20 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
               )}
             </form>
           )}
-          <span data-testid="writer-chars">{writerStats ? writerCountsText({ locale, spacing, stats: writerStats, narrow }) : WRITER_PENDING}</span>
+          {writerSelected && writerStats ? (
+            <span data-testid="writer-selection">
+              {translate(
+                locale,
+                narrow ? 'writer.selectionShort' : 'writer.selection',
+                {
+                  selected: formatNumber(spacing === 'include' ? writerSelected.chars : writerSelected.charsNoSpace, locale),
+                  total: formatNumber(spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace, locale),
+                },
+              )}
+            </span>
+          ) : (
+            <span data-testid="writer-chars">{writerStats ? writerCountsText({ locale, spacing, stats: writerStats, narrow }) : WRITER_PENDING}</span>
+          )}
           {writerStats && (
             <span className="note-editor__today" data-testid="writer-today">
               {todayText({ locale, today, goal: language.writerDailyGoal ?? null })}

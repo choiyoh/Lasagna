@@ -7,7 +7,6 @@ import { keys } from './keys';
 import { changeLanguage, changeWriterSettings } from './language';
 import { useLanguage } from './useLocale';
 import { McpSettings } from './McpSettings';
-import { showTextPrompt } from '@nopsidian/editor/nops';
 
 interface Props {
   theme: ThemeChoice;
@@ -18,8 +17,8 @@ interface Props {
   onOpenTrash: () => void;
   onOpenNote: (path: string) => void;
   onReverted: (path: string, kind: 'restored' | 'trashed') => void;
-  /** 작품(폴더+템플릿) 만들기 — 작가 모드에서만 버튼이 보인다 */
-  onCreateWork?: (name: string) => void;
+  /** 작품 만들기 대화상자를 연다 — 작가 모드에서만 버튼이 보인다 */
+  onCreateWork?: () => void;
 }
 
 const LANGUAGE_KEY: Record<LanguageSetting, Parameters<typeof t>[0]> = {
@@ -244,14 +243,7 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
                   {t('settings.workCreate')}
                   <small className="muted">{t('settings.workCreateHint')}</small>
                 </span>
-                <button
-                  data-testid="work-create"
-                  onClick={() => {
-                    void showTextPrompt(t('work.namePrompt'), '').then((name) => {
-                      if (name !== null) onCreateWork(name);
-                    });
-                  }}
-                >
+                <button data-testid="work-create" onClick={() => onCreateWork()}>
                   {t('settings.workCreate')}
                 </button>
               </div>

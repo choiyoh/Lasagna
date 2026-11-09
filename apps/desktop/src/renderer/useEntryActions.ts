@@ -7,7 +7,7 @@ import type { NoteSummary } from '@nopsidian/ipc-contract';
 import type { ConfirmState, Toast } from './app-types';
 import { flushAll } from './flush';
 import { withNoteCover, withNoteIcon } from './note-icon';
-import { characterNoteMarkdown, characterTemplateCandidates, episodeNoteMarkdown, episodeTemplateCandidates, validateWorkName, workPlan, withGoalChars } from '@nopsidian/core';
+import { characterNoteMarkdown, characterTemplateCandidates, episodeNoteMarkdown, episodeTemplateCandidates, validateWorkName, workPlan, withGoalChars, type WorkKind } from '@nopsidian/core';
 import { freshNotes, untitledPath } from './note-title';
 import { placeGroupInOrder, remapOrder, type SidebarOrder } from './sidebar-order';
 import type { TreeNode } from './sidebar/build-tree';
@@ -284,13 +284,13 @@ export function useEntryActions(deps: EntryActionDeps) {
    * 같은 이름의 폴더가 있으면 덮어쓰지 않고 알린다. 실패해도 이미 만든 것만 남는다.
    */
   const createWork = useCallback(
-    async (rawName: string) => {
+    async (rawName: string, kind: WorkKind = 'serial') => {
       const problem = validateWorkName(rawName);
       if (problem) {
         setToast({ message: t(`work.err.${problem}`) });
         return;
       }
-      const plan = workPlan(rawName, getLanguage().locale);
+      const plan = workPlan(rawName, getLanguage().locale, kind);
       if (!plan) return;
       try {
         const folders = await window.nops.folder.list();

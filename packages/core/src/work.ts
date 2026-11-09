@@ -12,12 +12,21 @@ import { splitFrontmatter } from './markdown/frontmatter.js';
 
 export type WorkLocale = 'ko' | 'en';
 
+/** 작품 구조 — 기본형(연재) / 출판형(원고·교정 등 출판 폴더 추가). */
+export type WorkKind = 'serial' | 'publish';
+
 export interface WorkNames {
   /** 작품 안 폴더 이름 */
   episodes: string;
   characters: string;
   storyBible: string;
   templates: string;
+  /** 출판형 전용 폴더 */
+  manuscript: string;
+  proofreading: string;
+  synopsis: string;
+  cover: string;
+  royalties: string;
   /** 템플릿 노트 파일 이름(확장자 제외) */
   characterSheet: string;
   episode: string;
@@ -32,6 +41,11 @@ export function workNames(locale: WorkLocale): WorkNames {
     characters: tr('work.folder.characters'),
     storyBible: tr('work.folder.storyBible'),
     templates: tr('work.folder.templates'),
+    manuscript: tr('work.folder.manuscript'),
+    proofreading: tr('work.folder.proofreading'),
+    synopsis: tr('work.folder.synopsis'),
+    cover: tr('work.folder.cover'),
+    royalties: tr('work.folder.royalties'),
     characterSheet: tr('work.template.characterSheet'),
     episode: tr('work.template.episode'),
     worldbuilding: tr('work.template.worldbuilding'),
@@ -64,6 +78,8 @@ export function worldbuildingMarkdown(locale: WorkLocale): string {
 export interface WorkPlan {
   /** 검증을 통과한 작품 이름(= 볼트 루트의 폴더 이름) */
   name: string;
+  /** 이 계획이 만드는 구조 */
+  kind: WorkKind;
   folders: string[];
   files: { path: string; content: string }[];
 }
@@ -90,17 +106,30 @@ export function validateWorkName(raw: string): WorkNameError | null {
  * 작품 생성 계획. 이름이 잘못되면 `null`(호출자가 오류 문구를 고른다).
  * 계획은 만들기만 하고 아무것도 쓰지 않는다(중복 확인은 호출자 몫).
  */
-export function workPlan(rawName: string, locale: WorkLocale): WorkPlan | null {
+export function workPlan(rawName: string, locale: WorkLocale, kind: WorkKind = 'serial'): WorkPlan | null {
   if (validateWorkName(rawName) !== null) return null;
   const name = rawName.trim();
   const names = workNames(locale);
-  const folders = [name, `${name}/${names.episodes}`, `${name}/${names.characters}`, `${name}/${names.storyBible}`, `${name}/${names.templates}`];
+  const folders =
+    kind === 'publish'
+      ? [
+          name,
+          `${name}/${names.manuscript}`,
+          `${name}/${names.proofreading}`,
+          `${name}/${names.synopsis}`,
+          `${name}/${names.cover}`,
+          `${name}/${names.royalties}`,
+          `${name}/${names.characters}`,
+          `${name}/${names.storyBible}`,
+          `${name}/${names.templates}`,
+        ]
+      : [name, `${name}/${names.episodes}`, `${name}/${names.characters}`, `${name}/${names.storyBible}`, `${name}/${names.templates}`];
   const files = [
     { path: `${name}/${names.templates}/${names.characterSheet}.md`, content: characterSheetMarkdown(locale) },
     { path: `${name}/${names.templates}/${names.episode}.md`, content: episodeMarkdown(locale) },
     { path: `${name}/${names.templates}/${names.worldbuilding}.md`, content: worldbuildingMarkdown(locale) },
   ];
-  return { name, folders, files };
+  return { name, kind, folders, files: files.map((f) => ({ ...f, path: `${name}/${names.templates}/${f.path.split('/').pop() ?? ''}` })) };
 }
 
 /** 템플릿 선택기에서 작품 템플릿만 골라내는 데 쓰는 하위 폴더 이름들(두 언어 모두). */

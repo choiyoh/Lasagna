@@ -129,3 +129,41 @@ describe('새 회차 노트', () => {
     expect(note).not.toContain('name:'); // 회차는 속성을 넣지 않는다
   });
 });
+
+describe('출판형 구조(W2b)', () => {
+  it('한국어: 원고·교정·시놉시스 양식·표지·인세지급 + 캐릭터·설정집·템플릿', () => {
+    const plan = workPlan('달빛', 'ko', 'publish');
+    expect(plan?.kind).toBe('publish');
+    expect(plan?.folders).toEqual([
+      '달빛',
+      '달빛/원고',
+      '달빛/교정',
+      '달빛/시놉시스 양식',
+      '달빛/표지',
+      '달빛/인세지급',
+      '달빛/캐릭터',
+      '달빛/설정집',
+      '달빛/템플릿',
+    ]);
+    // 템플릿 노트 3개만 만들고 샘플 원고·정산 파일은 만들지 않는다
+    expect(plan?.files.map((f) => f.path)).toEqual(['달빛/템플릿/캐릭터 시트.md', '달빛/템플릿/회차.md', '달빛/템플릿/세계관·복선.md']);
+  });
+
+  it('영어 이름', () => {
+    expect(workPlan('Moon', 'en', 'publish')?.folders).toEqual([
+      'Moon',
+      'Moon/Manuscript',
+      'Moon/Proofreading',
+      'Moon/Synopsis',
+      'Moon/Cover',
+      'Moon/Royalties',
+      'Moon/Characters',
+      'Moon/Story bible',
+      'Moon/Templates',
+    ]);
+  });
+
+  it('기본형은 그대로(회귀)', () => {
+    expect(workPlan('Moon', 'en')?.folders).toEqual(['Moon', 'Moon/Episodes', 'Moon/Characters', 'Moon/Story bible', 'Moon/Templates']);
+  });
+});

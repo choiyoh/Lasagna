@@ -60,18 +60,22 @@ async function prompt(page: Page, text: string): Promise<void> {
   await input.press('Enter');
 }
 
-async function createWork(page: Page, name: string): Promise<void> {
-  await page.getByTestId('settings-btn').click();
-  await page.getByTestId('work-create').click();
-  await prompt(page, name);
-  await page.keyboard.press('Escape');
-}
-
+/** 필요하면 작품을 만든다(테스트 간 의존 제거). */
 async function ensureWork(page: Page, name: string): Promise<void> {
   await expect(page.getByTestId('work-section')).toBeVisible({ timeout: 15_000 });
   const card = page.getByTestId('work-card').filter({ hasText: name });
   if ((await card.count()) === 0) await createWork(page, name);
   await expect(page.getByTestId('work-card').filter({ hasText: name })).toBeVisible({ timeout: 15_000 });
+}
+
+async function createWork(page: Page, name: string): Promise<void> {
+  await page.getByTestId('settings-btn').click();
+  await page.getByTestId('work-create').click();
+  await expect(page.getByTestId('work-dialog')).toBeVisible();
+  await page.getByTestId('work-dialog-name').fill(name);
+  await page.getByTestId('work-dialog-create').click();
+  await expect(page.getByTestId('work-dialog')).toHaveCount(0);
+  await page.keyboard.press('Escape');
 }
 
 test.beforeAll(async () => {
@@ -242,4 +246,35 @@ test('작가 모드 OFF 에서는 배지·새 회차 버튼이 DOM 에 없다', 
   await resetWriter(page, { mode: false });
   await expect(page.getByTestId('new-episode')).toHaveCount(0);
   await expect(page.getByTestId('tree-badge')).toHaveCount(0);
+});
+
+test('사이드바 + 작품 만들기도 같은 대화상자를 연다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page);
+  await page.getByTestId('work-add').click();
+  await expect(page.getByTestId('work-dialog')).toBeVisible();
+  await expect(page.getByTestId('work-structure-serial')).toHaveAttribute('aria-checked', 'true'); // 기본형이 기본
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('work-dialog')).toHaveCount(0);
+});
+
+test('목표 프리셋을 펼쳐도 상태줄 높이가 변하지 않는다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page);
+  await page.locator('aside.sidebar [data-path="메모.md"]').click();
+  await expect(page.getByTestId('writer-status')).toBeVisible();
+  const status = page.getByTestId('writer-status');
+  const before = (await status.boundingBox())?.height ?? 0;
+  if ((await page.getByTestId('writer-goal-set').count()) > 0) await page.getByTestId('writer-goal-set').click();
+  else await page.getByTestId('writer-goal-edit').click();
+  await expect(page.getByTestId('writer-goal-presets')).toBeVisible();
+  const after = (await status.boundingBox())?.height ?? 0;
+  expect(after).toBe(before); // 팝오버라 바 높이는 그대로
+  await page.setViewportSize({ width: 900, height: 800 });
+  const before920 = (await status.boundingBox())?.height ?? 0;
+  await expect(page.getByTestId('writer-goal-presets')).toBeVisible(); // 920 에서도 같은 팝오버
+  expect((await status.boundingBox())?.height ?? 0).toBe(before920);
+  await page.setViewportSize({ width: 1440, height: 900 });
 });

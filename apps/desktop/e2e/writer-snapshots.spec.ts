@@ -104,6 +104,15 @@ test('1교 칩으로 저장 → 수정 → diff → 되돌리기(자동 이력�
   await page.getByTestId('snapshot-add').click();
   await page.getByTestId('snapshot-quick').first().click(); // 1교
   await page.getByTestId('snapshot-save').click();
+  // 행 모양: 이름·메타가 한 줄이고 행 높이가 부풀지 않는다(디자이너 QA 회귀)
+  const snapRow = page.getByTestId('snapshot-entry').first().locator('..');
+  const rowBox = await snapRow.boundingBox();
+  expect(rowBox?.height ?? 0).toBeLessThan(48);
+  // 이름 버튼 자체도 한 줄 높이(줄바꿈으로 쌓이지 않는다)이고 nowrap 이다.
+  const entryBox = await page.getByTestId('snapshot-entry').first().boundingBox();
+  expect(entryBox?.height ?? 0).toBeLessThan(40);
+  const whiteSpace = await page.getByTestId('snapshot-entry').first().evaluate((el) => getComputedStyle(el).whiteSpace);
+  expect(whiteSpace).toBe('nowrap');
   await expect(page.getByTestId('snapshot-entry')).toHaveCount(1);
   await expect(page.getByTestId('snapshot-entry')).toContainText('1교');
 

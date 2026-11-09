@@ -501,7 +501,7 @@ html[lang='en'] .dockbody__tabs { flex-wrap: wrap; row-gap: 2px; }
 .marks__x:hover { background: var(--hover); }
 
 .history { padding: 8px; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: auto; }
-.history__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; max-height: 40%; overflow: auto; }
+.history__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; max-height: 40%; overflow-y: auto; overflow-x: hidden; }
 .history__list button { width: 100%; text-align: left; padding: 3px 8px; border-radius: 6px; }
 .history__list button:hover, .history__list button.active { background: var(--hover); }
 .history__bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
@@ -1021,9 +1021,14 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
 .snapshots__quick { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; }
 .snapshots__quick button { font-size: 10.5px; padding: 0 7px; border: 1px dashed var(--border); border-radius: 99px; background: none; color: var(--muted); cursor: pointer; }
 .snapshots__quick button:hover { color: var(--fg); border-color: var(--accent); }
-.snapshots__row { display: flex; align-items: center; gap: 2px; }
-.snapshots__row > button:first-child { flex: 1; min-width: 0; text-align: left; }
-.snapshots__more { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0 4px; }
+.snapshots .history__list { max-height: none; overflow: visible; }
+.snapshots__row { display: flex; align-items: center; gap: 2px; white-space: nowrap; width: 100%; box-sizing: border-box; }
+/* 행 액션(⋯·×)은 폭을 차지하지 않게 하고, 이름 버튼만 남는 폭을 쓴다(.history__list button 의 width:100% 무효화) */
+.snapshots__row > button { width: auto; }
+.snapshots__row > button:first-child { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 6px; text-align: left; overflow: hidden; }
+.snapshots__row > button:first-child b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.snapshots__row > button:first-child .muted { white-space: nowrap; flex: none; font-size: 11px; }
+.snapshots__more { flex: none; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0 4px; line-height: 1.4; }
 .snapshots__more:hover { color: var(--fg); }
 .snapshots__sep { padding: 6px 12px 2px; }
 @media (max-width: 920px) {

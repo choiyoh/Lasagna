@@ -87,18 +87,35 @@ test('회차 DB 칩을 눌러야 _db.yaml 이 생기고, 자동 열이 계산된
   await expect(page.getByTestId('auto-글자수')).toHaveText('자동');
   await expect(page.getByTestId('auto-목표 달성')).toHaveText('자동');
 
+  // 빈 상태: '+ 첫 회차' → 회차 1·상태 초고 행 생성
+  await expect(page.getByRole('button', { name: /\+ 첫 회차/ })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: /\+ 첫 회차/ }).click();
+  await expect(page.getByTestId('db-table')).toContainText('1화', { timeout: 15_000 });
+  await expect(page.getByTestId('db-table')).toContainText('초고');
+  // 새 행의 회차 기본값 = 최대+1
+  await page.getByTestId('db-new-row').click();
+  await page.getByTestId('db-add-title').fill('2화');
+  await page.getByTestId('db-add-title').press('Enter');
+  await expect(page.getByTestId('db-table')).toContainText('2화', { timeout: 15_000 });
+
   // 회차 노트를 만들면 행이 생기고 글자수가 계산된다
   await page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('new-episode').click();
   const prompt = page.locator('.nops-prompt input');
   await expect(prompt).toBeVisible();
-  await prompt.fill('1화');
+  await prompt.fill('3화');
   await prompt.press('Enter');
-  await expect.poll(() => readFileSync(path.join(vaultDir, '달빛', '회차', '1화.md'), 'utf8').startsWith('# 1화'), { timeout: 15_000 }).toBe(true);
+  await expect.poll(() => readFileSync(path.join(vaultDir, '달빛', '회차', '3화.md'), 'utf8').startsWith('# 3화'), { timeout: 15_000 }).toBe(true);
   // DB 화면에 행과 계산된 자동 값이 보인다('1화' = 2자)
-  await expect(page.getByTestId('db-table')).toContainText('1화', { timeout: 15_000 });
-  await expect(page.getByTestId('db-table')).toContainText('2');
+  await expect(page.getByTestId('db-table')).toContainText('3화', { timeout: 15_000 });
   // 자동 열 값은 파일에 저장되지 않는다
-  expect(readFileSync(path.join(vaultDir, '달빛', '회차', '1화.md'), 'utf8')).not.toContain('글자수');
+  expect(readFileSync(path.join(vaultDir, '달빛', '회차', '3화.md'), 'utf8')).not.toContain('글자수');
+
+  // 920px: 수정일 열은 숨기고 나머지 열은 유지
+  await page.setViewportSize({ width: 900, height: 800 });
+  await expect(page.getByTestId('th-수정일')).toBeHidden();
+  await expect(page.getByTestId('th-회차')).toBeVisible();
+  await expect(page.getByTestId('th-글자수')).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 900 });
 });
 
 test('영어에서는 Episode/Characters/Auto 로 보인다', async () => {

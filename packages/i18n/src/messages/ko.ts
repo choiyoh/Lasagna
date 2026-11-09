@@ -886,6 +886,7 @@ export const ko = {
   'db.openCenter': '가운데 창',
   'db.more': '더 보기',
   'db.menu': '데이터베이스 메뉴',
+  'db.firstEpisode': "+ 첫 회차",
   'db.newRow': '+ 새 행',
   'db.close': '닫기',
   'db.closeHint': '닫기 (Esc)',

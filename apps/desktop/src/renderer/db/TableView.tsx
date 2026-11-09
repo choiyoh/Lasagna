@@ -274,6 +274,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                 setDragCol(null);
               }}
               role="columnheader"
+              data-prop={c}
               aria-sort={sortOf(c) === 'asc' ? 'ascending' : sortOf(c) === 'desc' ? 'descending' : 'none'}>
               {onSort || onHide ? (
                 <button className="dbtable__thbtn" onClick={(e) => toggleMenu(c, e.currentTarget)} aria-haspopup="menu" aria-expanded={menu?.col === c} data-testid={`th-${c}`}>
@@ -381,6 +382,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                       key={c}
                       className={isEd ? 'dbtable__td editing' : 'dbtable__td'}
                       style={{ width: w(c) }}
+                      data-prop={c}
                       role="cell"
                       onClick={() => {
                         if (c === TITLE) return;

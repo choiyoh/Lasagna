@@ -515,6 +515,23 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           <WorkSection
             locale={locale}
             works={works}
+            goalTitles={Object.fromEntries(
+              works.map((w) => {
+                const goal = workGoals[w.name];
+                if (!goal) return [w.name, ''];
+                const progress = calcWorkGoal(goal, { episodes: w.episodes, chars: w.chars, charsNoSpace: w.charsNoSpace }, new Date());
+                const deadline = goal.deadline ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(`${goal.deadline}T00:00:00`)) : '';
+                return [
+                  w.name,
+                  progress.daysLeft === null
+                    ? t('workGoal.noDeadlineTitle')
+                    : t('workGoal.deadlineTitle', {
+                        date: deadline,
+                        days: progress.daysLeft,
+                      }),
+                ];
+              }),
+            )}
             goalLines={Object.fromEntries(
               works.map((w) => {
                 const goal = workGoals[w.name];
@@ -838,6 +855,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               goal={workGoals[goalWork] ?? null}
               current={{ episodes: summary.episodes, chars: summary.chars, charsNoSpace: summary.charsNoSpace }}
               today={new Date()}
+              todayChars={workToday}
               onClose={() => setGoalWork(null)}
               onSave={(goal) => {
                 void window.nops.settings

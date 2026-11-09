@@ -16,6 +16,8 @@ interface Props {
   onCreateEpisode: (work: string) => void;
   /** 작품별 목표선 문구(없으면 목표 설정 버튼) */
   goalLines: Record<string, string>;
+  /** 목표선 툴팁(마감일·남은 일수) */
+  goalTitles: Record<string, string>;
   onOpenGoal: (work: string) => void;
 }
 
@@ -42,7 +44,7 @@ export function workMetaText(locale: 'ko' | 'en', work: Pick<WorkSummary, 'episo
  * 작가용 사이드바의 '작품' 섹션. 작가 모드에서만 렌더된다(일반 모드는 이 DOM 자체가 없다).
  * 카드: 회차 수·총 글자수, 일일 목표가 있으면 오늘 진행 막대. 칩: 캐릭터/설정집(폴더 펼침).
  */
-export function WorkSection({ locale, works, spacing, narrow, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter, onCreateEpisode, goalLines, onOpenGoal }: Props) {
+export function WorkSection({ locale, works, spacing, narrow, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter, onCreateEpisode, goalLines, goalTitles, onOpenGoal }: Props) {
   const tr = (key: Parameters<typeof translate>[1], params?: Record<string, string | number>) => translate(locale, key, params);
   const count = (n: number) => formatNumber(n, locale);
   const ratio = dailyGoal !== null && dailyGoal > 0 ? Math.min(1, Math.max(0, today / dailyGoal)) : 0;
@@ -62,7 +64,12 @@ export function WorkSection({ locale, works, spacing, narrow, today, dailyGoal, 
               <div className="workcard__meta" data-testid="work-meta">
                 {workMetaText(locale, work, spacing)}
               </div>
-              <button className="workcard__goal-line" data-testid="work-goal-line" onClick={() => onOpenGoal(work.name)}>
+              <button
+                className="workcard__goal-line"
+                data-testid="work-goal-line"
+                title={goalTitles[work.name] || undefined}
+                onClick={() => onOpenGoal(work.name)}
+              >
                 {goalLines[work.name] || tr('work.goalSet')}
               </button>
               {dailyGoal !== null && dailyGoal > 0 ? (

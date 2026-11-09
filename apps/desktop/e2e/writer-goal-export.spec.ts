@@ -94,6 +94,8 @@ test('작품 목표를 저장하면 카드 목표선이 보이고 재시작 후 
   await page.getByTestId('work-goal-save').click();
   await expect(page.getByTestId('work-goal-dialog')).toHaveCount(0);
   await expect(line).toHaveText(/완결 2\/80화 · 하루 [\d,]+자/);
+  // 툴팁: 마감일·남은 일수
+  await expect(line).toHaveAttribute('title', /마감 .*일 남음/);
 
   // 저장 위치는 userData 이고 볼트에는 목표 파일을 만들지 않는다
   const userData = path.join(base, 'userdata');
@@ -115,7 +117,7 @@ test('일일 목표로 설정을 누르면 전역 일일 목표가 계산값으�
   const line = page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-goal-line');
   await line.click();
   const perDay = await page.getByTestId('work-goal-summary').innerText();
-  const value = Number((perDay.match(/([\d,]+)\s*자\s*$/) ?? [])[1]?.replace(/,/g, '') ?? '0');
+  const value = Number((perDay.match(/하루 ([\d,]+)자/) ?? [])[1]?.replace(/,/g, '') ?? '0');
   expect(value).toBeGreaterThan(0);
   await page.getByTestId('work-goal-set-daily').click();
   await expect.poll(async () => (await page.evaluate(() => window.nops.settings.language())).writerDailyGoal, { timeout: 10_000 }).toBe(value);
@@ -154,6 +156,21 @@ test('복사 미리보기: 플랫폼용은 제목·기호를 빼고, 클립보�
   expect(copied).toBe(platform);
 });
 
+test('카카오 장르 힌트는 선택한 장르 하나만, 오늘 비교 줄도 계산된다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page);
+  await page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-goal-line').click();
+  await page.getByTestId('work-goal-preset-kakao').click();
+  await expect(page.getByTestId('work-goal-hint')).toContainText(/장르를 고르면/);
+  await page.getByTestId('work-goal-genre').selectOption('romance');
+  await expect(page.getByTestId('work-goal-hint')).toContainText('~80');
+  await expect(page.getByTestId('work-goal-hint')).not.toContainText('판타지');
+  // 오늘 쓴 글자수와 필요량 비교(사실만)
+  await expect(page.getByTestId('work-goal-today')).toContainText(/오늘 [\d,]+자 · 필요량의 \d+%/);
+  await page.keyboard.press('Escape');
+});
+
 test('일반 모드에는 목표선·복사 버튼이 DOM 에 없다', async () => {
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
@@ -170,5 +187,7 @@ test('영어 문구로 보인다', async () => {
   await expect(page.getByTestId('work-goal-line')).toHaveText(/episodes/);
   await page.getByTestId('work-goal-line').click();
   await expect(page.getByTestId('work-goal-dialog')).toContainText('Work goal');
+  // 영어 복수형: 현재 회차가 1 이하일 때 단수 문구가 나온다(데이터는 2회차라 other).
+  await expect(page.getByTestId('work-goal-summary')).toContainText(/episodes left/);
   await page.keyboard.press('Escape');
 });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { t, translate } from '@nopsidian/i18n';
-import { calcWorkGoal, WORK_GOAL_PRESETS, type WorkGoal, type WorkGoalPreset } from '@nopsidian/core';
+import { pluralCategory, t, translate } from '@nopsidian/i18n';
+import { calcWorkGoal, KAKAO_EPISODE_HINTS, WORK_GOAL_PRESETS, type WorkGoal, type WorkGoalPreset } from '@nopsidian/core';
 
 interface Props {
   work: string;
@@ -8,6 +8,8 @@ interface Props {
   goal: WorkGoal | null;
   current: { episodes: number; chars: number; charsNoSpace: number };
   today: Date;
+  /** 오늘 쓴 글자수(상태줄과 같은 값) */
+  todayChars: number;
   onSave: (goal: WorkGoal | null) => void;
   onSetDaily: (perDay: number) => void;
   onClose: () => void;
@@ -16,7 +18,7 @@ interface Props {
 const fmt = (locale: 'ko' | 'en', n: number) => new Intl.NumberFormat(locale).format(n);
 
 /** 작품 목표 대화상자 — 플랫폼 프리셋은 회당 글자수·기준만 채우고 완결 회차는 힌트로만 보여 준다. */
-export function WorkGoalDialog({ work, locale, goal, current, today, onSave, onSetDaily, onClose }: Props) {
+export function WorkGoalDialog({ work, locale, goal, current, today, todayChars, onSave, onSetDaily, onClose }: Props) {
   const tr = (key: Parameters<typeof translate>[1], params?: Record<string, string | number>) => translate(locale, key, params);
   const [preset, setPreset] = useState<WorkGoalPreset>(goal?.preset ?? 'naver');
   const [episodes, setEpisodes] = useState(String(goal?.episodes ?? ''));
@@ -58,11 +60,15 @@ export function WorkGoalDialog({ work, locale, goal, current, today, onSave, onS
     }
   };
 
+  // 카카오는 선택한 장르의 권장 범위만 힌트로 보여 준다(고르기 전에는 안내 한 줄).
   const hint =
     preset === 'naver' ? tr('workGoal.hint.naver')
-    : preset === 'kakao' ? tr('workGoal.hint.kakao')
-    : preset === 'ridi' ? tr('workGoal.hint.ridi')
-    : null;
+    : preset === 'kakao'
+      ? genre
+        ? tr('workGoal.hint.kakaoGenre', { range: KAKAO_EPISODE_HINTS[genre] ?? '' })
+        : tr('workGoal.hint.kakaoPick')
+      : preset === 'ridi' ? tr('workGoal.hint.ridi')
+      : null;
 
   const save = () => {
     if (!Number.isFinite(episodesNum) || episodesNum <= 0) {
@@ -133,8 +139,16 @@ export function WorkGoalDialog({ work, locale, goal, current, today, onSave, onS
         {error ? <p className="error" role="alert" data-testid="work-goal-error">{error}</p> : null}
 
         <div className="workgoaldlg__summary" data-testid="work-goal-summary">
-          <span>{tr('workGoal.remaining', { episodes: fmt(locale, progress.remainingEpisodes) })}</span>
-          <span>{tr('workGoal.remainingChars', { chars: fmt(locale, progress.remainingChars) })}</span>
+          <span>
+            {tr(`workGoal.remaining.${pluralCategory(locale, progress.remainingEpisodes)}`, {
+              episodes: fmt(locale, progress.remainingEpisodes),
+            })}
+          </span>
+          <span>
+            {tr(`workGoal.remainingChars.${pluralCategory(locale, progress.remainingChars)}`, {
+              chars: fmt(locale, progress.remainingChars),
+            })}
+          </span>
           <span>
             {progress.status === 'done'
               ? tr('workGoal.done')
@@ -144,8 +158,13 @@ export function WorkGoalDialog({ work, locale, goal, current, today, onSave, onS
                   ? tr('workGoal.dueToday')
                   : progress.perDay === null
                     ? tr('workGoal.noDeadline')
-                    : tr('workGoal.perDay', { chars: fmt(locale, progress.perDay) })}
+                    : tr(`workGoal.perDay.${pluralCategory(locale, progress.perDay)}`, { chars: fmt(locale, progress.perDay) })}
           </span>
+          {progress.perDay !== null && progress.perDay > 0 ? (
+            <span data-testid="work-goal-today">
+              {tr('workGoal.today', { today: fmt(locale, todayChars), percent: Math.round((todayChars / progress.perDay) * 100) })}
+            </span>
+          ) : null}
         </div>
 
         <div className="dialog__actions">

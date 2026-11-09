@@ -35,3 +35,17 @@ describe('작품 목표 저장소', () => {
     expect(new WriterWorksStore(f).all('v1')).toEqual({ good: goal });
   });
 });
+
+describe('깨진 마감일 복구', () => {
+  it('형식이 틀리거나 없는 날짜는 그 필드만 버리고 목표는 유지한다(읽기·쓰기 모두)', () => {
+    const f = file();
+    const store = new WriterWorksStore(f);
+    // 쓰기 경로
+    store.set('v1', 'A', { ...goal, deadline: 'abc' });
+    expect(store.all('v1').A?.deadline).toBeNull();
+    expect(store.all('v1').A?.episodes).toBe(80);
+    // 읽기 경로(예전 파일에 깨진 값이 남아 있는 경우)
+    writeFileSync(f, JSON.stringify({ version: 1, vaults: { v1: { B: { ...goal, deadline: '2026-13-45' } } } }));
+    expect(new WriterWorksStore(f).all('v1').B).toMatchObject({ deadline: null, episodes: 80 });
+  });
+});

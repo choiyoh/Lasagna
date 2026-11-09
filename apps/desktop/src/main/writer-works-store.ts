@@ -1,5 +1,5 @@
 import { atomicWrite } from '@nopsidian/core';
-import type { WorkGoal } from '@nopsidian/core';
+import { parseLocalDay, type WorkGoal } from '@nopsidian/core';
 import { readFileSync } from 'node:fs';
 
 interface WriterWorksFile {
@@ -24,6 +24,12 @@ function isGoal(value: unknown): value is WorkGoal {
   );
 }
 
+/** 깨진 마감일(형식·존재하지 않는 날짜)은 그 필드만 버리고 목표는 살린다. */
+function normalize(goal: WorkGoal): WorkGoal {
+  if (goal.deadline !== null && !parseLocalDay(goal.deadline)) return { ...goal, deadline: null };
+  return goal;
+}
+
 /** userData/writer-works.json — 작품 목표(볼트·노트에는 기록하지 않는다). 깨지면 빈 값으로 복구. */
 export class WriterWorksStore {
   private data: WriterWorksFile | null = null;
@@ -42,7 +48,7 @@ export class WriterWorksStore {
       for (const [vaultId, works] of Object.entries(raw.vaults)) {
         if (!works || typeof works !== 'object') continue;
         const clean: Record<string, WorkGoal> = {};
-        for (const [work, goal] of Object.entries(works)) if (isGoal(goal)) clean[work] = goal;
+        for (const [work, goal] of Object.entries(works)) if (isGoal(goal)) clean[work] = normalize(goal);
         if (Object.keys(clean).length > 0) vaults[vaultId] = clean;
       }
       this.data = { version: 1, vaults };
@@ -60,7 +66,7 @@ export class WriterWorksStore {
     const data = this.load();
     const works = { ...(data.vaults[vaultId] ?? {}) };
     if (goal === null) delete works[work];
-    else works[work] = goal;
+    else works[work] = normalize(goal);
     const next: WriterWorksFile = {
       version: 1,
       vaults: { ...data.vaults, ...(Object.keys(works).length > 0 ? { [vaultId]: works } : {}) },

@@ -11,3 +11,13 @@ describe('작품 목표 영어 복수형', () => {
     expect(translate('ko', 'workGoal.remaining.other', { episodes: '1' })).toBe('남은 회차 1');
   });
 });
+
+describe('새 영어 숫자 문구 복수형', () => {
+  it('today·deadlineTitle 1/0/2', () => {
+    expect(translate('en', 'workGoal.today.one', { today: '1', percent: '50' })).toBe('1 character today · 50% of the needed amount');
+    expect(translate('en', 'workGoal.today.other', { today: '0', percent: '0' })).toBe('0 characters today · 0% of the needed amount');
+    expect(translate('en', 'workGoal.today.other', { today: '2', percent: '10' })).toBe('2 characters today · 10% of the needed amount');
+    expect(translate('en', 'workGoal.deadlineTitle.one', { date: 'Dec 1', days: '1' })).toBe('Due Dec 1 · 1 day left');
+    expect(translate('en', 'workGoal.deadlineTitle.other', { date: 'Dec 1', days: '2' })).toBe('Due Dec 1 · 2 days left');
+  });
+});

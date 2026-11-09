@@ -14,7 +14,7 @@ import { changeWriterSettings } from './language';
 import { WorkSection } from './WorkSection';
 import { WorkCreateDialog } from './WorkCreateDialog';
 import { WorkGoalDialog } from './WorkGoalDialog';
-import { calcWorkGoal, goalLineText, type WorkGoal } from '@nopsidian/core';
+import { calcWorkGoal, goalLineText, goalTooltip, parseLocalDay, type WorkGoal } from '@nopsidian/core';
 import { OutlinePanel } from './OutlinePanel';
 import { CommentsPanel } from './CommentsPanel';
 import { TrashDialog } from './TrashDialog';
@@ -520,16 +520,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 const goal = workGoals[w.name];
                 if (!goal) return [w.name, ''];
                 const progress = calcWorkGoal(goal, { episodes: w.episodes, chars: w.chars, charsNoSpace: w.charsNoSpace }, new Date());
-                const deadline = goal.deadline ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(`${goal.deadline}T00:00:00`)) : '';
-                return [
-                  w.name,
-                  progress.daysLeft === null
-                    ? t('workGoal.noDeadlineTitle')
-                    : t('workGoal.deadlineTitle', {
-                        date: deadline,
-                        days: progress.daysLeft,
-                      }),
-                ];
+                // 저장된 마감일이 깨져 있어도 렌더가 죽지 않게(유효한 날짜일 때만 Intl 서식).
+                const day = parseLocalDay(goal.deadline);
+                const deadline = day ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(day) : '';
+                return [w.name, goalTooltip({ locale, progress, deadline: goal.deadline, dateText: deadline })];
               }),
             )}
             goalLines={Object.fromEntries(

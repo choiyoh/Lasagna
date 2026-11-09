@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calcWorkGoal, daysUntil, goalLineText, parseLocalDay, type WorkGoal } from './work-goal.js';
+import { calcWorkGoal, daysUntil, goalLineText, goalTooltip, parseLocalDay, sanitizeWorkGoal, type WorkGoal } from './work-goal.js';
 
 const goal = (over: Partial<WorkGoal> = {}): WorkGoal => ({
   episodes: 80,
@@ -71,5 +71,24 @@ describe('작품 목표·마감 계산', () => {
     expect(goalLineText({ locale: 'ko', episodes: 24, goal: 80, perDay: 4191, narrow: true })).toBe('4,191자/일');
     expect(goalLineText({ locale: 'en', episodes: 24, goal: 80, perDay: 4191, narrow: false })).toBe('24/80 episodes · 4,191 a day');
     expect(goalLineText({ locale: 'ko', episodes: 24, goal: 80, perDay: null, narrow: false })).toBe('완결 24/80화');
+  });
+});
+
+describe('카드 목표선 툴팁·마감일 정규화', () => {
+  it('오늘 마감·지남은 상태 문구, 미래는 날짜·남은 일수(1일 단수)', () => {
+    const today = new Date(2026, 10, 20);
+    const p = (deadline: string) => calcWorkGoal(goal({ deadline }), current, today);
+    expect(goalTooltip({ locale: 'ko', progress: p('2026-11-20'), deadline: '2026-11-20', dateText: '2026. 11. 20.' })).toBe('오늘 마감');
+    expect(goalTooltip({ locale: 'ko', progress: p('2026-11-19'), deadline: '2026-11-19', dateText: '2026. 11. 19.' })).toBe('마감일 지남');
+    expect(goalTooltip({ locale: 'ko', progress: p('2026-11-21'), deadline: '2026-11-21', dateText: '2026. 11. 21.' })).toBe('마감 2026. 11. 21. · 1일 남음');
+    expect(goalTooltip({ locale: 'en', progress: p('2026-11-21'), deadline: '2026-11-21', dateText: 'Nov 21, 2026' })).toBe('Due Nov 21, 2026 · 1 day left');
+    expect(goalTooltip({ locale: 'en', progress: p('2026-12-01'), deadline: '2026-12-01', dateText: 'Dec 1, 2026' })).toBe('Due Dec 1, 2026 · 11 days left');
+    expect(goalTooltip({ locale: 'ko', progress: p(null as unknown as string), deadline: null, dateText: '' })).toBe('마감일 없음');
+  });
+
+  it('잘못된 마감일은 null 로 정리', () => {
+    expect(sanitizeWorkGoal(goal({ deadline: 'abc' })).deadline).toBeNull();
+    expect(sanitizeWorkGoal(goal({ deadline: '2026-13-45' })).deadline).toBeNull();
+    expect(sanitizeWorkGoal(goal({ deadline: '2026-11-21' })).deadline).toBe('2026-11-21');
   });
 });

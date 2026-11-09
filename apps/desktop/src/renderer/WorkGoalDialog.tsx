@@ -162,7 +162,10 @@ export function WorkGoalDialog({ work, locale, goal, current, today, todayChars,
           </span>
           {progress.perDay !== null && progress.perDay > 0 ? (
             <span data-testid="work-goal-today">
-              {tr('workGoal.today', { today: fmt(locale, todayChars), percent: Math.round((todayChars / progress.perDay) * 100) })}
+              {tr(`workGoal.today.${pluralCategory(locale, todayChars)}`, {
+                today: fmt(locale, todayChars),
+                percent: Math.round((todayChars / progress.perDay) * 100),
+              })}
             </span>
           ) : null}
         </div>

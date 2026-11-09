@@ -68,6 +68,11 @@ export function parseLocalDay(value: string | null | undefined): Date | null {
   return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d ? date : null;
 }
 
+/** 저장된 목표의 마감일이 유효한 `YYYY-MM-DD` 가 아니면 '마감일 없음'으로 정리한다(나머지 필드는 유지). */
+export function sanitizeWorkGoal(goal: WorkGoal): WorkGoal {
+  return parseLocalDay(goal.deadline) ? goal : { ...goal, deadline: null };
+}
+
 /** 오늘(로컬)과 마감일(로컬)로 남은 일수. 마감일이 오늘이면 0, 지났으면 음수. */
 export function daysUntil(deadline: string | null, today: Date): number | null {
   const day = parseLocalDay(deadline);
@@ -94,7 +99,18 @@ export function calcWorkGoal(goal: WorkGoal, current: GoalCurrent, today: Date):
   return { status, remainingEpisodes, totalTarget, remainingChars, daysLeft, perDay };
 }
 
-/** 카드 목표선 문구(ko `완결 24/80화 · 하루 4,191자`, en `24/80 episodes · 4,191 a day`). */
+/**
+ * 카드 목표선 툴팁 문구. 마감 오늘/지남은 남은 일수 대신 상태를 보여 준다.
+ * ko: `마감 <날짜> · N일 남음` / `오늘 마감` / `마감일 지남` / `마감일 없음`
+ */
+export function goalTooltip(opts: { locale: 'ko' | 'en'; progress: GoalProgress; deadline: string | null; dateText: string }): string {
+  const { locale, progress, deadline, dateText } = opts;
+  if (progress.daysLeft === null) return translate(locale, 'workGoal.noDeadlineTitle');
+  if (progress.status === 'overdue') return translate(locale, 'workGoal.overdueTitle');
+  if (progress.status === 'dueToday' || progress.daysLeft === 0) return translate(locale, 'workGoal.dueTodayTitle');
+  const key = `workGoal.deadlineTitle.${progress.daysLeft === 1 ? 'one' : 'other'}` as Parameters<typeof translate>[1];
+  return translate(locale, key, { date: dateText || deadline || '', days: progress.daysLeft });
+}
 export function goalLineText(opts: { locale: 'ko' | 'en'; episodes: number; goal: number; perDay: number | null; narrow: boolean }): string {
   const f = (n: number) => new Intl.NumberFormat(opts.locale).format(n);
   const params = { episodes: f(opts.episodes), goal: f(opts.goal), perDay: opts.perDay === null ? '' : f(opts.perDay) };

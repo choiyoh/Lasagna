@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { t, tPlural } from '@nopsidian/i18n';
+import { t, tPlural, translate } from '@nopsidian/i18n';
 import type { DbRow, View } from '@nopsidian/core/db';
 import type { DbQueryResult } from '@nopsidian/ipc-contract';
 import type { Toast } from '../app-types';
@@ -385,8 +385,9 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
   }
   const current: DbData = { ...data, view };
   // 회차 DB 감지: 회차 열(number) + note_chars() 자동 열. → 새 행 회차 기본값·빈 상태 '+ 첫 회차'.
+  const episodeNames = [translate('ko', 'work.db.episode'), translate('en', 'work.db.episode')];
   const episodeCol = Object.keys(data.schema.properties).find(
-    (n) => (n === '회차' || n === 'Episode') && data.schema.properties[n]?.type === 'number',
+    (n) => episodeNames.includes(n) && data.schema.properties[n]?.type === 'number',
   );
   const isEpisodeDb = !!episodeCol && Object.values(data.schema.properties).some((p) => p.type === 'formula' && /\bnote_chars\s*\(/.test(p.expr));
   const statusCol = Object.keys(data.schema.properties).find((n) => data.schema.properties[n]?.type === 'status');
@@ -398,7 +399,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
     : null;
   const addFirstEpisode = () => {
     if (!isEpisodeDb || !episodeCol || nextEpisode === null) return;
-    const title = locale === 'en' ? `Episode ${nextEpisode}` : `${nextEpisode}화`;
+    const title = translate(locale, 'db.episodeTitle', { n: nextEpisode });
     void window.nops.db
       .addRow({ folder, title, values: { [episodeCol]: nextEpisode, ...(statusCol && draftOption ? { [statusCol]: draftOption } : {}) } })
       .then(() => load())

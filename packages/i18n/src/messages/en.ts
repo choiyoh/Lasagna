@@ -885,6 +885,7 @@ export const en: Record<MessageKey, string> = {
   'db.openCenter': 'Center window',
   'db.more': 'More',
   'db.menu': 'Database menu',
+  'db.episodeTitle': "Episode {n}",
   'db.firstEpisode': "+ First episode",
   'db.newRow': '+ New row',
   'db.close': 'Close',

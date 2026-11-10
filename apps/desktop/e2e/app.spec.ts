@@ -2113,6 +2113,18 @@ views:
     expect(m, clip).not.toBeNull();
     const id = m![1]!;
     await expect.poll(() => readFileSync(target, 'utf8'), { timeout: 15000 }).toBe(`# 블록대상\n\n첫 문단\n\n복사할 문단 ^${id}\n\n마지막 문단\n`);
+    // 인덱스가 블록 ID를 반영할 때까지 기다린다(놓친 감시 이벤트는 같은 내용 재터치로 다시 알린다).
+    await expect
+      .poll(
+        async () => {
+          const blocks = await page.evaluate(() => window.nops.link.blocks({ path: '블록대상.md' }));
+          if (blocks.some((b) => b.id === id)) return true;
+          writeExternalNote(target, readFileSync(target));
+          return false;
+        },
+        { timeout: 15000 },
+      )
+      .toBe(true);
 
     // 2) 다른 노트에서 [[블록대상#^ 자동완성 (이미 ID가 있는 블록)
     await open(page, '블록출발');
@@ -2121,15 +2133,15 @@ views:
     await page.keyboard.press('End');
     await page.keyboard.type(' 참고: [[블록대상#^복사');
     const popup = page.locator('.nops-link-suggest');
-    await expect(popup.locator('.is-active')).toContainText('복사할 문단');
-    await expect(popup.locator('.is-active')).toContainText(`^${id}`);
+    await expect(popup.locator('.is-active')).toContainText('복사할 문단', { timeout: 15000 });
+    await expect(popup.locator('.is-active')).toContainText(`^${id}`, { timeout: 15000 });
     await page.keyboard.press('Enter');
     await expect.poll(() => readFileSync(source, 'utf8'), { timeout: 15000 }).toContain(`[[블록대상#^${id}]]`);
 
     // 3) ID가 없는 블록을 고르면 대상 노트에 ID가 새로 붙는다
     await page.keyboard.type(' 또 [[아이디없음#^붙일');
-    await expect(popup.locator('.is-active')).toContainText('붙일 문단 하나');
-    await expect(popup.locator('.is-active')).toContainText('ID를 새로');
+    await expect(popup.locator('.is-active')).toContainText('붙일 문단 하나', { timeout: 15000 });
+    await expect(popup.locator('.is-active')).toContainText('ID를 새로', { timeout: 15000 });
     await page.keyboard.press('Enter');
     await expect
       .poll(() => readFileSync(plain, 'utf8'), { timeout: 15000 })

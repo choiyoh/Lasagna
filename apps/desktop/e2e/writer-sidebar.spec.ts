@@ -213,7 +213,8 @@ test('새 회차를 만들면 회차 행 글자수 배지가 보이고 입력하
   await openVaultIfNeeded(page);
   await resetWriter(page);
   await createWork(page, '배지작품');
-  await page.getByTestId('new-episode').click();
+  // 작품 카드가 여러 개면 전역 로케이터가 2개를 잡는다 — 이 작품 카드로 한정한다.
+  await page.getByTestId('work-card').filter({ hasText: '배지작품' }).getByTestId('new-episode').click();
   await prompt(page, '2화');
   await expect(page.locator('.ProseMirror h1')).toHaveText('2화');
   // 실제로 만들어진 경로를 트리에서 확인한다(작품 이름이 중복되면 번호가 붙을 수 있다).

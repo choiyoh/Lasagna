@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { presentBackgroundWindow, type PresentableWindow } from './e2e-window';
+import { BACKGROUND_BOUNDS, backgroundWindowOptions, presentBackgroundWindow, type PresentableWindow } from './e2e-window';
 
 const fakeWindow = () => {
   const calls: string[] = [];
@@ -38,5 +38,16 @@ describe('presentBackgroundWindow', () => {
     delete (win as { setFocusable?: unknown }).setFocusable;
     expect(() => presentBackgroundWindow(win, { unfocusable: true })).not.toThrow();
     expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(true);
+  });
+});
+
+describe('backgroundWindowOptions', () => {
+  it('e2e 에서는 생성 순간부터 숨김·투명·화면 밖', () => {
+    expect(backgroundWindowOptions(true)).toEqual({ show: false, opacity: 0, x: BACKGROUND_BOUNDS.x, y: BACKGROUND_BOUNDS.y });
+    expect(BACKGROUND_BOUNDS.x).toBeLessThan(0);
+  });
+
+  it('배포(비 e2e) 실행에서는 창 옵션이 이전과 같다(빈 객체)', () => {
+    expect(backgroundWindowOptions(false)).toEqual({});
   });
 });

@@ -72,6 +72,8 @@ interface Props {
   focusMode?: boolean;
   /** 타자기 스크롤 켜짐(설정) */
   typewriter?: boolean;
+  /** 작가 모드 '이전 회차' — 없으면 버튼을 그리지 않는다(일반 모드는 이 prop 자체가 없다) */
+  previousEpisode?: { available: boolean; onOpen: () => void };
 }
 
 /** 목표 빠른 선택 — 글자수와 그 플랫폼의 기준. 누르면 입력칸에 숫자만 채운다(저장은 사용자가 확인). */
@@ -128,7 +130,7 @@ function scrollToFocus(editor: Editor, focus: { heading: string | null; block: s
  * 열기: 읽기(hash) → 파싱 → 표시. 편집 500ms 뒤 `note.save`(baseHash로 외부 변경 감지).
  * 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다.
  */
-export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename, onSetGoal, focusMode = false, typewriter = true }: Props) {
+export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename, onSetGoal, focusMode = false, typewriter = true, previousEpisode }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
@@ -896,6 +898,17 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         {onRename && (
           <button className="note-editor__mode" onClick={onRename} title={t('note.renameTitle')}>
             {t('note.rename')}
+          </button>
+        )}
+        {writer && previousEpisode && (
+          <button
+            className="note-editor__mode note-editor__mode--previous"
+            data-testid="previous-episode"
+            disabled={!previousEpisode.available}
+            title={previousEpisode.available ? t('writer.previousEpisode') : t('writer.previousNone')}
+            onClick={previousEpisode.onOpen}
+          >
+            {t('writer.previousEpisode')}
           </button>
         )}
         {writer && (

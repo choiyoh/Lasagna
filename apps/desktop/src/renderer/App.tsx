@@ -779,6 +779,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                       ? { previousEpisode: { available: !!previousOf(p), onOpen: () => { const prev = previousOf(p); if (prev) openPrevious(p, prev); } } }
                       : {})}
                     refocus={refocus?.path === p ? refocus.tick : undefined}
+                    onRefocusDone={() => setRefocus((cur) => (cur?.path === p ? null : cur))}
                   />
                 </ErrorBoundary>
               )}
@@ -849,6 +850,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                     ? { previousEpisode: { available: !!previousOf(p), onOpen: () => { const prev = previousOf(p); if (prev) openPrevious(p, prev); } } }
                     : {})}
                   refocus={refocus?.path === p ? refocus.tick : undefined}
+                  onRefocusDone={() => setRefocus((cur) => (cur?.path === p ? null : cur))}
                 />
               </ErrorBoundary>
             )}

@@ -190,6 +190,51 @@ test('이전 회차 버튼은 오른쪽 칸에 앞 회차를 열고, 쓰던 노�
   await expect(page.locator('.pane')).toHaveCount(1);
 });
 
+test('refocus 는 한 번만: 찾기·이름 변경·다른 노트의 포커스를 가로채지 않는다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page);
+  await page.getByRole('tab', { name: '파일' }).click();
+  await page.locator('aside.sidebar [data-path$="/3화.md"]').first().click();
+  const prev = page.getByTestId('pane-0').getByTestId('previous-episode');
+  await expect(prev).toBeEnabled();
+
+  // (a) 이전 회차 직후 ⌘F: 찾기 입력이 포커스를 갖고 타이핑이 들어간다
+  await prev.click();
+  await page.keyboard.press('Meta+f');
+  const find = page.locator('.findbar input');
+  await expect(find).toBeFocused();
+  await find.fill('찾기');
+  await expect(find).toHaveValue('찾기');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.findbar')).toHaveCount(0);
+  if ((await page.locator('.pane').count()) > 1) {
+    await page.getByTestId('pane-1').locator('.tab__close').click();
+    await expect(page.locator('.pane')).toHaveCount(1);
+  }
+
+  // (b) F2 이름 변경 프롬프트가 입력 포커스를 유지한다
+  await prev.click();
+  await page.keyboard.press('F2');
+  const rename = page.locator('.nops-prompt input');
+  await expect(rename).toBeFocused();
+  await rename.fill('이름');
+  await expect(rename).toHaveValue('이름');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.nops-prompt')).toHaveCount(0);
+  if ((await page.locator('.pane').count()) > 1) {
+    await page.getByTestId('pane-1').locator('.tab__close').click();
+    await expect(page.locator('.pane')).toHaveCount(1);
+  }
+
+  // (c) 기능을 쓴 뒤 다른 노트를 열어도 사이드바/탭 포커스를 뺏지 않는다
+  await page.locator('aside.sidebar [data-path$="/2화.md"]').first().click();
+  await expect(page.getByTestId('pane-0').getByTestId('note-tab')).toContainText('2화');
+  await page.waitForTimeout(300);
+  const stolen = await page.evaluate(() => !!document.activeElement?.closest('.ProseMirror, .cm-content'));
+  expect(stolen).toBe(false);
+});
+
 test('작가 모드 OFF·일반 모드에는 버튼과 팔레트 항목이 DOM 에 없다', async () => {
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);

@@ -74,8 +74,10 @@ interface Props {
   typewriter?: boolean;
   /** 작가 모드 '이전 회차' — 없으면 버튼을 그리지 않는다(일반 모드는 이 prop 자체가 없다) */
   previousEpisode?: { available: boolean; onOpen: () => void };
-  /** 값이 바뀌면 편집 영역으로 포커스를 되돌린다(이전 회차를 연 뒤 입력 흐름 유지) */
+  /** 값이 바뀌면 편집 영역으로 포커스를 되돌린다(이전 회차를 연 뒤 입력 흐름 유지, 1회성) */
   refocus?: number;
+  /** refocus 를 썼거나 버렸을 때 부모가 신호를 지우게 한다 */
+  onRefocusDone?: () => void;
 }
 
 /** 목표 빠른 선택 — 글자수와 그 플랫폼의 기준. 누르면 입력칸에 숫자만 채운다(저장은 사용자가 확인). */
@@ -132,7 +134,7 @@ function scrollToFocus(editor: Editor, focus: { heading: string | null; block: s
  * 열기: 읽기(hash) → 파싱 → 표시. 편집 500ms 뒤 `note.save`(baseHash로 외부 변경 감지).
  * 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다.
  */
-export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename, onSetGoal, focusMode = false, typewriter = true, previousEpisode, refocus }: Props) {
+export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename, onSetGoal, focusMode = false, typewriter = true, previousEpisode, refocus, onRefocusDone }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
@@ -436,24 +438,47 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   useEffect(() => {
     bumpDocTick();
   }, [mode]);
-  // 이전 회차를 연 뒤: 분할·레이아웃이 끝난 다음 프레임에 쓰던 칸의 입력 영역으로 초점을 돌린다.
+  // 이전 회차를 연 뒤: 분할·레이아웃이 끝난 다음 프레임에 **한 번만** 쓰던 칸으로 초점을 돌린다.
+  // 다른 입력(찾기 막대·이름 변경·팔레트·모달·사이드바)이 이미 초점을 가졌으면 건드리지 않는다.
+  const refocusDoneRef = useRef(onRefocusDone);
+  refocusDoneRef.current = onRefocusDone;
   useEffect(() => {
     if (!refocus) return;
+    let cancelled = false;
     let second = 0;
     let timer = 0;
-    const apply = () => {
-      if (modeRef.current === 'source') sourceRef.current?.focus();
-      else editorRef.current?.focus();
+    const done = () => {
+      if (cancelled) return;
+      refocusDoneRef.current?.();
     };
-    // 다음 프레임에 바로 초점을 주고, 분할 레이아웃·새 칸 마운트가 늦으면 한 번 더 준다.
+    const canTake = () => {
+      const active = document.activeElement;
+      if (!active || active === document.body) return true;
+      return !!active.closest('[data-testid="previous-episode"]');
+    };
+    const apply = (final: boolean) => {
+      if (cancelled) return;
+      if (!canTake()) {
+        done();
+        return;
+      }
+      const source = modeRef.current === 'source';
+      const target = source ? sourceRef.current?.view.dom : editorRef.current?.getView().dom;
+      if (source) sourceRef.current?.focus();
+      else editorRef.current?.focus();
+      const got = !!target && (document.activeElement === target || target.contains(document.activeElement));
+      if (got || final) done();
+    };
     const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(apply);
-      timer = window.setTimeout(apply, 80);
+      second = requestAnimationFrame(() => apply(false));
+      timer = window.setTimeout(() => apply(true), 80);
     });
     return () => {
+      cancelled = true;
       cancelAnimationFrame(first);
       cancelAnimationFrame(second);
       clearTimeout(timer);
+      done();
     };
   }, [refocus]);
 

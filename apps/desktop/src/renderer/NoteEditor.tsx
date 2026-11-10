@@ -74,6 +74,8 @@ interface Props {
   typewriter?: boolean;
   /** 작가 모드 '이전 회차' — 없으면 버튼을 그리지 않는다(일반 모드는 이 prop 자체가 없다) */
   previousEpisode?: { available: boolean; onOpen: () => void };
+  /** 값이 바뀌면 편집 영역으로 포커스를 되돌린다(이전 회차를 연 뒤 입력 흐름 유지) */
+  refocus?: number;
 }
 
 /** 목표 빠른 선택 — 글자수와 그 플랫폼의 기준. 누르면 입력칸에 숫자만 채운다(저장은 사용자가 확인). */
@@ -130,7 +132,7 @@ function scrollToFocus(editor: Editor, focus: { heading: string | null; block: s
  * 열기: 읽기(hash) → 파싱 → 표시. 편집 500ms 뒤 `note.save`(baseHash로 외부 변경 감지).
  * 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다.
  */
-export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename, onSetGoal, focusMode = false, typewriter = true, previousEpisode }: Props) {
+export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename, onSetGoal, focusMode = false, typewriter = true, previousEpisode, refocus }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
@@ -434,6 +436,24 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   useEffect(() => {
     bumpDocTick();
   }, [mode]);
+  // 이전 회차를 연 뒤: 분할·레이아웃이 끝난 다음 프레임에 쓰던 칸의 입력 영역으로 초점을 돌린다.
+  useEffect(() => {
+    if (!refocus) return;
+    let timer = 0;
+    const apply = () => {
+      if (modeRef.current === 'source') sourceRef.current?.focus();
+      else editorRef.current?.focus();
+    };
+    // 분할 레이아웃·새 칸 마운트가 끝난 뒤에 초점을 준다.
+    const first = requestAnimationFrame(() => {
+      timer = window.setTimeout(apply, 80);
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      clearTimeout(timer);
+    };
+  }, [refocus]);
+
   const [pickingIcon, setPickingIcon] = useState(false);
   const [pickingCover, setPickingCover] = useState(false);
   const peekRef = useRef(peek);

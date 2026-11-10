@@ -379,6 +379,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
 
   const previousOf = useCallback((p: string) => previousEpisodePath(works, p, locale), [works, locale]);
   const previous = selected ? previousOf(selected) : null;
+  const [refocus, setRefocus] = useState<{ path: string; tick: number } | null>(null);
+  const refocusTick = useRef(0);
+  const restoreEditorFocus = useCallback((path: string) => setRefocus({ path, tick: ++refocusTick.current }), []);
   // split if needed, open in the other pane, then restore focus to the writing pane
   const openPrevious = useCallback(
     (from: string, to: string) => {
@@ -389,6 +392,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         dispatchTabs({ type: 'split', dir: 'row' });
         dispatchTabs({ type: 'open', path: to, newTab: true });
         dispatchTabs({ type: 'focusPane', pane: 0 });
+        restoreEditorFocus(from);
         return;
       }
       const other = cur === 0 ? 1 : 0;
@@ -396,9 +400,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       dispatchTabs({ type: 'focusPane', pane: other });
       dispatchTabs({ type: 'open', path: to, newTab: true });
       dispatchTabs({ type: 'focusPane', pane: cur });
-      void from;
+      restoreEditorFocus(from);
     },
-    [tabs, dispatchTabs],
+    [tabs, dispatchTabs, restoreEditorFocus],
   );
 
   const commands = useMemo<PaletteCommand[]>(
@@ -774,6 +778,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                     {...(writerOn
                       ? { previousEpisode: { available: !!previousOf(p), onOpen: () => { const prev = previousOf(p); if (prev) openPrevious(p, prev); } } }
                       : {})}
+                    refocus={refocus?.path === p ? refocus.tick : undefined}
                   />
                 </ErrorBoundary>
               )}
@@ -843,6 +848,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                   {...(writerOn
                     ? { previousEpisode: { available: !!previousOf(p), onOpen: () => { const prev = previousOf(p); if (prev) openPrevious(p, prev); } } }
                     : {})}
+                  refocus={refocus?.path === p ? refocus.tick : undefined}
                 />
               </ErrorBoundary>
             )}

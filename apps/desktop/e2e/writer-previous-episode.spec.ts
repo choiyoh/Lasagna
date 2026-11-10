@@ -122,10 +122,12 @@ test('이전 회차 버튼은 오른쪽 칸에 앞 회차를 열고, 쓰던 노�
   await expect(page.getByTestId('pane-0').getByTestId('note-tab')).toContainText('3화');
   await expect(page.getByTestId('pane-0')).toHaveClass(/is-active/);
 
-  // 이어서 입력하면 두 문장이 모두 저장된다
-  await src.locator('.cm-content').click();
-  await page.keyboard.press('Meta+ArrowDown');
+  // 클릭 없이 바로 입력해도 쓰던 칸(왼쪽)에 들어간다 — 포커스가 버튼에 남지 않는다
+  await expect
+    .poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="pane-0"] .cm-content')))
+    .toBe(true);
   await page.keyboard.type('이어');
+  await expect(page.getByTestId('pane-1').locator('.ProseMirror')).not.toContainText('이어');
   await expect
     .poll(() => readFileSync(path.join(vaultDir, '두쪽', '회차', '3화.md'), 'utf8').includes('첫문장이어'), { timeout: 15_000 })
     .toBe(true);
@@ -139,6 +141,17 @@ test('이전 회차 버튼은 오른쪽 칸에 앞 회차를 열고, 쓰던 노�
   await page.getByTestId('pane-1').locator('.tab__close').click();
   await expect(page.locator('.pane')).toHaveCount(1);
   await expect(page.getByTestId('pane-0').getByTestId('note-tab')).toContainText('3화');
+
+  // 편집 모드에서도 클릭 후 포커스가 왼쪽 에디터(ProseMirror)로 돌아온다
+  await page.getByRole('button', { name: '편집 모드' }).click();
+  await page.getByTestId('pane-0').locator('.ProseMirror').click();
+  await prev.click();
+  await expect(page.getByTestId('pane-1')).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="pane-0"] .ProseMirror')))
+    .toBe(true);
+  await page.getByTestId('pane-1').locator('.tab__close').click();
+  await expect(page.locator('.pane')).toHaveCount(1);
 
   // 첫 회차에서는 비활성 + 툴팁
   await page.locator('aside.sidebar [data-path$="/1화.md"]').first().click();

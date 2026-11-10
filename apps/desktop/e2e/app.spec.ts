@@ -80,6 +80,7 @@ test.beforeAll(async () => {
   vaultDir = path.join(base, '내 볼트');
   mkdirSync(path.join(vaultDir, '프로젝트'), { recursive: true });
   writeExternalNote(path.join(vaultDir, '프로젝트', 'Nopsidian.md'), '# Nopsidian\n핵심은 읽기 쉬운 코드다\n');
+  writeExternalNote(path.join(vaultDir, '병합.md'), '# 병합\n\n첫 문단\n\n둘째 문단\n');
   writeExternalNote(
     path.join(vaultDir, '위험.md'),
     '# 위험\n<script>window.__pwned = 1</script>\n<img src=x onerror="window.__pwned = 1">\n[링크](javascript:alert(1))\n',
@@ -182,6 +183,7 @@ test('저장: 앱 편집과 외부 편집을 병합하고, 자기 쓰기는 디�
   const page = await app.firstWindow();
   const file = path.join(vaultDir, '병합.md');
   const base = '# 병합\n\n첫 문단\n\n둘째 문단\n';
+  // 최초 추가는 beforeAll 픽스처로 만들어 두고, 여기서는 외부 편집(갱신)만 다룬다.
   writeExternalNote(file, base);
   await expect(page.getByRole('button', { name: '병합', exact: true })).toBeVisible({ timeout: 15000 });
 
@@ -190,6 +192,13 @@ test('저장: 앱 편집과 외부 편집을 병합하고, 자기 쓰기는 디�
 
   // 앱이 읽은 뒤 다른 편집기가 둘째 문단을 고친다
   writeExternalNote(file, base.replace('둘째 문단', '둘째(외부)'));
+
+  // 앱 자신의 저장 알림을 감시한다(도착은 필수가 아니고, 도착하면 external=false 여야 한다).
+  await page.evaluate(() => {
+    const seen: { path: string; external: boolean }[] = [];
+    window.nops.on('note.changed', (e) => seen.push({ path: e.path, external: e.external }));
+    (window as unknown as { __seen: typeof seen }).__seen = seen;
+  });
 
   const saved = await page.evaluate((hash) =>
     window.nops.note.save({ path: '병합.md', content: '# 병합\n\n첫(앱)\n\n둘째 문단\n', baseHash: hash }),
@@ -205,6 +214,18 @@ test('저장: 앱 편집과 외부 편집을 병합하고, 자기 쓰기는 디�
   const reread = await page.evaluate(() => window.nops.note.read({ path: '병합.md' }));
   expect(reread.content).toBe(saved.content);
   expect(reread.hash).toBe(saved.hash);
+
+  // 사용자에게 해로운 경우(자기 저장을 외부 변경으로 오인)만 확실히 막는다:
+  // 저장 후 잠시 동안 이 경로에 external=true 가 한 번도 오지 않아야 한다.
+  await page.waitForTimeout(2000);
+  const flags = await page.evaluate(() =>
+    ((window as unknown as { __seen?: { path: string; external: boolean }[] }).__seen ?? [])
+      .filter((e) => e.path === '병합.md')
+      .map((e) => e.external),
+  );
+  expect(flags).not.toContain(true);
+  // 도착했다면 반드시 external=false(도착 자체는 감시 이벤트에 의존하므로 필수로 두지 않는다).
+  expect(flags.every((f) => f === false)).toBe(true);
 });
 
 test('링크: 위키링크가 해석되어 백링크로 조회된다', async () => {

@@ -1099,8 +1099,7 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
 .focuschrome__exit:hover { color: var(--fg); }
 @media (max-width: 920px) { .focuschrome__path { display: none; } }
 @media (max-width: 920px) {
-  /* 회차 DB 920px: 수정일 열 숨김(⋯ 메뉴에 CSV·템플릿은 이미 있음), 제목 말줄임 */
-  .dbtable__th[data-prop='수정일'], .dbtable__td[data-prop='수정일'],
-  .dbtable__th[data-prop='Updated'], .dbtable__td[data-prop='Updated'] { display: none; }
-  .dbtable__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 회차 DB 테이블에만: 수정일 열 숨김, 제목 말줄임 (일반 DB는 그대로) */
+  .dbtable[data-episode='1'] .dbtable__narrow-hide { display: none; }
+  .dbtable[data-episode='1'] .dbtable__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }

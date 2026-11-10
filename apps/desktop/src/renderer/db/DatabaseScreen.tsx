@@ -629,6 +629,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         {view.type === 'table' && (
           <TableView
             data={current}
+            episode={isEpisodeDb}
             rows={data.groups ? flat : rows}
             empty={emptyState}
             onOpen={openRow}

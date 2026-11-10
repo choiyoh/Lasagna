@@ -560,11 +560,14 @@ export function useEntryActions(deps: EntryActionDeps) {
       };
       const statusOptions = [tr('work.db.draft'), tr('work.db.revised'), tr('work.db.done')];
       try {
+        let created = false;
         try {
           await window.nops.db.create({ folder: episodeFolder, title });
+          created = true;
         } catch {
-          // 이미 DB(_db.yaml)면 그대로 연다(덮어쓰기 금지).
+          // 이미 DB(_db.yaml)면 그대로 연다 — 열·뷰를 절대 바꾸지 않는다(데이터 손상 방지).
         }
+        if (created) {
         const ensure = async (name: string, def: unknown) => {
           try {
             await window.nops.db.editSchema({ folder: episodeFolder, op: { kind: 'setProperty', name, def } });
@@ -584,15 +587,15 @@ export function useEntryActions(deps: EntryActionDeps) {
         await ensure(cols.chars, { type: 'formula', expr: 'note_chars()' });
         await ensure(cols.goal, { type: 'formula', expr: 'goal_met()' });
         await ensure(cols.updated, { type: 'updated_time' });
-        const columns = [cols.episode, cols.status, cols.chars, cols.goal, cols.updated];
+        const calc = { [cols.chars]: 'sum', [cols.goal]: 'checked' };
+        const columns = ['title', cols.episode, cols.status, cols.chars, cols.goal, cols.updated];
+        const sort = [{ prop: cols.episode, dir: 'desc' }];
+        // 기본 v1 을 '전체' 정의로 덮어써 첫 화면부터 회차 내림차순·합계·제목 열이 보이게 한다.
         await window.nops.db
-          .editSchema({
-            folder: episodeFolder,
-            op: {
-              kind: 'upsertView',
-              view: { id: 'all', name: tr('work.db.all'), columns, sort: [{ prop: cols.episode, dir: 'desc' }] },
-            },
-          })
+          .editSchema({ folder: episodeFolder, op: { kind: 'upsertView', view: { id: 'v1', name: tr('work.db.all'), columns, sort, calc } } })
+          .catch(() => undefined);
+        await window.nops.db
+          .editSchema({ folder: episodeFolder, op: { kind: 'upsertView', view: { id: 'all', name: tr('work.db.all'), columns, sort, calc } } })
           .catch(() => undefined);
         for (const [i, status] of statusOptions.entries()) {
           await window.nops.db
@@ -600,10 +603,11 @@ export function useEntryActions(deps: EntryActionDeps) {
               folder: episodeFolder,
               op: {
                 kind: 'upsertView',
-                view: { id: `status-${i}`, name: status, columns, filter: { prop: cols.status, op: '=', value: status } },
+                view: { id: `status-${i}`, name: status, columns, sort, calc, filter: { prop: cols.status, op: '=', value: status } },
               },
             })
             .catch(() => undefined);
+        }
         }
         setDbOpen(episodeFolder);
       } catch (e) {

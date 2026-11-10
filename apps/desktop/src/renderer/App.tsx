@@ -37,7 +37,7 @@ import { useImportExport } from './useImportExport';
 import { applyTheme, loadTheme, nextTheme, THEME_ICON, THEME_KEY, type ThemeChoice } from './theme';
 import { useLanguage, useLocale } from './useLocale';
 import { showTextPrompt } from '@nopsidian/editor/nops';
-import type { WorkSummary } from '@nopsidian/core';
+import { previousEpisodePath, type WorkSummary } from '@nopsidian/core';
 import { initialTabs, parseTabs, selectedOf, tabsReducer } from './tabs';
 import { DatabaseScreen } from './db/DatabaseScreen';
 import { DbList } from './db/DbList';
@@ -377,6 +377,34 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
 
   const { exportNote, exportVault, importNotion, importMarkdown } = useImportExport({ selected, refresh, setToast });
 
+  const previousOf = useCallback((p: string) => previousEpisodePath(works, p, locale), [works, locale]);
+  const previous = selected ? previousOf(selected) : null;
+  const [refocus, setRefocus] = useState<{ path: string; tick: number } | null>(null);
+  const refocusTick = useRef(0);
+  const restoreEditorFocus = useCallback((path: string) => setRefocus({ path, tick: ++refocusTick.current }), []);
+  // split if needed, open in the other pane, then restore focus to the writing pane
+  const openPrevious = useCallback(
+    (from: string, to: string) => {
+      const cur = tabs.activePane;
+      const at = tabs.panes.findIndex((p) => p.tabs.includes(to));
+      if (tabs.panes.length < 2) {
+        if (at === 0) dispatchTabs({ type: 'close', pane: 0, path: to });
+        dispatchTabs({ type: 'split', dir: 'row' });
+        dispatchTabs({ type: 'open', path: to, newTab: true });
+        dispatchTabs({ type: 'focusPane', pane: 0 });
+        restoreEditorFocus(from);
+        return;
+      }
+      const other = cur === 0 ? 1 : 0;
+      if (at === cur) dispatchTabs({ type: 'close', pane: cur, path: to });
+      dispatchTabs({ type: 'focusPane', pane: other });
+      dispatchTabs({ type: 'open', path: to, newTab: true });
+      dispatchTabs({ type: 'focusPane', pane: cur });
+      restoreEditorFocus(from);
+    },
+    [tabs, dispatchTabs, restoreEditorFocus],
+  );
+
   const commands = useMemo<PaletteCommand[]>(
     () => [
       { id: 'quick', label: t('palette.quick'), hint: '⌘O', keywords: ['open', '열기', '전환', 'ㅇㄱ'], run: () => setSwitcher(true) },
@@ -406,6 +434,17 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'import-notion', label: t('palette.importNotion'), keywords: ['import', 'notion', '노션', '가져오기'], run: () => void importNotion() },
       { id: 'tab-new', label: t('palette.tabNew'), keywords: ['tab', '탭'], run: () => { setSwitcherNewTab(true); setSwitcher(true); } },
       { id: 'tab-close', label: t('palette.tabClose'), hint: '⌘W', keywords: ['close', 'tab', '탭', '닫기'], enabled: !!selected, run: () => selected && dispatchTabs({ type: 'close', pane: tabs.activePane, path: selected }) },
+      ...(writerOn
+        ? [
+            {
+              id: 'previous-episode',
+              label: t('palette.previousEpisode'),
+              keywords: ['previous', 'episode'],
+              enabled: !!previous,
+              run: () => selected && previous && openPrevious(selected, previous),
+            },
+          ]
+        : []),
       { id: 'split-right', label: t('palette.splitRight'), keywords: ['split', '분할', '좌우'], run: () => dispatchTabs({ type: 'split', dir: 'row' }) },
       { id: 'split-down', label: t('palette.splitDown'), keywords: ['split', '분할', '상하'], run: () => dispatchTabs({ type: 'split', dir: 'col' }) },
       { id: 'unsplit', label: t('palette.unsplit'), keywords: ['unsplit', 'merge', '분할', '합치기'], enabled: tabs.panes.length > 1, run: () => dispatchTabs({ type: 'unsplit' }) },
@@ -413,7 +452,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'theme', label: t('palette.theme'), keywords: ['theme', 'dark', 'light', '다크', '라이트', '테마', '다크모드'], run: cycleTheme },
       { id: 'close', label: t('palette.switchVault'), keywords: ['vault', '볼트', '닫기'], run: onClose },
     ],
-    [selected, dockVisible, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, importMarkdown, cycleTheme, deleteEntry, newFolder, quickNote, onClose, openPanel, tabs.activePane, tabs.panes.length, locale],
+    [selected, dockVisible, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, importMarkdown, cycleTheme, deleteEntry, newFolder, quickNote, onClose, openPanel, tabs.activePane, tabs.panes.length, locale, writerOn, previous, openPrevious],
   );
 
   useEffect(() => {
@@ -736,6 +775,11 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                     cover={notes.find((n) => n.path === p)?.cover ?? null}
                     onSetCover={(c) => void setNoteCover(p, c)}
                     onSetGoal={(g) => void setNoteGoal(p, g)}
+                    {...(writerOn
+                      ? { previousEpisode: { available: !!previousOf(p), onOpen: () => { const prev = previousOf(p); if (prev) openPrevious(p, prev); } } }
+                      : {})}
+                    refocus={refocus?.path === p ? refocus.tick : undefined}
+                    onRefocusDone={() => setRefocus((cur) => (cur?.path === p ? null : cur))}
                   />
                 </ErrorBoundary>
               )}
@@ -802,6 +846,11 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                   onSetGoal={(g) => void setNoteGoal(p, g)}
                   focusMode={focusMode && pane === tabs.activePane}
                   typewriter={language.writerTypewriter !== false}
+                  {...(writerOn
+                    ? { previousEpisode: { available: !!previousOf(p), onOpen: () => { const prev = previousOf(p); if (prev) openPrevious(p, prev); } } }
+                    : {})}
+                  refocus={refocus?.path === p ? refocus.tick : undefined}
+                  onRefocusDone={() => setRefocus((cur) => (cur?.path === p ? null : cur))}
                 />
               </ErrorBoundary>
             )}

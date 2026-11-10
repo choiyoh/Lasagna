@@ -16,6 +16,7 @@ function packagedExecutable(): string {
 let app: ElectronApplication;
 let base = '';
 let vaultDir = '';
+let noteDir = '';
 let userDataDir = '';
 
 async function launch(): Promise<ElectronApplication> {
@@ -46,7 +47,8 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
 
 async function openNote(page: Page, name: string): Promise<void> {
   await openVaultIfNeeded(page);
-  await page.locator('aside.sidebar').getByRole('button', { name, exact: true }).click();
+  await revealEpisode(page);
+  await page.locator('aside.sidebar').getByRole('button', { name: new RegExp(`^${name}`) }).first().click();
   await expect(page.locator('.ProseMirror')).toBeVisible();
 }
 
@@ -70,18 +72,33 @@ async function toggleWriter(page: Page, on: boolean): Promise<void> {
   await expect(page.getByTestId('writer-status')).toHaveCount(on ? 1 : 0);
 }
 
+
+/** 사이드바에서 작품/회차 폴더를 펼쳐 회차 노트가 보이게 한다(W6 픽스처는 작품/회차 아래에 있다). */
+async function revealEpisode(page: Page): Promise<void> {
+  for (const name of ['작품', '회차']) {
+    const box = page
+      .locator('aside.sidebar details')
+      .filter({ has: page.locator('summary', { hasText: new RegExp(`^${name}$`) }) })
+      .first();
+    if ((await box.count()) && !(await box.evaluate((el) => el.hasAttribute('open')))) await box.locator('summary').click();
+  }
+}
+
 test.beforeAll(async () => {
   test.setTimeout(240_000);
   base = mkdtempSync(path.join(tmpdir(), 'nops-goal-'));
   vaultDir = path.join(base, 'Demo');
+  noteDir = path.join(vaultDir, '작품', '회차');
+  mkdirSync(noteDir, { recursive: true });
+  mkdirSync(path.join(vaultDir, '작품', '캐릭터'), { recursive: true });
   userDataDir = path.join(base, 'userdata');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, 'Hello.md'), '# Hello\n\n본문\n');
-  writeFileSync(path.join(vaultDir, 'Swap.md'), '# Swap\n\n처음\n');
-  writeFileSync(path.join(vaultDir, 'NoFm.md'), '# 제목\n\n본문 문장\n');
-  writeFileSync(path.join(vaultDir, 'Crlf.md'), '---\r\ntitle: CRLF\r\n---\r\n# CRLF\r\n\r\n본문\r\n');
+  writeFileSync(path.join(noteDir, 'Hello.md'), '# Hello\n\n본문\n');
+  writeFileSync(path.join(noteDir, 'Swap.md'), '# Swap\n\n처음\n');
+  writeFileSync(path.join(noteDir, 'NoFm.md'), '# 제목\n\n본문 문장\n');
+  writeFileSync(path.join(noteDir, 'Crlf.md'), '---\r\ntitle: CRLF\r\n---\r\n# CRLF\r\n\r\n본문\r\n');
   writeFileSync(
-    path.join(vaultDir, 'Mixed.md'),
+    path.join(noteDir, 'Mixed.md'),
     '# Mixed\n\n가 [[노트|별칭]] 나\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n![그림](a.png)\n\n```ts\nconst a = 1;\n```\n\n> [!note] 콜아웃\n> 내용\n',
   );
   app = await launch();
@@ -96,16 +113,16 @@ test('목표가 없으면 "목표 설정" 이 보이고, 설정하면 노트 속
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'Hello');
-  writeFileSync(path.join(vaultDir, 'Hello.md'), '# Hello\n\n본문\n'); // 앞 테스트가 남긴 목표 제거
+  writeFileSync(path.join(noteDir, 'Hello.md'), '# Hello\n\n본문\n'); // 앞 테스트가 남긴 목표 제거
   await expect(page.getByTestId('writer-goal-set')).toBeVisible();
   await expect(page.getByTestId('writer-today')).toContainText(/오늘/);
-  const before = readFileSync(path.join(vaultDir, 'Hello.md'), 'utf8');
+  const before = readFileSync(path.join(noteDir, 'Hello.md'), 'utf8');
 
   await page.getByTestId('writer-goal-set').click();
   await page.getByTestId('writer-goal-input').fill('5000');
   await page.getByTestId('writer-goal-save').click();
   await expect(page.getByTestId('writer-goal-text')).toContainText('/5,000자');
-  const after = readFileSync(path.join(vaultDir, 'Hello.md'), 'utf8');
+  const after = readFileSync(path.join(noteDir, 'Hello.md'), 'utf8');
   expect(after).toBe(`---\ngoal_chars: 5000\n---\n${before}`);
 });
 
@@ -113,7 +130,7 @@ test('목표를 정할 때만 파일이 바뀐다(토글·표시만으로는 바
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, '제목');
-  const file = path.join(vaultDir, 'NoFm.md');
+  const file = path.join(noteDir, 'NoFm.md');
   const before = readFileSync(file, 'utf8');
   const stamp = statSync(file).mtimeMs;
   await toggleWriter(page, true);
@@ -127,8 +144,8 @@ test('위키·표·이미지·코드가 든 문서도 목표 저장 후 본문 �
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'Mixed');
-  writeFileSync(path.join(vaultDir, 'Mixed.md'), '# Mixed\n\n가 [[노트|별칭]] 나\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n![그림](a.png)\n\n```ts\nconst a = 1;\n```\n\n> [!note] 콜아웃\n> 내용\n');
-  const file = path.join(vaultDir, 'Mixed.md');
+  writeFileSync(path.join(noteDir, 'Mixed.md'), '# Mixed\n\n가 [[노트|별칭]] 나\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n![그림](a.png)\n\n```ts\nconst a = 1;\n```\n\n> [!note] 콜아웃\n> 내용\n');
+  const file = path.join(noteDir, 'Mixed.md');
   const before = readFileSync(file, 'utf8');
   await toggleWriter(page, true);
   await page.getByTestId('writer-goal-set').click();
@@ -144,7 +161,7 @@ test('CRLF·frontmatter 없는 노트도 목표 저장이 줄바꿈을 망가뜨
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'CRLF');
-  const file = path.join(vaultDir, 'Crlf.md');
+  const file = path.join(noteDir, 'Crlf.md');
   await toggleWriter(page, true);
   await page.getByTestId('writer-goal-set').click();
   await page.getByTestId('writer-goal-input').fill('800');
@@ -158,20 +175,20 @@ test('목표 해제: 입력을 비우면 속성이 지워지고 "목표 설정" 
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'Hello');
-  writeFileSync(path.join(vaultDir, 'Hello.md'), '---\ngoal_chars: 5000\n---\n# Hello\n\n본문\n');
+  writeFileSync(path.join(noteDir, 'Hello.md'), '---\ngoal_chars: 5000\n---\n# Hello\n\n본문\n');
   await expect(page.getByTestId('writer-goal-text')).toContainText('/5,000자');
   await page.getByTestId('writer-goal-edit').click();
   await page.getByTestId('writer-goal-input').fill('');
   await page.getByTestId('writer-goal-save').click();
   await expect(page.getByTestId('writer-goal-set')).toBeVisible();
-  expect(readFileSync(path.join(vaultDir, 'Hello.md'), 'utf8')).not.toContain('goal_chars');
+  expect(readFileSync(path.join(noteDir, 'Hello.md'), 'utf8')).not.toContain('goal_chars');
 });
 
 test('입력하면 오늘 쓴 글자수가 늘고, 삭제로 줄어도 0 미만으로 내려가지 않는다', async () => {
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'Swap');
-  writeFileSync(path.join(vaultDir, 'Swap.md'), '# Swap\n\n처음\n');
+  writeFileSync(path.join(noteDir, 'Swap.md'), '# Swap\n\n처음\n');
   const readToday = async () => Number((await page.getByTestId('writer-today').innerText()).replace(/[^0-9]/g, ''));
   const start = await readToday();
   await page.locator('.ProseMirror').click();
@@ -186,7 +203,7 @@ test('앱을 다시 켜도 목표·오늘 쓴 글자수가 그대로 보인다',
   const before = await app.firstWindow();
   await resetWriter(before);
   await openNote(before, 'Hello');
-  writeFileSync(path.join(vaultDir, 'Hello.md'), '# Hello\n\n본문\n');
+  writeFileSync(path.join(noteDir, 'Hello.md'), '# Hello\n\n본문\n');
   await before.getByTestId('writer-goal-set').click();
   await before.getByTestId('writer-goal-input').fill('5000');
   await before.getByTestId('writer-goal-save').click();
@@ -206,8 +223,8 @@ test('앱을 다시 켜도 목표·오늘 쓴 글자수가 그대로 보인다',
 test('다른 노트로 전환해도 그 노트의 목표·현재 값으로 바뀐다', async () => {
   const page = await app.firstWindow();
   await resetWriter(page);
-  writeFileSync(path.join(vaultDir, 'Mixed.md'), '---\ngoal_chars: 1200\n---\n# Mixed\n\n가 [[노트|별칭]] 나\n');
-  writeFileSync(path.join(vaultDir, 'NoFm.md'), '# 제목\n\n본문 문장\n');
+  writeFileSync(path.join(noteDir, 'Mixed.md'), '---\ngoal_chars: 1200\n---\n# Mixed\n\n가 [[노트|별칭]] 나\n');
+  writeFileSync(path.join(noteDir, 'NoFm.md'), '# 제목\n\n본문 문장\n');
   await openNote(page, 'Mixed');
   await expect(page.getByTestId('writer-goal-text')).toContainText('/1,200자');
   await openNote(page, '제목');
@@ -218,9 +235,9 @@ test('외부에서 파일을 바꾸면(무음 reload) 목표·총계가 새 내�
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'Swap');
-  writeFileSync(path.join(vaultDir, 'Swap.md'), '# Swap\n\n처음\n');
+  writeFileSync(path.join(noteDir, 'Swap.md'), '# Swap\n\n처음\n');
   await expect(page.locator('.note-editor__status')).toHaveAttribute('data-state', 'saved', { timeout: 15_000 });
-  writeFileSync(path.join(vaultDir, 'Swap.md'), '---\ngoal_chars: 100\n---\n# Swap\n\n짧\n');
+  writeFileSync(path.join(noteDir, 'Swap.md'), '---\ngoal_chars: 100\n---\n# Swap\n\n짧\n');
   await expect(page.locator('.ProseMirror')).toHaveText(/짧/);
   await expect(page.getByTestId('writer-goal-text')).toContainText('/100자');
 });
@@ -255,13 +272,14 @@ test('읽기 전용 볼트에서 목표 저장이 실패하면 화면 값이 유
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, '제목');
-  const file = path.join(vaultDir, 'NoFm.md');
+  const file = path.join(noteDir, 'NoFm.md');
   writeFileSync(file, '---\ngoal_chars: 500\n---\n# 제목\n\n본문 문장\n');
   // 앞 테스트에서 영어로 바꿨을 수 있다 — 숫자 부분만 언어와 무관하게 확인한다
   await expect(page.getByTestId('writer-goal-text')).toContainText(/\/500(?!\d)/);
   const { chmodSync } = await import('node:fs');
   chmodSync(file, 0o444);
   chmodSync(vaultDir, 0o555);
+  chmodSync(noteDir, 0o555);
   try {
     await page.getByTestId('writer-goal-edit').click();
     await page.getByTestId('writer-goal-input').fill('900');
@@ -271,6 +289,7 @@ test('읽기 전용 볼트에서 목표 저장이 실패하면 화면 값이 유
     await expect(page.locator('.ProseMirror')).toContainText('본문 문장');
   } finally {
     chmodSync(vaultDir, 0o755);
+    chmodSync(noteDir, 0o755);
     chmodSync(file, 0o644);
   }
 });

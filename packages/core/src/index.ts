@@ -17,6 +17,7 @@ export * from './writer-daily.js';
 export * from './work.js';
 export * from './work-sidebar.js';
 export * from './previous-episode.js';
+export * from './episode-note.js';
 export * from './snapshots.js';
 export * from './history-move.js';
 export * from './work-goal.js';

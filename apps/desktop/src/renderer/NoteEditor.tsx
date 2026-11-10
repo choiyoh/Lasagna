@@ -78,6 +78,8 @@ interface Props {
   refocus?: number;
   /** refocus 를 썼거나 버렸을 때 부모가 신호를 지우게 한다 */
   onRefocusDone?: () => void;
+  /** 작품의 회차 폴더 안 노트인가 — 작가 모드 상태줄은 회차 노트에서만 그린다(W6) */
+  episodeNote?: boolean;
 }
 
 /** 목표 빠른 선택 — 글자수와 그 플랫폼의 기준. 누르면 입력칸에 숫자만 채운다(저장은 사용자가 확인). */
@@ -134,7 +136,7 @@ function scrollToFocus(editor: Editor, focus: { heading: string | null; block: s
  * 열기: 읽기(hash) → 파싱 → 표시. 편집 500ms 뒤 `note.save`(baseHash로 외부 변경 감지).
  * 외부 변경: 편집 중이 아니면 조용히 다시 불러오고, 편집 중이면 다음 저장에서 병합한다.
  */
-export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename, onSetGoal, focusMode = false, typewriter = true, previousEpisode, refocus, onRefocusDone }: Props) {
+export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename, focus, noteLinkName, dbHost, peek, icon, onSetIcon, cover, onSetCover, onTitleRename, onSetGoal, focusMode = false, typewriter = true, previousEpisode, refocus, onRefocusDone, episodeNote }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
@@ -160,6 +162,8 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   // 작가 모드 — 꺼져 있으면 상태줄도 계산도 없다(일반 모드 화면·동작 동일).
   const language = useLanguage();
   const writer = language.writerMode === true;
+  /** 상태줄·오늘 집계·문서 목표는 회차 노트에서만(작품 목록을 받기 전에는 숨김) */
+  const writerStatsOn = writer && episodeNote === true;
   const spacing = language.writerSpacing ?? 'include';
   const [writerStats, setWriterStats] = useState<TextStats | null>(null);
   /** 선택 영역 글자수(작가 모드) — 없으면 null */
@@ -223,7 +227,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   // 작가 모드 상태줄: 입력 중에는 150ms 모아서 계산한다(5만 자에서도 입력이 끊기지 않게).
   useEffect(() => {
     // 노트·모드가 바뀔 때만 이전 숫자를 비운다(같은 문서의 재계산 중에는 이전 값을 유지해 깜빡이지 않게).
-    if (!writer) {
+    if (!writerStatsOn) {
       setWriterStats(null);
       resetKey.current = '';
       return;
@@ -248,7 +252,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       pendingEditRef.current = false;
       if (!next) return;
       prevStatsRef.current = next;
-      if (!writer || !edited || !before) return;
+      if (!writerStatsOn || !edited || !before) return;
       const delta = basisChars(next, spacing) - basisChars(before, spacing);
       if (delta === 0) return;
       window.nops.settings
@@ -285,11 +289,11 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       if (timer !== undefined) clearTimeout(timer);
       if (idle !== undefined) window.cancelIdleCallback(idle);
     };
-  }, [writer, docTick, epoch, spacing, path, mode]);
+  }, [writerStatsOn, docTick, epoch, spacing, path, mode]);
 
   // 오늘 쓴 글자수 — 앱 통계(userData)에서 볼트 합계를 읽는다. 볼트·노트는 건드리지 않는다.
   useEffect(() => {
-    if (!writer) return;
+    if (!writerStatsOn) return;
     let alive = true;
     window.nops.settings
       .writerToday({ vaultId })
@@ -302,12 +306,12 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     return () => {
       alive = false;
     };
-  }, [writer, vaultId, path]);
+  }, [writerStatsOn, vaultId, path]);
 
   // 선택 영역 글자수 — 전체와 같은 규칙(마크다운 기호·frontmatter 제외, 현재 공백 기준)로 세고,
   // 한글 IME 조합 중에는 갱신하지 않는다. 집중 모드에서는 같은 시점에 타자기 스크롤을 맞춘다.
   useEffect(() => {
-    if (!writer) {
+    if (!writerStatsOn) {
       setWriterSelected(null);
       return;
     }
@@ -401,7 +405,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       sourceDom?.removeEventListener('compositionstart', onCompositionStart);
       sourceDom?.removeEventListener('compositionend', onCompositionEnd);
     };
-  }, [writer, path, mode, epoch, spacing, writerStats, docTick, focusMode, typewriter]);
+  }, [writerStatsOn, path, mode, epoch, spacing, writerStats, docTick, focusMode, typewriter]);
 
   // 집중 모드에 들어오거나 문서가 바뀌면 커서 줄을 42% 위치로 맞춘다(처음/끝은 클램프).
   useEffect(() => {
@@ -929,7 +933,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   }, []);
 
   return (
-    <div className={writer ? 'note-editor note-editor--writer' : 'note-editor'} data-mode={mode} ref={rootRef}>
+    <div className={writerStatsOn ? 'note-editor note-editor--writer' : 'note-editor'} data-mode={mode} ref={rootRef}>
       {find && mode === 'edit' && editorRef.current && (
         <FindBar
           view={editorRef.current.getView()}
@@ -1116,7 +1120,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         />
       )}
       <div ref={sourceHostRef} className="note-editor__source" data-testid="source-editor" hidden={mode === 'edit'} />
-      {writer && (
+      {writerStatsOn && (
         <div className="note-editor__writer" data-testid="writer-status" aria-live="off">
           {noteGoal !== null && writerStats ? (
             <span className="note-editor__goal" data-testid="writer-goal">

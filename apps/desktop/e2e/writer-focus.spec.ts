@@ -168,14 +168,18 @@ test('920px 에서는 집중 모드 본문 폭이 560px 이고, 일반 모드에
   await openNote(page);
   await resetWriter(page);
   await page.setViewportSize({ width: 900, height: 800 });
-  const normal = await page.locator('.ProseMirror').boundingBox();
+  const normal = (await page.locator('.ProseMirror').boundingBox())?.width ?? 0;
   await page.keyboard.press('ControlOrMeta+Shift+M');
   await expect(page.getByTestId('workspace')).toHaveClass(/workspace--focus/);
-  const focus = await page.locator('.ProseMirror').boundingBox();
-  expect(focus?.width ?? 0).toBeLessThanOrEqual(560);
-  expect(focus?.width ?? 0).toBeLessThan(normal?.width ?? 1);
+  const focus = (await page.locator('.ProseMirror').boundingBox())?.width ?? 0;
+  // 의도: 920px 이하 집중 모드 본문은 560px. 일반 모드 폭은 스크롤바(8px)에 따라 달라질 수 있어
+  // 집중 모드가 그보다 좁을 것을 요구하지 않고, 토글 전후 일반 모드 폭이 그대로인지만 본다.
+  expect(focus).toBeLessThanOrEqual(560);
+  expect(focus).toBeGreaterThan(520);
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('workspace')).not.toHaveClass(/workspace--focus/);
+  const normalAfter = (await page.locator('.ProseMirror').boundingBox())?.width ?? 0;
+  expect(Math.abs(normalAfter - normal)).toBeLessThanOrEqual(1);
   await page.setViewportSize({ width: 1440, height: 900 });
 });
 

@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
+import { countMarkdown, readGoalChars } from '@nopsidian/core';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { getLocale, setLocale, t } from '@nopsidian/i18n';
@@ -97,6 +98,9 @@ export function listDatabases(db: Database.Database, root: string, locale?: 'ko'
   return out;
 }
 
+/** 요청마다 주입되는 작가 모드 글자수 기준(자동 열). */
+let readerSpacing: 'include' | 'exclude' = 'include';
+
 export interface DbQueryParams {
   folder: string;
   /** 저장된 뷰 id(없으면 첫 뷰) */
@@ -109,6 +113,8 @@ export interface DbQueryParams {
   groupLimit?: number;
   /** 이 질의를 요청한 앱 언어 — 스키마 문제 문구·기본 제목에 쓴다 */
   locale?: 'ko' | 'en';
+  /** 글자수 자동 열 기준(전역 작가 모드 설정 주입) */
+  spacing?: 'include' | 'exclude';
 }
 
 export interface DbQueryOutput {
@@ -143,6 +149,7 @@ const ctxCache = new WeakMap<Database.Database, { gen: number; minute: number; l
 export function queryDatabase(db: Database.Database, root: string, p: DbQueryParams, generation = -1): DbQueryOutput {
   // worker 스레드는 렌더러와 다른 컨텍스트라, 요청마다 지금 앱 언어를 받아 문구를 만든다.
   if (p.locale) setLocale(p.locale);
+  readerSpacing = p.spacing ?? readerSpacing;
   const parsed = readSchema(root, p.folder);
   if (!parsed) throw new Error(t('main.err.dbNotFound', { name: p.folder || t('main.root') }));
   // 이슈 문구는 코드+params 로 저장돼 있으니 매 요청(표시 시점) 지금 언어로 다시 만든다.
@@ -164,7 +171,7 @@ export function queryDatabase(db: Database.Database, root: string, p: DbQueryPar
   // 언어가 바뀌면 다시 계산한다 — 계산된 오류 문구가 캐시에 남지 않게
   if (hit && generation >= 0 && hit.gen === generation && hit.minute === minute && hit.locale === getLocale()) ctx = hit.ctx;
   else {
-    ctx = computeContext(db, root, folders);
+    ctx = computeContext(db, root, folders, readerSpacing);
     if (generation >= 0) ctxCache.set(db, { gen: generation, minute, locale: getLocale(), ctx });
   }
   const computed = ctx.db(p.folder)!;
@@ -201,7 +208,30 @@ function pickErrors(all: Record<string, Record<string, string>>, rows: DbRow[]) 
 }
 
 /** 질의 한 번에 쓰는 계산 문맥: 관계 해석기·다른 데이터베이스 행·롤업/수식 */
-function computeContext(db: Database.Database, root: string, folders: string[]): ComputeContext {
+/** 본문 글자수 자동 열용 캐시(경로 → mtime·크기·글자수·목표). 수식이 note_chars/goal_met 을 쓸 때만 읽는다. */
+const noteInfoCache = new Map<string, { mtime: number; size: number; chars: number; charsNoSpace: number; goalChars: number | null }>();
+
+function noteInfo(root: string): (rel: string) => { chars: number; charsNoSpace: number; goalChars: number | null } | null {
+  return (rel) => {
+    const full = path.join(root, ...rel.split('/'));
+    try {
+      const st = statSync(full);
+      const hit = noteInfoCache.get(full);
+      if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) {
+        return { chars: hit.chars, charsNoSpace: hit.charsNoSpace, goalChars: hit.goalChars };
+      }
+      const text = readFileSync(full, 'utf8');
+      const counted = countMarkdown(text);
+      const info = { mtime: st.mtimeMs, size: st.size, chars: counted.chars, charsNoSpace: counted.charsNoSpace, goalChars: readGoalChars(text) };
+      noteInfoCache.set(full, info);
+      return { chars: info.chars, charsNoSpace: info.charsNoSpace, goalChars: info.goalChars };
+    } catch {
+      return null;
+    }
+  };
+}
+
+function computeContext(db: Database.Database, root: string, folders: string[], spacing: 'include' | 'exclude' = 'include'): ComputeContext {
   let resolver: ReturnType<typeof createLinkResolver> | null = null;
   let pathById: Map<number, string> | null = null;
   const ensure = () => {
@@ -230,6 +260,8 @@ function computeContext(db: Database.Database, root: string, folders: string[]):
       const id = resolver!(name, from);
       return id === undefined ? undefined : pathById!.get(id);
     },
+    noteInfo: noteInfo(root),
+    spacing,
     now: new Date(),
   });
 }
@@ -255,9 +287,10 @@ export interface RowDatabaseOutput {
 }
 
 /** 노트가 어떤 데이터베이스의 행이면 그 데이터베이스와 계산이 끝난 행 값을 돌려준다. */
-export function rowDatabase(db: Database.Database, root: string, notePath: string, generation = -1, locale?: 'ko' | 'en'): RowDatabaseOutput | null {
+export function rowDatabase(db: Database.Database, root: string, notePath: string, generation = -1, locale?: 'ko' | 'en', spacing?: 'include' | 'exclude'): RowDatabaseOutput | null {
   // 이 경로도 별도 스레드다 — 요청이 실었으면 지금 앱 언어로 문구를 만든다.
   if (locale) setLocale(locale);
+  readerSpacing = spacing ?? readerSpacing;
   const folders = [...dbFolders(db)].sort((a, b) => b.length - a.length);
   for (const folder of folders) {
     const dir = folder === '' ? '' : `${folder}/`;
@@ -269,7 +302,7 @@ export function rowDatabase(db: Database.Database, root: string, notePath: strin
     let ctx: ComputeContext;
     if (hit && generation >= 0 && hit.gen === generation && hit.minute === minute && hit.locale === getLocale()) ctx = hit.ctx;
     else {
-      ctx = computeContext(db, root, dbFolders(db));
+      ctx = computeContext(db, root, dbFolders(db), readerSpacing);
       if (generation >= 0) ctxCache.set(db, { gen: generation, minute, locale: getLocale(), ctx });
     }
     const computed = ctx.db(folder);

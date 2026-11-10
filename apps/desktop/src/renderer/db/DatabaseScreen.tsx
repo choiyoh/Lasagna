@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { t, tPlural } from '@nopsidian/i18n';
+import { t, tPlural, translate } from '@nopsidian/i18n';
 import type { DbRow, View } from '@nopsidian/core/db';
 import type { DbQueryResult } from '@nopsidian/ipc-contract';
 import type { Toast } from '../app-types';
@@ -384,6 +384,27 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
     return <div className="dbscreen">{error ? <p className="warn pad" role="alert">{error}</p> : <p className="muted pad">{t('db.loading')}</p>}</div>;
   }
   const current: DbData = { ...data, view };
+  // 회차 DB 감지: 회차 열(number) + note_chars() 자동 열. → 새 행 회차 기본값·빈 상태 '+ 첫 회차'.
+  const episodeNames = [translate('ko', 'work.db.episode'), translate('en', 'work.db.episode')];
+  const episodeCol = Object.keys(data.schema.properties).find(
+    (n) => episodeNames.includes(n) && data.schema.properties[n]?.type === 'number',
+  );
+  const isEpisodeDb = !!episodeCol && Object.values(data.schema.properties).some((p) => p.type === 'formula' && /\bnote_chars\s*\(/.test(p.expr));
+  const statusCol = Object.keys(data.schema.properties).find((n) => data.schema.properties[n]?.type === 'status');
+  const draftOption = statusCol
+    ? (data.schema.properties[statusCol] as { options: { name: string; group?: string }[] }).options.find((o) => o.group === 'todo')?.name
+    : undefined;
+  const nextEpisode = isEpisodeDb
+    ? Math.max(0, ...data.rows.map((r) => (typeof r.values[episodeCol!] === 'number' ? (r.values[episodeCol!] as number) : 0))) + 1
+    : null;
+  const addFirstEpisode = () => {
+    if (!isEpisodeDb || !episodeCol || nextEpisode === null) return;
+    const title = translate(locale, 'db.episodeTitle', { n: nextEpisode });
+    void window.nops.db
+      .addRow({ folder, title, values: { [episodeCol]: nextEpisode, ...(statusCol && draftOption ? { [statusCol]: draftOption } : {}) } })
+      .then(() => load())
+      .catch((e) => setError(userMessage(e)));
+  };
   const emptyState = data.matched === 0 ? (
     <EmptyState
       title={view.filter ? t('db.emptyFiltered') : t('db.emptyNoRows')}
@@ -397,7 +418,9 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         },
       }))}
       onReset={
-        view.filter
+        isEpisodeDb && !view.filter
+          ? addFirstEpisode
+          : view.filter
           ? () => {
               const next = { ...view, filter: undefined };
               setDraft(next);
@@ -405,7 +428,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             }
           : undefined
       }
-      resetLabel={view.filter ? t('db.clearAllFilters') : undefined}
+      resetLabel={isEpisodeDb && !view.filter ? t('db.firstEpisode') : view.filter ? t('db.clearAllFilters') : undefined}
       countUnit="rows"
     />
   ) : null;
@@ -479,7 +502,13 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
             {propertyManager}
           </div>
         )}
-        <button className="primary" onClick={() => setAdding({ title: '', values: {} })}>{t('db.newRow')}</button>
+        <button
+          className="primary"
+          data-testid="db-new-row"
+          onClick={() => setAdding({ title: '', values: isEpisodeDb && episodeCol && nextEpisode !== null ? { [episodeCol]: nextEpisode } : {} })}
+        >
+          {t('db.newRow')}
+        </button>
         <button onClick={onClose} title={t('db.closeHint')}>{t('db.close')}</button>
       </header>
       {showTpl && (
@@ -569,6 +598,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         <div className="dbadd" role="form" aria-label={t('db.newRowForm')}>
           <input
             autoFocus
+            data-testid="db-add-title"
             value={adding.title}
             placeholder={t('db.newRowTitle')}
             onChange={(e) => setAdding({ ...adding, title: e.target.value })}
@@ -599,6 +629,7 @@ export function DatabaseScreen({ folder, vaultId, onOpenNote, onClose, notes, on
         {view.type === 'table' && (
           <TableView
             data={current}
+            episode={isEpisodeDb}
             rows={data.groups ? flat : rows}
             empty={emptyState}
             onOpen={openRow}

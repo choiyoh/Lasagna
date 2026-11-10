@@ -214,6 +214,8 @@ export const dbQueryInput = z.object({
   offset: z.number().int().min(0).optional(),
   limit: z.number().int().min(1).max(5000).optional(),
   groupLimit: z.number().int().min(1).max(1000).optional(),
+  /** 글자수 자동 열 기준(작가 모드 설정) */
+  spacing: z.enum(['include', 'exclude']).optional(),
 });
 export const dbQueryOutput = z.object({
   folder: z.string(),

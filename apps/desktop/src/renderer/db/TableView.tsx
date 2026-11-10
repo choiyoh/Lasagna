@@ -51,6 +51,8 @@ interface Props {
   onStartedRenaming?: () => void;
   /** 행 우클릭 메뉴·여러 행 선택 막대의 동작. 없으면 선택 기능이 없다 */
   onRowAction?: (action: RowAction, paths: string[]) => void;
+  /** 회차 DB(작가 모드) — 920px에서 수정일 열 숨김·제목 말줄임을 이 테이블에만 적용 */
+  episode?: boolean;
   /** 행이 없을 때 헤더 아래에 그릴 내용(0행 EmptyState). 있으면 행·계산 줄은 그리지 않는다 */
   empty?: ReactNode;
 }
@@ -62,7 +64,7 @@ const fmtCalc = (v: unknown) => (typeof v === 'number' ? String(Math.round(v * 1
 const ROW_H = 32;
 
 /** 표 뷰: 행을 가상화해(2만 행도 보이는 만큼만 그림) 셀을 눌러 바로 고친다. */
-export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide, onColumns, onFilter, onReorderRows, startRenaming, onStartedRenaming, onRowAction, empty }: Props) {
+export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRenameTitle, onSort, onHide, onColumns, onFilter, onReorderRows, startRenaming, onStartedRenaming, onRowAction, empty, episode }: Props) {
   /** 선택한 행(경로). 체크 상자·⇧클릭으로 범위·우클릭 */
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const anchor = useRef<string | null>(null);
@@ -239,7 +241,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
   };
 
   return (
-    <div className={selected.length ? 'dbtable has-picked' : 'dbtable'} ref={scroller} data-testid="db-table">
+    <div className={selected.length ? 'dbtable has-picked' : 'dbtable'} data-episode={episode ? '1' : undefined} ref={scroller} data-testid="db-table">
       {onRowAction && selected.length > 0 && (
         <div className="dbtable__selbar" role="toolbar" aria-label={t('db.selectedRows')} data-testid="db-selbar">
           <strong>{t('db.selectedCount', { count: selected.length })}</strong>
@@ -262,7 +264,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
           {cols.map((c) => (
             <div
               key={c}
-              className={dragCol && dragCol !== c ? 'dbtable__th dropable' : 'dbtable__th'}
+              className={`${dragCol && dragCol !== c ? 'dbtable__th dropable' : 'dbtable__th'}${episode && c !== TITLE && data.schema.properties[c]?.type === 'updated_time' ? ' dbtable__narrow-hide' : ''}`}
               style={{ width: w(c) }}
               draggable={!!onColumns && c !== TITLE}
               onDragStart={() => setDragCol(c)}
@@ -274,10 +276,19 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                 setDragCol(null);
               }}
               role="columnheader"
+              data-prop={c}
               aria-sort={sortOf(c) === 'asc' ? 'ascending' : sortOf(c) === 'desc' ? 'descending' : 'none'}>
               {onSort || onHide ? (
                 <button className="dbtable__thbtn" onClick={(e) => toggleMenu(c, e.currentTarget)} aria-haspopup="menu" aria-expanded={menu?.col === c} data-testid={`th-${c}`}>
                   {c === TITLE ? t('db.title') : c}
+                  {(() => {
+                    const headerProp = c === TITLE ? undefined : data.schema.properties[c];
+                    return headerProp?.type === 'updated_time' || (headerProp?.type === 'formula' && /\b(note_chars|goal_met)\s*\(/.test(headerProp.expr));
+                  })() && (
+                    <span className="dbtable__auto" data-testid={`auto-${c}`}>
+                      {t('db.autoColumn')}
+                    </span>
+                  )}
                   {sortOf(c) && <span className="dbtable__sort" aria-hidden>{sortOf(c) === 'asc' ? ' ↑' : ' ↓'}</span>}
                 </button>
               ) : (
@@ -374,8 +385,9 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                   return (
                     <div
                       key={c}
-                      className={isEd ? 'dbtable__td editing' : 'dbtable__td'}
+                      className={`${isEd ? 'dbtable__td editing' : 'dbtable__td'}${episode && c !== TITLE && prop?.type === 'updated_time' ? ' dbtable__narrow-hide' : ''}`}
                       style={{ width: w(c) }}
+                      data-prop={c}
                       role="cell"
                       onClick={() => {
                         if (c === TITLE) return;

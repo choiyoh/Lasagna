@@ -7,6 +7,7 @@ import type { NoteSummary } from '@nopsidian/ipc-contract';
 import type { ConfirmState, Toast } from './app-types';
 import { flushAll } from './flush';
 import { withNoteCover, withNoteIcon } from './note-icon';
+import { translate } from '@nopsidian/i18n';
 import { characterNoteMarkdown, characterTemplateCandidates, episodeNoteMarkdown, episodeTemplateCandidates, validateWorkName, workPlan, withGoalChars, type WorkKind } from '@nopsidian/core';
 import { freshNotes, untitledPath } from './note-title';
 import { placeGroupInOrder, remapOrder, type SidebarOrder } from './sidebar-order';
@@ -542,5 +543,76 @@ export function useEntryActions(deps: EntryActionDeps) {
   );
 
 
-  return { createNote, quickNote, newFolder, openDaily, createWork, createCharacter, createEpisode, renameEntry, renameCurrent, setNoteIcon, setNoteCover, setNoteGoal, renameNoteTitle, moveMany, moveEntries, moveRelative, deleteEntry, deleteEntries };
+  /**
+   * 회차 DB — 작품의 회차 폴더를 DB로 연다. `_db.yaml` 은 **사용자가 칩을 눌렀을 때만** 만들고,
+   * 이미 있으면 덮어쓰지 않고 그대로 연다. 자동 열은 formula 함수(note_chars/goal_met)를 쓴다.
+   */
+  const openEpisodeDb = useCallback(
+    async (episodeFolder: string, title: string) => {
+      const locale = getLanguage().locale;
+      const tr = (key: string) => translate(locale, key as Parameters<typeof translate>[1]);
+      const cols = {
+        episode: tr('work.db.episode'),
+        status: tr('work.db.status'),
+        chars: tr('work.db.chars'),
+        goal: tr('work.db.goal'),
+        updated: tr('work.db.updated'),
+      };
+      const statusOptions = [tr('work.db.draft'), tr('work.db.revised'), tr('work.db.done')];
+      try {
+        let created = false;
+        try {
+          await window.nops.db.create({ folder: episodeFolder, title });
+          created = true;
+        } catch {
+          // 이미 DB(_db.yaml)면 그대로 연다 — 열·뷰를 절대 바꾸지 않는다(데이터 손상 방지).
+        }
+        if (created) {
+        const ensure = async (name: string, def: unknown) => {
+          try {
+            await window.nops.db.editSchema({ folder: episodeFolder, op: { kind: 'setProperty', name, def } });
+          } catch {
+            // 이미 있는 열이면 무시한다.
+          }
+        };
+        await ensure(cols.episode, { type: 'number', format: 'number' });
+        await ensure(cols.status, {
+          type: 'status',
+          options: [
+            { name: statusOptions[0]!, group: 'todo' },
+            { name: statusOptions[1]!, group: 'doing' },
+            { name: statusOptions[2]!, group: 'done' },
+          ],
+        });
+        await ensure(cols.chars, { type: 'formula', expr: 'note_chars()' });
+        await ensure(cols.goal, { type: 'formula', expr: 'goal_met()' });
+        await ensure(cols.updated, { type: 'updated_time' });
+        const calc = { [cols.chars]: 'sum', [cols.goal]: 'checked' };
+        const columns = ['title', cols.episode, cols.status, cols.chars, cols.goal, cols.updated];
+        const sort = [{ prop: cols.episode, dir: 'desc' }];
+        // 기본 v1 을 '전체' 정의로 덮어써 첫 화면부터 회차 내림차순·합계·제목 열이 보이게 한다.
+        await window.nops.db
+          .editSchema({ folder: episodeFolder, op: { kind: 'upsertView', view: { id: 'v1', name: tr('work.db.all'), columns, sort, calc } } })
+          .catch(() => undefined);
+        for (const [i, status] of statusOptions.entries()) {
+          await window.nops.db
+            .editSchema({
+              folder: episodeFolder,
+              op: {
+                kind: 'upsertView',
+                view: { id: `status-${i}`, name: status, columns, sort, calc, filter: { prop: cols.status, op: '=', value: status } },
+              },
+            })
+            .catch(() => undefined);
+        }
+        }
+        setDbOpen(episodeFolder);
+      } catch (e) {
+        setToast({ message: t('entry.dbFailed', { message: userMessage(e) }) });
+      }
+    },
+    [setDbOpen],
+  );
+
+  return { createNote, quickNote, newFolder, openDaily, createWork, createCharacter, createEpisode, openEpisodeDb, renameEntry, renameCurrent, setNoteIcon, setNoteCover, setNoteGoal, renameNoteTitle, moveMany, moveEntries, moveRelative, deleteEntry, deleteEntries };
 }

@@ -651,13 +651,13 @@ function registerHandlers() {
     const v = requireVault();
     await v.index.ready;
     // 행 노트 패널(속성·수식 오류)의 문구도 앱 언어를 따르게 locale 을 함께 넘긴다.
-    return v.index.query('rowDatabase', rel, currentLanguage().locale) as never;
+    return v.index.query('rowDatabase', rel, currentLanguage().locale, currentLanguage().writerSpacing ?? 'include') as never;
   });
   handle('db.query', async (input) => {
     const v = requireVault();
     await v.index.ready;
     // index worker 는 별도 스레드라, 그 스레드가 만드는 문구(스키마 문제·기본 제목)도 앱 언어를 따르게 넘긴다.
-    return v.index.query('queryDatabase', { ...input, locale: currentLanguage().locale }) as never;
+    return v.index.query('queryDatabase', { ...input, locale: currentLanguage().locale, spacing: currentLanguage().writerSpacing ?? 'include' }) as never;
   });
   handle('db.updateCell', async ({ path: rel, prop, value }) => {
     await updateCell(requireVault(), rel, prop, value);

@@ -120,3 +120,64 @@ views:
     expect(r.rows.find((x) => x.title === '뿌리')!.values['자식 수']).toBe(2);
   });
 });
+
+describe('note_chars/goal_met 자동 열(B2)', () => {
+  it('본문 글자수·목표 비교를 계산하고, 안 쓰는 수식에서는 본문을 읽지 않는다', async () => {
+    const { ComputeContext } = await import('./db-compute');
+    let reads = 0;
+    const schema = {
+      title: '회차',
+      rowsFolder: '회차',
+      properties: {
+        글자수: { type: 'formula', expr: 'note_chars()' },
+        '목표 달성': { type: 'formula', expr: 'goal_met()' },
+        '일반 수식': { type: 'formula', expr: 'prop("회차") * 2' },
+        회차: { type: 'number', format: 'number' },
+      },
+      views: [],
+    } as never;
+    const rows = [
+      { path: '회차/1화.md', title: '1화', values: { 회차: 1 } as never },
+      { path: '회차/2화.md', title: '2화', values: { 회차: 2 } as never },
+    ] as never;
+    const noteInfo = (p: string) => {
+      reads += 1;
+      return p.includes('1화') ? { chars: 4000, charsNoSpace: 3800, goalChars: 4000 } : { chars: 120, charsNoSpace: 110, goalChars: null };
+    };
+    const ctx = new ComputeContext({
+      baseDb: () => ({ schema: schema as never, rows: rows as never }),
+      dbFolderOf: () => null,
+      resolve: () => undefined,
+      noteInfo,
+      spacing: 'include',
+      now: new Date(),
+    });
+    const out = ctx.db('회차')!;
+    expect(out.rows[0]?.values['글자수']).toBe(4000);
+    expect(out.rows[0]?.values['목표 달성']).toBe(true);
+    expect(out.rows[1]?.values['글자수']).toBe(120);
+    expect(out.rows[1]?.values['목표 달성']).toBe(null); // 목표 없음 → 빈칸
+    expect(out.rows[0]?.values['일반 수식']).toBe(2);
+    // note_* 를 쓰는 수식 때문에만 본문을 읽는다(2행 × 호출 캐시는 host 구현 몫).
+    expect(reads).toBeGreaterThan(0);
+
+    // note_* 를 안 쓰는 DB는 본문을 전혀 읽지 않는다(일반 DB 성능 영향 없음)
+    let plainReads = 0;
+    const plain = new ComputeContext({
+      baseDb: () => ({
+        schema: { title: 's', rowsFolder: 's', properties: { 두배: { type: 'formula', expr: 'prop("n") * 2' }, n: { type: 'number' } }, views: [] } as never,
+        rows: [{ path: 's/a.md', title: 'a', values: { n: 2 } }] as never,
+      }),
+      dbFolderOf: () => null,
+      resolve: () => undefined,
+      noteInfo: () => {
+        plainReads += 1;
+        return null;
+      },
+      spacing: 'include',
+      now: new Date(),
+    });
+    expect(plain.db('s')!.rows[0]?.values['두배']).toBe(4);
+    expect(plainReads).toBe(0);
+  });
+});

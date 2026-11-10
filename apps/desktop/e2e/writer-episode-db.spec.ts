@@ -111,9 +111,13 @@ test('회차 DB 칩을 눌러야 _db.yaml 이 생기고, 자동 열이 계산된
   // 자동 열 값은 파일에 저장되지 않는다
   expect(readFileSync(path.join(vaultDir, '달빛', '회차', '3화.md'), 'utf8')).not.toContain('글자수');
 
+  // 탭은 전체·초고·퇴고·완료 4개(여분의 '표' 뷰 없음), 기본은 '전체'
+  await expect(page.getByRole('tablist', { name: /보기|views/i }).getByRole('tab')).toHaveCount(4);
+  await expect(page.getByRole('tab', { name: '전체' })).toHaveAttribute('aria-selected', 'true');
   // 기본 뷰: 회차 내림차순(3화가 맨 위), 합계 행, 탭 전환 후에도 제목 열
   const firstRow = page.locator('[data-testid="db-table"] .dbtable__row').first();
-  await expect(firstRow).toContainText('2화'); // 회차 내림차순(1·2 중 2가 위)
+  await expect(firstRow).toContainText('2화'); // 회차 값이 있는 행 기준 내림차순(새 회차는 회차 값이 비어 맨 아래)
+  await expect(page.locator('.dbtable__calc')).toHaveCount(1);
   await expect(page.locator('.dbtable__calc')).toContainText(/합계/);
   await page.getByRole('tab', { name: '퇴고' }).click();
   await expect(page.getByTestId('th-title')).toBeVisible();

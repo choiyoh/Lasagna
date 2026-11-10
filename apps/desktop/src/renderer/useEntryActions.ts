@@ -594,9 +594,6 @@ export function useEntryActions(deps: EntryActionDeps) {
         await window.nops.db
           .editSchema({ folder: episodeFolder, op: { kind: 'upsertView', view: { id: 'v1', name: tr('work.db.all'), columns, sort, calc } } })
           .catch(() => undefined);
-        await window.nops.db
-          .editSchema({ folder: episodeFolder, op: { kind: 'upsertView', view: { id: 'all', name: tr('work.db.all'), columns, sort, calc } } })
-          .catch(() => undefined);
         for (const [i, status] of statusOptions.entries()) {
           await window.nops.db
             .editSchema({

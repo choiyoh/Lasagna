@@ -43,7 +43,7 @@ import { countMarkdown } from '@nopsidian/core';
 import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
 import { e2eBackground } from './e2e-mode';
-import { presentBackgroundWindow } from './e2e-window';
+import { backgroundWindowOptions, presentBackgroundWindow } from './e2e-window';
 import { runMcpStdio } from './mcp-stdio';
 import { installProtocols, registerSchemes } from './protocols';
 import {
@@ -131,6 +131,8 @@ function createWindow(openPath?: string) {
     height: 800,
     minWidth: 640,
     minHeight: 400,
+    // e2e 백그라운드: 생성 순간부터 숨김·투명·화면 밖(ready-to-show 전 노출 방지). 배포는 그대로.
+    ...backgroundWindowOptions(BACKGROUND_E2E),
     show: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
@@ -227,6 +229,7 @@ async function exportContext(v: OpenVault): Promise<ExportContext> {
 /** 정적 HTML 을 보이지 않는 창(스크립트·네트워크 없음)에 띄워 PDF 로 만든다. */
 async function htmlToPdf(doc: string): Promise<Uint8Array> {
   const win = new BrowserWindow({
+    ...backgroundWindowOptions(BACKGROUND_E2E),
     show: false,
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false, webSecurity: true },
   });

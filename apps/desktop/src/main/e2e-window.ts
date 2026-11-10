@@ -7,6 +7,23 @@
  *
  * 배포 앱에서는 이 함수를 **호출하지 않는다**(main 이 백그라운드 판정일 때만 부른다).
  */
+/** e2e 백그라운드 창의 생성 시점 상태 — ready-to-show 전에 화면에 보이지 않게 한다. */
+export const BACKGROUND_BOUNDS = { x: -20000, y: -20000, width: 1200, height: 800 } as const;
+
+/**
+ * BrowserWindow 생성자에 넣을 e2e 전용 옵션. 배포 실행에서는 빈 객체라 기존과 같다.
+ * 생성 직후부터 `show:false` + 투명 + 화면 밖으로 두어, ready-to-show 전 과도 구간에도 보이지 않는다.
+ */
+export function backgroundWindowOptions(enabled: boolean): {
+  show?: boolean;
+  opacity?: number;
+  x?: number;
+  y?: number;
+} {
+  if (!enabled) return {};
+  return { show: false, opacity: 0, x: BACKGROUND_BOUNDS.x, y: BACKGROUND_BOUNDS.y };
+}
+
 export interface PresentableWindow {
   setBounds(bounds: { x: number; y: number; width: number; height: number }): void;
   setOpacity(opacity: number): void;
@@ -26,7 +43,7 @@ export interface PresentOptions {
 
 export function presentBackgroundWindow(win: PresentableWindow, opts: PresentOptions = {}): void {
   // 화면 밖을 노리되 macOS 가 화면 안으로 clamp 하므로, 투명 + 클릭 통과 + 포커스 불가로 사용자에게 보이지 않게 한다.
-  win.setBounds({ x: -20000, y: -20000, width: 1200, height: 800 });
+  win.setBounds(BACKGROUND_BOUNDS);
   win.setOpacity(0);
   // 클릭은 절대 받지 않는다(사용자가 그 영역을 눌러도 앱이 활성화되지 않는다).
   win.setIgnoreMouseEvents(true);

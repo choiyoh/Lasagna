@@ -15,6 +15,7 @@ function packagedExecutable(): string {
 let app: ElectronApplication;
 let base = '';
 let vaultDir = '';
+let noteDir = '';
 
 async function launch(): Promise<ElectronApplication> {
   const launched = await electron.launch({
@@ -50,16 +51,32 @@ async function resetWriter(page: Page, opts: { mode?: boolean; locale?: 'ko' | '
 
 async function openNote(page: Page): Promise<void> {
   await openVaultIfNeeded(page);
-  await page.locator('aside.sidebar [data-path="회차.md"]').click();
+  await revealEpisode(page);
+  await page.locator('aside.sidebar [data-path="작품/회차/회차.md"]').click();
   await expect(page.locator('.ProseMirror')).toBeVisible();
+}
+
+
+/** 사이드바에서 작품/회차 폴더를 펼쳐 회차 노트가 보이게 한다(W6 픽스처는 작품/회차 아래에 있다). */
+async function revealEpisode(page: Page): Promise<void> {
+  for (const name of ['작품', '회차']) {
+    const box = page
+      .locator('aside.sidebar details')
+      .filter({ has: page.locator('summary', { hasText: new RegExp(`^${name}$`) }) })
+      .first();
+    if ((await box.count()) && !(await box.evaluate((el) => el.hasAttribute('open')))) await box.locator('summary').click();
+  }
 }
 
 test.beforeAll(async () => {
   test.setTimeout(240_000);
   base = mkdtempSync(path.join(tmpdir(), 'nops-focus-'));
   vaultDir = path.join(base, 'Demo');
+  noteDir = path.join(vaultDir, '작품', '회차');
+  mkdirSync(noteDir, { recursive: true });
+  mkdirSync(path.join(vaultDir, '작품', '캐릭터'), { recursive: true });
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, '회차.md'), '# 1화\n\n가나다라마바사아자차\n\n' + Array.from({ length: 600 }, () => '문단입니다.').join('\n\n') + '\n');
+  writeFileSync(path.join(noteDir, '회차.md'), '# 1화\n\n가나다라마바사아자차\n\n' + Array.from({ length: 600 }, () => '문단입니다.').join('\n\n') + '\n');
   app = await launch();
 });
 

@@ -17,6 +17,7 @@ function packagedExecutable(): string {
 let app: ElectronApplication;
 let base = '';
 let vaultDir = '';
+let noteDir = '';
 let notePath = '';
 
 async function launch(): Promise<ElectronApplication> {
@@ -45,13 +46,30 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
   }
 }
 
+
+/** 사이드바에서 작품/회차 폴더를 펼쳐 회차 노트가 보이게 한다(W6 픽스처는 작품/회차 아래에 있다). */
+async function revealEpisode(page: Page): Promise<void> {
+  for (const name of ['작품', '회차']) {
+    const box = page
+      .locator('aside.sidebar details')
+      .filter({ has: page.locator('summary', { hasText: new RegExp(`^${name}$`) }) })
+      .first();
+    if ((await box.count()) && !(await box.evaluate((el) => el.hasAttribute('open')))) await box.locator('summary').click();
+  }
+}
+
 test.beforeAll(async () => {
   test.setTimeout(240_000);
   base = mkdtempSync(path.join(tmpdir(), 'nops-writer-'));
   vaultDir = path.join(base, 'Demo');
+  noteDir = path.join(vaultDir, '작품', '회차');
+  mkdirSync(noteDir, { recursive: true });
+  mkdirSync(path.join(vaultDir, '작품', '캐릭터'), { recursive: true });
   mkdirSync(vaultDir, { recursive: true });
-  notePath = path.join(vaultDir, 'Hello.md');
+  notePath = path.join(noteDir, 'Hello.md');
   writeFileSync(notePath, '# Hello\n\n본문\n');
+  writeFileSync(path.join(vaultDir, '작품', '캐릭터', '주인공.md'), '# 주인공\n\n캐릭터 설명\n');
+  writeFileSync(path.join(vaultDir, '메모.md'), '# 메모\n\n작품 밖\n');
   app = await launch();
 });
 
@@ -62,7 +80,8 @@ test.afterAll(async () => {
 
 async function openNote(page: Page): Promise<void> {
   await openVaultIfNeeded(page);
-  await page.locator('aside.sidebar').getByRole('button', { name: 'Hello', exact: true }).click();
+  await revealEpisode(page);
+  await page.locator('aside.sidebar [data-path$="/Hello.md"]').click();
   await expect(page.locator('.ProseMirror')).toHaveText(/Hello/);
 }
 
@@ -142,10 +161,10 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
   await expect(again.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 (포함|제외)$/);
 
   // 다른 노트로 바꾸면 숫자도 그 노트 기준으로 갱신된다
-  const other = path.join(vaultDir, 'Other.md');
+  const other = path.join(noteDir, 'Other.md');
   writeFileSync(other, '# Other\n\n짧은 글\n');
-  await expect(again.locator('aside.sidebar').getByRole('button', { name: 'Other', exact: true })).toBeVisible({ timeout: 20_000 });
-  await again.locator('aside.sidebar').getByRole('button', { name: 'Other', exact: true }).click();
+  await expect(again.locator('aside.sidebar').locator('[data-path$="/Other.md"]')).toBeVisible({ timeout: 20_000 });
+  await again.locator('aside.sidebar').locator('[data-path$="/Other.md"]').click();
   const otherCount = await again.getByTestId('writer-chars').innerText();
   // 기준(공백 포함/제외)은 앞에서 저장된 값을 따른다
   await expect(again.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 (포함|제외)$/);
@@ -192,11 +211,12 @@ test('긴 회차에서도 글자수 상태줄은 화면 하단에 붙어 있다'
   const page = await app.firstWindow();
   await resetWriter(page);
   await openVaultIfNeeded(page);
-  const longPath = path.join(vaultDir, 'Long.md');
+  await revealEpisode(page);
+  const longPath = path.join(noteDir, 'Long.md');
   writeFileSync(longPath, `# Long\n\n${'문장 하나입니다. '.repeat(4000)}\n`);
   // 파일 감시가 목록에 반영될 때까지 기다린 뒤 연다
-  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Long', exact: true })).toBeVisible({ timeout: 20_000 });
-  await page.locator('aside.sidebar').getByRole('button', { name: 'Long', exact: true }).click();
+  await expect(page.locator('aside.sidebar').locator('[data-path$="/Long.md"]')).toBeVisible({ timeout: 20_000 });
+  await page.locator('aside.sidebar').locator('[data-path$="/Long.md"]').click();
   await toggleWriter(page, true);
 
   const bar = page.getByTestId('writer-status');
@@ -218,10 +238,11 @@ test('columns 문서도 표식 없이 센다(소스 모드 포함)', async () =>
   const page = await app.firstWindow();
   await resetWriter(page);
   await openVaultIfNeeded(page);
-  const colsPath = path.join(vaultDir, 'Columns.md');
+  await revealEpisode(page);
+  const colsPath = path.join(noteDir, 'Columns.md');
   writeFileSync(colsPath, ':::columns\n:::column\n첫째\n:::\n:::column\n둘째\n:::\n:::\n\n[보기](https://example.com/very/long/url)\n');
-  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Columns', exact: true })).toBeVisible({ timeout: 20_000 });
-  await page.locator('aside.sidebar').getByRole('button', { name: 'Columns', exact: true }).click();
+  await expect(page.locator('aside.sidebar').locator('[data-path$="/Columns.md"]')).toBeVisible({ timeout: 20_000 });
+  await page.locator('aside.sidebar').locator('[data-path$="/Columns.md"]').click();
   await toggleWriter(page, true);
   // 표식(:::columns 등)은 세지 않는다: 보이는 글자 '첫째둘째' + '보기' = 6자
   await expect(page.getByTestId('writer-chars')).toHaveText(/^6자 · 공백 포함$/);
@@ -236,10 +257,11 @@ test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상
   const page = await app.firstWindow();
   await resetWriter(page);
   await openVaultIfNeeded(page);
-  const livePath = path.join(vaultDir, 'Live.md');
+  await revealEpisode(page);
+  const livePath = path.join(noteDir, 'Live.md');
   writeFileSync(livePath, '# Live\n\n처음\n');
-  await expect(page.locator('aside.sidebar').getByRole('button', { name: 'Live', exact: true })).toBeVisible({ timeout: 20_000 });
-  await page.locator('aside.sidebar').getByRole('button', { name: 'Live', exact: true }).click();
+  await expect(page.locator('aside.sidebar').locator('[data-path$="/Live.md"]')).toBeVisible({ timeout: 20_000 });
+  await page.locator('aside.sidebar').locator('[data-path$="/Live.md"]').click();
   await toggleWriter(page, true);
   await expect(page.getByTestId('writer-chars')).toHaveText(/^\d+자 · 공백 포함$/);
 
@@ -271,4 +293,62 @@ test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('writer-chars')).toContainText('characters');
+});
+
+test('상태줄·오늘 집계·문서 목표 UI 는 회차 노트에서만 보인다(W6)', async () => {
+  const page = await app.firstWindow();
+  await resetWriter(page);
+  await openVaultIfNeeded(page);
+  await revealEpisode(page);
+  const status = page.getByTestId('writer-status');
+
+  // 회차 노트: 상태줄이 있고 작가 전용 레이아웃 클래스가 붙는다
+  await page.locator('aside.sidebar [data-path$="/Hello.md"]').click();
+  await expect(status).toHaveCount(1);
+  await expect(page.locator('.note-editor')).toHaveClass(/note-editor--writer/);
+  const episodePad = await page.locator('.note-editor').evaluate((el) => getComputedStyle(el).paddingBottom);
+
+  // 캐릭터 시트: 상태줄 DOM 없음, 일반 모드와 같은 여백
+  await page.locator('aside.sidebar [data-path$="/주인공.md"]').click();
+  await expect(page.locator('.ProseMirror h1')).toHaveText('주인공');
+  await expect(status).toHaveCount(0);
+  await expect(page.locator('.note-editor')).not.toHaveClass(/note-editor--writer/);
+  const charPad = await page.locator('.note-editor').evaluate((el) => getComputedStyle(el).paddingBottom);
+
+  const today = async () =>
+    page.evaluate(async () => {
+      const v = await window.nops.vault.current();
+      return (await window.nops.settings.writerToday({ vaultId: v!.id })).chars;
+    });
+  const before = await today();
+  await page.locator('.ProseMirror p').last().click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' 캐릭터 메모');
+  await expect(page.locator('.note-editor__status')).toHaveAttribute('data-state', 'saved', { timeout: 15_000 });
+  await page.waitForTimeout(400);
+  expect(await today()).toBe(before); // 캐릭터 편집은 오늘 집계에 들어가지 않는다
+
+  // 작가 모드를 꺼도 여백이 같다(작가 전용 24px 패딩이 아님)
+  await toggleWriter(page, false);
+  const offPad = await page.locator('.note-editor').evaluate((el) => getComputedStyle(el).paddingBottom);
+  expect(episodePad).toBe('24px');
+  expect(charPad).not.toBe('24px');
+  expect(charPad).toBe(offPad);
+  // 회차 노트에서 다시 켠 뒤(토글 도우미는 상태줄 1개를 기대한다) 캐릭터 노트로 집중 모드를 확인한다
+  await page.locator('aside.sidebar [data-path$="/Hello.md"]').click();
+  await toggleWriter(page, true);
+  await page.locator('aside.sidebar [data-path$="/주인공.md"]').click();
+  await expect(page.locator('.ProseMirror h1')).toHaveText('주인공');
+
+  // 집중 모드에서도 캐릭터 노트에는 상태줄이 없다
+  await page.keyboard.press('Meta+Shift+M');
+  await expect(page.locator('.workspace')).toHaveClass(/workspace--focus/);
+  await expect(status).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.workspace')).not.toHaveClass(/workspace--focus/);
+
+  // 작품 밖 메모도 상태줄이 없다
+  await page.locator('aside.sidebar [data-path="메모.md"]').click();
+  await expect(page.locator('.ProseMirror h1')).toHaveText('메모');
+  await expect(status).toHaveCount(0);
 });

@@ -1,4 +1,4 @@
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import { _electron as electron, expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -66,6 +66,22 @@ async function ensureWork(page: Page, name: string): Promise<void> {
   const card = page.getByTestId('work-card').filter({ hasText: name });
   if ((await card.count()) === 0) await createWork(page, name);
   await expect(page.getByTestId('work-card').filter({ hasText: name })).toBeVisible({ timeout: 15_000 });
+}
+
+
+/** 작가 상태줄 테스트용 회차 노트(W6: 상태줄은 회차에서만) — 없으면 만들고 연다. */
+async function openStatsEpisode(page: Page): Promise<Locator> {
+  await ensureWork(page, '프리셋작품');
+  let row = page.locator('aside.sidebar [data-path$="/1화.md"]').first();
+  if ((await row.count()) === 0) {
+    await page.getByTestId('work-card').filter({ hasText: '프리셋작품' }).getByTestId('new-episode').click();
+    await prompt(page, '1화');
+  }
+  row = page.locator('aside.sidebar [data-path$="/1화.md"]').first();
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.click();
+  await expect(page.locator('.ProseMirror h1')).toHaveText(/1화/);
+  return row;
 }
 
 async function createWork(page: Page, name: string): Promise<void> {
@@ -225,7 +241,7 @@ test('목표 프리셋: 누르면 입력칸이 채워지고, 리디+공백 포�
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   await resetWriter(page);
-  await page.locator('aside.sidebar [data-path="메모.md"]').click();
+  const row = await openStatsEpisode(page);
   await expect(page.getByTestId('writer-status')).toHaveCount(1);
   await page.getByTestId('writer-goal-set').click();
   const input = page.getByTestId('writer-goal-input');
@@ -237,7 +253,8 @@ test('목표 프리셋: 누르면 입력칸이 채워지고, 리디+공백 포�
   await expect(input).toHaveValue('4500');
   await expect(page.getByTestId('writer-goal-preset-hint')).toContainText(/리디북스|Ridi/);
   await page.getByTestId('writer-goal-save').click();
-  await expect.poll(() => readFileSync(path.join(vaultDir, '메모.md'), 'utf8').includes('goal_chars: 4500'), { timeout: 15_000 }).toBe(true);
+  const rel = (await row.getAttribute('data-path')) ?? '';
+  await expect.poll(() => readFileSync(path.join(vaultDir, rel), 'utf8').includes('goal_chars: 4500'), { timeout: 15_000 }).toBe(true);
 });
 
 test('작가 모드 OFF 에서는 배지·새 회차 버튼이 DOM 에 없다', async () => {
@@ -263,7 +280,7 @@ test('목표 프리셋을 펼쳐도 상태줄 높이가 변하지 않는다', as
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   await resetWriter(page);
-  await page.locator('aside.sidebar [data-path="메모.md"]').click();
+  await openStatsEpisode(page);
   await expect(page.getByTestId('writer-status')).toBeVisible();
   const status = page.getByTestId('writer-status');
   const before = (await status.boundingBox())?.height ?? 0;

@@ -37,7 +37,7 @@ import { useImportExport } from './useImportExport';
 import { applyTheme, loadTheme, nextTheme, THEME_ICON, THEME_KEY, type ThemeChoice } from './theme';
 import { useLanguage, useLocale } from './useLocale';
 import { showTextPrompt } from '@nopsidian/editor/nops';
-import { previousEpisodePath, type WorkSummary } from '@nopsidian/core';
+import { isEpisodeNote, previousEpisodePath, type WorkSummary } from '@nopsidian/core';
 import { initialTabs, parseTabs, selectedOf, tabsReducer } from './tabs';
 import { DatabaseScreen } from './db/DatabaseScreen';
 import { DbList } from './db/DbList';
@@ -378,6 +378,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const { exportNote, exportVault, importNotion, importMarkdown } = useImportExport({ selected, refresh, setToast });
 
   const previousOf = useCallback((p: string) => previousEpisodePath(works, p, locale), [works, locale]);
+  /** 회차 폴더 안 노트에만 작가 상태줄·오늘 집계를 보인다(작품 목록 로드 전에는 false) */
+  const episodeOf = useCallback((p: string) => isEpisodeNote(works, p), [works]);
   const previous = selected ? previousOf(selected) : null;
   const [refocus, setRefocus] = useState<{ path: string; tick: number } | null>(null);
   const refocusTick = useRef(0);
@@ -780,6 +782,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                       : {})}
                     refocus={refocus?.path === p ? refocus.tick : undefined}
                     onRefocusDone={() => setRefocus((cur) => (cur?.path === p ? null : cur))}
+                    episodeNote={episodeOf(p)}
                   />
                 </ErrorBoundary>
               )}
@@ -851,6 +854,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                     : {})}
                   refocus={refocus?.path === p ? refocus.tick : undefined}
                   onRefocusDone={() => setRefocus((cur) => (cur?.path === p ? null : cur))}
+                  episodeNote={episodeOf(p)}
                 />
               </ErrorBoundary>
             )}

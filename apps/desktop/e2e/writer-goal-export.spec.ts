@@ -15,6 +15,7 @@ function packagedExecutable(): string {
 let app: ElectronApplication;
 let base = '';
 let vaultDir = '';
+let noteDir = '';
 
 async function launch(): Promise<ElectronApplication> {
   const launched = await electron.launch({
@@ -57,12 +58,27 @@ async function createWork(page: Page, name: string): Promise<void> {
   await page.keyboard.press('Escape');
 }
 
+
+/** 사이드바에서 작품/회차 폴더를 펼쳐 회차 노트가 보이게 한다(W6 픽스처는 작품/회차 아래에 있다). */
+async function revealEpisode(page: Page): Promise<void> {
+  for (const name of ['작품', '회차']) {
+    const box = page
+      .locator('aside.sidebar details')
+      .filter({ has: page.locator('summary', { hasText: new RegExp(`^${name}$`) }) })
+      .first();
+    if ((await box.count()) && !(await box.evaluate((el) => el.hasAttribute('open')))) await box.locator('summary').click();
+  }
+}
+
 test.beforeAll(async () => {
   test.setTimeout(240_000);
   base = mkdtempSync(path.join(tmpdir(), 'nops-w4e-'));
   vaultDir = path.join(base, 'Demo');
+  noteDir = path.join(vaultDir, '작품', '회차');
+  mkdirSync(noteDir, { recursive: true });
+  mkdirSync(path.join(vaultDir, '작품', '캐릭터'), { recursive: true });
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, '회차.md'), '# 1화 밤의 시작\n\n**굵은** 문장과 [[노트|별칭]], [링크](https://x.y)\n\n> 인용문\n');
+  writeFileSync(path.join(noteDir, '회차.md'), '# 1화 밤의 시작\n\n**굵은** 문장과 [[노트|별칭]], [링크](https://x.y)\n\n> 인용문\n');
   app = await launch();
 });
 
@@ -100,7 +116,7 @@ test('작품 목표를 저장하면 카드 목표선이 보이고 재시작 후 
   // 저장 위치는 userData 이고 볼트에는 목표 파일을 만들지 않는다
   const userData = path.join(base, 'userdata');
   await expect.poll(() => statSync(path.join(userData, 'writer-works.json')).size, { timeout: 10_000 }).toBeGreaterThan(0);
-  expect(readFileSync(path.join(vaultDir, '회차.md'), 'utf8')).toBe('# 1화 밤의 시작\n\n**굵은** 문장과 [[노트|별칭]], [링크](https://x.y)\n\n> 인용문\n');
+  expect(readFileSync(path.join(noteDir, '회차.md'), 'utf8')).toBe('# 1화 밤의 시작\n\n**굵은** 문장과 [[노트|별칭]], [링크](https://x.y)\n\n> 인용문\n');
 
   // 재시작 후 유지
   await app.close();
@@ -126,7 +142,8 @@ test('일일 목표로 설정을 누르면 전역 일일 목표가 계산값으�
   await expect(page.getByTestId('work-goal-episodes')).toHaveValue('80');
   await page.keyboard.press('Escape');
   // 상태줄에도 같은 값이 반영된다(노트를 연 뒤)
-  await page.locator('aside.sidebar [data-path="회차.md"]').click();
+  await revealEpisode(page);
+  await page.locator('aside.sidebar [data-path="작품/회차/회차.md"]').click();
   await expect(page.getByTestId('writer-today')).toContainText(`/${new Intl.NumberFormat('ko').format(value)}`);
 });
 
@@ -134,7 +151,8 @@ test('복사 미리보기: 플랫폼용은 제목·기호를 빼고, 클립보�
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   await resetWriter(page);
-  await page.locator('aside.sidebar [data-path="회차.md"]').click();
+  await revealEpisode(page);
+  await page.locator('aside.sidebar [data-path="작품/회차/회차.md"]').click();
   await expect(page.locator('.ProseMirror')).toContainText('굵은');
   await page.evaluate(() => {
     (window as unknown as { __copied?: string }).__copied = '';
@@ -179,7 +197,8 @@ test('일반 모드에는 목표선·복사 버튼이 DOM 에 없다', async () 
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   await resetWriter(page, { mode: false });
-  await page.locator('aside.sidebar [data-path="회차.md"]').click();
+  await revealEpisode(page);
+  await page.locator('aside.sidebar [data-path="작품/회차/회차.md"]').click();
   await expect(page.getByTestId('work-goal-line')).toHaveCount(0);
   await expect(page.getByTestId('copy-open')).toHaveCount(0);
 });
@@ -188,8 +207,8 @@ test('영어 문구로 보인다', async () => {
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   await resetWriter(page, { locale: 'en' });
-  await expect(page.getByTestId('work-goal-line')).toHaveText(/episodes/);
-  await page.getByTestId('work-goal-line').click();
+  await expect(page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-goal-line')).toHaveText(/episodes/);
+  await page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-goal-line').click();
   await expect(page.getByTestId('work-goal-dialog')).toContainText('Work goal');
   // 영어 복수형: 현재 회차가 1 이하일 때 단수 문구가 나온다(데이터는 2회차라 other).
   await expect(page.getByTestId('work-goal-summary')).toContainText(/episodes left/);

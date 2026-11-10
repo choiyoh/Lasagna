@@ -114,23 +114,26 @@ test('이전 회차 버튼은 오른쪽 칸에 앞 회차를 열고, 쓰던 노�
   await src.locator('.cm-content').click();
   await page.keyboard.press('Meta+ArrowDown');
   await page.keyboard.type('첫문장');
+  const t0 = Date.now();
   await prev.click();
+  // 클릭 뒤 ~100ms 안에 쓰던 칸 에디터가 포커스를 갖는다(버튼에 남지 않는다).
+  await expect
+    .poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="pane-0"] .cm-content')), { timeout: 1500 })
+    .toBe(true);
+  const focusMs = Date.now() - t0;
+  expect(focusMs).toBeLessThan(300);
+  // 곧바로 타이핑해도 왼쪽 노트에 들어가고 저장된다.
+  await page.keyboard.type('이어');
+  await expect
+    .poll(() => readFileSync(path.join(vaultDir, '두쪽', '회차', '3화.md'), 'utf8').includes('첫문장이어'), { timeout: 15_000 })
+    .toBe(true);
+  await expect(page.getByTestId('pane-1').locator('.ProseMirror')).not.toContainText('이어');
 
   // 오른쪽 칸에 2화, 왼쪽(쓰던 칸)은 3화 그대로
   await expect(page.getByTestId('pane-1')).toBeVisible();
   await expect(page.getByTestId('pane-1').getByTestId('note-tab')).toContainText('2화');
   await expect(page.getByTestId('pane-0').getByTestId('note-tab')).toContainText('3화');
   await expect(page.getByTestId('pane-0')).toHaveClass(/is-active/);
-
-  // 클릭 없이 바로 입력해도 쓰던 칸(왼쪽)에 들어간다 — 포커스가 버튼에 남지 않는다
-  await expect
-    .poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="pane-0"] .cm-content')))
-    .toBe(true);
-  await page.keyboard.type('이어');
-  await expect(page.getByTestId('pane-1').locator('.ProseMirror')).not.toContainText('이어');
-  await expect
-    .poll(() => readFileSync(path.join(vaultDir, '두쪽', '회차', '3화.md'), 'utf8').includes('첫문장이어'), { timeout: 15_000 })
-    .toBe(true);
 
   // 이미 분할돼 있어도 같은 회차를 중복으로 열지 않는다
   await prev.click();
@@ -145,7 +148,9 @@ test('이전 회차 버튼은 오른쪽 칸에 앞 회차를 열고, 쓰던 노�
   // 편집 모드에서도 클릭 후 포커스가 왼쪽 에디터(ProseMirror)로 돌아온다
   await page.getByRole('button', { name: '편집 모드' }).click();
   await page.getByTestId('pane-0').locator('.ProseMirror').click();
-  await prev.click();
+  // 키보드(Enter)로 눌러도 같은 핸들러로 열리고 포커스가 돌아온다
+  await prev.focus();
+  await page.keyboard.press('Enter');
   await expect(page.getByTestId('pane-1')).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="pane-0"] .ProseMirror')))
@@ -174,7 +179,15 @@ test('이전 회차 버튼은 오른쪽 칸에 앞 회차를 열고, 쓰던 노�
   await expect(palette).toBeVisible();
   await palette.locator('input').fill('이전 회차');
   await expect(palette.getByRole('option').first()).toContainText('이전 회차');
-  await page.keyboard.press('Escape');
+  // 팔레트로 실행해도 쓰던 칸 에디터로 포커스가 돌아온다
+  await page.keyboard.press('Enter');
+  await expect(palette).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="pane-0"] .editor, [data-testid="pane-0"] .ProseMirror, [data-testid="pane-0"] .cm-content')))
+    .toBe(true);
+  // 다음 테스트가 한 칸에서 시작하도록 정리
+  await page.getByTestId('pane-1').locator('.tab__close').click();
+  await expect(page.locator('.pane')).toHaveCount(1);
 });
 
 test('작가 모드 OFF·일반 모드에는 버튼과 팔레트 항목이 DOM 에 없다', async () => {

@@ -439,17 +439,20 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   // 이전 회차를 연 뒤: 분할·레이아웃이 끝난 다음 프레임에 쓰던 칸의 입력 영역으로 초점을 돌린다.
   useEffect(() => {
     if (!refocus) return;
+    let second = 0;
     let timer = 0;
     const apply = () => {
       if (modeRef.current === 'source') sourceRef.current?.focus();
       else editorRef.current?.focus();
     };
-    // 분할 레이아웃·새 칸 마운트가 끝난 뒤에 초점을 준다.
+    // 다음 프레임에 바로 초점을 주고, 분할 레이아웃·새 칸 마운트가 늦으면 한 번 더 준다.
     const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(apply);
       timer = window.setTimeout(apply, 80);
     });
     return () => {
       cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
       clearTimeout(timer);
     };
   }, [refocus]);

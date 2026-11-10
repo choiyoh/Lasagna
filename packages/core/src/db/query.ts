@@ -541,7 +541,9 @@ export function calcColumn(schema: DbSchema, rows: DbRow[], prop: string, fn: Ca
     case 'avg':
     case 'min':
     case 'max': {
-      if (schema.properties[prop]?.type !== 'number') return null; // 타입에 안 맞는 fn
+      // 수식·롤업도 결과가 숫자면 합계를 낸다(작가 모드 글자수 자동 열). 일반 열 동작은 그대로.
+      const kind = schema.properties[prop]?.type;
+      if (kind !== 'number' && kind !== 'formula' && kind !== 'rollup') return null; // 타입에 안 맞는 fn
       // Math.min(...nums) 은 행이 많으면 인자 한도에 걸리므로 직접 훑는다
       let sum = 0;
       let n = 0;
@@ -567,7 +569,20 @@ export function calcColumn(schema: DbSchema, rows: DbRow[], prop: string, fn: Ca
     }
     case 'checked':
     case 'unchecked': {
-      if (schema.properties[prop]?.type !== 'checkbox') return null; // 타입에 안 맞는 fn
+      const kind = schema.properties[prop]?.type;
+      if (kind === 'formula' || kind === 'rollup') {
+        // 참/거짓 수식: '체크된 수/값이 있는 행 수' (goal_met() 은 목표 없는 행이 null).
+        let on = 0;
+        let total = 0;
+        for (const row of rows) {
+          const value = getCell(schema, row, prop);
+          if (typeof value !== 'boolean') continue;
+          total += 1;
+          if (fn === 'checked' ? value : !value) on += 1;
+        }
+        return total > 0 ? `${on}/${total}` : null;
+      }
+      if (kind !== 'checkbox') return null; // 타입에 안 맞는 fn
       let n = 0;
       for (const row of rows) {
         const value = getCell(schema, row, prop);

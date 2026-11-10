@@ -434,6 +434,28 @@ describe('calcColumn', () => {
     expect(calcColumn(schema, rows, '체크', 'unchecked')).toBe(1);
     expect(calcColumn(schema, rows, '수치', 'checked')).toBeNull();
   });
+
+  it('수식 열: 결과가 숫자면 합계, 참/거짓이면 체크된 수/값이 있는 행 수', () => {
+    const withFormulas: DbSchema = {
+      ...schema,
+      properties: {
+        ...schema.properties,
+        글자수: { type: 'formula', expr: 'note_chars()' },
+        목표달성: { type: 'formula', expr: 'goal_met()' },
+      },
+    };
+    const frows = [
+      row('a', 'a', { 글자수: 2, 목표달성: true }),
+      row('b', 'b', { 글자수: 3, 목표달성: false }),
+      row('c', 'c', { 글자수: 5, 목표달성: null }),
+    ];
+    expect(calcColumn(withFormulas, frows, '글자수', 'sum')).toBe(10);
+    expect(calcColumn(withFormulas, frows, '목표달성', 'checked')).toBe('1/2');
+    expect(calcColumn(withFormulas, frows, '목표달성', 'unchecked')).toBe('1/2');
+    expect(calcColumn(withFormulas, [frows[2]!], '목표달성', 'checked')).toBeNull();
+    // 일반 체크박스 표시는 숫자 그대로(기존 동작)
+    expect(calcColumn(schema, rows, '체크', 'checked')).toBe(2);
+  });
 });
 
 describe('queryRows', () => {

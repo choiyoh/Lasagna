@@ -1,5 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -83,15 +83,23 @@ test('회차 DB 칩을 눌러야 _db.yaml 이 생기고, 자동 열이 계산된
   await page.waitForTimeout(300); // 뷰 저장이 끝난 뒤 비교한다
   const yaml = readFileSync(dbFile, 'utf8');
   expect(yaml).toContain('goal_met');
+  // 뷰는 전체·초고·퇴고·완료 4개, 같은 id/이름이 두 번 있지 않다.
+  expect([...yaml.matchAll(/^\s*-\s+id:\s*(\S+)/gm)].map((m) => m[1])).toEqual(['v1', 'status-0', 'status-1', 'status-2']);
+  expect([...yaml.matchAll(/^\s*name:\s*(.+)$/gm)].map((m) => m[1]!.trim())).toEqual(['전체', '초고', '퇴고', '완료']);
   // DB 화면: 열 이름과 자동 배지
   await expect(page.getByTestId('th-글자수')).toContainText('글자수');
   await expect(page.getByTestId('auto-글자수')).toHaveText('자동');
   await expect(page.getByTestId('auto-목표 달성')).toHaveText('자동');
 
-  // 빈 상태: '+ 첫 회차' → 회차 1·상태 초고 행 생성
+  // 빈 상태: '+ 첫 회차' → 회차 1·상태 초고 행 생성(파일 생성 지연도 잰다)
   await expect(page.getByRole('button', { name: /\+ 첫 회차/ })).toBeVisible({ timeout: 15_000 });
+  const t0 = Date.now();
   await page.getByRole('button', { name: /\+ 첫 회차/ }).click();
+  await expect.poll(() => existsSync(path.join(vaultDir, '달빛', '회차', '1화.md')), { timeout: 15_000 }).toBe(true);
+  const fileMs = Date.now() - t0;
   await expect(page.getByTestId('db-table')).toContainText('1화', { timeout: 15_000 });
+  console.log(`[W4c] first episode file=${fileMs}ms row=${Date.now() - t0}ms`);
+  expect(fileMs).toBeLessThan(1500);
   await expect(page.getByTestId('db-table')).toContainText('초고');
   // 새 행의 회차 기본값 = 최대+1
   await page.getByTestId('db-new-row').click();
@@ -118,7 +126,11 @@ test('회차 DB 칩을 눌러야 _db.yaml 이 생기고, 자동 열이 계산된
   const firstRow = page.locator('[data-testid="db-table"] .dbtable__row').first();
   await expect(firstRow).toContainText('2화'); // 회차 값이 있는 행 기준 내림차순(새 회차는 회차 값이 비어 맨 아래)
   await expect(page.locator('.dbtable__calc')).toHaveCount(1);
-  await expect(page.locator('.dbtable__calc')).toContainText(/합계/);
+  // 목표를 넣어 글자수 총합과 목표 달성 수(n/m)를 확인한다.
+  writeFileSync(path.join(vaultDir, '달빛', '회차', '1화.md'), '---\ngoal_chars: 1\n---\n# 1화\n');
+  writeFileSync(path.join(vaultDir, '달빛', '회차', '2화.md'), '---\ngoal_chars: 99\n---\n# 2화\n');
+  await expect(page.locator('.dbtable__calc')).toContainText('6', { timeout: 15_000 });
+  await expect(page.locator('.dbtable__calc')).toContainText('1/2');
   await page.getByRole('tab', { name: '퇴고' }).click();
   await expect(page.getByTestId('th-title')).toBeVisible();
   await expect(page.getByTestId('db-new-row')).toContainText(/새 행/);
@@ -181,4 +193,27 @@ test('언어를 바꿔 다시 열어도 기존 회차 DB 는 그대로다(열·�
   await expect(again.getByTestId('th-Episode')).toHaveCount(0);
   expect(readFileSync(dbFile, 'utf8')).toBe(before);
   expect((readFileSync(dbFile, 'utf8').match(/회차: \{ type: number/g) ?? []).length).toBe(1);
+});
+
+test('영어 회차 DB 도 뷰 4개와 합계 행(총 글자수·n/m)이 보인다', async () => {
+  const page = await app.firstWindow();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openVaultIfNeeded(page);
+  await resetWriter(page, 'en');
+  await page.getByRole('tab', { name: /Files|파일/ }).click();
+  await createWork(page, 'Moon');
+  const dbFile = path.join(vaultDir, 'Moon', 'Episodes', '_db.yaml');
+  await page.getByTestId('work-card').filter({ hasText: 'Moon' }).getByTestId('work-chip-db').click();
+  await expect.poll(() => { try { return readFileSync(dbFile, 'utf8').includes('calc'); } catch { return false; } }, { timeout: 15_000 }).toBe(true);
+  const yaml = readFileSync(dbFile, 'utf8');
+  expect([...yaml.matchAll(/^\s*-\s+id:\s*(\S+)/gm)].map((m) => m[1])).toEqual(['v1', 'status-0', 'status-1', 'status-2']);
+  await expect(page.getByRole('tab', { name: 'All' })).toBeVisible();
+  await page.getByRole('button', { name: /\+ First episode/ }).click();
+  const dir = path.join(vaultDir, 'Moon', 'Episodes');
+  await expect.poll(() => readdirSync(dir).filter((f) => f.endsWith('.md')).length, { timeout: 15_000 }).toBe(1);
+  const file = path.join(dir, readdirSync(dir).find((f) => f.endsWith('.md'))!);
+  writeFileSync(file, '---\ngoal_chars: 1\n---\n# E1\n');
+  await expect(page.locator('.dbtable__calc')).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.locator('.dbtable__calc')).toContainText('2');
+  await expect(page.locator('.dbtable__calc')).toContainText('1/1');
 });

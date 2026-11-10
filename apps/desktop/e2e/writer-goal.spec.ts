@@ -197,7 +197,9 @@ test('입력하면 오늘 쓴 글자수가 늘고, 삭제로 줄어도 0 미만�
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type('오늘 쓴 문장');
   await expect.poll(readToday, { timeout: 10_000 }).toBe(start + 7); // '오늘 쓴 문장' = 공백 포함 7자
-  for (let i = 0; i < 20; i += 1) await page.keyboard.press('Backspace');
+  // 한 번에 전체 선택 후 삭제(키 입력 유실과 무관하게 -7 델타 한 번)
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.press('Backspace');
   await expect.poll(readToday, { timeout: 10_000 }).toBe(0);
 });
 

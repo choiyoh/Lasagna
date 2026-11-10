@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // 작가 모드(W3): 사이드바 '작품' 섹션 — 카드·칩·새 캐릭터·글자수 갱신·일반 모드 불변.
 function packagedExecutable(): string {
@@ -41,6 +42,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 async function resetWriter(page: Page, opts: { mode?: boolean; locale?: 'ko' | 'en' } = {}): Promise<void> {
@@ -100,7 +102,7 @@ test.beforeAll(async () => {
   vaultDir = path.join(base, 'Demo');
   userDataDir = path.join(base, 'userdata');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, '메모.md'), '# 메모\n\n본문\n');
+  writeExternalNote(path.join(vaultDir, '메모.md'), '# 메모\n\n본문\n');
   app = await launch();
 });
 
@@ -145,7 +147,7 @@ test('회차 글자수가 카드에 반영되고, 입력·저장 후에도 갱�
   await openVaultIfNeeded(page);
   await resetWriter(page);
   const episode = path.join(vaultDir, '달빛 조각사', '회차', '1화.md');
-  writeFileSync(episode, '# 1화\n\n가나다라마바사아자차\n'); // 본문 10자(+제목 2자)
+  writeExternalNote(episode, '# 1화\n\n가나다라마바사아자차\n'); // 본문 10자(+제목 2자)
   await expect(page.getByTestId('work-meta')).toHaveText(/1회차 · 12자/, { timeout: 10_000 });
   // 외부에서 만든 파일이 색인되어 트리에 나타날 때까지 기다린다(카드 집계는 파일 시스템 기준이라 더 빠르다).
   const row = page.locator('aside.sidebar [data-path="달빛 조각사/회차/1화.md"]');
@@ -211,7 +213,8 @@ test('새 회차를 만들면 회차 행 글자수 배지가 보이고 입력하
   await openVaultIfNeeded(page);
   await resetWriter(page);
   await createWork(page, '배지작품');
-  await page.getByTestId('new-episode').click();
+  // 작품 카드가 여러 개면 전역 로케이터가 2개를 잡는다 — 이 작품 카드로 한정한다.
+  await page.getByTestId('work-card').filter({ hasText: '배지작품' }).getByTestId('new-episode').click();
   await prompt(page, '2화');
   await expect(page.locator('.ProseMirror h1')).toHaveText('2화');
   // 실제로 만들어진 경로를 트리에서 확인한다(작품 이름이 중복되면 번호가 붙을 수 있다).

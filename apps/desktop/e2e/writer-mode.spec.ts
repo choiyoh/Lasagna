@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // 작가 모드(W1): 토글·글자수 상태줄(총계)·공백 기준·언어 전환·재시작 유지, 그리고 노트 파일 불변.
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
@@ -44,6 +45,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 
@@ -67,9 +69,9 @@ test.beforeAll(async () => {
   mkdirSync(path.join(vaultDir, '작품', '캐릭터'), { recursive: true });
   mkdirSync(vaultDir, { recursive: true });
   notePath = path.join(noteDir, 'Hello.md');
-  writeFileSync(notePath, '# Hello\n\n본문\n');
-  writeFileSync(path.join(vaultDir, '작품', '캐릭터', '주인공.md'), '# 주인공\n\n캐릭터 설명\n');
-  writeFileSync(path.join(vaultDir, '메모.md'), '# 메모\n\n작품 밖\n');
+  writeExternalNote(notePath, '# Hello\n\n본문\n');
+  writeExternalNote(path.join(vaultDir, '작품', '캐릭터', '주인공.md'), '# 주인공\n\n캐릭터 설명\n');
+  writeExternalNote(path.join(vaultDir, '메모.md'), '# 메모\n\n작품 밖\n');
   app = await launch();
 });
 
@@ -162,7 +164,7 @@ test('작가 모드 설정은 재시작해도 유지되고, 영어에서는 char
 
   // 다른 노트로 바꾸면 숫자도 그 노트 기준으로 갱신된다
   const other = path.join(noteDir, 'Other.md');
-  writeFileSync(other, '# Other\n\n짧은 글\n');
+  writeExternalNote(other, '# Other\n\n짧은 글\n');
   await expect(again.locator('aside.sidebar').locator('[data-path$="/Other.md"]')).toBeVisible({ timeout: 20_000 });
   await again.locator('aside.sidebar').locator('[data-path$="/Other.md"]').click();
   const otherCount = await again.getByTestId('writer-chars').innerText();
@@ -213,7 +215,7 @@ test('긴 회차에서도 글자수 상태줄은 화면 하단에 붙어 있다'
   await openVaultIfNeeded(page);
   await revealEpisode(page);
   const longPath = path.join(noteDir, 'Long.md');
-  writeFileSync(longPath, `# Long\n\n${'문장 하나입니다. '.repeat(4000)}\n`);
+  writeExternalNote(longPath, `# Long\n\n${'문장 하나입니다. '.repeat(4000)}\n`);
   // 파일 감시가 목록에 반영될 때까지 기다린 뒤 연다
   await expect(page.locator('aside.sidebar').locator('[data-path$="/Long.md"]')).toBeVisible({ timeout: 20_000 });
   await page.locator('aside.sidebar').locator('[data-path$="/Long.md"]').click();
@@ -240,7 +242,7 @@ test('columns 문서도 표식 없이 센다(소스 모드 포함)', async () =>
   await openVaultIfNeeded(page);
   await revealEpisode(page);
   const colsPath = path.join(noteDir, 'Columns.md');
-  writeFileSync(colsPath, ':::columns\n:::column\n첫째\n:::\n:::column\n둘째\n:::\n:::\n\n[보기](https://example.com/very/long/url)\n');
+  writeExternalNote(colsPath, ':::columns\n:::column\n첫째\n:::\n:::column\n둘째\n:::\n:::\n\n[보기](https://example.com/very/long/url)\n');
   await expect(page.locator('aside.sidebar').locator('[data-path$="/Columns.md"]')).toBeVisible({ timeout: 20_000 });
   await page.locator('aside.sidebar').locator('[data-path$="/Columns.md"]').click();
   await toggleWriter(page, true);
@@ -259,7 +261,7 @@ test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상
   await openVaultIfNeeded(page);
   await revealEpisode(page);
   const livePath = path.join(noteDir, 'Live.md');
-  writeFileSync(livePath, '# Live\n\n처음\n');
+  writeExternalNote(livePath, '# Live\n\n처음\n');
   await expect(page.locator('aside.sidebar').locator('[data-path$="/Live.md"]')).toBeVisible({ timeout: 20_000 });
   await page.locator('aside.sidebar').locator('[data-path$="/Live.md"]').click();
   await toggleWriter(page, true);
@@ -275,7 +277,7 @@ test('편집한 뒤 외부 변경·소스 왕복·언어 전환이 있어도 상
 
   // 밖에서 파일을 통째로 바꾸면(무음 reload) 상태줄도 새 내용 기준이어야 한다
   const editedCount = await page.getByTestId('writer-chars').innerText();
-  writeFileSync(livePath, '# Live\n\n짧\n');
+  writeExternalNote(livePath, '# Live\n\n짧\n');
   await expect(page.locator('.ProseMirror')).toHaveText(/짧/);
   // 디바운스 뒤 값이 새 내용으로 바뀔 때까지 기다린다(이전 값과 다름)
   await expect(page.getByTestId('writer-chars')).not.toHaveText(editedCount);

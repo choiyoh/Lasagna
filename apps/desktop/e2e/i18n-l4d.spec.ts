@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // L4d 영어 스모크: 동기화 대화상자·CSV 가져오기 화면 문구가 영어이고, 언어를 바꾸면 즉시 다시 그린다.
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
@@ -23,7 +24,7 @@ test.beforeAll(async () => {
   base = mkdtempSync(path.join(tmpdir(), 'nops-l4d-'));
   vaultDir = path.join(base, 'Demo');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, 'Hello.md'), '# Hello\n');
+  writeExternalNote(path.join(vaultDir, 'Hello.md'), '# Hello\n');
   app = await electron.launch({
     executablePath: packagedExecutable(),
     env: { ...process.env, NOPS_E2E: '1' },
@@ -51,6 +52,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 test('English smoke: sync dialog is English, switching language redraws it', async () => {

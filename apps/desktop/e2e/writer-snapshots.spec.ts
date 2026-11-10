@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // 작가 모드(W4d): 이름 붙인 스냅샷 — 저장·diff·되돌리기·이름 바꾸기·삭제·재시작·일반 모드 불변.
 function packagedExecutable(): string {
@@ -41,6 +42,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 async function openDock(page: Page): Promise<void> {
@@ -74,7 +76,7 @@ test.beforeAll(async () => {
   vaultDir = path.join(base, 'Demo');
   mkdirSync(vaultDir, { recursive: true });
   notePath = path.join(vaultDir, '회차.md');
-  writeFileSync(notePath, '# 회차\n\n처음 문장\n');
+  writeExternalNote(notePath, '# 회차\n\n처음 문장\n');
   app = await launch();
 });
 
@@ -232,7 +234,7 @@ test('다른 노트로 바꾸면 선택한 스냅샷·diff 가 초기화되고 �
 
   // 다른 노트를 만들어 전환한다(스냅샷이 없는 노트)
   const other = path.join(vaultDir, '다른노트.md');
-  writeFileSync(other, '# 다른노트\n\n건드리면 안 되는 내용\n');
+  writeExternalNote(other, '# 다른노트\n\n건드리면 안 되는 내용\n');
   const otherRow = page.locator('aside.sidebar [data-path="다른노트.md"]');
   await expect(otherRow).toBeVisible({ timeout: 15_000 });
   await otherRow.click();
@@ -249,7 +251,7 @@ test('다른 노트로 바꾸면 선택한 스냅샷·diff 가 초기화되고 �
 test('이름 바꾸기를 취소하면 스냅샷이 원래 노트로 돌아온다', async () => {
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
-  writeFileSync(path.join(vaultDir, '취소노트.md'), '# 취소노트\n\n취소 테스트 내용\n');
+  writeExternalNote(path.join(vaultDir, '취소노트.md'), '# 취소노트\n\n취소 테스트 내용\n');
   await resetSettings(page);
   const row = page.locator('aside.sidebar [data-path="취소노트.md"]');
   await expect(row).toBeVisible({ timeout: 15_000 });

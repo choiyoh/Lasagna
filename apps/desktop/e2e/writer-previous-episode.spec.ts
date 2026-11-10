@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // 작가 모드(W5): '이전 회차'를 오른쪽 칸에 열기 — 진입점·비활성·분할 재사용·일반 모드 불변.
 function packagedExecutable(): string {
@@ -40,6 +41,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 async function resetWriter(page: Page, mode = true, locale: 'ko' | 'en' = 'ko'): Promise<void> {
@@ -78,7 +80,7 @@ test.beforeAll(async () => {
   base = mkdtempSync(path.join(tmpdir(), 'nops-prev-'));
   vaultDir = path.join(base, 'Demo');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, '메모.md'), '# 메모\n');
+  writeExternalNote(path.join(vaultDir, '메모.md'), '# 메모\n');
   app = await launch();
 });
 

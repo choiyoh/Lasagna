@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // L2a 영어 스모크: 영어로 전환한 뒤 이번에 번역한 화면들이 한글 없이 뜨는지 확인한다.
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
@@ -44,6 +45,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 test.beforeAll(async () => {
@@ -51,8 +53,8 @@ test.beforeAll(async () => {
   userData = path.join(base, 'userdata');
   vaultDir = path.join(base, 'vault');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, 'Hello.md'), '# Hello\n\nSee [[Other]].\n');
-  writeFileSync(path.join(vaultDir, 'Other.md'), '# Other\n');
+  writeExternalNote(path.join(vaultDir, 'Hello.md'), '# Hello\n\nSee [[Other]].\n');
+  writeExternalNote(path.join(vaultDir, 'Other.md'), '# Other\n');
   app = await launch();
 });
 

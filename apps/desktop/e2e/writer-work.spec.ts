@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // 작가 모드(W2): '작품 만들기' — 폴더 구조·템플릿 노트·중복/이름 검증·일반 모드 불변.
 function packagedExecutable(): string {
@@ -40,6 +41,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 /** 테스트마다 언어와 작가 모드를 스스로 맞춘다. */
@@ -107,7 +109,7 @@ test.beforeAll(async () => {
   base = mkdtempSync(path.join(tmpdir(), 'nops-work-'));
   vaultDir = path.join(base, 'Demo');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, '메모.md'), '# 메모\n\n본문\n');
+  writeExternalNote(path.join(vaultDir, '메모.md'), '# 메모\n\n본문\n');
   app = await launch();
 });
 
@@ -239,7 +241,7 @@ test('출판형 구조를 고르면 폴더 8개와 템플릿만 만들고, 새 �
   await expect(row.getByTestId('tree-badge')).toHaveText('2');
 
   // 교정 폴더 노트는 회차 수·글자수에서 제외된다
-  writeFileSync(path.join(vaultDir, '출판작', '교정', '1교.md'), '# 1교\n\n교정 메모 문장\n');
+  writeExternalNote(path.join(vaultDir, '출판작', '교정', '1교.md'), '# 1교\n\n교정 메모 문장\n');
   await expect.poll(
     async () => (await page.getByTestId('work-card').filter({ hasText: '출판작' }).getByTestId('work-meta').innerText()),
     { timeout: 15_000 },

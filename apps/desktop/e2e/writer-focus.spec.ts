@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // 작가 모드(W4b): 선택 글자수·집중 모드(⌘⇧M)·타자기 스크롤·글꼴 설정.
 function packagedExecutable(): string {
@@ -37,6 +38,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 async function resetWriter(page: Page, opts: { mode?: boolean; locale?: 'ko' | 'en' } = {}): Promise<void> {
@@ -76,7 +78,7 @@ test.beforeAll(async () => {
   mkdirSync(noteDir, { recursive: true });
   mkdirSync(path.join(vaultDir, '작품', '캐릭터'), { recursive: true });
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(noteDir, '회차.md'), '# 1화\n\n가나다라마바사아자차\n\n' + Array.from({ length: 600 }, () => '문단입니다.').join('\n\n') + '\n');
+  writeExternalNote(path.join(noteDir, '회차.md'), '# 1화\n\n가나다라마바사아자차\n\n' + Array.from({ length: 600 }, () => '문단입니다.').join('\n\n') + '\n');
   app = await launch();
 });
 

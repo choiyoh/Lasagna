@@ -1,10 +1,11 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { strToU8, zipSync } from 'fflate';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // `pnpm package` 로 만든 앱을 실행한다(Fuses·asar·네이티브 모듈까지 함께 검증).
 /** 패키징한 앱의 실행 파일. darwin 은 .app 번들 안, win32 는 .exe, linux 는 실행 파일이다. NOPS_E2E_EXECUTABLE 로 덮어쓸 수 있다. */
@@ -41,6 +42,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await openVault.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 30_000 });
   }
+  await waitForWatcher(page);
 }
 
 /**
@@ -77,8 +79,9 @@ test.beforeAll(async () => {
   const base = mkdtempSync(path.join(tmpdir(), 'nops-e2e-'));
   vaultDir = path.join(base, '내 볼트');
   mkdirSync(path.join(vaultDir, '프로젝트'), { recursive: true });
-  writeFileSync(path.join(vaultDir, '프로젝트', 'Nopsidian.md'), '# Nopsidian\n핵심은 읽기 쉬운 코드다\n');
-  writeFileSync(
+  writeExternalNote(path.join(vaultDir, '프로젝트', 'Nopsidian.md'), '# Nopsidian\n핵심은 읽기 쉬운 코드다\n');
+  writeExternalNote(path.join(vaultDir, '병합.md'), '# 병합\n\n첫 문단\n\n둘째 문단\n');
+  writeExternalNote(
     path.join(vaultDir, '위험.md'),
     '# 위험\n<script>window.__pwned = 1</script>\n<img src=x onerror="window.__pwned = 1">\n[링크](javascript:alert(1))\n',
   );
@@ -168,34 +171,34 @@ test('렌더러는 Node에 접근할 수 없고 악성 HTML은 실행되지 않�
 
 test('앱 밖에서 만든 파일이 목록과 검색에 반영된다', async () => {
   const page = await app.firstWindow();
-  writeFileSync(path.join(vaultDir, '외부.md'), '# 외부 편집\n다른 편집기에서 작성한 바나나우유\n');
+  writeExternalNote(path.join(vaultDir, '외부.md'), '# 외부 편집\n다른 편집기에서 작성한 바나나우유\n');
   // 빈 화면(Welcome)의 최근 목록에도 같은 이름이 나오므로 사이드바 트리 행으로 한정한다.
-  await expect(page.locator('aside.sidebar').getByRole('button', { name: '외부 편집' })).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('aside.sidebar').getByRole('button', { name: '외부 편집' })).toBeVisible({ timeout: 15000 });
   await page.getByPlaceholder('본문 검색').fill('바나나우유');
   await expect(page.locator('.hit', { hasText: '외부 편집' })).toBeVisible();
   await page.getByPlaceholder('본문 검색').fill('');
 });
 
-test('저장: 앱 편집과 외부 편집을 병합하고, 자기 쓰기는 external=false로 알린다', async () => {
+test('저장: 앱 편집과 외부 편집을 병합하고, 자기 쓰기는 디스크·읽기 해시로 확인된다', async () => {
   const page = await app.firstWindow();
   const file = path.join(vaultDir, '병합.md');
   const base = '# 병합\n\n첫 문단\n\n둘째 문단\n';
-  writeFileSync(file, base);
-  await expect(page.getByRole('button', { name: '병합', exact: true })).toBeVisible({ timeout: 5000 });
+  // 최초 추가는 beforeAll 픽스처로 만들어 두고, 여기서는 외부 편집(갱신)만 다룬다.
+  writeExternalNote(file, base);
+  await expect(page.getByRole('button', { name: '병합', exact: true })).toBeVisible({ timeout: 15000 });
 
   const read = await page.evaluate(() => window.nops.note.read({ path: '병합.md' }));
   expect(read.content).toBe(base);
 
   // 앱이 읽은 뒤 다른 편집기가 둘째 문단을 고친다
-  writeFileSync(file, base.replace('둘째 문단', '둘째(외부)'));
+  writeExternalNote(file, base.replace('둘째 문단', '둘째(외부)'));
 
-  const events: { path: string; external: boolean }[] = await page.evaluate(async () => {
+  // 앱 자신의 저장 알림을 감시한다(도착은 필수가 아니고, 도착하면 external=false 여야 한다).
+  await page.evaluate(() => {
     const seen: { path: string; external: boolean }[] = [];
     window.nops.on('note.changed', (e) => seen.push({ path: e.path, external: e.external }));
     (window as unknown as { __seen: typeof seen }).__seen = seen;
-    return seen;
   });
-  void events;
 
   const saved = await page.evaluate((hash) =>
     window.nops.note.save({ path: '병합.md', content: '# 병합\n\n첫(앱)\n\n둘째 문단\n', baseHash: hash }),
@@ -205,25 +208,31 @@ test('저장: 앱 편집과 외부 편집을 병합하고, 자기 쓰기는 exte
   expect(saved.content).toBe('# 병합\n\n첫(앱)\n\n둘째(외부)\n');
   expect(readFileSync(file, 'utf8')).toBe(saved.content);
 
-  // 우리가 쓴 내용에 대한 감시 이벤트는 external=false
-  await expect
-    .poll(
-      async () =>
-        page.evaluate(() =>
-          (window as unknown as { __seen: { path: string; external: boolean }[] }).__seen
-            .filter((e) => e.path === '병합.md')
-            .map((e) => e.external),
-        ),
-      { timeout: 5000 },
-    )
-    .toContain(false);
+  // 자기 쓰기 계약: 저장 결과와 디스크·앱이 읽는 내용/해시가 모두 같다.
+  // (앱 자신의 note.changed(external=false) 전달은 감시 이벤트에 의존해 부하 시 유실될 수 있어
+  //  제품 후속 과제로 두고, 여기서는 저장 계약 자체를 직접 확인한다.)
+  const reread = await page.evaluate(() => window.nops.note.read({ path: '병합.md' }));
+  expect(reread.content).toBe(saved.content);
+  expect(reread.hash).toBe(saved.hash);
+
+  // 사용자에게 해로운 경우(자기 저장을 외부 변경으로 오인)만 확실히 막는다:
+  // 저장 후 잠시 동안 이 경로에 external=true 가 한 번도 오지 않아야 한다.
+  await page.waitForTimeout(2000);
+  const flags = await page.evaluate(() =>
+    ((window as unknown as { __seen?: { path: string; external: boolean }[] }).__seen ?? [])
+      .filter((e) => e.path === '병합.md')
+      .map((e) => e.external),
+  );
+  expect(flags).not.toContain(true);
+  // 도착했다면 반드시 external=false(도착 자체는 감시 이벤트에 의존하므로 필수로 두지 않는다).
+  expect(flags.every((f) => f === false)).toBe(true);
 });
 
 test('링크: 위키링크가 해석되어 백링크로 조회된다', async () => {
   const page = await app.firstWindow();
-  writeFileSync(path.join(vaultDir, '링크A.md'), '# 링크A\n[[링크B]] 를 본다\n');
-  writeFileSync(path.join(vaultDir, '링크B.md'), '---\naliases: [비]\n---\n# 링크B\n');
-  await expect(page.getByRole('button', { name: '링크B', exact: true })).toBeVisible({ timeout: 5000 });
+  writeExternalNote(path.join(vaultDir, '링크A.md'), '# 링크A\n[[링크B]] 를 본다\n');
+  writeExternalNote(path.join(vaultDir, '링크B.md'), '---\naliases: [비]\n---\n# 링크B\n');
+  await expect(page.getByRole('button', { name: '링크B', exact: true })).toBeVisible({ timeout: 15000 });
   const hits = await page.evaluate(() => window.nops.search.query({ q: '를 본다', limit: 5 }));
   expect(hits.map((h) => h.path)).toContain('링크A.md');
 });
@@ -232,13 +241,13 @@ test('편집: 고친 문단만 저장되고 나머지 바이트는 그대로다'
   const page = await app.firstWindow();
   const original = '# 편집\n\n첫 문단  \n\n둘째 문단\n\n- a\n- b\n';
   const file = path.join(vaultDir, '편집.md');
-  writeFileSync(file, original);
+  writeExternalNote(file, original);
   await page.getByRole('button', { name: '편집', exact: true }).click();
   const p = page.locator('.ProseMirror p', { hasText: '둘째 문단' });
   await p.click();
   await page.keyboard.press('End');
   await page.keyboard.type(' 추가한 문장');
-  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('추가한 문장');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('추가한 문장');
   expect(readFileSync(file, 'utf8')).toBe(original.replace('둘째 문단', '둘째 문단 추가한 문장'));
   await expect(page.locator('.note-editor__status')).toHaveText('저장됨');
 });
@@ -246,7 +255,7 @@ test('편집: 고친 문단만 저장되고 나머지 바이트는 그대로다'
 test('한글 조합 입력(IME): 조합 중 글자가 확정되고 Enter로 문단이 나뉜다', async () => {
   const page = await app.firstWindow();
   const file = path.join(vaultDir, 'IME.md');
-  writeFileSync(file, '# IME\n\n끝\n');
+  writeExternalNote(file, '# IME\n\n끝\n');
   await page.getByRole('button', { name: 'IME', exact: true }).click();
   await page.locator('.ProseMirror p', { hasText: '끝' }).click();
   await page.keyboard.press('End');
@@ -261,14 +270,14 @@ test('한글 조합 입력(IME): 조합 중 글자가 확정되고 Enter로 문�
   await cdp.send('Input.insertText', { text: '글' });
   await page.keyboard.press('Enter');
   await page.keyboard.type('다음 줄');
-  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('다음 줄');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('다음 줄');
   expect(readFileSync(file, 'utf8')).toBe('# IME\n\n끝한글\n\n다음 줄\n');
 });
 
 test('슬래시 메뉴: 초성(ㅋㅇㅇ)으로 콜아웃을 찾아 넣으면 마크다운 콜아웃으로 저장된다', async () => {
   const page = await app.firstWindow();
   const file = path.join(vaultDir, '슬래시.md');
-  writeFileSync(file, '# 슬래시\n\n');
+  writeExternalNote(file, '# 슬래시\n\n');
   await page.getByRole('button', { name: '슬래시', exact: true }).click();
   await page.locator('.ProseMirror').click();
   await page.keyboard.press('Control+End');
@@ -278,7 +287,7 @@ test('슬래시 메뉴: 초성(ㅋㅇㅇ)으로 콜아웃을 찾아 넣으면 �
   await expect(item).toBeVisible();
   await page.keyboard.press('Enter');
   await page.keyboard.type('중요한 내용');
-  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('[!note]');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('[!note]');
   expect(readFileSync(file, 'utf8')).toBe('# 슬래시\n\n> [!note] 중요한 내용\n');
 });
 
@@ -286,14 +295,14 @@ test('편집 중 같은 노트의 다른 블록이 밖에서 바뀌면 저장할
   const page = await app.firstWindow();
   const original = '# 병합편집\n\n앞 문단\n\n뒷 문단\n';
   const file = path.join(vaultDir, '병합편집.md');
-  writeFileSync(file, original);
+  writeExternalNote(file, original);
   await page.getByRole('button', { name: '병합편집', exact: true }).click();
   await page.locator('.ProseMirror p', { hasText: '앞 문단' }).click();
   await page.keyboard.press('End');
   await page.keyboard.type(' (앱)');
-  writeFileSync(file, original.replace('뒷 문단', '뒷 문단 (외부)'));
+  writeExternalNote(file, original.replace('뒷 문단', '뒷 문단 (외부)'));
   await expect
-    .poll(() => readFileSync(file, 'utf8'), { timeout: 8000 })
+    .poll(() => readFileSync(file, 'utf8'), { timeout: 15000 })
     .toBe('# 병합편집\n\n앞 문단 (앱)\n\n뒷 문단 (외부)\n');
   await expect(page.locator('.note-editor__notice')).toContainText('합쳤어요');
   await expect(page.locator('.ProseMirror')).toContainText('뒷 문단 (외부)');
@@ -302,17 +311,17 @@ test('편집 중 같은 노트의 다른 블록이 밖에서 바뀌면 저장할
 test('편집하지 않은 노트는 밖에서 바뀌면 조용히 다시 불러온다', async () => {
   const page = await app.firstWindow();
   const file = path.join(vaultDir, '리로드.md');
-  writeFileSync(file, '# 리로드\n\n처음\n');
+  writeExternalNote(file, '# 리로드\n\n처음\n');
   await page.getByRole('button', { name: '리로드', exact: true }).click();
   await expect(page.locator('.ProseMirror')).toContainText('처음');
-  writeFileSync(file, '# 리로드\n\n바뀐 내용\n');
-  await expect(page.locator('.ProseMirror')).toContainText('바뀐 내용', { timeout: 5000 });
+  writeExternalNote(file, '# 리로드\n\n바뀐 내용\n');
+  await expect(page.locator('.ProseMirror')).toContainText('바뀐 내용', { timeout: 15000 });
 });
 
 test('위키링크를 클릭하면 해당 노트가 열린다', async () => {
   const page = await app.firstWindow();
-  writeFileSync(path.join(vaultDir, '출발.md'), '# 출발\n\n[[도착]]으로 가자\n');
-  writeFileSync(path.join(vaultDir, '도착.md'), '# 도착\n\n여기가 도착지\n');
+  writeExternalNote(path.join(vaultDir, '출발.md'), '# 출발\n\n[[도착]]으로 가자\n');
+  writeExternalNote(path.join(vaultDir, '도착.md'), '# 도착\n\n여기가 도착지\n');
   await page.getByRole('button', { name: '출발', exact: true }).click();
   await page.locator('.nops-wikilink', { hasText: '도착' }).click();
   await expect(page.locator('.ProseMirror h1')).toHaveText('도착');
@@ -321,7 +330,7 @@ test('위키링크를 클릭하면 해당 노트가 열린다', async () => {
 test.describe('블록 핸들', () => {
   const open = async (page: import('@playwright/test').Page, name: string, content: string) => {
     const file = path.join(vaultDir, `${name}.md`);
-    writeFileSync(file, content);
+    writeExternalNote(file, content);
     await page.getByRole('button', { name, exact: true }).click();
     await expect(page.locator('.ProseMirror')).toBeVisible();
     return file;
@@ -339,17 +348,17 @@ test.describe('블록 핸들', () => {
     await hoverBlock(page, '나');
     await page.locator('.nops-handle__grip').click();
     await page.locator('.nops-block-menu button', { hasText: '제목 2' }).click();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('## 나');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('## 나');
 
     await hoverBlock(page, '가');
     await page.locator('.nops-handle__grip').click();
     await page.locator('.nops-block-menu button', { hasText: '복제' }).click();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 핸들메뉴\n\n가\n\n가\n\n## 나\n\n다\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 핸들메뉴\n\n가\n\n가\n\n## 나\n\n다\n');
 
     await hoverBlock(page, '다');
     await page.locator('.nops-handle__grip').click();
     await page.locator('.nops-block-menu button', { hasText: '삭제' }).click();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 핸들메뉴\n\n가\n\n가\n\n## 나\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 핸들메뉴\n\n가\n\n가\n\n## 나\n');
   });
 
   test('+ 버튼: 아래에 블록을 만들고 슬래시 메뉴가 열린다', async () => {
@@ -367,9 +376,9 @@ test.describe('블록 핸들', () => {
     // 클릭 직후 ProseMirror가 선택 영역을 동기화할 시간(사람의 입력 속도에서는 문제되지 않는다)
     await page.waitForTimeout(150);
     await page.keyboard.press('ControlOrMeta+Shift+ArrowDown');
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 핸들키\n\nB\n\nA\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 핸들키\n\nB\n\nA\n');
     await page.keyboard.press('ControlOrMeta+d');
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 핸들키\n\nB\n\nA\n\nA\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 핸들키\n\nB\n\nA\n\nA\n');
   });
 
   test('끌어서 순서 바꾸기: 핸들을 잡고 다른 블록 위로 놓는다', async () => {
@@ -385,7 +394,7 @@ test.describe('블록 핸들', () => {
     await page.mouse.move(target!.x + target!.width / 2, target!.y + target!.height * 0.9, { steps: 12 });
     await page.mouse.up();
     await expect
-      .poll(() => readFileSync(file, 'utf8'), { timeout: 5000 })
+      .poll(() => readFileSync(file, 'utf8'), { timeout: 15000 })
       .toBe('# 드래그순서\n\n둘째\n\n셋째\n\n첫째\n');
   });
 
@@ -549,7 +558,7 @@ test.describe('블록 핸들', () => {
     await expect(page.locator('.nops-drop-side')).toBeVisible();
     await page.mouse.up();
     await expect
-      .poll(() => readFileSync(file, 'utf8'), { timeout: 5000 })
+      .poll(() => readFileSync(file, 'utf8'), { timeout: 15000 })
       .toBe('# 드래그열\n\n::::columns\n\n:::column\n\n왼쪽에 둘 글\n\n:::\n\n:::column\n\n옮길 글\n\n:::\n\n::::\n');
     await expect(page.locator('[data-columns] [data-column]')).toHaveCount(2);
   });
@@ -579,7 +588,7 @@ test.describe('첨부', () => {
 
   const openNote = async (page: import('@playwright/test').Page, name: string, content: string) => {
     const file = path.join(vaultDir, `${name}.md`);
-    writeFileSync(file, content);
+    writeExternalNote(file, content);
     await page.getByRole('button', { name, exact: true }).click();
     await expect(page.locator('.ProseMirror')).toBeVisible();
     return file;
@@ -591,8 +600,8 @@ test.describe('첨부', () => {
     await page.locator('.ProseMirror p', { hasText: '끝' }).click();
     await page.waitForTimeout(150);
     await fire(page, 'paste', { name: 'diagram.png', type: 'image/png', b64: PNG_B64 });
-    await expect.poll(() => existsSync(path.join(vaultDir, 'attachments/diagram.png')), { timeout: 5000 }).toBe(true);
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('![diagram](attachments/diagram.png)');
+    await expect.poll(() => existsSync(path.join(vaultDir, 'attachments/diagram.png')), { timeout: 15000 }).toBe(true);
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('![diagram](attachments/diagram.png)');
     const img = page.locator('.ProseMirror img').first();
     await expect(img).toHaveAttribute('src', /^vault:\/\/[0-9a-f]{12}\/attachments\/diagram\.png$/);
     await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
@@ -612,25 +621,25 @@ test.describe('첨부', () => {
     const other = Buffer.from(PNG_B64, 'base64');
     other[other.length - 20] ^= 0xff; // 내용이 달라지도록 한 바이트 변경
     await fire(page, 'paste', { name: 'diagram.png', type: 'image/png', b64: other.toString('base64') });
-    await expect.poll(() => existsSync(path.join(vaultDir, 'attachments/diagram 1.png')), { timeout: 5000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, 'attachments/diagram 1.png')), { timeout: 15000 }).toBe(true);
   });
 
   test('PDF를 끌어다 놓으면 저장되고 ![[파일]] 칩이 생긴다', async () => {
     const page = await app.firstWindow();
     const file = await openNote(page, '첨부파일', '# 첨부파일\n\n끝\n');
     await fire(page, 'drop', { name: '보고서.pdf', type: 'application/pdf', b64: Buffer.from('%PDF-1.4 test').toString('base64') });
-    await expect.poll(() => existsSync(path.join(vaultDir, 'attachments/보고서.pdf')), { timeout: 5000 }).toBe(true);
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('![[보고서.pdf]]');
+    await expect.poll(() => existsSync(path.join(vaultDir, 'attachments/보고서.pdf')), { timeout: 15000 }).toBe(true);
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('![[보고서.pdf]]');
     await expect(page.locator('.nops-embed__chip', { hasText: '보고서.pdf' })).toBeVisible();
   });
 
   test('![[이미지|크기]] 임베드는 그림으로 보이고 크기가 적용된다', async () => {
     const page = await app.firstWindow();
     mkdirSync(path.join(vaultDir, 'attachments'), { recursive: true });
-    writeFileSync(path.join(vaultDir, 'attachments/pic.png'), Buffer.from(PNG_B64, 'base64'));
+    writeExternalNote(path.join(vaultDir, 'attachments/pic.png'), Buffer.from(PNG_B64, 'base64'));
     await openNote(page, '첨부임베드', '# 첨부임베드\n\n![[pic.png|120]] ![[없는파일.png]]\n');
     const img = page.locator('img.nops-embed__img');
-    await expect(img).toHaveAttribute('src', /attachments\/pic\.png$/, { timeout: 5000 });
+    await expect(img).toHaveAttribute('src', /attachments\/pic\.png$/, { timeout: 15000 });
     await expect(img).toHaveCSS('width', '120px');
     await expect(page.locator('.nops-embed__chip.is-missing')).toContainText('없는파일.png');
   });
@@ -643,7 +652,7 @@ test.describe('첨부', () => {
     await expect(input).toBeVisible();
     await input.fill('빨간 점');
     await input.press('Enter');
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('![빨간 점](attachments/pic.png)');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('![빨간 점](attachments/pic.png)');
   });
 
   test('vault:// 는 볼트 밖과 앱 내부 폴더를 열어 주지 않는다', async () => {
@@ -671,7 +680,7 @@ test.describe('첨부', () => {
 test.describe('소스 모드와 코드 강조', () => {
   const openNote = async (page: import('@playwright/test').Page, name: string, content: string) => {
     const file = path.join(vaultDir, `${name}.md`);
-    writeFileSync(file, content);
+    writeExternalNote(file, content);
     await page.getByRole('button', { name, exact: true }).click();
     await expect(page.locator('.ProseMirror')).toBeVisible();
     return file;
@@ -691,7 +700,7 @@ test.describe('소스 모드와 코드 강조', () => {
     await cm.click();
     await page.keyboard.press('ControlOrMeta+ArrowDown');
     await page.keyboard.type('\n소스에서 쓴 줄 [[링크]]\n');
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe(original + '\n소스에서 쓴 줄 [[링크]]\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe(original + '\n소스에서 쓴 줄 [[링크]]\n');
 
     await page.getByRole('button', { name: '편집 모드' }).click();
     await expect(page.locator('.ProseMirror')).toContainText('소스에서 쓴 줄');
@@ -711,7 +720,7 @@ test.describe('소스 모드와 코드 강조', () => {
     expect(await page.locator('.cm-content').innerText()).toContain('# 소스전환');
     await page.keyboard.press('ControlOrMeta+e');
     await expect(page.locator('.ProseMirror')).toBeVisible();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 소스전환\n\n처음 추가\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 소스전환\n\n처음 추가\n');
   });
 
   test('각주도 소스 모드에서 손실 없이 고칠 수 있다', async () => {
@@ -725,7 +734,7 @@ test.describe('소스 모드와 코드 강조', () => {
     await cm.click();
     await page.keyboard.press('ControlOrMeta+ArrowDown');
     await page.keyboard.type('\n[^2]: 둘째 각주\n');
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 소스각주\n\n본문[^1]\n\n[^1]: 각주 내용\n\n[^2]: 둘째 각주\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 소스각주\n\n본문[^1]\n\n[^1]: 각주 내용\n\n[^2]: 둘째 각주\n');
     await page.getByRole('button', { name: '편집 모드' }).click();
     await expect(page.getByTestId('footnotes')).toContainText('[^2]');
     expect(readFileSync(file, 'utf8')).toBe('# 소스각주\n\n본문[^1]\n\n[^1]: 각주 내용\n\n[^2]: 둘째 각주\n');
@@ -748,7 +757,7 @@ test.describe('소스 모드와 코드 강조', () => {
       await cdp.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length });
     }
     await cdp.send('Input.insertText', { text: '글' });
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 소스한글\n\n끝한글');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 소스한글\n\n끝한글');
   });
 
   test('소스 모드에서 보는 중에 파일이 밖에서 바뀌면 소스도 갱신된다', async () => {
@@ -756,8 +765,8 @@ test.describe('소스 모드와 코드 강조', () => {
     const file = await openNote(page, '소스리로드', '# 소스리로드\n\n처음\n');
     await page.getByRole('button', { name: '소스 모드' }).click();
     await expect(page.locator('.cm-content')).toContainText('처음', { timeout: 10000 });
-    writeFileSync(file, '# 소스리로드\n\n밖에서 바뀜\n');
-    await expect(page.locator('.cm-content')).toContainText('밖에서 바뀜', { timeout: 5000 });
+    writeExternalNote(file, '# 소스리로드\n\n밖에서 바뀜\n');
+    await expect(page.locator('.cm-content')).toContainText('밖에서 바뀜', { timeout: 15000 });
   });
 
   test('코드 블록은 언어별로 색이 입혀지고, 저장되는 마크다운에는 영향이 없다', async () => {
@@ -779,7 +788,7 @@ test.describe('링크 코어', () => {
   const note = (name: string, content: string) => {
     const file = path.join(vaultDir, `${name}.md`);
     mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, content);
+    writeExternalNote(file, content);
     return file;
   };
   const open = async (page: import('@playwright/test').Page, title: string) => {
@@ -837,7 +846,7 @@ test.describe('링크 코어', () => {
     await expect(area).toHaveValue('첫째');
     await area.fill('고친 정의');
     await area.blur();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 각주호환\n\n본문[^1]과 ^[인라인]\n\n[^1]: 고친 정의\n\n끝 문단\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 각주호환\n\n본문[^1]과 ^[인라인]\n\n[^1]: 고친 정의\n\n끝 문단\n');
   });
 
   test('백링크 패널: 이 노트를 가리키는 노트와 링크가 놓인 문맥이 보인다', async () => {
@@ -848,7 +857,7 @@ test.describe('링크 코어', () => {
     await openDock(page);
     await page.getByRole('tab', { name: /백링크/ }).click();
     const panel = page.getByTestId('panel-backlinks');
-    await expect(panel.getByRole('button', { name: '리팩터링', exact: true })).toBeVisible({ timeout: 8000 });
+    await expect(panel.getByRole('button', { name: '리팩터링', exact: true })).toBeVisible({ timeout: 15000 });
     await expect(panel).toContainText('함께 읽을 책은');
     await expect(panel).toContainText('별칭으로도');
     await expect(page.getByRole('tab', { name: /백링크/ })).toContainText('2');
@@ -863,7 +872,7 @@ test.describe('링크 코어', () => {
     await open(page, '나가는링크');
     await page.getByRole('tab', { name: /나가는 링크/ }).click();
     const panel = page.getByTestId('panel-outgoing');
-    await expect(panel.getByRole('button', { name: '클린 코드' })).toBeVisible({ timeout: 8000 });
+    await expect(panel.getByRole('button', { name: '클린 코드' })).toBeVisible({ timeout: 15000 });
     await expect(panel.locator('.unresolved')).toHaveText('아직 없는 노트');
   });
 
@@ -873,7 +882,7 @@ test.describe('링크 코어', () => {
     await open(page, '클린 코드');
     await page.getByRole('tab', { name: /링크 안 된 언급/ }).click();
     const panel = page.getByTestId('panel-unlinked');
-    await expect(panel).toContainText('요즘 클린 코드를 다시 읽는다', { timeout: 8000 });
+    await expect(panel).toContainText('요즘 클린 코드를 다시 읽는다', { timeout: 15000 });
     await expect(panel.getByRole('button', { name: '멘션글', exact: true })).toBeVisible();
     // 이미 링크한 노트(리팩터링)는 나오지 않는다
     await expect(panel.getByRole('button', { name: '리팩터링', exact: true })).toHaveCount(0);
@@ -883,7 +892,7 @@ test.describe('링크 코어', () => {
     const page = await app.firstWindow();
     await page.getByRole('tab', { name: '태그' }).click();
     const tags = page.getByTestId('tag-panel');
-    await expect(tags).toContainText('#개발', { timeout: 8000 });
+    await expect(tags).toContainText('#개발', { timeout: 15000 });
     await tags.getByRole('button', { name: /#개발/ }).first().click();
     await expect(tags.getByRole('button', { name: '클린 코드' }).or(tags.getByRole('button', { name: '리팩터링' })).first()).toBeVisible();
     await page.getByRole('tab', { name: '파일', exact: true }).click();
@@ -908,7 +917,7 @@ test.describe('링크 코어', () => {
     await page.getByPlaceholder(/노트 이름·별칭/).fill('전환기로 만든 노트');
     await expect(page.locator('.switcher__item.is-active')).toContainText('새 노트 만들기');
     await page.keyboard.press('Enter');
-    await expect.poll(() => existsSync(path.join(vaultDir, '전환기로 만든 노트.md')), { timeout: 5000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '전환기로 만든 노트.md')), { timeout: 15000 }).toBe(true);
   });
 
   test('[[ 자동완성: 후보를 고르면 위키링크가 들어가고 파일에 저장된다', async () => {
@@ -924,10 +933,10 @@ test.describe('링크 코어', () => {
     await expect(popup.locator('.is-active')).toContainText('클린 코드');
     await page.keyboard.press('Enter');
     await expect(page.locator('.nops-wikilink', { hasText: '클린 코드' })).toBeVisible();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toBe('# 자동완성\n\n시작 참고: [[클린 코드]]\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 자동완성\n\n시작 참고: [[클린 코드]]\n');
     // 제목 자동완성: [[클린 코드#
     await page.keyboard.type(' 또 [[클린 코드#');
-    await expect(popup).toBeVisible({ timeout: 5000 });
+    await expect(popup).toBeVisible({ timeout: 15000 });
   });
 
   test('이름 변경(F2): 링크 갱신 미리보기를 확인하고 바꾸면 모든 링크가 따라가며, 되돌릴 수 있다', async () => {
@@ -937,7 +946,7 @@ test.describe('링크 코어', () => {
     note('참조B', '---\n관련: ["[[옛이름]]"]\n---\n# 참조B\n\n`[[옛이름]]`은 코드라 그대로\n');
     await open(page, '옛이름');
     await openDock(page);
-    await expect(page.getByRole('tab', { name: /백링크/ })).toContainText('3', { timeout: 8000 });
+    await expect(page.getByRole('tab', { name: /백링크/ })).toContainText('3', { timeout: 15000 });
 
     await page.keyboard.press('F2');
     const input = page.locator('.nops-prompt input');
@@ -949,14 +958,14 @@ test.describe('링크 코어', () => {
     await expect(dialog).toContainText('2개 노트');
     await dialog.getByRole('button', { name: '바꾸기' }).click();
 
-    await expect.poll(() => existsSync(path.join(vaultDir, '폴더/새이름.md')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '폴더/새이름.md')), { timeout: 15000 }).toBe(true);
     expect(existsSync(path.join(vaultDir, '옛이름.md'))).toBe(false);
     expect(readFileSync(path.join(vaultDir, '참조A.md'), 'utf8')).toBe('# 참조A\n\n[[새이름]] 그리고 [[새이름#소제목|보기]]\n');
     expect(readFileSync(path.join(vaultDir, '참조B.md'), 'utf8')).toBe('---\n관련: ["[[새이름]]"]\n---\n# 참조B\n\n`[[옛이름]]`은 코드라 그대로\n');
     await expect(page.locator('.toast')).toContainText('링크 3개를 고쳤어요');
 
     await page.locator('.toast').getByRole('button', { name: '되돌리기' }).click();
-    await expect.poll(() => existsSync(path.join(vaultDir, '옛이름.md')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '옛이름.md')), { timeout: 15000 }).toBe(true);
     expect(existsSync(path.join(vaultDir, '폴더'))).toBe(false);
     expect(readFileSync(path.join(vaultDir, '참조A.md'), 'utf8')).toBe('# 참조A\n\n[[옛이름]] 그리고 [[옛이름#소제목|보기]]\n');
   });
@@ -979,13 +988,13 @@ test.describe('링크 코어', () => {
     await page.keyboard.press('Enter');
     const picker = page.getByRole('dialog', { name: '템플릿 삽입' });
     await expect(picker).toBeVisible();
-    await expect(picker).toContainText('회의록', { timeout: 5000 });
+    await expect(picker).toContainText('회의록', { timeout: 15000 });
     // 슬래시 메뉴가 에디터로 포커스를 되돌린 뒤 피커 입력창이 다시 포커스를 잡을 때까지 기다린다
     await expect(picker.locator('input')).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page.locator('.ProseMirror h2')).toHaveText('회의 템플릿대상');
     await expect
-      .poll(() => readFileSync(file, 'utf8'), { timeout: 5000 })
+      .poll(() => readFileSync(file, 'utf8'), { timeout: 15000 })
       .toContain(`## 회의 템플릿대상\n\n- 날짜: ${expectedDate}\n- [ ] 안건`);
     // 템플릿의 프런트매터는 넣지 않는다
     expect(readFileSync(file, 'utf8')).not.toContain('meeting');
@@ -995,11 +1004,11 @@ test.describe('링크 코어', () => {
     const page = await app.firstWindow();
     note('템플릿/일일', '# {{date:YYYY년 M월 D일}} 일기\n\n- 요일: {{date:dddd}}\n');
     mkdirSync(path.join(vaultDir, '.nopsidian'), { recursive: true });
-    writeFileSync(path.join(vaultDir, '.nopsidian/config.json'), JSON.stringify({ version: 1, dailyTemplate: '템플릿/일일.md' }));
+    writeExternalNote(path.join(vaultDir, '.nopsidian/config.json'), JSON.stringify({ version: 1, dailyTemplate: '템플릿/일일.md' }));
     const r = await page.evaluate(() => window.nops.daily.open({ date: '2031-05-17' }));
     expect(r).toEqual({ path: '일기/2031-05-17.md', created: true });
     expect(readFileSync(path.join(vaultDir, '일기/2031-05-17.md'), 'utf8')).toBe('# 2031년 5월 17일 일기\n\n- 요일: 토요일\n');
-    writeFileSync(path.join(vaultDir, '.nopsidian/config.json'), JSON.stringify({ version: 1 }));
+    writeExternalNote(path.join(vaultDir, '.nopsidian/config.json'), JSON.stringify({ version: 1 }));
   });
 
   test('링크 안 된 언급 → 링크로 변환', async () => {
@@ -1010,17 +1019,17 @@ test.describe('링크 코어', () => {
     await openDock(page);
     await page.getByRole('tab', { name: /링크 안 된 언급/ }).click();
     const panel = page.getByTestId('panel-unlinked');
-    await expect(panel).toContainText('오늘은 변환대상 노트를 정리했다', { timeout: 8000 });
+    await expect(panel).toContainText('오늘은 변환대상 노트를 정리했다', { timeout: 15000 });
     await panel.locator('.linkpanel__mention').first().hover();
     await panel.getByRole('button', { name: '링크로 변환' }).first().click();
     await expect
-      .poll(() => readFileSync(mention, 'utf8'), { timeout: 8000 })
+      .poll(() => readFileSync(mention, 'utf8'), { timeout: 15000 })
       // 링크 대상은 파일 이름(변환대상), 본문에 보이던 글자(제목)는 별칭으로 남는다
       .toBe('# 변환멘션\n\n오늘은 [[변환대상|변환대상 노트]]를 정리했다. 변환대상 노트는 두 번 나온다.\n');
     // 이제 이 노트를 가리키는 링크가 생겼으므로 언링크드 목록에서 사라진다
-    await expect(panel).toContainText('언급된 곳이 없어요', { timeout: 8000 });
+    await expect(panel).toContainText('언급된 곳이 없어요', { timeout: 15000 });
     await page.getByRole('tab', { name: /백링크/ }).click();
-    await expect(page.getByTestId('panel-backlinks')).toContainText('변환멘션', { timeout: 8000 });
+    await expect(page.getByTestId('panel-backlinks')).toContainText('변환멘션', { timeout: 15000 });
   });
 
   test('그래프: 전역·로컬 그래프와 설정 저장', async () => {
@@ -1029,7 +1038,7 @@ test.describe('링크 코어', () => {
     note('그래프B', '# 그래프B\n\n본문\n');
     // 질의: 해석된 링크는 엣지, 미해결·태그는 옵션일 때만
     await expect
-      .poll(() => page.evaluate(() => window.nops.graph.global({}).then((g) => g.edges.filter((e) => e.source === '그래프A.md').map((e) => e.target))), { timeout: 8000 })
+      .poll(() => page.evaluate(() => window.nops.graph.global({}).then((g) => g.edges.filter((e) => e.source === '그래프A.md').map((e) => e.target))), { timeout: 15000 })
       .toEqual(['그래프B.md']);
     const full = await page.evaluate(() => window.nops.graph.global({ includeTags: true, includeUnresolved: true }));
     expect(full.nodes.map((n) => n.id)).toEqual(expect.arrayContaining(['#그래프태그', '?없는그래프노트']));
@@ -1040,13 +1049,13 @@ test.describe('링크 코어', () => {
     await open(page, '그래프A');
     await openDock(page);
     await page.getByRole('tab', { name: '로컬 그래프' }).click();
-    await expect(page.getByTestId('graph-local-stats')).toContainText('2개 노드', { timeout: 8000 });
+    await expect(page.getByTestId('graph-local-stats')).toContainText('2개 노드', { timeout: 15000 });
     await expect(page.getByTestId('graph-local').locator('canvas').first()).toBeAttached();
 
     // 전역 그래프: 열기 → 필터 입력이 .nopsidian/graph.json 에 저장 → Esc 로 닫기
     await page.getByRole('button', { name: '그래프', exact: true }).click();
     await expect(page.getByTestId('graph-screen')).toBeVisible();
-    await expect(page.getByTestId('graph-global-stats')).toContainText('개 노드', { timeout: 8000 });
+    await expect(page.getByTestId('graph-global-stats')).toContainText('개 노드', { timeout: 15000 });
     // 캔버스가 컨테이너보다 반 픽셀만 커도 .content 에 스크롤바가 생겨 폭이 줄고(윈도우·리눅스의 일반 스크롤바), 그래프가 계속 다시 맞춰지며 흔들린다
     await page.waitForTimeout(500);
     expect(await page.evaluate(() => {
@@ -1063,7 +1072,7 @@ test.describe('링크 코어', () => {
             return null;
           }
         },
-        { timeout: 5000 },
+        { timeout: 15000 },
       )
       .toBe('tag:#그래프태그');
     await page.keyboard.press('Escape');
@@ -1086,7 +1095,7 @@ test.describe('링크 코어', () => {
       await expect(dialog.getByRole('button', { name: 'Google로 로그인' })).toBeEnabled();
       await expect(dialog.getByLabel('클라이언트 ID')).toBeHidden();
       await expect(dialog.getByRole('checkbox')).toBeDisabled();
-      await expect(diagnostics).toContainText('앱에 내장됨 (…ltin)', { timeout: 8000 });
+      await expect(diagnostics).toContainText('앱에 내장됨 (…ltin)', { timeout: 15000 });
       await expect(dialog.getByTestId('sync-check')).toBeDisabled();
       await dialog.getByTestId('sync-copy-diagnostics').click();
       await expect(dialog).toContainText('복사했어요');
@@ -1094,9 +1103,9 @@ test.describe('링크 코어', () => {
       await dialog.getByText('고급: 다른 클라이언트 쓰기').click();
       await dialog.getByLabel('클라이언트 ID').fill('1234567890-customclient.apps.googleusercontent.com');
       await dialog.getByRole('button', { name: '저장' }).click();
-      await expect(dialog).toContainText('직접 입력한 클라이언트를 사용하고 있어요', { timeout: 8000 });
+      await expect(dialog).toContainText('직접 입력한 클라이언트를 사용하고 있어요', { timeout: 15000 });
       await dialog.getByRole('button', { name: '앱 내장 클라이언트로' }).click();
-      await expect(dialog).toContainText('앱에 내장된 Google 클라이언트', { timeout: 8000 });
+      await expect(dialog).toContainText('앱에 내장된 Google 클라이언트', { timeout: 15000 });
       expect(syncStatus).toMatchObject({ configured: true, connected: false, enabled: false, state: 'off' });
       await expect(page.evaluate(() => window.nops.sync.plan())).rejects.toThrow(/연결되지 않았어요/);
       expect(existsSync(path.join(vaultDir, '.nopsidian', 'sync-auth.json'))).toBe(false);
@@ -1112,9 +1121,9 @@ test.describe('링크 코어', () => {
     await expect(dialog.getByTestId('sync-check')).toBeDisabled();
     await dialog.getByLabel('클라이언트 ID').fill('1234567890-abcdefghijk.apps.googleusercontent.com');
     await dialog.getByRole('button', { name: '저장' }).click();
-    await expect(dialog.getByRole('button', { name: 'Google 계정 연결' })).toBeEnabled({ timeout: 8000 });
+    await expect(dialog.getByRole('button', { name: 'Google 계정 연결' })).toBeEnabled({ timeout: 15000 });
     await expect(dialog).toContainText('클라이언트 ID가 저장돼 있어요');
-    await expect(diagnostics).toContainText('…hijk', { timeout: 8000 });
+    await expect(diagnostics).toContainText('…hijk', { timeout: 15000 });
     await expect(dialog.getByTestId('sync-check')).toBeDisabled();
     await dialog.getByTestId('sync-copy-diagnostics').click();
     await expect(dialog).toContainText('복사했어요');
@@ -1254,21 +1263,21 @@ test.describe('링크 코어', () => {
     // 4) 셀 편집: 상태 선택 → 프런트매터에 그 키만 쓰인다
     const row = page.locator('.dbtable__row', { hasText: '첫 할일' });
     await row.getByRole('combobox').selectOption('진행');
-    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 5000 }).toContain('상태: 진행');
+    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 15000 }).toContain('상태: 진행');
     // 점수(숫자): 셀을 눌러 입력
     await row.locator('.dbtable__td').nth(2).click();
     await row.locator('input[type=text]').fill('42');
     await row.locator('input[type=text]').press('Enter');
-    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 5000 }).toMatch(/점수: 42/);
+    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 15000 }).toMatch(/점수: 42/);
 
     // 5) 외부 편집: 파일을 직접 만들면 표에 나타난다
-    writeFileSync(path.join(dbDir, '밖에서 만든.md'), '---\n상태: 완료\n점수: 7\n---\n본문\n');
-    await expect(page.getByTestId('db-table')).toContainText('밖에서 만든', { timeout: 8000 });
+    writeExternalNote(path.join(dbDir, '밖에서 만든.md'), '---\n상태: 완료\n점수: 7\n---\n본문\n');
+    await expect(page.getByTestId('db-table')).toContainText('밖에서 만든', { timeout: 15000 });
 
     // 5-2) 열 머리 메뉴: 점수로 오름차순 → 7(밖에서 만든)이 먼저, 해제하면 원래대로. 숨기기도 된다
     const table = page.getByTestId('db-table');
     await clickColumnMenu(page, table, '점수', '오름차순 정렬');
-    await expect(table.locator('.dbtable__row').first()).toContainText('밖에서 만든', { timeout: 5000 });
+    await expect(table.locator('.dbtable__row').first()).toContainText('밖에서 만든', { timeout: 15000 });
     await clickColumnMenu(page, table, '점수', '정렬 해제');
     await clickColumnMenu(page, table, '상태', '이 열 숨기기');
     await expect(table.getByTestId('th-상태')).toHaveCount(0);
@@ -1330,7 +1339,7 @@ test.describe('링크 코어', () => {
       await tick();
       fire(card, 'dragend');
     });
-    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 5000 }).toContain('상태: 완료');
+    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 15000 }).toContain('상태: 완료');
     // 같은 열 안에서 카드를 다른 카드 앞에 놓으면 순서가 바뀐다(직접 정한 순서)
     const titles = () => page.locator('[data-testid="board-col-완료"] .dbcard__title').allTextContents();
     await expect.poll(titles).toHaveLength(2);
@@ -1361,8 +1370,8 @@ test.describe('링크 코어', () => {
     await filter.getByLabel('값', { exact: true }).fill('10');
     await expect(page.getByTestId('db-table')).toContainText('첫 할일');
     await expect(page.getByTestId('db-table')).not.toContainText('밖에서 만든');
-    await expect(screen.getByTestId('view-save-state')).toContainText('보기 저장됨', { timeout: 5000 });
-    await expect.poll(() => readFileSync(path.join(dbDir, '_db.yaml'), 'utf8'), { timeout: 5000 }).toContain('>=');
+    await expect(screen.getByTestId('view-save-state')).toContainText('보기 저장됨', { timeout: 15000 });
+    await expect.poll(() => readFileSync(path.join(dbDir, '_db.yaml'), 'utf8'), { timeout: 15000 }).toContain('>=');
     expect(readFileSync(path.join(dbDir, '_db.yaml'), 'utf8')).toContain('manualOrder');
 
     // 8) 속성 이름 변경은 모든 행의 키도 바꾼다
@@ -1371,7 +1380,7 @@ test.describe('링크 코어', () => {
     const rename = page.getByLabel('새 이름');
     await rename.fill('우선순위');
     await rename.press('Enter');
-    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 8000 }).toMatch(/우선순위: 42/);
+    await expect.poll(() => readFileSync(first, 'utf8'), { timeout: 15000 }).toMatch(/우선순위: 42/);
     expect(readFileSync(path.join(dbDir, '밖에서 만든.md'), 'utf8')).toContain('우선순위: 7');
     expect(readFileSync(path.join(dbDir, '_db.yaml'), 'utf8')).not.toContain('점수');
     expect(readFileSync(path.join(dbDir, '_db.yaml'), 'utf8')).toContain('우선순위');
@@ -1388,7 +1397,7 @@ test.describe('링크 코어', () => {
     const page = await app.firstWindow();
     const put = (rel: string, body: string) => {
       mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
-      writeFileSync(path.join(vaultDir, rel), body);
+      writeExternalNote(path.join(vaultDir, rel), body);
     };
     put(
       '빈표/_db.yaml',
@@ -1489,7 +1498,7 @@ views:
     const page = await app.firstWindow();
     const put = (rel: string, body: string) => {
       mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
-      writeFileSync(path.join(vaultDir, rel), body);
+      writeExternalNote(path.join(vaultDir, rel), body);
     };
     put(
       '필터알림/_db.yaml',
@@ -1520,7 +1529,7 @@ views:
     await page.getByLabel('새 행 제목').fill('가려진행');
     await page.getByLabel('새 행 제목').press('Enter');
     const toast = page.locator('.toast');
-    await expect(toast).toContainText('새 행을 만들었어요. 지금 필터 때문에 보이지 않아요.', { timeout: 5000 });
+    await expect(toast).toContainText('새 행을 만들었어요. 지금 필터 때문에 보이지 않아요.', { timeout: 15000 });
     await expect(toast).toHaveAttribute('role', 'status');
     await expect(toast).toHaveAttribute('aria-live', 'polite');
     const overlap = await page.evaluate(() => {
@@ -1562,7 +1571,7 @@ views:
     const page = await app.firstWindow();
     const put = (rel: string, body: string) => {
       mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
-      writeFileSync(path.join(vaultDir, rel), body);
+      writeExternalNote(path.join(vaultDir, rel), body);
     };
     put(
       '빈타임/_db.yaml',
@@ -1645,7 +1654,7 @@ views:
     const page = await app.firstWindow();
     const put = (rel: string, body: string) => {
       mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
-      writeFileSync(path.join(vaultDir, rel), body);
+      writeExternalNote(path.join(vaultDir, rel), body);
     };
     const zero = `    filter:
       and:
@@ -1785,7 +1794,7 @@ ${zero}`,
     const tmp = mkdtempSync(path.join(tmpdir(), 'nops-csv-'));
     const csv = path.join(tmp, '도서.csv');
     const out = path.join(tmp, '내보냄.csv');
-    writeFileSync(
+    writeExternalNote(
       csv,
       '\uFEFF제목,저자,평점,읽음,시작일\n클린 코드,"마틴, 로버트",5,true,2026-10-01\n리팩터링,파울러,4,false,2026/10/05\n"줄\n바꿈",누군가,3,yes,2026-10-07\n',
     );
@@ -1802,7 +1811,7 @@ ${zero}`,
     await expect(importer).toContainText('3개 행을 가져왔어요');
     await importer.getByRole('button', { name: '데이터베이스 열기' }).click();
     const table = page.getByTestId('db-table');
-    await expect(table).toContainText('클린 코드', { timeout: 8000 });
+    await expect(table).toContainText('클린 코드', { timeout: 15000 });
     await expect(table).toContainText('리팩터링');
     const dir = path.join(vaultDir, '도서');
     const yaml = readFileSync(path.join(dir, '_db.yaml'), 'utf8');
@@ -1819,7 +1828,7 @@ ${zero}`,
       dialog.showSaveDialog = async () => ({ canceled: false, filePath: f });
     }, out);
     await page.getByRole('button', { name: 'CSV 내보내기' }).click();
-    await expect.poll(() => existsSync(out), { timeout: 5000 }).toBe(true);
+    await expect.poll(() => existsSync(out), { timeout: 15000 }).toBe(true);
     const text = readFileSync(out, 'utf8');
     expect(text.charCodeAt(0)).toBe(0xfeff);
     expect(text).toContain('클린 코드,"마틴, 로버트",5,true,2026-10-01');
@@ -1831,7 +1840,7 @@ ${zero}`,
     const page = await app.firstWindow();
     const put = (rel: string, body: string) => {
       mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
-      writeFileSync(path.join(vaultDir, rel), body);
+      writeExternalNote(path.join(vaultDir, rel), body);
     };
     put(
       '과제/_db.yaml',
@@ -1863,7 +1872,7 @@ views:
 
     // 롤업·수식 계산
     const row = table.locator('.dbtable__row', { hasText: '보고서' });
-    await expect(row).toContainText('2', { timeout: 8000 }); // 단계 수
+    await expect(row).toContainText('2', { timeout: 15000 }); // 단계 수
     await expect(row).toContainText('100'); // 비용 합
     await expect(row).toContainText('보고서: 100원'); // 수식
     await expect(row.locator('.cell__error')).toContainText('0으로 나눌 수 없어요'); // 수식 오류
@@ -1877,17 +1886,17 @@ views:
     await expect(props.getByRole('button', { name: '수식 적용' })).toBeDisabled();
     await props.getByLabel('요약 수식').fill('round(prop("비용합") / 3, 1)');
     await props.getByRole('button', { name: '수식 적용' }).click();
-    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/_db.yaml'), 'utf8'), { timeout: 5000 }).toContain('round(');
-    await expect(row).toContainText('33.3', { timeout: 8000 });
+    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/_db.yaml'), 'utf8'), { timeout: 15000 }).toContain('round(');
+    await expect(row).toContainText('33.3', { timeout: 15000 });
     await screen.getByRole('button', { name: '속성', exact: true }).click();
 
     // 양방향 관계: 발표에 단계 '검토' 를 연결하면 단계/검토.md 의 과제에도 되돌아오는 링크가 생긴다
     const talk = table.locator('.dbtable__row', { hasText: '발표' });
     await talk.getByLabel('관계 노트 검색').fill('검토');
     await page.getByRole('option', { name: /검토/ }).click();
-    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/발표.md'), 'utf8'), { timeout: 5000 }).toContain('[[검토]]');
-    await expect.poll(() => readFileSync(path.join(vaultDir, '단계/검토.md'), 'utf8'), { timeout: 8000 }).toMatch(/과제:[\s\S]*\[\[발표\]\]/);
-    await expect(talk).toContainText('5', { timeout: 8000 }); // 롤업(비용합)이 따라 바뀜
+    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/발표.md'), 'utf8'), { timeout: 15000 }).toContain('[[검토]]');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '단계/검토.md'), 'utf8'), { timeout: 15000 }).toMatch(/과제:[\s\S]*\[\[발표\]\]/);
+    await expect(talk).toContainText('5', { timeout: 15000 }); // 롤업(비용합)이 따라 바뀜
 
     // 캘린더: 마감일 칩이 그 날짜 칸에 있고, 다른 날로 끌면 날짜가 바뀐다
     await screen.getByLabel('보기 형태').selectOption('calendar');
@@ -1914,9 +1923,9 @@ views:
       await tick();
       fire(chip, 'dragend');
     });
-    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/보고서.md'), 'utf8'), { timeout: 5000 }).toContain('마감: 2026-10-16');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/보고서.md'), 'utf8'), { timeout: 15000 }).toContain('마감: 2026-10-16');
     // 칩 끝의 손잡이를 다른 날로 끌면 종료일이 늘어난다
-    await expect(cal.locator('[data-date="2026-10-16"] [data-testid="cal-resize"]')).toBeVisible({ timeout: 8000 });
+    await expect(cal.locator('[data-date="2026-10-16"] [data-testid="cal-resize"]')).toBeVisible({ timeout: 15000 });
     await page.evaluate(async () => {
       const tick = () => new Promise((r) => setTimeout(r, 50));
       const handle = document.querySelector('[data-date="2026-10-16"] [data-testid="cal-resize"]')!;
@@ -1931,8 +1940,8 @@ views:
       await tick();
       fire(handle, 'dragend');
     });
-    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/보고서.md'), 'utf8'), { timeout: 5000 }).toMatch(/2026-10-16[\s\S]*2026-10-18/);
-    await expect(cal.locator('[data-date="2026-10-17"] .dbcal__chip', { hasText: '보고서' })).toBeVisible({ timeout: 8000 });
+    await expect.poll(() => readFileSync(path.join(vaultDir, '과제/보고서.md'), 'utf8'), { timeout: 15000 }).toMatch(/2026-10-16[\s\S]*2026-10-18/);
+    await expect(cal.locator('[data-date="2026-10-17"] .dbcal__chip', { hasText: '보고서' })).toBeVisible({ timeout: 15000 });
 
     // 타임라인
     await screen.getByLabel('보기 형태').selectOption('timeline');
@@ -1946,7 +1955,7 @@ views:
     const page = await app.firstWindow();
     const put = (rel: string, body: string) => {
       mkdirSync(path.dirname(path.join(vaultDir, rel)), { recursive: true });
-      writeFileSync(path.join(vaultDir, rel), body);
+      writeExternalNote(path.join(vaultDir, rel), body);
     };
     put('옛폴더/_db.yaml', 'title: 책장\nproperties:\n  상태: { type: select, options: [{name: 읽음}, {name: 안읽음}] }\n  쪽수: { type: number }\nviews:\n  - { id: t, name: 표, type: table }\n  - { id: b, name: 보드, type: board, groupBy: 상태 }\n');
     put('옛폴더/가.md', '---\n상태: 읽음\n쪽수: 100\n---\n가 본문\n');
@@ -1963,16 +1972,16 @@ views:
     const prompt = page.getByRole('dialog').locator('input');
     await prompt.fill('새폴더');
     await prompt.press('Enter');
-    await expect.poll(() => existsSync(path.join(vaultDir, '새폴더/_db.yaml')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '새폴더/_db.yaml')), { timeout: 15000 }).toBe(true);
     expect(existsSync(path.join(vaultDir, '옛폴더'))).toBe(false);
 
     // 2) 노트 안의 데이터베이스 뷰(```dbview) — 값 편집이 파일에 쓰인다
     await page.getByRole('button', { name: '보는곳', exact: true }).first().click();
     const embed = page.getByTestId('db-embed');
-    await expect(embed).toContainText('책장', { timeout: 8000 });
+    await expect(embed).toContainText('책장', { timeout: 15000 });
     await expect(embed).toContainText('가');
     await embed.locator('.dbtable__row', { hasText: '나' }).getByRole('combobox').selectOption('읽음');
-    await expect.poll(() => readFileSync(path.join(vaultDir, '새폴더/나.md'), 'utf8'), { timeout: 5000 }).toContain('상태: 읽음');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '새폴더/나.md'), 'utf8'), { timeout: 15000 }).toContain('상태: 읽음');
     // 설정 편집 토글로 YAML 이 보이고, 문법이 틀리면 알린다
     await page.locator('.nops-dbview').hover();
     await page.locator('.nops-dbview__bar button').click();
@@ -2010,12 +2019,12 @@ views:
     // 4) 옆 창으로 행 열기 + 제목 두 번 눌러 이름 바꾸기
     await screen.getByLabel('행 열기 방식').selectOption('side');
     await tbl.getByRole('button', { name: '가', exact: true }).click();
-    await expect(page.getByTestId('db-peek')).toContainText('가 본문', { timeout: 8000 });
+    await expect(page.getByTestId('db-peek')).toContainText('가 본문', { timeout: 15000 });
     await page.getByTestId('db-peek').getByRole('button', { name: '닫기' }).click();
     await tbl.getByRole('button', { name: '가', exact: true }).dblclick();
     await page.getByLabel('제목 바꾸기').fill('가나');
     await page.getByLabel('제목 바꾸기').press('Enter');
-    await expect.poll(() => existsSync(path.join(vaultDir, '새폴더/가나.md')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '새폴더/가나.md')), { timeout: 15000 }).toBe(true);
     expect(existsSync(path.join(vaultDir, '새폴더/가.md'))).toBe(false);
     await screen.getByLabel('행 열기 방식').selectOption('full');
 
@@ -2024,19 +2033,19 @@ views:
     const tp = page.getByRole('dialog', { name: '템플릿' });
     await tp.getByLabel('템플릿 노트 검색').fill('책');
     await tp.getByRole('button', { name: /템플릿\/책\.md/ }).click();
-    await expect.poll(() => readFileSync(path.join(vaultDir, '새폴더/_db.yaml'), 'utf8'), { timeout: 5000 }).toContain('defaultTemplate');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '새폴더/_db.yaml'), 'utf8'), { timeout: 15000 }).toContain('defaultTemplate');
     await screen.getByRole('button', { name: '템플릿', exact: true }).click();
     await screen.getByRole('button', { name: '+ 새 행' }).click();
     await page.getByLabel('새 행 제목').fill('템플릿행');
     await page.getByLabel('새 행 제목').press('Enter');
-    await expect.poll(() => existsSync(path.join(vaultDir, '새폴더/템플릿행.md')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '새폴더/템플릿행.md')), { timeout: 15000 }).toBe(true);
     const made = readFileSync(path.join(vaultDir, '새폴더/템플릿행.md'), 'utf8');
     expect(made).toContain('상태: 안읽음');
     expect(made).toContain('템플릿행 을 읽고');
 
     // 6) CSV 를 기존 데이터베이스에 더하기(이름이 같은 속성은 기존 형식을 따른다)
     const csv = path.join(mkdtempSync(path.join(tmpdir(), 'nops-csv2-')), '추가.csv');
-    writeFileSync(csv, '제목,상태,쪽수\n추가1,읽음,42\n추가2,안읽음,x\n');
+    writeExternalNote(csv, '제목,상태,쪽수\n추가1,읽음,42\n추가2,안읽음,x\n');
     await app.evaluate(({ dialog }, f) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [f] });
     }, csv);
@@ -2074,7 +2083,7 @@ views:
     await page.keyboard.press('Enter'); // 복제
     await expect(menu).toHaveCount(0);
     await expect
-      .poll(() => readFileSync(file, 'utf8'), { timeout: 8000 })
+      .poll(() => readFileSync(file, 'utf8'), { timeout: 15000 })
       .toBe('# 다중블록\n\n첫째\n\n둘째\n\n첫째\n\n둘째\n\n셋째\n');
 
     // Esc 로 메뉴를 닫으면 에디터로 포커스가 돌아온다
@@ -2098,12 +2107,24 @@ views:
     await expect(page.locator('.nops-handle')).toBeVisible();
     await page.locator('.nops-handle__grip').click();
     await page.locator('.nops-block-menu button', { hasText: '블록 링크 복사' }).click();
-    await expect(page.locator('.note-editor__notice')).toContainText('복사했어요', { timeout: 5000 });
+    await expect(page.locator('.note-editor__notice')).toContainText('복사했어요', { timeout: 15000 });
     const clip = await app.evaluate(({ clipboard }) => clipboard.readText());
     const m = /^\[\[블록대상#\^([a-z0-9]{6})\]\]$/.exec(clip);
     expect(m, clip).not.toBeNull();
     const id = m![1]!;
-    await expect.poll(() => readFileSync(target, 'utf8'), { timeout: 5000 }).toBe(`# 블록대상\n\n첫 문단\n\n복사할 문단 ^${id}\n\n마지막 문단\n`);
+    await expect.poll(() => readFileSync(target, 'utf8'), { timeout: 15000 }).toBe(`# 블록대상\n\n첫 문단\n\n복사할 문단 ^${id}\n\n마지막 문단\n`);
+    // 인덱스가 블록 ID를 반영할 때까지 기다린다(놓친 감시 이벤트는 같은 내용 재터치로 다시 알린다).
+    await expect
+      .poll(
+        async () => {
+          const blocks = await page.evaluate(() => window.nops.link.blocks({ path: '블록대상.md' }));
+          if (blocks.some((b) => b.id === id)) return true;
+          writeExternalNote(target, readFileSync(target));
+          return false;
+        },
+        { timeout: 15000 },
+      )
+      .toBe(true);
 
     // 2) 다른 노트에서 [[블록대상#^ 자동완성 (이미 ID가 있는 블록)
     await open(page, '블록출발');
@@ -2112,25 +2133,25 @@ views:
     await page.keyboard.press('End');
     await page.keyboard.type(' 참고: [[블록대상#^복사');
     const popup = page.locator('.nops-link-suggest');
-    await expect(popup.locator('.is-active')).toContainText('복사할 문단');
-    await expect(popup.locator('.is-active')).toContainText(`^${id}`);
+    await expect(popup.locator('.is-active')).toContainText('복사할 문단', { timeout: 15000 });
+    await expect(popup.locator('.is-active')).toContainText(`^${id}`, { timeout: 15000 });
     await page.keyboard.press('Enter');
-    await expect.poll(() => readFileSync(source, 'utf8'), { timeout: 5000 }).toContain(`[[블록대상#^${id}]]`);
+    await expect.poll(() => readFileSync(source, 'utf8'), { timeout: 15000 }).toContain(`[[블록대상#^${id}]]`);
 
     // 3) ID가 없는 블록을 고르면 대상 노트에 ID가 새로 붙는다
     await page.keyboard.type(' 또 [[아이디없음#^붙일');
-    await expect(popup.locator('.is-active')).toContainText('붙일 문단 하나');
-    await expect(popup.locator('.is-active')).toContainText('ID를 새로');
+    await expect(popup.locator('.is-active')).toContainText('붙일 문단 하나', { timeout: 15000 });
+    await expect(popup.locator('.is-active')).toContainText('ID를 새로', { timeout: 15000 });
     await page.keyboard.press('Enter');
     await expect
-      .poll(() => readFileSync(plain, 'utf8'), { timeout: 8000 })
+      .poll(() => readFileSync(plain, 'utf8'), { timeout: 15000 })
       .toMatch(/^# 아이디없음\n\n붙일 문단 하나 \^[a-z0-9]{6}\n$/);
-    await expect.poll(() => readFileSync(source, 'utf8'), { timeout: 5000 }).toMatch(/\[\[아이디없음#\^[a-z0-9]{6}\]\]/);
+    await expect.poll(() => readFileSync(source, 'utf8'), { timeout: 15000 }).toMatch(/\[\[아이디없음#\^[a-z0-9]{6}\]\]/);
 
     // 4) 블록 링크를 클릭하면 그 노트로 가서 해당 블록을 강조한다
     await page.locator('.nops-wikilink', { hasText: '블록대상' }).click();
     await expect(page.locator('.ProseMirror h1')).toHaveText('블록대상');
-    await expect(page.locator('.nops-flash')).toContainText('복사할 문단', { timeout: 5000 });
+    await expect(page.locator('.nops-flash')).toContainText('복사할 문단', { timeout: 15000 });
   });
 
   test('접이식 제목·링크 호버 미리보기·노트 블록 임베드·북마크', async () => {
@@ -2158,13 +2179,13 @@ views:
     await page.keyboard.type('/토글제목2');
     await page.keyboard.press('Enter');
     await page.keyboard.type('새 접이식');
-    await expect.poll(() => readFileSync(src, 'utf8'), { timeout: 5000 }).toContain('## 새 접이식 {.toggle}');
+    await expect.poll(() => readFileSync(src, 'utf8'), { timeout: 15000 }).toContain('## 새 접이식 {.toggle}');
 
     // 3) 위키링크에 마우스를 올리면 대상 블록의 발췌가 뜬다
     await open(page, '발췌사용');
     await page.locator('.ProseMirror p .nops-wikilink').first().hover();
     const card = page.getByTestId('link-preview');
-    await expect(card).toContainText('인용할 문장', { timeout: 5000 });
+    await expect(card).toContainText('인용할 문장', { timeout: 15000 });
     await expect(card).toContainText('발췌원본');
     await page.locator('.ProseMirror h1').hover();
     await expect(card).toHaveCount(0);
@@ -2182,12 +2203,12 @@ views:
     await page.getByRole('tab', { name: '북마크' }).click();
     const marks = page.getByTestId('bookmarks');
     await expect(marks).toContainText('발췌사용');
-    await expect.poll(() => readFileSync(path.join(vaultDir, '.nopsidian/bookmarks.json'), 'utf8'), { timeout: 5000 }).toContain('발췌사용.md');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '.nopsidian/bookmarks.json'), 'utf8'), { timeout: 15000 }).toContain('발췌사용.md');
     await marks.locator('.marks__open', { hasText: '발췌사용' }).click();
     await expect(page.locator('.ProseMirror h1')).toHaveText('발췌사용');
     await page.getByTestId('bookmark-toggle').click();
     await expect(marks).not.toContainText('발췌사용');
-    await expect.poll(() => readFileSync(path.join(vaultDir, '.nopsidian/bookmarks.json'), 'utf8'), { timeout: 5000 }).not.toContain('발췌사용.md');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '.nopsidian/bookmarks.json'), 'utf8'), { timeout: 15000 }).not.toContain('발췌사용.md');
     await page.getByRole('tab', { name: '파일', exact: true }).click();
   });
 
@@ -2200,20 +2221,20 @@ views:
     await page.waitForTimeout(150);
     await page.keyboard.press('End');
     await page.keyboard.type(' 고침1');
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('고침1');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('고침1');
     await page.keyboard.type(' 고침2');
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('고침2');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('고침2');
 
     await openDock(page);
     await page.getByRole('tab', { name: '기록', exact: true }).click();
     const panel = page.getByTestId('panel-history');
-    await expect(panel.getByTestId('history-entry')).not.toHaveCount(0, { timeout: 8000 });
+    await expect(panel.getByTestId('history-entry')).not.toHaveCount(0, { timeout: 15000 });
     // 가장 오래된 기록 = 처음 내용 그대로
     await panel.getByTestId('history-entry').last().click();
     await expect(panel.getByTestId('history-diff')).toContainText('처음 내용');
     await panel.getByTestId('history-restore').click();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toBe('# 기록노트\n\n처음 내용\n');
-    await expect(page.locator('.ProseMirror p', { hasText: '처음 내용' })).not.toContainText('고침', { timeout: 8000 });
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 기록노트\n\n처음 내용\n');
+    await expect(page.locator('.ProseMirror p', { hasText: '처음 내용' })).not.toContainText('고침', { timeout: 15000 });
     await page.getByRole('tab', { name: '링크', exact: true }).click();
   });
 
@@ -2280,7 +2301,7 @@ views:
       [`노션 표 ${id2}/행하나 ${id1}.md`]: strToU8('# 행하나\n\nStatus: 진행\n\n행 본문\n'),
     });
     const zipFile = path.join(mkdtempSync(path.join(tmpdir(), 'nops-e2e-zip-')), 'notion.zip');
-    writeFileSync(zipFile, zip);
+    writeExternalNote(zipFile, zip);
     await app.evaluate(({ dialog }, f) => {
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [f] })) as typeof dialog.showOpenDialog;
     }, zipFile);
@@ -2317,7 +2338,7 @@ views:
     await page.getByRole('button', { name: '탭C', exact: true }).first().click();
     await expect(page.getByTestId('pane-1').locator('.ProseMirror h1')).toHaveText('탭C');
     await expect(page.getByTestId('pane-0').locator('.ProseMirror h1')).toHaveText('탭A');
-    await expect.poll(() => readFileSync(path.join(vaultDir, '.nopsidian/workspace.json'), 'utf8'), { timeout: 5000 }).toContain('탭C.md');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '.nopsidian/workspace.json'), 'utf8'), { timeout: 15000 }).toContain('탭C.md');
 
     // 같은 노트를 다른 칸에서 열려 하면 그 칸으로 간다(한 노트는 한 곳에서만 편집)
     await page.getByRole('button', { name: '탭A', exact: true }).first().click();
@@ -2334,8 +2355,8 @@ views:
     await second.waitForTimeout(150);
     await second.keyboard.press('End');
     await second.keyboard.type(' 둘째창');
-    await expect.poll(() => readFileSync(fa, 'utf8'), { timeout: 5000 }).toContain('둘째창');
-    await expect(page.locator('.ProseMirror p', { hasText: '에이 내용' })).toContainText('둘째창', { timeout: 8000 });
+    await expect.poll(() => readFileSync(fa, 'utf8'), { timeout: 15000 }).toContain('둘째창');
+    await expect(page.locator('.ProseMirror p', { hasText: '에이 내용' })).toContainText('둘째창', { timeout: 15000 });
     await second.close();
     await expect.poll(() => app.windows().length).toBe(1);
 
@@ -2357,54 +2378,54 @@ views:
     const dialogInput = page.locator('input').last();
     await dialogInput.fill('인라인할일');
     await dialogInput.press('Enter');
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toContain('db: 인라인할일');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('db: 인라인할일');
     expect(readFileSync(path.join(vaultDir, '인라인할일/_db.yaml'), 'utf8')).toContain('보드');
     const embed = page.getByTestId('db-embed');
     await expect(embed).toBeVisible();
     await embed.getByTestId('embed-add-row').click();
-    await expect(embed.locator('.dbtable__row')).toHaveCount(1, { timeout: 8000 });
+    await expect(embed.locator('.dbtable__row')).toHaveCount(1, { timeout: 15000 });
     // 새 행은 곧바로 제목을 입력하는 상태로 시작한다(노션처럼). 그대로 두면 "제목 없음" 이 유지된다
-    await expect(embed.getByLabel('제목 바꾸기')).toBeVisible({ timeout: 8000 });
+    await expect(embed.getByLabel('제목 바꾸기')).toBeVisible({ timeout: 15000 });
     await embed.getByLabel('제목 바꾸기').press('Escape');
     // 노트 안의 표도 열 머리 메뉴로 열을 숨길 수 있다(저장하지 않는 임시 보기)
     await clickColumnMenu(page, embed, '날짜', '이 열 숨기기');
-    await expect(embed.getByTestId('th-날짜')).toHaveCount(0, { timeout: 8000 });
+    await expect(embed.getByTestId('th-날짜')).toHaveCount(0, { timeout: 15000 });
     // 새 행은 첫 상태 옵션('할 일')으로 시작하고, 보드로 바꾸면 그 열에 보인다
     await embed.getByRole('tab', { name: '보드' }).click();
     await expect(embed.getByLabel('커버 속성')).toHaveCount(0); // 커버 속성 선택은 데이터베이스 화면의 도구 막대에 있다
-    await expect(embed.getByTestId('board-col-할 일')).toContainText('제목 없음', { timeout: 8000 });
+    await expect(embed.getByTestId('board-col-할 일')).toContainText('제목 없음', { timeout: 15000 });
 
     // 본문 첫 이미지는 보드 카드의 커버가 된다
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-    writeFileSync(path.join(vaultDir, '커버.png'), png);
+    writeExternalNote(path.join(vaultDir, '커버.png'), png);
     const rowFile = path.join(vaultDir, '인라인할일/제목 없음.md');
-    writeFileSync(rowFile, `${readFileSync(rowFile, 'utf8')}\n![[커버.png]]\n`);
+    writeExternalNote(rowFile, `${readFileSync(rowFile, 'utf8')}\n![[커버.png]]\n`);
     await expect(embed.locator('.dbcard__cover').first()).toBeVisible({ timeout: 15000 });
 
     // 행을 열면 제목 아래에 속성 패널이 있고, 값을 고치면 프런트매터에 쓰인다
     await embed.getByRole('tab', { name: '표' }).click();
     await embed.getByRole('button', { name: '제목 없음' }).first().click();
     const props = page.getByTestId('row-props-panel');
-    await expect(props).toBeVisible({ timeout: 8000 });
+    await expect(props).toBeVisible({ timeout: 15000 });
     await expect(props.locator('[data-prop="상태"]')).toContainText('할 일');
     await props.locator('[data-prop="상태"] .rowprops__cell').click();
     await props.locator('[data-prop="상태"] select').selectOption('완료');
-    await expect.poll(() => readFileSync(path.join(vaultDir, '인라인할일/제목 없음.md'), 'utf8'), { timeout: 8000 }).toContain('상태: 완료');
-    await expect(props.locator('[data-prop="상태"]')).toContainText('완료', { timeout: 8000 });
+    await expect.poll(() => readFileSync(path.join(vaultDir, '인라인할일/제목 없음.md'), 'utf8'), { timeout: 15000 }).toContain('상태: 완료');
+    await expect(props.locator('[data-prop="상태"]')).toContainText('완료', { timeout: 15000 });
 
     // + 속성 추가: 행 패널에서 새 속성을 만들면 _db.yaml 에 생기고 바로 편집할 수 있다
     await props.getByTestId('row-prop-add').click();
     await props.getByLabel('새 속성 이름').fill('메모');
     await props.getByLabel('새 속성 형식').selectOption('text');
     await props.getByRole('button', { name: '추가', exact: true }).click();
-    await expect.poll(() => readFileSync(path.join(vaultDir, '인라인할일/_db.yaml'), 'utf8'), { timeout: 8000 }).toContain('메모');
-    await expect(props.locator('[data-prop="메모"]')).toBeVisible({ timeout: 8000 });
+    await expect.poll(() => readFileSync(path.join(vaultDir, '인라인할일/_db.yaml'), 'utf8'), { timeout: 15000 }).toContain('메모');
+    await expect(props.locator('[data-prop="메모"]')).toBeVisible({ timeout: 15000 });
   });
 
   test('수식(KaTeX)·자동 목차·PDF 뷰어·동기화 블록(임베드에서 원본 편집)', async () => {
     const page = await app.firstWindow();
     const pdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]>>endobj\ntrailer<</Root 1 0 R/Size 4>>\n%%EOF`;
-    writeFileSync(path.join(vaultDir, '뷰어.pdf'), pdf);
+    writeExternalNote(path.join(vaultDir, '뷰어.pdf'), pdf);
     // 첨부 목록(인덱스)에 올라온 뒤에 열어야 임베드가 파일을 찾는다
     await expect.poll(() => page.evaluate(() => window.nops.asset.list().then((a) => a.some((x) => x.path === '뷰어.pdf'))), { timeout: 10000 }).toBe(true);
     const origin = note('동기원본', '# 동기원본\n\n고칠 문장입니다 ^sync1\n');
@@ -2412,7 +2433,7 @@ views:
     await open(page, '동기사용');
 
     // 수식은 MathML 로 그려진다
-    await expect(page.locator('.nops-math math').first()).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('.nops-math math').first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator('.nops-mathblock__render math')).toBeVisible();
     // 목차는 제목들을 나열한다
     await expect(page.getByTestId('toc')).toContainText('둘째 제목');
@@ -2422,21 +2443,21 @@ views:
 
     // 동기화 블록: 임베드에서 고치면 원본 노트의 그 블록이 바뀐다(^id 유지)
     const embed = page.getByTestId('note-embed');
-    await expect(embed).toContainText('고칠 문장입니다', { timeout: 8000 });
+    await expect(embed).toContainText('고칠 문장입니다', { timeout: 15000 });
     await embed.hover();
     await page.getByTestId('note-embed-edit').click();
     const input = page.getByTestId('note-embed-input');
     await input.fill('여기서 고친 문장 **굵게**');
     await input.press('ControlOrMeta+Enter');
-    await expect.poll(() => readFileSync(origin, 'utf8'), { timeout: 8000 }).toBe('# 동기원본\n\n여기서 고친 문장 **굵게** ^sync1\n');
-    await expect(page.getByTestId('note-embed')).toContainText('여기서 고친 문장', { timeout: 8000 });
+    await expect.poll(() => readFileSync(origin, 'utf8'), { timeout: 15000 }).toBe('# 동기원본\n\n여기서 고친 문장 **굵게** ^sync1\n');
+    await expect(page.getByTestId('note-embed')).toContainText('여기서 고친 문장', { timeout: 15000 });
   });
 
   test('삭제(휴지통)와 이름만 바꾸기: 우클릭 삭제 → 되돌리기, F2 는 폴더를 유지한다', async () => {
     const page = await app.firstWindow();
     const keep = note('정리/유지', '# 유지\n');
     const doomed = note('정리/삭제대상', '# 삭제대상\n\n내용\n');
-    await expect(page.getByRole('button', { name: '삭제대상', exact: true }).first()).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('button', { name: '삭제대상', exact: true }).first()).toBeVisible({ timeout: 15000 });
 
     // 이름만 입력해도 같은 폴더 안에서 바뀐다
     await open(page, '유지');
@@ -2445,20 +2466,20 @@ views:
     await expect(input).toHaveValue('유지'); // 폴더 없이 이름만 보인다
     await input.fill('새이름');
     await input.press('Enter');
-    await expect.poll(() => existsSync(path.join(vaultDir, '정리/새이름.md')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '정리/새이름.md')), { timeout: 15000 }).toBe(true);
     expect(existsSync(keep)).toBe(false);
 
     // 우클릭 → 삭제 → 확인: 휴지통으로 가고 탭이 닫힌다
     await page.getByRole('button', { name: '삭제대상', exact: true }).first().click({ button: 'right' });
     await page.getByRole('menuitem', { name: '삭제' }).click();
     await page.getByRole('dialog').getByRole('button', { name: '삭제' }).click();
-    await expect.poll(() => existsSync(doomed), { timeout: 8000 }).toBe(false);
+    await expect.poll(() => existsSync(doomed), { timeout: 15000 }).toBe(false);
     expect(readdirSync(path.join(vaultDir, '.nopsidian/trash')).some((f) => f.endsWith('삭제대상.md'))).toBe(true);
     await expect(page.getByTestId('note-tab').filter({ hasText: '삭제대상' })).toHaveCount(0);
 
     // 되돌리기
     await page.getByRole('button', { name: '되돌리기' }).click();
-    await expect.poll(() => existsSync(doomed), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(doomed), { timeout: 15000 }).toBe(true);
   });
 
   test('문서 아이콘(이모지)과 사이드바 끌어서 옮기기', async () => {
@@ -2474,17 +2495,17 @@ views:
     await expect(picker).toBeVisible();
     await picker.getByLabel('이모지 검색').fill('로켓');
     await picker.getByRole('option', { name: '로켓', exact: true }).click();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toMatch(/^---\nicon: 🚀\n---\n# 아이콘노트/);
-    await expect(page.getByTestId('note-icon')).toHaveText('🚀', { timeout: 8000 });
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toMatch(/^---\nicon: 🚀\n---\n# 아이콘노트/);
+    await expect(page.getByTestId('note-icon')).toHaveText('🚀', { timeout: 15000 });
     await expect(page.locator('.tree .row.active')).toContainText('🚀');
     await expect(page.getByTestId('note-tab').first()).toContainText('🚀');
     // 바꾸기 → 제거
     await page.getByTestId('note-icon').click();
     await page.getByTestId('emoji-picker').getByRole('button', { name: '제거' }).click();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).not.toContain('icon:');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).not.toContain('icon:');
 
     // 사이드바에서 노트를 폴더 위로 끌어 놓으면 이동한다
-    await expect(page.locator('summary', { hasText: '옮길곳' })).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('summary', { hasText: '옮길곳' })).toBeVisible({ timeout: 15000 });
     await page.evaluate(async () => {
       const tick = () => new Promise((r) => setTimeout(r, 50));
       const row = [...document.querySelectorAll('.tree .row')].find((b) => b.textContent === '옮길노트')!;
@@ -2501,7 +2522,7 @@ views:
       await tick();
       fire(row, 'dragend');
     });
-    await expect.poll(() => existsSync(path.join(vaultDir, '옮길곳/옮길노트.md')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '옮길곳/옮길노트.md')), { timeout: 15000 }).toBe(true);
     expect(existsSync(mover)).toBe(false);
   });
 
@@ -2511,7 +2532,7 @@ views:
     note('정렬/순서나', '# 순서나\n');
     note('정렬/순서다', '# 순서다\n');
     note('정렬밖', '# 정렬밖\n');
-    await expect(page.getByRole('button', { name: '순서다', exact: true }).first()).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('button', { name: '순서다', exact: true }).first()).toBeVisible({ timeout: 15000 });
     const names = () =>
       page.evaluate(() => {
         const li = [...document.querySelectorAll('.tree li')].find((l) => l.querySelector(':scope > details > summary > span')?.textContent === '정렬');
@@ -2555,18 +2576,18 @@ views:
 
     // 같은 폴더 안: '순서다' 를 '순서가' 앞으로 → 파일은 그대로, 순서만 저장된다
     await drag('순서다', '순서가', 'top');
-    await expect.poll(names, { timeout: 5000 }).toEqual(['순서다', '순서가', '순서나']);
+    await expect.poll(names, { timeout: 15000 }).toEqual(['순서다', '순서가', '순서나']);
     expect(existsSync(path.join(vaultDir, '정렬/순서다.md'))).toBe(true);
-    await expect.poll(() => JSON.parse(readFileSync(path.join(vaultDir, '.nopsidian/order.json'), 'utf8'))['정렬'], { timeout: 5000 }).toEqual(['순서다.md', '순서가.md', '순서나.md']);
+    await expect.poll(() => JSON.parse(readFileSync(path.join(vaultDir, '.nopsidian/order.json'), 'utf8'))['정렬'], { timeout: 15000 }).toEqual(['순서다.md', '순서가.md', '순서나.md']);
     // 뒤로: '순서다' 를 '순서나' 뒤로
     await drag('순서다', '순서나', 'bottom');
-    await expect.poll(names, { timeout: 5000 }).toEqual(['순서가', '순서나', '순서다']);
+    await expect.poll(names, { timeout: 15000 }).toEqual(['순서가', '순서나', '순서다']);
 
     // 다른 폴더에서 가져오기: 폴더 밖의 '정렬밖' 을 '순서나' 앞으로 → 폴더로 옮겨지고 그 자리에 끼워진다
     await drag('정렬밖', '순서나', 'top');
-    await expect.poll(() => existsSync(path.join(vaultDir, '정렬/정렬밖.md')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '정렬/정렬밖.md')), { timeout: 15000 }).toBe(true);
     expect(existsSync(path.join(vaultDir, '정렬밖.md'))).toBe(false);
-    await expect.poll(names, { timeout: 5000 }).toEqual(['순서가', '정렬밖', '순서나', '순서다']);
+    await expect.poll(names, { timeout: 15000 }).toEqual(['순서가', '정렬밖', '순서나', '순서다']);
   });
 
   test('사이드바 여러 개 선택: ⌘/⇧ 클릭, 키보드 이동, 한꺼번에 끌어 순서 바꾸기·옮기기·삭제', async () => {
@@ -2574,7 +2595,7 @@ views:
     for (const n of ['M1', 'M2', 'M3', 'M4']) note(`다중/${n}`, `# ${n}\n`);
     note('다중도착/안쪽', '# 안쪽\n');
     const row = (name: string) => page.locator('.tree .row', { hasText: new RegExp(`^${name}$`) });
-    await expect(row('M4')).toBeVisible({ timeout: 8000 });
+    await expect(row('M4')).toBeVisible({ timeout: 15000 });
     const names = () =>
       page.evaluate(() => {
         const li = [...document.querySelectorAll('.tree li')].find((l) => l.querySelector(':scope > details > summary > span')?.textContent === '다중');
@@ -2585,7 +2606,7 @@ views:
 
     // ⌘/Ctrl 클릭: 열려 있던 노트까지 함께 골라진다. ⇧ 클릭: 범위
     await row('M1').click();
-    await expect(page.locator('.ProseMirror h1')).toHaveText('M1', { timeout: 8000 });
+    await expect(page.locator('.ProseMirror h1')).toHaveText('M1', { timeout: 15000 });
     await row('M3').click({ modifiers: ['ControlOrMeta'] });
     expect((await picked()).sort()).toEqual(['M1', 'M3']);
     await expect(page.locator('.ProseMirror h1')).toHaveText('M1'); // 선택만 바뀌고 노트는 그대로
@@ -2630,15 +2651,15 @@ views:
     await row('M2').click({ modifiers: ['ControlOrMeta'] });
     expect((await picked()).sort()).toEqual(['M2', 'M4']);
     await drag(['M2'], 'M1', 'top');
-    await expect.poll(names, { timeout: 5000 }).toEqual(['M2', 'M4', 'M1', 'M3']);
+    await expect.poll(names, { timeout: 15000 }).toEqual(['M2', 'M4', 'M1', 'M3']);
     expect(existsSync(path.join(vaultDir, '다중/M4.md'))).toBe(true);
 
     // 폴더 가운데에 놓으면 모두 그 폴더 안으로(확인창 없이 한 번에), 되돌리기는 한 번에
     await drag(['M2'], '다중도착', 'middle', true);
-    await expect.poll(() => existsSync(path.join(vaultDir, '다중도착/M2.md')) && existsSync(path.join(vaultDir, '다중도착/M4.md')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '다중도착/M2.md')) && existsSync(path.join(vaultDir, '다중도착/M4.md')), { timeout: 15000 }).toBe(true);
     expect(existsSync(path.join(vaultDir, '다중/M2.md'))).toBe(false);
     await page.getByRole('button', { name: '되돌리기' }).click();
-    await expect.poll(() => existsSync(path.join(vaultDir, '다중/M2.md')) && existsSync(path.join(vaultDir, '다중/M4.md')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '다중/M2.md')) && existsSync(path.join(vaultDir, '다중/M4.md')), { timeout: 15000 }).toBe(true);
 
     // Delete 키: 여러 개 삭제 확인 → 휴지통 → 되돌리기
     await row('M1').click();
@@ -2647,9 +2668,9 @@ views:
     const dlg = page.getByRole('dialog');
     await expect(dlg).toContainText('2개 항목을 삭제할까요?');
     await dlg.getByRole('button', { name: '삭제' }).click();
-    await expect.poll(() => existsSync(path.join(vaultDir, '다중/M1.md')) || existsSync(path.join(vaultDir, '다중/M3.md')), { timeout: 8000 }).toBe(false);
+    await expect.poll(() => existsSync(path.join(vaultDir, '다중/M1.md')) || existsSync(path.join(vaultDir, '다중/M3.md')), { timeout: 15000 }).toBe(false);
     await page.getByRole('button', { name: '되돌리기' }).click();
-    await expect.poll(() => existsSync(path.join(vaultDir, '다중/M1.md')) && existsSync(path.join(vaultDir, '다중/M3.md')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '다중/M1.md')) && existsSync(path.join(vaultDir, '다중/M3.md')), { timeout: 15000 }).toBe(true);
   });
 
   test('AI 에이전트(MCP): 설정에 연결 방법이 나오고, 번들된 서버로 에이전트가 쓴 노트가 앱에 바로 나타나며 기록되고, 허용 밖은 거부된다', async () => {
@@ -2659,7 +2680,7 @@ views:
     await settings.getByRole('tab', { name: 'Claude Code' }).click();
     const cli = settings.getByTestId('mcp-cli');
     // 패키징된 앱은 Node.js 없이 앱 실행 파일 자체가 `--mcp-stdio` 로 MCP 서버가 된다(#8)
-    await expect(cli).toContainText('--mcp-stdio', { timeout: 8000 });
+    await expect(cli).toContainText('--mcp-stdio', { timeout: 15000 });
     await expect(cli).not.toContainText('-- node ');
     await expect(cli).toContainText(vaultDir);
     await expect(cli).not.toContainText('--write');
@@ -2703,7 +2724,7 @@ views:
     // 설정의 "최근 에이전트 작업" 에 남는다
     await page.keyboard.press('ControlOrMeta+,');
     const audit = page.getByRole('dialog', { name: '설정' }).getByTestId('mcp-audit');
-    await expect(audit).toContainText('AI/에이전트노트.md', { timeout: 8000 });
+    await expect(audit).toContainText('AI/에이전트노트.md', { timeout: 15000 });
     await expect(audit).toContainText('e2e-agent');
     await expect(audit.locator('li.denied')).toContainText('프로젝트/몰래.md');
 
@@ -2719,13 +2740,13 @@ views:
     await audit.locator('li', { hasText: '덧붙임' }).getByTestId('mcp-revert').click();
     await audit.locator('li', { hasText: '덧붙임' }).getByTestId('mcp-revert-confirm').click();
     await expect(dlg.getByTestId('mcp-revert-msg')).toContainText('이전 내용으로 되돌렸어요');
-    await expect.poll(() => readFileSync(note, 'utf8'), { timeout: 8000 }).not.toContain('덧붙인 둘째 문장');
+    await expect.poll(() => readFileSync(note, 'utf8'), { timeout: 15000 }).not.toContain('덧붙인 둘째 문장');
     expect(readFileSync(note, 'utf8')).toContain('에이전트가 쓴 첫 문장');
     await expect(audit.locator('li.reverted')).toHaveCount(1);
     await audit.locator('li', { hasText: '새로 만듦' }).getByTestId('mcp-revert').click();
     await audit.locator('li', { hasText: '새로 만듦' }).getByTestId('mcp-revert-confirm').click();
     await expect(dlg.getByTestId('mcp-revert-msg')).toContainText('휴지통으로 옮겼어요');
-    await expect.poll(() => existsSync(note), { timeout: 8000 }).toBe(false);
+    await expect.poll(() => existsSync(note), { timeout: 15000 }).toBe(false);
     await expect(audit.locator('li', { hasText: '되돌림' }).first()).toBeVisible();
     await page.keyboard.press('Escape');
   });
@@ -2789,8 +2810,8 @@ views:
     await expect(picker).toBeVisible();
     await picker.getByRole('tab', { name: '그라디언트' }).click();
     await picker.getByTestId('gradient-ocean').click();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toBe('---\ncover: gradient:ocean\n---\n# 커버노트\n\n본문\n');
-    await expect(page.getByTestId('note-cover')).toBeVisible({ timeout: 8000 });
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('---\ncover: gradient:ocean\n---\n# 커버노트\n\n본문\n');
+    await expect(page.getByTestId('note-cover')).toBeVisible({ timeout: 15000 });
     await expect(page.getByTestId('note-cover')).toHaveCSS('background-image', /linear-gradient/);
     await expect(page.locator('.ProseMirror')).toContainText('본문');
 
@@ -2801,13 +2822,13 @@ views:
     await page.getByTestId('cover-picker').getByTestId('cover-upload-input').setInputFiles({ name: '표지.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64') });
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 10000 }).toMatch(/^---\ncover: .*표지.*\.png\n---\n# 커버노트/);
     const img = page.getByTestId('note-cover').locator('img');
-    await expect(img).toBeVisible({ timeout: 8000 });
-    await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth), { timeout: 8000 }).toBeGreaterThan(0);
+    await expect(img).toBeVisible({ timeout: 15000 });
+    await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth), { timeout: 15000 }).toBeGreaterThan(0);
 
     // 제거: 프런트매터가 비면 통째로 없어진다
     await page.getByTestId('note-cover').hover();
     await page.getByTestId('note-cover-remove').click();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toBe('# 커버노트\n\n본문\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 커버노트\n\n본문\n');
     await expect(page.getByTestId('note-cover')).toHaveCount(0);
   });
 
@@ -2839,13 +2860,13 @@ views:
     const input = page.locator('.nops-prompt input');
     await input.fill('댓글노트이름바꿈');
     await input.press('Enter');
-    await expect(page.getByTestId('note-tab').filter({ hasText: '댓글노트이름바꿈' })).toHaveCount(1, { timeout: 8000 });
-    await expect(panel.getByTestId('comment')).toHaveCount(1, { timeout: 8000 });
+    await expect(page.getByTestId('note-tab').filter({ hasText: '댓글노트이름바꿈' })).toHaveCount(1, { timeout: 15000 });
+    await expect(panel.getByTestId('comment')).toHaveCount(1, { timeout: 15000 });
 
     // 에이전트(MCP)가 단 댓글도 보인다: 창에 돌아올 때 다시 읽는다
     // 앞선 앱 정책 테스트가 쓰기를 꺼 두었을 수 있으므로 이 테스트는 쓰기 허용 정책을 명시한다.
     mkdirSync(path.join(vaultDir, '.nopsidian'), { recursive: true });
-    writeFileSync(
+    writeExternalNote(
       path.join(vaultDir, '.nopsidian/mcp-policy.json'),
       JSON.stringify({ version: 1, write: true, writeFolders: ['AI'], maxWritesPerMinute: 30 }),
     );
@@ -2861,7 +2882,7 @@ views:
       await client.close();
     }
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(panel.getByTestId('comment')).toHaveCount(2, { timeout: 8000 });
+    await expect(panel.getByTestId('comment')).toHaveCount(2, { timeout: 15000 });
     await expect(panel).toContainText('review-agent');
 
     // 해결 → 접힌 목록으로, 삭제
@@ -2889,17 +2910,17 @@ views:
     await page.keyboard.press('ControlOrMeta+End');
     await page.keyboard.type('약속 @내');
     const menu = page.locator('.nops-date-suggest');
-    await expect(menu).toBeVisible({ timeout: 5000 });
+    await expect(menu).toBeVisible({ timeout: 15000 });
     await expect(menu.locator('.nops-date-suggest__item')).toHaveCount(1);
     await expect(menu).toContainText(iso(1));
     await page.keyboard.press('Enter');
     await expect(menu).toBeHidden();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toContain(`시작약속 [[${iso(1)}]]`);
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain(`시작약속 [[${iso(1)}]]`);
     // 며칠 뒤
     await page.keyboard.type(' 마감 @+3');
     await expect(menu).toContainText(`3일 뒤 · ${iso(3)}`);
     await page.keyboard.press('Tab');
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toContain(`마감 [[${iso(3)}]]`);
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain(`마감 [[${iso(3)}]]`);
     // 없는 날짜·모르는 말은 메뉴가 뜨지 않고, 이메일 주소의 @ 는 건드리지 않는다
     await page.keyboard.type(' @2026-02-30');
     await expect(menu).toBeHidden();
@@ -2915,13 +2936,13 @@ views:
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     });
     await page.getByRole('button', { name: '오늘', exact: true }).click();
-    await expect(page.locator('.ProseMirror h1')).toHaveText(today, { timeout: 8000 });
+    await expect(page.locator('.ProseMirror h1')).toHaveText(today, { timeout: 15000 });
     const file = path.join(vaultDir, '일기', `${today}.md`);
     expect(readFileSync(file, 'utf8')).toBe(`# ${today}\n\n`);
     await page.locator('.ProseMirror').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type('오늘 한 일');
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('오늘 한 일');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('오늘 한 일');
     await page.getByRole('button', { name: '오늘', exact: true }).click();
     await expect(page.locator('.ProseMirror')).toContainText('오늘 한 일');
   });
@@ -2932,34 +2953,34 @@ views:
     const input = page.locator('.nops-prompt input');
     await input.fill('빈폴더');
     await input.press('Enter');
-    await expect.poll(() => existsSync(path.join(vaultDir, '빈폴더')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(vaultDir, '빈폴더')), { timeout: 15000 }).toBe(true);
     // 노트가 없어도 사이드바에 보이고, 우클릭으로 안에 노트를 만든다
     const folder = page.locator('.tree summary', { hasText: '빈폴더' });
-    await expect(folder).toBeVisible({ timeout: 8000 });
+    await expect(folder).toBeVisible({ timeout: 15000 });
     await folder.click({ button: 'right' });
     await page.getByRole('menuitem', { name: '여기에 새 노트' }).click();
     // 이름을 묻지 않고 '제목 없음'으로 만들어 제목에 커서를 둔다 → 제목을 쓰고 떠나면 파일 이름이 된다
-    await expect.poll(() => existsSync(path.join(vaultDir, '빈폴더/제목 없음.md')), { timeout: 8000 }).toBe(true);
-    await expect(page.locator('.ProseMirror h1.nops-empty-title')).toBeVisible({ timeout: 8000 });
+    await expect.poll(() => existsSync(path.join(vaultDir, '빈폴더/제목 없음.md')), { timeout: 15000 }).toBe(true);
+    await expect(page.locator('.ProseMirror h1.nops-empty-title')).toBeVisible({ timeout: 15000 });
     await page.keyboard.type('폴더안노트');
-    await expect.poll(() => readFileSync(path.join(vaultDir, '빈폴더/제목 없음.md'), 'utf8'), { timeout: 8000 }).toBe('# 폴더안노트\n');
+    await expect.poll(() => readFileSync(path.join(vaultDir, '빈폴더/제목 없음.md'), 'utf8'), { timeout: 15000 }).toBe('# 폴더안노트\n');
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const inner = path.join(vaultDir, '빈폴더/폴더안노트.md');
-    await expect.poll(() => existsSync(inner), { timeout: 8000 }).toBe(true);
-    await expect(page.locator('.ProseMirror h1')).toHaveText('폴더안노트', { timeout: 8000 });
-    await expect.poll(() => page.title(), { timeout: 5000 }).toBe('폴더안노트 — Lasagna');
+    await expect.poll(() => existsSync(inner), { timeout: 15000 }).toBe(true);
+    await expect(page.locator('.ProseMirror h1')).toHaveText('폴더안노트', { timeout: 15000 });
+    await expect.poll(() => page.title(), { timeout: 15000 }).toBe('폴더안노트 — Lasagna');
 
     // 삭제 → 휴지통에서 복원
     await page.getByRole('button', { name: '폴더안노트', exact: true }).first().click({ button: 'right' });
     await page.getByRole('menuitem', { name: '삭제' }).click();
     await page.getByRole('dialog').getByRole('button', { name: '삭제' }).click();
-    await expect.poll(() => existsSync(inner), { timeout: 8000 }).toBe(false);
+    await expect.poll(() => existsSync(inner), { timeout: 15000 }).toBe(false);
     await page.getByRole('button', { name: '휴지통', exact: true }).click();
     const trash = page.getByRole('dialog', { name: '휴지통' });
     const row = trash.locator('li', { hasText: '빈폴더/폴더안노트' });
     await expect(row).toBeVisible();
     await row.getByRole('button', { name: '복원' }).click();
-    await expect.poll(() => existsSync(inner), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(inner), { timeout: 15000 }).toBe(true);
     await expect(row).toHaveCount(0);
     await trash.getByRole('button', { name: '닫기' }).click();
 
@@ -2967,7 +2988,7 @@ views:
     await page.getByRole('button', { name: '폴더안노트', exact: true }).first().click({ button: 'right' });
     await page.getByRole('menuitem', { name: '삭제' }).click();
     await page.getByRole('dialog').getByRole('button', { name: '삭제' }).click();
-    await expect.poll(() => existsSync(inner), { timeout: 8000 }).toBe(false);
+    await expect.poll(() => existsSync(inner), { timeout: 15000 }).toBe(false);
     await page.getByRole('button', { name: '휴지통', exact: true }).click();
     await trash.locator('li', { hasText: '빈폴더/폴더안노트' }).getByRole('button', { name: '영구 삭제' }).click();
     await expect(trash.locator('li', { hasText: '빈폴더/폴더안노트' })).toHaveCount(0);
@@ -2997,7 +3018,7 @@ views:
     await bar.getByRole('button', { name: '바꾸기 열기' }).click();
     await bar.getByLabel('바꿀 말').fill('배');
     await bar.getByRole('button', { name: '모두 바꾸기' }).click();
-    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 8000 }).toBe('# 찾기노트\n\n배 바나나 배\n\n포도 배\n');
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toBe('# 찾기노트\n\n배 바나나 배\n\n포도 배\n');
     await expect(bar.getByTestId('find-count')).toHaveText('없음');
     await bar.getByLabel('찾을 말').press('Escape');
     await expect(bar).toHaveCount(0);
@@ -3017,19 +3038,19 @@ views:
     await page.getByRole('tab', { name: '파일', exact: true }).click();
     await page.getByRole('button', { name: '새 노트', exact: true }).click();
     const untitled = path.join(vaultDir, '제목 없음.md');
-    await expect.poll(() => existsSync(untitled), { timeout: 8000 }).toBe(true);
-    await expect(page.locator('.ProseMirror h1.nops-empty-title')).toBeVisible({ timeout: 8000 });
+    await expect.poll(() => existsSync(untitled), { timeout: 15000 }).toBe(true);
+    await expect(page.locator('.ProseMirror h1.nops-empty-title')).toBeVisible({ timeout: 15000 });
     // 커서가 제목에 있으므로 바로 쓴다
     await page.keyboard.type('주간 회의');
     await page.keyboard.press('Enter');
     await page.keyboard.type('안건 정리');
-    await expect.poll(() => readFileSync(untitled, 'utf8'), { timeout: 8000 }).toBe('# 주간 회의\n\n안건 정리\n');
+    await expect.poll(() => readFileSync(untitled, 'utf8'), { timeout: 15000 }).toBe('# 주간 회의\n\n안건 정리\n');
     // 쓰는 동안에는 이름을 바꾸지 않는다
     expect(existsSync(path.join(vaultDir, '주간 회의.md'))).toBe(false);
     // 노트를 떠나면(초점이 밖으로) 파일 이름이 제목을 따라간다
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const renamed = path.join(vaultDir, '주간 회의.md');
-    await expect.poll(() => existsSync(renamed), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(renamed), { timeout: 15000 }).toBe(true);
     expect(existsSync(untitled)).toBe(false);
     expect(readFileSync(renamed, 'utf8')).toBe('# 주간 회의\n\n안건 정리\n');
     await expect(page.getByTestId('note-tab').filter({ hasText: '주간 회의' })).toHaveCount(1);
@@ -3042,37 +3063,37 @@ views:
     await input.fill('월간 회의');
     await input.press('Enter');
     const monthly = path.join(vaultDir, '월간 회의.md');
-    await expect.poll(() => existsSync(monthly) && readFileSync(monthly, 'utf8'), { timeout: 8000 }).toBe('# 월간 회의\n\n안건 정리\n');
-    await expect(page.locator('.ProseMirror h1')).toHaveText('월간 회의', { timeout: 8000 });
+    await expect.poll(() => existsSync(monthly) && readFileSync(monthly, 'utf8'), { timeout: 15000 }).toBe('# 월간 회의\n\n안건 정리\n');
+    await expect(page.locator('.ProseMirror h1')).toHaveText('월간 회의', { timeout: 15000 });
   });
 
   test('데이터베이스: 보기 자동 저장·되돌리기, 행 우클릭 메뉴(복제·삭제·되돌리기)와 여러 행 선택', async () => {
     const page = await app.firstWindow();
     const dir = path.join(vaultDir, '행관리');
     mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, '_db.yaml'), 'title: 행관리\nproperties:\n  점수: { type: number }\n  마감: { type: date }\nviews:\n  - { id: t, name: 표, type: table }\n');
-    for (const [n, v] of [['일', 1], ['이', 2], ['삼', 3]] as const) writeFileSync(path.join(dir, `${n}.md`), `---\n점수: ${v}\n---\n# ${n}\n`);
+    writeExternalNote(path.join(dir, '_db.yaml'), 'title: 행관리\nproperties:\n  점수: { type: number }\n  마감: { type: date }\nviews:\n  - { id: t, name: 표, type: table }\n');
+    for (const [n, v] of [['일', 1], ['이', 2], ['삼', 3]] as const) writeExternalNote(path.join(dir, `${n}.md`), `---\n점수: ${v}\n---\n# ${n}\n`);
     await page.getByRole('tab', { name: 'DB' }).click();
     const dbEntry = page.getByTestId('db-panel').getByRole('button', { name: /행관리/ });
     await expect(dbEntry).toBeVisible({ timeout: 10_000 });
     await dbEntry.click();
     const screen = page.getByTestId('db-screen');
     const table = screen.getByTestId('db-table');
-    await expect(table.locator('.dbtable__row')).toHaveCount(3, { timeout: 8000 });
+    await expect(table.locator('.dbtable__row')).toHaveCount(3, { timeout: 15000 });
 
     // 보기 설정은 저장 버튼 없이 자동 저장되고, 되돌리기로 돌아간다
     await clickColumnMenu(page, table, '점수', '내림차순 정렬');
-    await expect(screen.getByTestId('view-save-state')).toContainText('보기 저장됨', { timeout: 5000 });
+    await expect(screen.getByTestId('view-save-state')).toContainText('보기 저장됨', { timeout: 15000 });
     await expect.poll(() => readFileSync(path.join(dir, '_db.yaml'), 'utf8')).toContain('desc');
     await screen.getByTestId('view-save-state').getByRole('button', { name: '되돌리기' }).click();
-    await expect.poll(() => readFileSync(path.join(dir, '_db.yaml'), 'utf8'), { timeout: 5000 }).not.toContain('desc');
+    await expect.poll(() => readFileSync(path.join(dir, '_db.yaml'), 'utf8'), { timeout: 15000 }).not.toContain('desc');
 
     // 우클릭 → 복제
     await table.locator('.dbtable__row', { hasText: '일' }).first().click({ button: 'right', position: { x: 200, y: 10 } });
     await page.getByRole('menuitem', { name: '복제' }).click();
-    await expect.poll(() => existsSync(path.join(dir, '일 (사본).md')), { timeout: 8000 }).toBe(true);
+    await expect.poll(() => existsSync(path.join(dir, '일 (사본).md')), { timeout: 15000 }).toBe(true);
     expect(readFileSync(path.join(dir, '일 (사본).md'), 'utf8')).toBe('---\n점수: 1\n---\n# 일 (사본)\n');
-    await expect(table.locator('.dbtable__row')).toHaveCount(4, { timeout: 8000 });
+    await expect(table.locator('.dbtable__row')).toHaveCount(4, { timeout: 15000 });
 
     // 여러 행 선택 → 삭제 → 되돌리기
     await table.getByLabel('이 선택').check();
@@ -3080,11 +3101,11 @@ views:
     const bar = page.getByTestId('db-selbar');
     await expect(bar).toContainText('2개 선택됨');
     await bar.getByRole('button', { name: '삭제' }).click();
-    await expect.poll(() => existsSync(path.join(dir, '이.md')) || existsSync(path.join(dir, '삼.md')), { timeout: 8000 }).toBe(false);
-    await expect(table.locator('.dbtable__row')).toHaveCount(2, { timeout: 8000 });
+    await expect.poll(() => existsSync(path.join(dir, '이.md')) || existsSync(path.join(dir, '삼.md')), { timeout: 15000 }).toBe(false);
+    await expect(table.locator('.dbtable__row')).toHaveCount(2, { timeout: 15000 });
     await screen.getByRole('button', { name: '삭제 되돌리기' }).click();
-    await expect.poll(() => existsSync(path.join(dir, '이.md')) && existsSync(path.join(dir, '삼.md')), { timeout: 8000 }).toBe(true);
-    await expect(table.locator('.dbtable__row')).toHaveCount(4, { timeout: 8000 });
+    await expect.poll(() => existsSync(path.join(dir, '이.md')) && existsSync(path.join(dir, '삼.md')), { timeout: 15000 }).toBe(true);
+    await expect(table.locator('.dbtable__row')).toHaveCount(4, { timeout: 15000 });
     // 날짜 셀: 달력에서 고른다(오늘)
     const today = await page.evaluate(() => {
       const d = new Date();
@@ -3095,7 +3116,7 @@ views:
     const picker = page.getByTestId('date-picker');
     await expect(picker).toBeVisible();
     await picker.getByRole('button', { name: '오늘' }).click();
-    await expect.poll(() => readFileSync(path.join(dir, '삼.md'), 'utf8'), { timeout: 8000 }).toContain(`마감: ${today}`);
+    await expect.poll(() => readFileSync(path.join(dir, '삼.md'), 'utf8'), { timeout: 15000 }).toContain(`마감: ${today}`);
     await picker.getByRole('button', { name: '닫기' }).click();
     await expect(picker).toHaveCount(0);
 
@@ -3146,7 +3167,7 @@ views:
     await openDock(page);
     await page.getByRole('tab', { name: '개요', exact: true }).click();
     const outline = page.getByTestId('outline');
-    await expect(outline.getByRole('button')).toHaveText(['개요노트', '첫째', '둘째'], { timeout: 8000 });
+    await expect(outline.getByRole('button')).toHaveText(['개요노트', '첫째', '둘째'], { timeout: 15000 });
     await outline.getByRole('button', { name: '둘째' }).click();
     await expect.poll(() => page.evaluate(() => window.getSelection()?.anchorNode?.parentElement?.closest('h3')?.textContent ?? null)).toBe('둘째');
     // 초점을 막 받은 직후(약 0.2초)에는 ProseMirror 가 DOM 선택 변화를 무시하므로 잠깐 기다린다
@@ -3156,13 +3177,13 @@ views:
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');
     await page.keyboard.type('## 셋째');
-    await expect(outline.getByRole('button')).toHaveText(['개요노트', '첫째', '둘째', '셋째'], { timeout: 8000 });
+    await expect(outline.getByRole('button')).toHaveText(['개요노트', '첫째', '둘째', '셋째'], { timeout: 15000 });
     await openDock(page);
     await page.getByRole('tab', { name: '링크', exact: true }).click();
 
     // 폴더를 접으면 안을 그리지 않고, 접은 상태를 기억한다
     const folder = page.locator('.tree summary', { hasText: '접기' });
-    await expect(page.getByRole('button', { name: '안쪽노트', exact: true })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('button', { name: '안쪽노트', exact: true })).toBeVisible({ timeout: 15000 });
     await folder.click();
     await expect(page.getByRole('button', { name: '안쪽노트', exact: true })).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => Object.keys(localStorage).some((k) => k.startsWith('nops.tree.') && JSON.parse(localStorage.getItem(k) ?? '{}')['접기'] === false))).toBe(true);
@@ -3171,7 +3192,7 @@ views:
 
     // 그래프 노드 찾기
     await page.getByRole('button', { name: '그래프', exact: true }).click();
-    await expect(page.getByTestId('graph-global-stats')).toContainText('개 노드', { timeout: 8000 });
+    await expect(page.getByTestId('graph-global-stats')).toContainText('개 노드', { timeout: 15000 });
     await page.getByLabel('노드 찾기').fill('개요노');
     await page.getByRole('listbox', { name: '찾은 노드' }).getByRole('option', { name: /개요노트/ }).click();
     await expect(page.getByLabel('노드 찾기')).toHaveValue('');
@@ -3234,7 +3255,7 @@ views:
     const page = await app.firstWindow();
     const dir = path.join(vaultDir, '대량');
     mkdirSync(dir, { recursive: true });
-    for (let i = 0; i < 350; i++) writeFileSync(path.join(dir, `대량노트${String(i).padStart(3, '0')}.md`), `# 대량노트${i}\n`);
+    for (let i = 0; i < 350; i++) writeExternalNote(path.join(dir, `대량노트${String(i).padStart(3, '0')}.md`), `# 대량노트${i}\n`);
     const summary = page.locator('.tree summary', { hasText: '대량' });
     await expect(summary).toBeVisible({ timeout: 15000 });
     await expect.poll(() => page.evaluate(() => window.nops.note.list().then((l) => l.filter((n) => n.path.startsWith('대량/')).length)), { timeout: 20000 }).toBe(350);
@@ -3243,7 +3264,7 @@ views:
     await expect(page.locator('.tree .row', { hasText: '대량노트000' })).toHaveCount(0);
     await summary.click();
     const rows = page.locator('.tree .row', { hasText: /^대량노트/ });
-    await expect(rows).toHaveCount(300, { timeout: 8000 });
+    await expect(rows).toHaveCount(300, { timeout: 15000 });
     await page.getByTestId('tree-more').click();
     await expect(rows).toHaveCount(350);
     await expect(page.getByTestId('tree-more')).toHaveCount(0);

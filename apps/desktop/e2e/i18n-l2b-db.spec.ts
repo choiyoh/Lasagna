@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // L2b 영어 스모크(데이터베이스): 영어로 전환한 뒤 db 화면·필터·속성 관리·템플릿에 한글이 남지 않는지 확인한다.
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
@@ -48,18 +49,18 @@ test.beforeAll(async () => {
   vaultDir = path.join(base, 'vault');
   const dbDir = path.join(vaultDir, 'Tasks');
   mkdirSync(dbDir, { recursive: true });
-  writeFileSync(path.join(dbDir, '_db.yaml'), DB_YAML);
+  writeExternalNote(path.join(dbDir, '_db.yaml'), DB_YAML);
   for (const [title, status, score, due, done] of [
     ['Alpha', 'Todo', 3, '2026-11-05', 'true'],
     ['Beta', 'Doing', 5, '2026-11-06', 'false'],
     ['Gamma', 'Done', 8, '2026-11-07', 'true'],
   ] as const) {
-    writeFileSync(path.join(path.join(vaultDir, 'Tasks'), `${title}.md`), `---\nStatus: ${status}\nScore: ${score}\nDue: ${due}\nDone: ${done}\ncreated: 2026-11-01T00:00:00.000Z\n---\n${title} note\n`);
+    writeExternalNote(path.join(path.join(vaultDir, 'Tasks'), `${title}.md`), `---\nStatus: ${status}\nScore: ${score}\nDue: ${due}\nDone: ${done}\ncreated: 2026-11-01T00:00:00.000Z\n---\n${title} note\n`);
   }
   // _db.yaml 이 깨진 데이터베이스(예약어 title 을 속성 이름으로) — 문제 문구도 앱 언어를 따라야 한다
   const broken = path.join(vaultDir, 'Broken');
   mkdirSync(broken, { recursive: true });
-  writeFileSync(path.join(broken, '_db.yaml'), 'version: 1\ntitle: Broken\nproperties:\n  title: { type: text }\nviews:\n  - id: v1\n    name: All\n    type: table\n');
+  writeExternalNote(path.join(broken, '_db.yaml'), 'version: 1\ntitle: Broken\nproperties:\n  title: { type: text }\nviews:\n  - id: v1\n    name: All\n    type: table\n');
   app = await electron.launch({
     executablePath: packagedExecutable(),
     env: { ...process.env, NOPS_E2E: '1' },
@@ -87,6 +88,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 test('English smoke: database toolbar, filter, properties and templates have no Korean', async () => {
@@ -229,7 +231,7 @@ test('English smoke: database toolbar, filter, properties and templates have no 
 
   // CSV 가져오기: 제목(type=title) 라벨이 raw 키가 아니라 영어 낱말이다
   const csvPath = path.join(vaultDir, 'import.csv');
-  writeFileSync(csvPath, 'Name,Note\nOne,n1\n');
+  writeExternalNote(csvPath, 'Name,Note\nOne,n1\n');
   await app.evaluate(({ dialog }, file) => {
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [file] })) as typeof dialog.showOpenDialog;
   }, csvPath);

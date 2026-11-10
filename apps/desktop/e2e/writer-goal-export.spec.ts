@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, readFileSync, rmSync, statSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // 작가 모드(W4e): 작품 목표·마감 계산, 일일 목표 연결, 복사용 미리보기/클립보드.
 function packagedExecutable(): string {
@@ -37,6 +38,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 async function resetWriter(page: Page, opts: { mode?: boolean; locale?: 'ko' | 'en' } = {}): Promise<void> {
@@ -78,7 +80,7 @@ test.beforeAll(async () => {
   mkdirSync(noteDir, { recursive: true });
   mkdirSync(path.join(vaultDir, '작품', '캐릭터'), { recursive: true });
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(noteDir, '회차.md'), '# 1화 밤의 시작\n\n**굵은** 문장과 [[노트|별칭]], [링크](https://x.y)\n\n> 인용문\n');
+  writeExternalNote(path.join(noteDir, '회차.md'), '# 1화 밤의 시작\n\n**굵은** 문장과 [[노트|별칭]], [링크](https://x.y)\n\n> 인용문\n');
   app = await launch();
 });
 

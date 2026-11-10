@@ -2,6 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher } from './watcher';
 
 // L3a: 영어에서 새로 만드는 기본값은 영어 이름으로 저장되고(한번 저장되면 그대로),
 //       댓글 작성자 저장값 '나' 는 화면에서만 Me 로 보인다.
@@ -51,6 +52,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 const day = () => {

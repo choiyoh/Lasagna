@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // L2b 영어 스모크(그래프): 영어로 전환한 뒤 그래프 화면·설정·통계·0건 안내에 한글이 남지 않는지 확인한다.
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
@@ -25,8 +26,8 @@ test.beforeAll(async () => {
   userData = path.join(base, 'userdata');
   vaultDir = path.join(base, 'vault');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, 'Alpha.md'), '# Alpha\n\nSee [[Beta]].\n');
-  writeFileSync(path.join(vaultDir, 'Beta.md'), '# Beta\n');
+  writeExternalNote(path.join(vaultDir, 'Alpha.md'), '# Alpha\n\nSee [[Beta]].\n');
+  writeExternalNote(path.join(vaultDir, 'Beta.md'), '# Beta\n');
   app = await electron.launch({
     executablePath: packagedExecutable(),
     env: { ...process.env, NOPS_E2E: '1' },
@@ -54,6 +55,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 test('English smoke: graph screen, settings, stats and empty state have no Korean', async () => {

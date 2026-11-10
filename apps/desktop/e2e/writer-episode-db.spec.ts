@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // 작가 모드(W4c): 회차 DB — 칩을 눌러야 _db.yaml 생성, 자동 열(글자수·목표 달성), 한/영.
 function packagedExecutable(): string {
@@ -36,6 +37,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 async function resetWriter(page: Page, locale: 'ko' | 'en' = 'ko'): Promise<void> {
@@ -60,7 +62,7 @@ test.beforeAll(async () => {
   base = mkdtempSync(path.join(tmpdir(), 'nops-epdb-'));
   vaultDir = path.join(base, 'Demo');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, '메모.md'), '# 메모\n');
+  writeExternalNote(path.join(vaultDir, '메모.md'), '# 메모\n');
   app = await launch();
 });
 
@@ -113,7 +115,12 @@ test('회차 DB 칩을 눌러야 _db.yaml 이 생기고, 자동 열이 계산된
   await expect(prompt).toBeVisible();
   await prompt.fill('3화');
   await prompt.press('Enter');
-  await expect.poll(() => readFileSync(path.join(vaultDir, '달빛', '회차', '3화.md'), 'utf8').startsWith('# 3화'), { timeout: 15_000 }).toBe(true);
+  await expect
+    .poll(() => {
+      const f = path.join(vaultDir, '달빛', '회차', '3화.md');
+      return existsSync(f) && readFileSync(f, 'utf8').startsWith('# 3화');
+    }, { timeout: 15_000 })
+    .toBe(true);
   // DB 화면에 행과 계산된 자동 값이 보인다('1화' = 2자)
   await expect(page.getByTestId('db-table')).toContainText('3화', { timeout: 15_000 });
   // 자동 열 값은 파일에 저장되지 않는다
@@ -127,8 +134,8 @@ test('회차 DB 칩을 눌러야 _db.yaml 이 생기고, 자동 열이 계산된
   await expect(firstRow).toContainText('2화'); // 회차 값이 있는 행 기준 내림차순(새 회차는 회차 값이 비어 맨 아래)
   await expect(page.locator('.dbtable__calc')).toHaveCount(1);
   // 목표를 넣어 글자수 총합과 목표 달성 수(n/m)를 확인한다.
-  writeFileSync(path.join(vaultDir, '달빛', '회차', '1화.md'), '---\ngoal_chars: 1\n---\n# 1화\n');
-  writeFileSync(path.join(vaultDir, '달빛', '회차', '2화.md'), '---\ngoal_chars: 99\n---\n# 2화\n');
+  writeExternalNote(path.join(vaultDir, '달빛', '회차', '1화.md'), '---\ngoal_chars: 1\n---\n# 1화\n');
+  writeExternalNote(path.join(vaultDir, '달빛', '회차', '2화.md'), '---\ngoal_chars: 99\n---\n# 2화\n');
   await expect(page.locator('.dbtable__calc')).toContainText('6', { timeout: 15_000 });
   await expect(page.locator('.dbtable__calc')).toContainText('1/2');
   await page.getByRole('tab', { name: '퇴고' }).click();
@@ -212,7 +219,7 @@ test('영어 회차 DB 도 뷰 4개와 합계 행(총 글자수·n/m)이 보인�
   const dir = path.join(vaultDir, 'Moon', 'Episodes');
   await expect.poll(() => readdirSync(dir).filter((f) => f.endsWith('.md')).length, { timeout: 15_000 }).toBe(1);
   const file = path.join(dir, readdirSync(dir).find((f) => f.endsWith('.md'))!);
-  writeFileSync(file, '---\ngoal_chars: 1\n---\n# E1\n');
+  writeExternalNote(file, '---\ngoal_chars: 1\n---\n# E1\n');
   await expect(page.locator('.dbtable__calc')).toHaveCount(1, { timeout: 15_000 });
   await expect(page.locator('.dbtable__calc')).toContainText('2');
   await expect(page.locator('.dbtable__calc')).toContainText('1/1');

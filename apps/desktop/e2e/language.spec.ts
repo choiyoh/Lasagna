@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // 패키징한 앱을 실행해 언어 설정이 화면·<html lang>·재시작 후에도 유지되는지 확인한다.
 function packagedExecutable(): string {
@@ -67,6 +68,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 async function openSettings(page: Page): Promise<void> {
@@ -79,7 +81,7 @@ test.beforeAll(async () => {
   userData = path.join(base, 'userdata');
   vaultDir = path.join(base, 'vault');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, 'Hello.md'), '# Hello\n');
+  writeExternalNote(path.join(vaultDir, 'Hello.md'), '# Hello\n');
   app = await launch();
 });
 
@@ -87,7 +89,7 @@ test.afterAll(async () => {
   // 실패로 끝나도 다음 실행이 영어로 시작하지 않게 되돌린다(임시 userData 지만 한 번 더 확인).
   try {
     const dir = await app?.evaluate(({ app: electronApp }) => electronApp.getPath('userData'));
-    if (dir) writeFileSync(path.join(dir, 'app-settings.json'), '{\n  "version": 1,\n  "language": "system"\n}\n');
+    if (dir) writeExternalNote(path.join(dir, 'app-settings.json'), '{\n  "version": 1,\n  "language": "system"\n}\n');
   } catch {
     // 앱이 이미 닫혔으면 임시 폴더째 지운다.
   }

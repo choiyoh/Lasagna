@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {mkdirSync, mkdtempSync, readFileSync, rmSync, statSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // 작가 모드(W1b): 문서 목표(노트 속성 goal_chars)·진행 막대·오늘 쓴 글자수(userData 통계)·일일 목표.
 // 노트 파일은 '목표를 정하는 순간'에만 바뀌고, 통계는 볼트·노트에 기록하지 않는다.
@@ -43,6 +44,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 async function openNote(page: Page, name: string): Promise<void> {
@@ -93,11 +95,11 @@ test.beforeAll(async () => {
   mkdirSync(path.join(vaultDir, '작품', '캐릭터'), { recursive: true });
   userDataDir = path.join(base, 'userdata');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(noteDir, 'Hello.md'), '# Hello\n\n본문\n');
-  writeFileSync(path.join(noteDir, 'Swap.md'), '# Swap\n\n처음\n');
-  writeFileSync(path.join(noteDir, 'NoFm.md'), '# 제목\n\n본문 문장\n');
-  writeFileSync(path.join(noteDir, 'Crlf.md'), '---\r\ntitle: CRLF\r\n---\r\n# CRLF\r\n\r\n본문\r\n');
-  writeFileSync(
+  writeExternalNote(path.join(noteDir, 'Hello.md'), '# Hello\n\n본문\n');
+  writeExternalNote(path.join(noteDir, 'Swap.md'), '# Swap\n\n처음\n');
+  writeExternalNote(path.join(noteDir, 'NoFm.md'), '# 제목\n\n본문 문장\n');
+  writeExternalNote(path.join(noteDir, 'Crlf.md'), '---\r\ntitle: CRLF\r\n---\r\n# CRLF\r\n\r\n본문\r\n');
+  writeExternalNote(
     path.join(noteDir, 'Mixed.md'),
     '# Mixed\n\n가 [[노트|별칭]] 나\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n![그림](a.png)\n\n```ts\nconst a = 1;\n```\n\n> [!note] 콜아웃\n> 내용\n',
   );
@@ -113,7 +115,7 @@ test('목표가 없으면 "목표 설정" 이 보이고, 설정하면 노트 속
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'Hello');
-  writeFileSync(path.join(noteDir, 'Hello.md'), '# Hello\n\n본문\n'); // 앞 테스트가 남긴 목표 제거
+  writeExternalNote(path.join(noteDir, 'Hello.md'), '# Hello\n\n본문\n'); // 앞 테스트가 남긴 목표 제거
   await expect(page.getByTestId('writer-goal-set')).toBeVisible();
   await expect(page.getByTestId('writer-today')).toContainText(/오늘/);
   const before = readFileSync(path.join(noteDir, 'Hello.md'), 'utf8');
@@ -144,7 +146,7 @@ test('위키·표·이미지·코드가 든 문서도 목표 저장 후 본문 �
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'Mixed');
-  writeFileSync(path.join(noteDir, 'Mixed.md'), '# Mixed\n\n가 [[노트|별칭]] 나\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n![그림](a.png)\n\n```ts\nconst a = 1;\n```\n\n> [!note] 콜아웃\n> 내용\n');
+  writeExternalNote(path.join(noteDir, 'Mixed.md'), '# Mixed\n\n가 [[노트|별칭]] 나\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n![그림](a.png)\n\n```ts\nconst a = 1;\n```\n\n> [!note] 콜아웃\n> 내용\n');
   const file = path.join(noteDir, 'Mixed.md');
   const before = readFileSync(file, 'utf8');
   await toggleWriter(page, true);
@@ -175,7 +177,7 @@ test('목표 해제: 입력을 비우면 속성이 지워지고 "목표 설정" 
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'Hello');
-  writeFileSync(path.join(noteDir, 'Hello.md'), '---\ngoal_chars: 5000\n---\n# Hello\n\n본문\n');
+  writeExternalNote(path.join(noteDir, 'Hello.md'), '---\ngoal_chars: 5000\n---\n# Hello\n\n본문\n');
   await expect(page.getByTestId('writer-goal-text')).toContainText('/5,000자');
   await page.getByTestId('writer-goal-edit').click();
   await page.getByTestId('writer-goal-input').fill('');
@@ -188,7 +190,7 @@ test('입력하면 오늘 쓴 글자수가 늘고, 삭제로 줄어도 0 미만�
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'Swap');
-  writeFileSync(path.join(noteDir, 'Swap.md'), '# Swap\n\n처음\n');
+  writeExternalNote(path.join(noteDir, 'Swap.md'), '# Swap\n\n처음\n');
   const readToday = async () => Number((await page.getByTestId('writer-today').innerText()).replace(/[^0-9]/g, ''));
   const start = await readToday();
   await page.locator('.ProseMirror').click();
@@ -203,7 +205,7 @@ test('앱을 다시 켜도 목표·오늘 쓴 글자수가 그대로 보인다',
   const before = await app.firstWindow();
   await resetWriter(before);
   await openNote(before, 'Hello');
-  writeFileSync(path.join(noteDir, 'Hello.md'), '# Hello\n\n본문\n');
+  writeExternalNote(path.join(noteDir, 'Hello.md'), '# Hello\n\n본문\n');
   await before.getByTestId('writer-goal-set').click();
   await before.getByTestId('writer-goal-input').fill('5000');
   await before.getByTestId('writer-goal-save').click();
@@ -223,8 +225,8 @@ test('앱을 다시 켜도 목표·오늘 쓴 글자수가 그대로 보인다',
 test('다른 노트로 전환해도 그 노트의 목표·현재 값으로 바뀐다', async () => {
   const page = await app.firstWindow();
   await resetWriter(page);
-  writeFileSync(path.join(noteDir, 'Mixed.md'), '---\ngoal_chars: 1200\n---\n# Mixed\n\n가 [[노트|별칭]] 나\n');
-  writeFileSync(path.join(noteDir, 'NoFm.md'), '# 제목\n\n본문 문장\n');
+  writeExternalNote(path.join(noteDir, 'Mixed.md'), '---\ngoal_chars: 1200\n---\n# Mixed\n\n가 [[노트|별칭]] 나\n');
+  writeExternalNote(path.join(noteDir, 'NoFm.md'), '# 제목\n\n본문 문장\n');
   await openNote(page, 'Mixed');
   await expect(page.getByTestId('writer-goal-text')).toContainText('/1,200자');
   await openNote(page, '제목');
@@ -235,9 +237,9 @@ test('외부에서 파일을 바꾸면(무음 reload) 목표·총계가 새 내�
   const page = await app.firstWindow();
   await resetWriter(page);
   await openNote(page, 'Swap');
-  writeFileSync(path.join(noteDir, 'Swap.md'), '# Swap\n\n처음\n');
+  writeExternalNote(path.join(noteDir, 'Swap.md'), '# Swap\n\n처음\n');
   await expect(page.locator('.note-editor__status')).toHaveAttribute('data-state', 'saved', { timeout: 15_000 });
-  writeFileSync(path.join(noteDir, 'Swap.md'), '---\ngoal_chars: 100\n---\n# Swap\n\n짧\n');
+  writeExternalNote(path.join(noteDir, 'Swap.md'), '---\ngoal_chars: 100\n---\n# Swap\n\n짧\n');
   await expect(page.locator('.ProseMirror')).toHaveText(/짧/);
   await expect(page.getByTestId('writer-goal-text')).toContainText('/100자');
 });
@@ -273,7 +275,7 @@ test('읽기 전용 볼트에서 목표 저장이 실패하면 화면 값이 유
   await resetWriter(page);
   await openNote(page, '제목');
   const file = path.join(noteDir, 'NoFm.md');
-  writeFileSync(file, '---\ngoal_chars: 500\n---\n# 제목\n\n본문 문장\n');
+  writeExternalNote(file, '---\ngoal_chars: 500\n---\n# 제목\n\n본문 문장\n');
   // 앞 테스트에서 영어로 바꿨을 수 있다 — 숫자 부분만 언어와 무관하게 확인한다
   await expect(page.getByTestId('writer-goal-text')).toContainText(/\/500(?!\d)/);
   const { chmodSync } = await import('node:fs');

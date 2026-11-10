@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {chmodSync, mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { waitForWatcher, writeExternalNote } from './watcher';
 
 // L4a 영어 스모크: MCP 설정 화면 문구가 영어이고, 복사 스니펫의 명령·키는 그대로인지 확인한다.
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
@@ -25,7 +26,7 @@ test.beforeAll(async () => {
   userData = path.join(base, 'userdata');
   vaultDir = path.join(base, 'Demo');
   mkdirSync(vaultDir, { recursive: true });
-  writeFileSync(path.join(vaultDir, 'Hello.md'), '# Hello\n');
+  writeExternalNote(path.join(vaultDir, 'Hello.md'), '# Hello\n');
   app = await electron.launch({
     executablePath: packagedExecutable(),
     env: { ...process.env, NOPS_E2E: '1' },
@@ -53,6 +54,7 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
     await cta.click();
     await expect(page.locator('aside.sidebar')).toBeVisible({ timeout: 60_000 });
   }
+  await waitForWatcher(page);
 }
 
 test('English smoke: MCP settings and command palette, snippet command unchanged', async () => {
@@ -104,7 +106,7 @@ test('깨진 정책 파일·빈 폴더도 화면 언어로 안내한다', async 
   const page = await app.firstWindow();
   // 볼트의 정책 파일을 깨뜨린다(사용자 데이터가 아니라 앱이 만드는 설정 파일)
   mkdirSync(path.join(vaultDir, '.nopsidian'), { recursive: true });
-  writeFileSync(path.join(vaultDir, '.nopsidian', 'mcp-policy.json'), '{ not json');
+  writeExternalNote(path.join(vaultDir, '.nopsidian', 'mcp-policy.json'), '{ not json');
   await page.reload();
   await openVaultIfNeeded(page);
 
@@ -131,7 +133,7 @@ test('깨진 정책 파일·빈 폴더도 화면 언어로 안내한다', async 
   await page.keyboard.press('Escape');
 
   // 루트가 배열인 스키마 오류
-  writeFileSync(path.join(vaultDir, '.nopsidian', 'mcp-policy.json'), '[]');
+  writeExternalNote(path.join(vaultDir, '.nopsidian', 'mcp-policy.json'), '[]');
   await page.reload();
   await openVaultIfNeeded(page);
   await page.getByTestId('settings-btn').click();

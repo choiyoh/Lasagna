@@ -46,6 +46,7 @@ import { e2eBackground } from './e2e-mode';
 import { backgroundWindowOptions, presentBackgroundWindow } from './e2e-window';
 import { buildMenuTemplate, hidesMenuBar } from './menu';
 import { revealExistingWindow } from './second-instance';
+import { notifySelfSave, saveWithSelfNotification } from './self-save';
 import { runMcpStdio } from './mcp-stdio';
 import { installProtocols, registerSchemes } from './protocols';
 import {
@@ -273,18 +274,25 @@ function registerHandlers() {
   handle('note.save', ({ path: rel, content, baseHash }, e) => {
     const v = requireVault();
     const base = v.bases.get(rel);
-    const result = saveNote({
-      root: v.info.path,
-      rel,
-      content,
-      baseHash,
-      ...(base && base.hash === baseHash ? { baseContent: base.content } : {}),
-    });
-    // 디스크에 실제로 있는 내용이 새 공통 조상이 된다(copy면 디스크는 그대로)
-    v.bases.set(rel, { hash: result.hash, content: result.content });
-    v.selfWrites.set(rel, result.hash);
-    v.selfOrigins.set(rel, e.sender.id);
-    return result;
+    return saveWithSelfNotification(
+      () =>
+        saveNote({
+          root: v.info.path,
+          rel,
+          content,
+          baseHash,
+          ...(base && base.hash === baseHash ? { baseContent: base.content } : {}),
+        }),
+      (result) => {
+        // 디스크에 실제로 있는 내용이 새 공통 조상이 된다(copy면 디스크는 그대로)
+        v.bases.set(rel, { hash: result.hash, content: result.content });
+        v.selfWrites.set(rel, result.hash);
+        v.selfOrigins.set(rel, e.sender.id);
+        // 감시 이벤트(300ms)를 기다리지 않고 쓴 창에 바로 알린다. 감시 이벤트가 뒤늦게 와도
+        // selfWrites 로 자기 쓰기임을 알아 중복 false 만 생기고(렌더러 디바운스로 안전) 다른 창은 external=true 를 받는다.
+        notifySelfSave(e.sender, rel);
+      },
+    );
   });
   handle('note.trash', ({ path: rel }) => {
     const v = requireVault();

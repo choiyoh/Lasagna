@@ -258,6 +258,8 @@ export const en: Record<MessageKey, string> = {
   'palette.tabNew': 'Open a note in a new tab',
   'palette.tabClose': 'Close this tab',
   'palette.splitRight': 'Split right',
+  'menu.edit': 'Edit',
+  'menu.view': 'View',
   'palette.previousEpisode': 'Open previous episode in the other pane',
   'palette.splitDown': 'Split down',
   'palette.unsplit': 'Merge split panes',

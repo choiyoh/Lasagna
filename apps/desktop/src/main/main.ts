@@ -1,5 +1,5 @@
 import squirrelStartup from 'electron-squirrel-startup';
-import { app, BrowserWindow, dialog, safeStorage, session, shell } from 'electron';
+import { app, BrowserWindow, Menu, dialog, safeStorage, session, shell } from 'electron';
 import { createHash } from 'node:crypto';
 import { applyRename, planRename, undoRename } from './rename';
 import { linkMention } from '../workers/index/mention-link';
@@ -44,6 +44,8 @@ import { configureIpc, handle, registerWebContents } from './ipc';
 import { isMcpStdioInvocation, mcpLaunchArgs, mcpScriptPath, mcpStdioArgs } from './mcp-cli';
 import { e2eBackground } from './e2e-mode';
 import { backgroundWindowOptions, presentBackgroundWindow } from './e2e-window';
+import { buildMenuTemplate, hidesMenuBar } from './menu';
+import { revealExistingWindow } from './second-instance';
 import { runMcpStdio } from './mcp-stdio';
 import { installProtocols, registerSchemes } from './protocols';
 import {
@@ -109,6 +111,12 @@ if (mcpStdio) {
 /** 테스트 빌드에서만 켜지는 '창을 띄우지 않는' 모드(배포 앱은 항상 false). */
 const BACKGROUND_E2E = e2eBackground();
 
+// 두 번째 실행(시작 메뉴·작업표시줄): 기존 창을 복원·포커스. e2e 에서는 드러내지 않는다.
+app.on('second-instance', () => {
+  if (mcpStdio) return;
+  revealExistingWindow(BrowserWindow.getAllWindows()[0], { background: BACKGROUND_E2E });
+});
+
 if (!mcpStdio) {
   registerSchemes();
 
@@ -131,6 +139,8 @@ function createWindow(openPath?: string) {
     height: 800,
     minWidth: 640,
     minHeight: 400,
+    // Windows·Linux: 기본 영문 메뉴바를 숨긴다(Alt 로 최소 메뉴 표시). macOS 는 기존 그대로.
+    autoHideMenuBar: hidesMenuBar(process.platform),
     // e2e 백그라운드: 생성 순간부터 숨김·투명·화면 밖(ready-to-show 전 노출 방지). 배포는 그대로.
     ...backgroundWindowOptions(BACKGROUND_E2E),
     show: false,
@@ -843,6 +853,8 @@ app.whenReady().then(() => {
   if (mcpStdio) return; // MCP 서버 모드: 창·프로토콜·IPC를 만들지 않는다
   // 이 프로세스에서 만드는 기본값도 앱 언어를 따른다(렌더러와 별개 컨텍스트).
   setLocale(currentLanguage().locale);
+  const menuTemplate = buildMenuTemplate(process.platform, app.isPackaged);
+  if (menuTemplate) Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
   installSessionPolicy(devServerUrl);
   if (devServerUrl) {
     // 개발 서버는 HMR 때문에 완화된 CSP를 쓴다. 운영 CSP는 app:// 응답 헤더로 강제된다.

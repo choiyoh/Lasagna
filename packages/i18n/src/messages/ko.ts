@@ -259,6 +259,8 @@ export const ko = {
   'palette.tabNew': '새 탭에서 노트 열기',
   'palette.tabClose': '현재 탭 닫기',
   'palette.splitRight': '오른쪽으로 분할',
+  'menu.edit': '편집',
+  'menu.view': '보기',
   'palette.previousEpisode': '이전 회차를 옆 칸에 열기',
   'palette.splitDown': '아래로 분할',
   'palette.unsplit': '분할 합치기',

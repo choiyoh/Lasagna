@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CONFLICT_START } from './merge3.js';
-import { atomicWrite, saveNote, sha256, snapshot } from './save.js';
+import { RENAME_RETRY_DELAYS_MS, atomicWrite, renameWithRetry, saveNote, sha256, snapshot } from './save.js';
 
 let root: string;
 const file = (rel: string) => path.join(root, rel);
@@ -13,7 +13,61 @@ beforeEach(() => {
   root = mkdtempSync(path.join(tmpdir(), 'nops-save-'));
 });
 
+describe('renameWithRetry (Windows 파일 잠금 대비)', () => {
+  const err = (code: string) => Object.assign(new Error(code), { code });
+
+  it('EPERM·EBUSY·EACCES 는 백오프 후 재시도하고, 성공하면 지연 기록이 남는다', () => {
+    const slept: number[] = [];
+    let calls = 0;
+    const rename = () => {
+      calls += 1;
+      if (calls === 1) throw err('EPERM');
+      if (calls === 2) throw err('EBUSY');
+    };
+    renameWithRetry(rename, 'tmp', 'file', { sleep: (ms) => slept.push(ms) });
+    expect(calls).toBe(3);
+    expect(slept).toEqual(RENAME_RETRY_DELAYS_MS.slice(0, 2));
+  });
+
+  it('마지막(5번째 재시도)까지 실패하면 원래 오류를 던지고 대기는 5회다', () => {
+    const slept: number[] = [];
+    let calls = 0;
+    const fail = () => {
+      calls += 1;
+      throw err('EACCES');
+    };
+    expect(() => renameWithRetry(fail, 'tmp', 'file', { sleep: (ms) => slept.push(ms) })).toThrow(/EACCES/);
+    expect(calls).toBe(RENAME_RETRY_DELAYS_MS.length + 1);
+    expect(slept).toEqual([...RENAME_RETRY_DELAYS_MS]);
+  });
+
+  it('다른 오류는 즉시 실패하고, 성공 경로는 한 번도 기다리지 않는다', () => {
+    const slept: number[] = [];
+    expect(() =>
+      renameWithRetry(
+        () => {
+          throw err('ENOENT');
+        },
+        'tmp',
+        'file',
+        { sleep: (ms) => slept.push(ms) },
+      ),
+    ).toThrow(/ENOENT/);
+    expect(slept).toEqual([]);
+    renameWithRetry(() => undefined, 'tmp', 'file', { sleep: (ms) => slept.push(ms) });
+    expect(slept).toEqual([]);
+  });
+});
+
 describe('atomicWrite', () => {
+  it('rename 이 실패해도 임시 파일을 남기지 않고 원본 자리를 건드리지 않는다', () => {
+    mkdirSync(file('lock'));
+    mkdirSync(file('lock/x.md')); // 파일 자리에 폴더가 있어 rename 이 실패한다
+    expect(() => atomicWrite(file('lock/x.md'), '내용')).toThrow();
+    expect(readdirSync(file('lock')).filter((n) => n.includes('.nops-tmp-'))).toEqual([]);
+    expect(statSync(file('lock/x.md')).isDirectory()).toBe(true);
+  });
+
   it('내용을 쓰고 임시 파일을 남기지 않는다', () => {
     mkdirSync(file('a'));
     atomicWrite(file('a/x.md'), '내용');

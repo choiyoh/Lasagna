@@ -19,6 +19,40 @@ import { resolveInVault } from './vault-path.js';
 
 export const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
+/** Windows 에서 대상 파일이 백신·검색 인덱서·클라우드에 열려 있을 때 나는 rename 오류 */
+const RETRYABLE_RENAME = new Set(['EPERM', 'EBUSY', 'EACCES']);
+/** 재시도 사이 대기(ms). 성공 경로에서는 한 번도 쓰지 않는다(macOS 지연 0). */
+export const RENAME_RETRY_DELAYS_MS = [20, 50, 100, 200, 400] as const;
+
+function sleepSync(ms: number) {
+  // 동기 저장 경로라 busy-loop 대신 스레드를 잠깐 재운다(짧은 값만 쓴다).
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * rename 재시도(Windows 전용 상황 대비). 코드가 RETRYABLE_RENAME 일 때만 짧게 물러났다 다시 한다.
+ * 다른 오류·마지막 실패는 그대로 던져 호출자가 임시 파일을 정리하고 원래 오류를 보여 준다.
+ */
+export function renameWithRetry(
+  rename: (from: string, to: string) => void,
+  from: string,
+  to: string,
+  opts: { sleep?: (ms: number) => void; delays?: readonly number[] } = {},
+): void {
+  const delays = opts.delays ?? RENAME_RETRY_DELAYS_MS;
+  const sleep = opts.sleep ?? sleepSync;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      rename(from, to);
+      return;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (!code || !RETRYABLE_RENAME.has(code) || attempt >= delays.length) throw e;
+      sleep(delays[attempt]!);
+    }
+  }
+}
+
 /** 임시 파일 → fsync → rename. 중간에 죽어도 원본이 반쯤 쓰인 상태로 남지 않는다. */
 export function atomicWrite(file: string, data: string | Uint8Array) {
   mkdirSync(path.dirname(file), { recursive: true });
@@ -43,7 +77,7 @@ export function atomicWrite(file: string, data: string | Uint8Array) {
   }
   closeSync(fd);
   try {
-    renameSync(tmp, file);
+    renameWithRetry(renameSync, tmp, file);
   } catch (e) {
     try {
       unlinkSync(tmp);

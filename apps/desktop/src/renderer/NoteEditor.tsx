@@ -1128,7 +1128,13 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
                 <i style={{ width: `${Math.round(goalProgress(basisChars(writerStats, spacing), noteGoal).ratio * 100)}%` }} />
               </span>
               <span className="note-editor__goalnum" data-testid="writer-goal-text">
-                {goalText({ locale, chars: basisChars(writerStats, spacing), goal: noteGoal, narrow })}
+                {goalText({
+                  locale,
+                  chars: basisChars(writerStats, spacing),
+                  goal: noteGoal,
+                  // 영어는 매수 표시가 켜지면 상태줄이 길어져 1000px 근처에서 접힌다 — 목표 단위를 줄인다.
+                  narrow: narrow || (locale === 'en' && language.writerPaperCount === true),
+                })}
               </span>
               {goalProgress(basisChars(writerStats, spacing), noteGoal).over > 0 && (
                 <span className="note-editor__goalover" data-testid="writer-goal-over">

@@ -227,6 +227,21 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
               </label>
             )}
             {language.writerMode === true && (
+              <label className="settings__row">
+                <span>
+                  {t('settings.writerPaperCount')}
+                  <small className="muted">{t('settings.writerPaperCountHint')}</small>
+                </span>
+                <input
+                  type="checkbox"
+                  data-testid="writer-paper-count"
+                  checked={language.writerPaperCount === true}
+                  onChange={(e) => void changeWriterSettings({ paperCount: e.target.checked }).catch(() => setWriterError(true))}
+                  aria-label={t('settings.writerPaperCount')}
+                />
+              </label>
+            )}
+            {language.writerMode === true && (
               <div className="settings__row">
                 <span>{t('settings.writerSpacing')}</span>
                 <RadioSeg

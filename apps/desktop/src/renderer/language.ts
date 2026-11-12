@@ -2,7 +2,7 @@ import { setLocale, type Locale } from '@nopsidian/i18n';
 import type { AppLanguage, LanguageSetting } from '@nopsidian/ipc-contract';
 
 /** main 이 들고 있는 언어 설정의 렌더러 사본. 여러 창이 같은 값을 본다. */
-let current: AppLanguage = { setting: 'system', locale: 'ko', writerMode: false, writerSpacing: 'include', writerDailyGoal: null, writerFont: 'sans', writerTypewriter: true };
+let current: AppLanguage = { setting: 'system', locale: 'ko', writerMode: false, writerSpacing: 'include', writerDailyGoal: null, writerFont: 'sans', writerTypewriter: true, writerPaperCount: false };
 const listeners = new Set<() => void>();
 
 export function getLanguage(): AppLanguage {
@@ -50,7 +50,7 @@ export async function changeLanguage(language: LanguageSetting): Promise<void> {
  * 작가 모드 설정만 바꾼다(언어는 그대로). main 이 저장·브로드캐스트하고 돌아온 값으로 즉시 반영한다.
  * 저장에 실패하면 그대로 던져 설정 화면이 이전 값을 유지한다.
  */
-export async function changeWriterSettings(next: { mode?: boolean; spacing?: 'include' | 'exclude'; dailyGoal?: number | null; font?: 'sans' | 'serif' | 'mono'; typewriter?: boolean }): Promise<void> {
+export async function changeWriterSettings(next: { mode?: boolean; spacing?: 'include' | 'exclude'; dailyGoal?: number | null; font?: 'sans' | 'serif' | 'mono'; typewriter?: boolean; paperCount?: boolean }): Promise<void> {
   apply(
     await window.nops.settings.setLanguage({
       ...(next.mode === undefined ? {} : { writerMode: next.mode }),
@@ -58,6 +58,7 @@ export async function changeWriterSettings(next: { mode?: boolean; spacing?: 'in
       ...(next.dailyGoal === undefined ? {} : { writerDailyGoal: next.dailyGoal }),
       ...(next.font === undefined ? {} : { writerFont: next.font }),
       ...(next.typewriter === undefined ? {} : { writerTypewriter: next.typewriter }),
+      ...(next.paperCount === undefined ? {} : { writerPaperCount: next.paperCount }),
     }),
   );
 }

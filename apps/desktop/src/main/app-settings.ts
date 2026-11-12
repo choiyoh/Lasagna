@@ -21,9 +21,11 @@ export interface AppSettings {
   writerFont?: WriterFont;
   /** 집중 모드 타자기 스크롤(기본 켜짐) */
   writerTypewriter?: boolean;
+  /** 원고지 매수 표시(상태줄, 기본 꺼짐) */
+  writerPaperCount?: boolean;
 }
 
-export const DEFAULT_APP_SETTINGS: AppSettings = { version: 1, language: 'system', writerMode: false, writerSpacing: 'include', writerDailyGoal: null, writerFont: 'sans', writerTypewriter: true };
+export const DEFAULT_APP_SETTINGS: AppSettings = { version: 1, language: 'system', writerMode: false, writerSpacing: 'include', writerDailyGoal: null, writerFont: 'sans', writerTypewriter: true, writerPaperCount: false };
 const WRITER_SPACINGS: readonly WriterSpacing[] = ['include', 'exclude'];
 const WRITER_FONTS: readonly WriterFont[] = ['sans', 'serif', 'mono'];
 
@@ -38,7 +40,7 @@ export function parseAppSettings(raw: string): AppSettings {
       return DEFAULT_APP_SETTINGS;
     }
     // 작가 모드 필드는 선택 — 없거나 이상하면 기본값(꺼짐·공백 포함)으로 읽는다.
-    const rawWriter = data as { writerMode?: unknown; writerSpacing?: unknown; writerDailyGoal?: unknown; writerFont?: unknown; writerTypewriter?: unknown };
+    const rawWriter = data as { writerMode?: unknown; writerSpacing?: unknown; writerDailyGoal?: unknown; writerFont?: unknown; writerTypewriter?: unknown; writerPaperCount?: unknown };
     const writerMode = typeof rawWriter.writerMode === 'boolean' ? rawWriter.writerMode : false;
     const writerSpacing = WRITER_SPACINGS.includes(rawWriter.writerSpacing as WriterSpacing)
       ? (rawWriter.writerSpacing as WriterSpacing)
@@ -47,7 +49,8 @@ export function parseAppSettings(raw: string): AppSettings {
     const writerDailyGoal = typeof goal === 'number' && Number.isFinite(goal) && goal > 0 ? Math.floor(goal) : null;
     const writerFont = WRITER_FONTS.includes(rawWriter.writerFont as WriterFont) ? (rawWriter.writerFont as WriterFont) : 'sans';
     const writerTypewriter = typeof rawWriter.writerTypewriter === 'boolean' ? rawWriter.writerTypewriter : true;
-    return { version: 1, language: data.language as LanguageSetting, writerMode, writerSpacing, writerDailyGoal, writerFont, writerTypewriter };
+    const writerPaperCount = typeof rawWriter.writerPaperCount === 'boolean' ? rawWriter.writerPaperCount : false;
+    return { version: 1, language: data.language as LanguageSetting, writerMode, writerSpacing, writerDailyGoal, writerFont, writerTypewriter, writerPaperCount };
   } catch {
     return DEFAULT_APP_SETTINGS;
   }
@@ -89,7 +92,7 @@ export class AppSettingsStore {
   }
 
   /** 작가 모드 설정 — 준 값만 바꾸고 나머지는 그대로 둔다. */
-  setWriter(next: { mode?: boolean; spacing?: WriterSpacing; dailyGoal?: number | null; font?: WriterFont; typewriter?: boolean }): AppSettings {
+  setWriter(next: { mode?: boolean; spacing?: WriterSpacing; dailyGoal?: number | null; font?: WriterFont; typewriter?: boolean; paperCount?: boolean }): AppSettings {
     const merged: AppSettings = {
       ...this.current,
       ...(next.mode === undefined ? {} : { writerMode: next.mode }),
@@ -97,6 +100,7 @@ export class AppSettingsStore {
       ...(next.dailyGoal === undefined ? {} : { writerDailyGoal: next.dailyGoal === null || next.dailyGoal <= 0 ? null : Math.floor(next.dailyGoal) }),
       ...(next.font === undefined ? {} : { writerFont: next.font }),
       ...(next.typewriter === undefined ? {} : { writerTypewriter: next.typewriter }),
+      ...(next.paperCount === undefined ? {} : { writerPaperCount: next.paperCount }),
     };
     writeAppSettings(this.file, merged);
     this.current = merged;

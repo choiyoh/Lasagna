@@ -1,5 +1,20 @@
 import { formatNumber, pluralCategory, translate } from '@nopsidian/i18n';
-import type { TextStats } from '@nopsidian/core';
+import { paperSheets, type TextStats } from '@nopsidian/core';
+
+/** 소수 첫째 자리 고정 표기(12,340 → '25.0'). */
+function formatSheets(value: number, locale: 'ko' | 'en'): string {
+  return new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
+}
+
+/**
+ * 원고지 매수 문구 — 전체 글자수 뒤에 붙인다. 좁은 창에서는 '원고지' 라벨만 줄인다.
+ * 영어는 'manuscript pages' 로 고정한다(1.0 도 pages — 소수라 단수 처리를 하지 않는다).
+ */
+export function paperText(opts: { locale: 'ko' | 'en'; chars: number; narrow: boolean }): string {
+  const { locale, chars, narrow } = opts;
+  const count = formatSheets(paperSheets(chars), locale);
+  return translate(locale, narrow ? 'writer.paperShort' : 'writer.paper', { count });
+}
 
 /** 글자수 상태줄 문구(한국어는 글자수만, 영어는 글자수+단어수). 좁은 창에서는 한국어 기준을 줄인다. */
 export function writerCountsText(opts: { locale: 'ko' | 'en'; spacing: 'include' | 'exclude'; stats: TextStats; narrow: boolean }): string {

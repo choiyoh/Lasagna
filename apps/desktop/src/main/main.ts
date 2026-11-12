@@ -792,15 +792,16 @@ function registerHandlers() {
   handle('settings.workGoals', ({ vaultId }) => writerWorksStore().all(vaultId));
   handle('settings.setWorkGoal', ({ vaultId, work, goal }) => writerWorksStore().set(vaultId, work, goal));
   handle('settings.writerAddDelta', ({ vaultId, path: notePath, delta }) => writerStatsStore().add(vaultId, notePath, delta));
-  handle('settings.setLanguage', ({ language, writerMode, writerSpacing, writerDailyGoal, writerFont, writerTypewriter }) => {
+  handle('settings.setLanguage', ({ language, writerMode, writerSpacing, writerDailyGoal, writerFont, writerTypewriter, writerPaperCount }) => {
     if (language !== undefined) settingsStore().setLanguage(language);
-    if (writerMode !== undefined || writerSpacing !== undefined || writerDailyGoal !== undefined || writerFont !== undefined || writerTypewriter !== undefined) {
+    if (writerMode !== undefined || writerSpacing !== undefined || writerDailyGoal !== undefined || writerFont !== undefined || writerTypewriter !== undefined || writerPaperCount !== undefined) {
       settingsStore().setWriter({
         ...(writerMode === undefined ? {} : { mode: writerMode }),
         ...(writerSpacing === undefined ? {} : { spacing: writerSpacing }),
         ...(writerDailyGoal === undefined ? {} : { dailyGoal: writerDailyGoal }),
         ...(writerFont === undefined ? {} : { font: writerFont }),
         ...(writerTypewriter === undefined ? {} : { typewriter: writerTypewriter }),
+        ...(writerPaperCount === undefined ? {} : { paperCount: writerPaperCount }),
       });
     }
     const current = currentLanguage();
@@ -857,7 +858,7 @@ function systemLanguages(): readonly string[] {
 }
 
 function currentLanguage(): AppLanguage {
-  const { language, writerMode, writerSpacing, writerDailyGoal, writerFont, writerTypewriter } = settingsStore().value;
+  const { language, writerMode, writerSpacing, writerDailyGoal, writerFont, writerTypewriter, writerPaperCount } = settingsStore().value;
   return {
     setting: language,
     locale: resolveLocale(language, systemLanguages()),
@@ -866,6 +867,7 @@ function currentLanguage(): AppLanguage {
     writerDailyGoal: writerDailyGoal ?? null,
     writerFont: writerFont ?? 'sans',
     writerTypewriter: writerTypewriter ?? true,
+    writerPaperCount: writerPaperCount === true,
   };
 }
 

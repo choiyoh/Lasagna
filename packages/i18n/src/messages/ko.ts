@@ -184,7 +184,7 @@ export const ko = {
 
   'settings.writer': "작가 모드",
   'settings.writerMode': "작가 모드 사용",
-  'settings.writerModeHint': "원고 집필용 기능을 켤니다(글자수, 작품·회차, 집중 모드 등). 노트 내용은 바뀌지 않아요.",
+  'settings.writerModeHint': "원고 집필용 기능을 켭니다(글자수, 작품·회차, 집중 모드 등). 노트 내용은 바뀌지 않아요.",
   'settings.writerSpacing': "글자수 기준",
   'settings.writerSpacing.include': "공백 포함",
   'settings.writerSpacing.exclude': "공백 제외",

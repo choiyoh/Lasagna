@@ -224,7 +224,9 @@ test('저장: 앱 편집과 외부 편집을 병합하고, 자기 쓰기는 디�
       .map((e) => e.external),
   );
   expect(flags).not.toContain(true);
-  // 도착했다면 반드시 external=false(도착 자체는 감시 이벤트에 의존하므로 필수로 두지 않는다).
+  // 저장 직후 직접 발행하므로 자기 저장 알림이 반드시 도착하고, 전부 external=false 여야 한다.
+  // (감시 이벤트가 뒤늦게 와 중복 false 가 와도 렌더러는 150ms 디바운스로 안전하다.)
+  expect(flags).toContain(false);
   expect(flags.every((f) => f === false)).toBe(true);
 });
 

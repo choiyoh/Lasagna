@@ -127,13 +127,20 @@ export function WorkSection({ locale, works, currentPath, spacing, narrow, today
                   title={work.name}
                   onClick={() => setChoice(work.name)}
                 >
+                  <span className="workrow__chev" aria-hidden>
+                    ▸
+                  </span>
                   <span className="workrow__name">{work.name}</span>
+                  <span className="workrow__count">{count(work.episodes)}</span>
                 </button>
               );
             }
             return (
               <div className="workcard" key={work.name} data-testid="work-card" data-work={work.name}>
                 <div className="workcard__head">
+                  <span className="workcard__chev" aria-hidden>
+                    ▾
+                  </span>
                   <button
                     className="workcard__name"
                     data-testid="work-open-name"

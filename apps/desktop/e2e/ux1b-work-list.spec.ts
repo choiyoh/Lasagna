@@ -101,7 +101,9 @@ test('작품 3개를 만들면 열린 1개만 펼쳐지고 나머지는 이름 �
   await expect(open.getByTestId('work-chip-story')).toHaveText(/설정집 0/);
   // 이름 한 줄에는 버튼·칩이 없다
   const row = page.locator('[data-testid="work-row"][data-work="메모작"]');
-  await expect(row).toHaveText('메모작');
+  await expect(row).toHaveText(/▸메모작\s*0/);
+  await expect(row.locator('.workrow__count')).toHaveText('0');
+  await expect(open.locator('.workcard__chev')).toHaveText('▾');
   await expect(row.getByTestId('new-episode')).toHaveCount(0);
 
   // 트리가 카드형(작품 3개·창 900 에서 171px)보다 확실히 넓다

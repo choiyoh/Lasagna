@@ -36,6 +36,31 @@ describe('작품 목표 저장소', () => {
   });
 });
 
+  it('작품 폴더 이름을 바꾸면 목표 키도 옮긴다(undo 포함)', () => {
+    const store = new WriterWorksStore(file());
+    store.set('v1', '달빛', goal);
+    expect(store.move('v1', '달빛', '달빛2')).toBe(true);
+    expect(store.all('v1')).toEqual({ 달빛2: goal });
+    expect(store.move('v1', '달빛2', '달빛')).toBe(true); // undo 방향
+    expect(store.all('v1')).toEqual({ 달빛: goal });
+  });
+
+  it('새 키에 목표가 있으면 덮어쓰지 않고 이전 키도 보존한다', () => {
+    const store = new WriterWorksStore(file());
+    store.set('v1', '옛작품', goal);
+    store.set('v1', '새작품', { ...goal, episodes: 10 });
+    expect(store.move('v1', '옛작품', '새작품')).toBe(false);
+    expect(store.all('v1')).toEqual({ 옛작품: goal, 새작품: { ...goal, episodes: 10 } });
+  });
+
+  it('이전 키가 없거나 같은 키면 아무 것도 하지 않는다', () => {
+    const store = new WriterWorksStore(file());
+    store.set('v1', '달빛', goal);
+    expect(store.move('v1', '없는작품', '새이름')).toBe(false);
+    expect(store.move('v1', '달빛', '달빛')).toBe(false);
+    expect(store.all('v1')).toEqual({ 달빛: goal });
+  });
+
 describe('깨진 마감일 복구', () => {
   it('형식이 틀리거나 없는 날짜는 그 필드만 버리고 목표는 유지한다(읽기·쓰기 모두)', () => {
     const f = file();

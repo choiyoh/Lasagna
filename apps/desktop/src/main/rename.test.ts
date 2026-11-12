@@ -2,7 +2,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFil
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { applyRename, expandMoves, planRename, undoRename, type VaultSnapshot } from './rename';
+import { applyRename, expandMoves, planRename, setUndoGoalMoves, undoRename, type VaultSnapshot } from './rename';
+import { WriterWorksStore } from './writer-works-store';
+import { workGoalKeyForRename } from './work-goal-key';
 
 let root: string;
 const put = (rel: string, content: string) => {
@@ -126,5 +128,48 @@ describe('undoRename', () => {
 
   it('기록이 없으면 오류', () => {
     expect(() => undoRename(root, 'nope-123')).toThrow(expect.objectContaining({ key: 'main.err.noRevertRecord' }) as never);
+  });
+});
+
+describe('작품 목표 undo 기록', () => {
+  const goal = { episodes: 20, perEpisode: 4000, basis: 'include' as const, deadline: null, preset: 'naver' as const };
+  const store = () => new WriterWorksStore(path.join(mkdtempSync(path.join(tmpdir(), 'nops-works-')), 'writer-works.json'));
+
+  it('루트 이름 바꾸기의 목표 이동은 undo 기록에 남고, undo 는 그 방향으로만 되돌린다', () => {
+    put('A/회차/001화.md', '# 1화\n');
+    const works = store();
+    works.set('v1', 'A', goal);
+    const { undoId } = run('A', 'B');
+    expect(works.move('v1', 'A', 'B')).toBe(true);
+    setUndoGoalMoves(root, undoId, [{ vaultId: 'v1', from: 'A', to: 'B' }]);
+
+    const r = undoRename(root, undoId);
+    expect(r.goalMoves).toEqual([{ vaultId: 'v1', from: 'A', to: 'B' }]);
+    for (const g of r.goalMoves) works.move(g.vaultId, g.to, g.from);
+    // 카드(폴더)도 목표도 원래 작품 A 로 돌아온다.
+    expect(existsSync(path.join(root, 'A/회차/001화.md'))).toBe(true);
+    expect(works.all('v1')).toEqual({ A: goal });
+  });
+
+  it('다른 작품 안으로 옮겼다 되돌리면 목표 이동 기록이 없어 목적지 작품 목표가 그대로 남는다', () => {
+    put('A/회차/001화.md', '# A 1화\n');
+    put('B/회차/001화.md', '# B 1화\n');
+    put('B/캐릭터/주인공.md', '# 주인공\n');
+    const works = store();
+    works.set('v1', 'B', goal);
+    const { undoId } = run('A', 'B/A');
+    // 루트 폴더 rename 이 아니므로 목표는 움직이지 않고 undo 기록에도 남기지 않는다.
+    expect(workGoalKeyForRename('A', 'B/A')).toBe(null);
+
+    const r = undoRename(root, undoId);
+    expect(r.moves[0]).toEqual({ from: 'A/회차/001화.md', to: 'B/A/회차/001화.md' });
+    expect(r.goalMoves).toEqual([]);
+    for (const g of r.goalMoves) works.move(g.vaultId, g.to, g.from);
+    expect(works.all('v1')).toEqual({ B: goal });
+    expect(existsSync(path.join(root, 'A/회차/001화.md'))).toBe(true);
+  });
+
+  it('기록이 없는 undoId 에 목표 내역을 남기려 해도 오류 없이 넘어간다', () => {
+    expect(() => setUndoGoalMoves(root, 'nope-123', [{ vaultId: 'v1', from: 'A', to: 'B' }])).not.toThrow();
   });
 });

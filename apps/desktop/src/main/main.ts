@@ -1,7 +1,7 @@
 import squirrelStartup from 'electron-squirrel-startup';
 import { app, BrowserWindow, Menu, dialog, safeStorage, session, shell } from 'electron';
 import { createHash } from 'node:crypto';
-import { applyRename, planRename, undoRename } from './rename';
+import { applyRename, planRename, setUndoGoalMoves, undoRename } from './rename';
 import { linkMention } from '../workers/index/mention-link';
 import path from 'node:path';
 import {
@@ -368,7 +368,7 @@ function registerHandlers() {
     for (const m of moves) relocateComments(v.info.path, m.from, m.to);
     // 작품 폴더(볼트 루트) 이름이 바뀌면 앱 데이터의 작품 목표도 새 키로 따라간다(실패해도 이름 바꾸기는 성공).
     const movedGoal = moveWorkGoal(v, from, to);
-    if (movedGoal) goalUndoMoves.set(undoId, [{ vaultId: v.info.id, ...movedGoal }]);
+    if (movedGoal) setUndoGoalMoves(v.info.path, undoId, [{ vaultId: v.info.id, ...movedGoal }]);
     // 앱이 기억하던 노트 내용(3-way 병합의 기준)은 이동·갱신 뒤에는 무효다
     v.bases.clear();
     v.selfWrites.clear();
@@ -379,16 +379,9 @@ function registerHandlers() {
     const r = undoRename(v.info.path, undoId);
     // 이름 바꾸기를 되돌리면 이력·스냅샷도 원래 경로 키로 돌아간다(실패해도 undo 자체는 성공).
     for (const m of r.moves) moveNoteHistory(v.info.path, m.to, m.from);
-    // 작품 목표도 역방향으로. rename 때 기록이 없으면(재시작 등) 첫 이동 경로의 루트 이름으로 추정한다.
-    const undoGoals = goalUndoMoves.get(undoId) ?? [];
-    goalUndoMoves.delete(undoId);
-    if (undoGoals.length === 0 && r.moves[0]) {
-      const a = r.moves[0].from.split('/')[0] ?? '';
-      const b = r.moves[0].to.split('/')[0] ?? '';
-      const k = workGoalKeyForRename(a, b);
-      if (k) undoGoals.push({ vaultId: v.info.id, ...k });
-    }
-    for (const g of undoGoals) {
+    // 작품 목표는 rename 때 undo 기록에 남긴 내역만 역방향으로 옮긴다(경로 추정 없음).
+    // 다른 폴더 안으로 옮겼다 되돌린 경우처럼 목표가 움직이지 않은 rename 은 기록이 비어 있다.
+    for (const g of r.goalMoves) {
       try {
         writerWorksStore().move(g.vaultId, g.to, g.from);
       } catch {
@@ -884,8 +877,6 @@ function writerStatsStore(): WriterStatsStore {
 }
 
 /** 작품 목표 — userData 에만 저장(볼트·노트 무기록). */
-/** rename undoId → 옮긴 작품 목표 키(이름 바꾸기 되돌리기용, 같은 세션). */
-const goalUndoMoves = new Map<string, { vaultId: string; from: string; to: string }[]>();
 
 /** 작품 폴더 이름 바꾸기 뒤 목표 키를 새 이름으로 옮긴다. 실패·대상 키 존재는 false(이름 바꾸기는 계속). */
 function moveWorkGoal(v: ReturnType<typeof requireVault>, from: string, to: string): { from: string; to: string } | null {

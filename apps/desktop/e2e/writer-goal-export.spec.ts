@@ -269,3 +269,60 @@ test('작품 폴더 이름을 바꾸거나 되돌리거나 옮겨도 작품 목�
     .toBe(true);
   await expect(card('새작품이름').getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
 });
+
+test('다른 작품 안으로 옮겼다 되돌려도 목적지 작품의 목표가 따라오지 않는다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await resetWriter(page);
+  const card = (name: string) => page.getByTestId('work-card').filter({ hasText: name });
+  const prompt = async (text: string) => {
+    const input = page.locator('.nops-prompt input');
+    await expect(input).toBeVisible();
+    await input.fill(text);
+    await input.press('Enter');
+  };
+  const folders = () => page.evaluate(() => window.nops.folder.list());
+  const goals = () =>
+    page.evaluate(async () => {
+      const v = await window.nops.vault.current();
+      return v ? window.nops.settings.workGoals({ vaultId: v.id }) : {};
+    });
+  await createWork(page, '안쪽작품');
+  await createWork(page, '바깥작품');
+  for (const name of ['안쪽작품', '바깥작품']) {
+    await card(name).getByTestId('new-episode').click();
+    await prompt('1화');
+    await card(name).getByTestId('new-character').click();
+    await prompt('주인공');
+  }
+  await card('바깥작품').getByTestId('work-goal-line').click();
+  await page.getByTestId('work-goal-preset-naver').click();
+  await page.getByTestId('work-goal-episodes').fill('20');
+  await page.getByTestId('work-goal-save').click();
+  await expect(card('바깥작품').getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
+  const goalBefore = await card('바깥작품').getByTestId('work-goal-line').innerText();
+  const storedBefore = await goals();
+  expect(Object.keys(storedBefore)).not.toContain('안쪽작품');
+
+  // 안쪽작품(목표 없음)을 바깥작품(목표 있음) 안으로 옮긴다 — 루트 작품이 아니게 된다.
+  await page.getByRole('button', { name: '안쪽작품 폴더 이름 변경' }).click();
+  const input = page.locator('.nops-prompt input');
+  await expect(input).toBeVisible();
+  await input.fill('바깥작품/안쪽작품');
+  await input.press('Enter');
+  await expect.poll(async () => (await folders()).includes('바깥작품/안쪽작품'), { timeout: 15000 }).toBe(true);
+  await expect(card('바깥작품').getByTestId('work-goal-line')).toHaveText(goalBefore);
+
+  // 되돌리기: 안쪽작품이 루트로 돌아오고, 바깥작품 목표는 그대로다(다른 작품으로 옮겨가지 않는다).
+  await page.locator('.toast').getByRole('button', { name: '되돌리기' }).click();
+  await expect
+    .poll(async () => {
+      const list = await folders();
+      return list.includes('안쪽작품') && !list.includes('바깥작품/안쪽작품');
+    }, { timeout: 15000 })
+    .toBe(true);
+  await expect(card('바깥작품').getByTestId('work-goal-line')).toHaveText(goalBefore);
+  await expect(card('안쪽작품').getByTestId('work-goal-line')).toHaveText('목표 설정');
+  // 화면 갱신에 기대지 않고 저장된 목표 키 자체를 확인한다 — 바깥작품 목표가 안쪽작품으로 옮겨가면 실패.
+  await expect.poll(goals, { timeout: 15000 }).toEqual(storedBefore);
+});

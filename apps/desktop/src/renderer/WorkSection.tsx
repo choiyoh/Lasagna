@@ -59,6 +59,12 @@ function readLastOpen(): string | null {
   }
 }
 
+/** 접힌 작품 행의 접근성 이름: '이름, N회차'(영어 'name, N episodes'). */
+export function workRowLabel(locale: 'ko' | 'en', name: string, episodes: number): string {
+  const counted = translate(locale, `work.episodes.${pluralCategory(locale, episodes)}`, { n: formatNumber(episodes, locale) });
+  return `${name}, ${counted}`;
+}
+
 /**
  * 작가용 사이드바의 '작품' 섹션(목록형). 작가 모드에서만 렌더된다(일반 모드는 이 DOM 자체가 없다).
  * 열린 작품 1개만 4줄로 펼치고(이름+회차+⋯ / 회차·글자수 / 목표 / 칩 줄), 나머지는 이름 한 줄이다.
@@ -124,6 +130,7 @@ export function WorkSection({ locale, works, currentPath, spacing, narrow, today
                   data-testid="work-row"
                   data-work={work.name}
                   aria-expanded={false}
+                  aria-label={workRowLabel(locale, work.name, work.episodes)}
                   title={work.name}
                   onClick={() => setChoice(work.name)}
                 >
@@ -131,7 +138,9 @@ export function WorkSection({ locale, works, currentPath, spacing, narrow, today
                     ▸
                   </span>
                   <span className="workrow__name">{work.name}</span>
-                  <span className="workrow__count">{count(work.episodes)}</span>
+                  <span className="workrow__count" aria-hidden>
+                    {count(work.episodes)}
+                  </span>
                 </button>
               );
             }

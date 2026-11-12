@@ -103,6 +103,7 @@ test('작품 3개를 만들면 열린 1개만 펼쳐지고 나머지는 이름 �
   const row = page.locator('[data-testid="work-row"][data-work="메모작"]');
   await expect(row).toHaveText(/▸메모작\s*0/);
   await expect(row.locator('.workrow__count')).toHaveText('0');
+  await expect(row).toHaveAccessibleName('메모작, 0회차');
   await expect(open.locator('.workcard__chev')).toHaveText('▾');
   await expect(row.getByTestId('new-episode')).toHaveCount(0);
 

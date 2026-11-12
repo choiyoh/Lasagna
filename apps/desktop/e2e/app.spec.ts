@@ -34,6 +34,12 @@ async function openDock(page: Page): Promise<void> {
   await links.click();
 }
 
+/** 사이드바 머리줄 `⋯` 메뉴를 연다(새 폴더·오늘·그래프·휴지통·동기화·내보내기·볼트 바꾸기). */
+async function openSidebarMenu(page: Page): Promise<void> {
+  await page.getByTestId('sidebar-more').click();
+  await expect(page.getByRole('menu')).toBeVisible();
+}
+
 /** 시작 화면이면 볼트를 연다. beforeAll 이 이미 열어 두었으면(테스트 재시작) 그냥 지나간다. */
 async function openVaultIfNeeded(page: Page): Promise<void> {
   const openVault = page.getByRole('button', { name: '폴더 열기 / 만들기' });
@@ -143,10 +149,16 @@ test('볼트를 열고 목록·검색·미리보기가 동작한다', async () =
   await expect(page.getByRole('button', { name: 'Nopsidian', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '위험', exact: true })).toBeVisible();
 
-  await page.getByPlaceholder('본문 검색').fill('읽기 쉬운');
-  const hit = page.locator('.hit', { hasText: 'Nopsidian' });
+  // 통합 검색 팝업: ⌘⇧F 는 본문 범위로 열린다(제목 구역·만들기 행 없음)
+  await page.keyboard.press('ControlOrMeta+Shift+F');
+  const switcher = page.getByRole('dialog', { name: '빠른 전환기' });
+  await expect(switcher).toBeVisible();
+  await expect(switcher.getByTestId('quick-chip-body')).toHaveAttribute('aria-pressed', 'true');
+  await switcher.getByPlaceholder(/노트 제목·본문 검색/).fill('읽기 쉬운');
+  const hit = switcher.getByRole('option', { name: /Nopsidian/ });
   await expect(hit).toBeVisible();
   await hit.click();
+  await expect(switcher).toHaveCount(0);
   await expect(page.locator('.ProseMirror h1')).toHaveText('Nopsidian');
 });
 
@@ -159,7 +171,6 @@ test('렌더러는 Node에 접근할 수 없고 악성 HTML은 실행되지 않�
   }));
   expect(flags).toEqual({ require: 'undefined', process: 'undefined', nops: 'object' });
 
-  await page.getByPlaceholder('본문 검색').fill('');
   await page.getByRole('button', { name: '위험', exact: true }).click();
   await expect(page.locator('.ProseMirror h1')).toHaveText('위험');
   await page.waitForTimeout(300);
@@ -174,9 +185,13 @@ test('앱 밖에서 만든 파일이 목록과 검색에 반영된다', async ()
   writeExternalNote(path.join(vaultDir, '외부.md'), '# 외부 편집\n다른 편집기에서 작성한 바나나우유\n');
   // 빈 화면(Welcome)의 최근 목록에도 같은 이름이 나오므로 사이드바 트리 행으로 한정한다.
   await expect(page.locator('aside.sidebar').getByRole('button', { name: '외부 편집' })).toBeVisible({ timeout: 15000 });
-  await page.getByPlaceholder('본문 검색').fill('바나나우유');
-  await expect(page.locator('.hit', { hasText: '외부 편집' })).toBeVisible();
-  await page.getByPlaceholder('본문 검색').fill('');
+  await page.getByTestId('sidebar-search').click();
+  const switcher = page.getByRole('dialog', { name: '빠른 전환기' });
+  await switcher.getByPlaceholder(/노트 제목·본문 검색/).fill('바나나우유');
+  await expect(switcher.getByRole('option', { name: /외부 편집/ })).toBeVisible({ timeout: 15000 });
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(switcher).toHaveCount(0);
 });
 
 test('저장: 앱 편집과 외부 편집을 병합하고, 자기 쓰기는 디스크·읽기 해시로 확인된다', async () => {
@@ -903,7 +918,7 @@ test.describe('링크 코어', () => {
   test('빠른 전환기(⌘O): 한글 초성으로 찾아 열고, 없으면 새 노트를 만든다', async () => {
     const page = await app.firstWindow();
     await page.keyboard.press('ControlOrMeta+o');
-    const input = page.getByPlaceholder(/노트 이름·별칭/);
+    const input = page.getByPlaceholder(/노트 제목·본문 검색/);
     await expect(input).toBeVisible();
     await input.fill('ㅋㄹㅋㄷ');
     await expect(page.locator('.switcher__item.is-active')).toContainText('클린 코드');
@@ -911,12 +926,12 @@ test.describe('링크 코어', () => {
     await expect(page.locator('.ProseMirror h1')).toHaveText('클린 코드');
 
     await page.keyboard.press('ControlOrMeta+o');
-    await page.getByPlaceholder(/노트 이름·별칭/).fill('cleancode');
+    await page.getByPlaceholder(/노트 제목·본문 검색/).fill('cleancode');
     await expect(page.locator('.switcher__item.is-active')).toContainText('클린 코드'); // 별칭 Clean Code 퍼지
     await page.keyboard.press('Escape');
 
     await page.keyboard.press('ControlOrMeta+o');
-    await page.getByPlaceholder(/노트 이름·별칭/).fill('전환기로 만든 노트');
+    await page.getByPlaceholder(/노트 제목·본문 검색/).fill('전환기로 만든 노트');
     await expect(page.locator('.switcher__item.is-active')).toContainText('새 노트 만들기');
     await page.keyboard.press('Enter');
     await expect.poll(() => existsSync(path.join(vaultDir, '전환기로 만든 노트.md')), { timeout: 15000 }).toBe(true);
@@ -1055,7 +1070,8 @@ test.describe('링크 코어', () => {
     await expect(page.getByTestId('graph-local').locator('canvas').first()).toBeAttached();
 
     // 전역 그래프: 열기 → 필터 입력이 .nopsidian/graph.json 에 저장 → Esc 로 닫기
-    await page.getByRole('button', { name: '그래프', exact: true }).click();
+    await openSidebarMenu(page);
+    await page.getByRole('menuitem', { name: '그래프' }).click();
     await expect(page.getByTestId('graph-screen')).toBeVisible();
     await expect(page.getByTestId('graph-global-stats')).toContainText('개 노드', { timeout: 15000 });
     // 캔버스가 컨테이너보다 반 픽셀만 커도 .content 에 스크롤바가 생겨 폭이 줄고(윈도우·리눅스의 일반 스크롤바), 그래프가 계속 다시 맞춰지며 흔들린다
@@ -1184,7 +1200,7 @@ test.describe('링크 코어', () => {
     expect(layout.side!.h).toBe(layout.vh);
 
     // 실제 키보드 Shift+Tab 으로 포커스를 옮겨 :focus-visible 의 링이 왼쪽 경계에서 잘리지 않는지 확인
-    await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid="settings-btn"]')?.focus());
+    await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid="trash-btn"]')?.focus());
     await page.keyboard.press('Shift+Tab');
     const reached = await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'sync-bar');
     expect(reached).toBe(true);
@@ -2937,7 +2953,8 @@ views:
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     });
-    await page.getByRole('button', { name: '오늘', exact: true }).click();
+    await openSidebarMenu(page);
+    await page.getByRole('menuitem', { name: '오늘의 노트' }).click();
     await expect(page.locator('.ProseMirror h1')).toHaveText(today, { timeout: 15000 });
     const file = path.join(vaultDir, '일기', `${today}.md`);
     expect(readFileSync(file, 'utf8')).toBe(`# ${today}\n\n`);
@@ -2945,13 +2962,15 @@ views:
     await page.keyboard.press('Control+End');
     await page.keyboard.type('오늘 한 일');
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15000 }).toContain('오늘 한 일');
-    await page.getByRole('button', { name: '오늘', exact: true }).click();
+    await openSidebarMenu(page);
+    await page.getByRole('menuitem', { name: '오늘의 노트' }).click();
     await expect(page.locator('.ProseMirror')).toContainText('오늘 한 일');
   });
 
   test('새 폴더·폴더 안 새 노트·휴지통 보기(복원·영구 삭제)·창 제목', async () => {
     const page = await app.firstWindow();
-    await page.getByRole('button', { name: '새 폴더', exact: true }).click();
+    await openSidebarMenu(page);
+    await page.getByRole('menuitem', { name: '새 폴더' }).click();
     const input = page.locator('.nops-prompt input');
     await input.fill('빈폴더');
     await input.press('Enter');
@@ -3193,7 +3212,8 @@ views:
     await expect(page.getByRole('button', { name: '안쪽노트', exact: true })).toBeVisible();
 
     // 그래프 노드 찾기
-    await page.getByRole('button', { name: '그래프', exact: true }).click();
+    await openSidebarMenu(page);
+    await page.getByRole('menuitem', { name: '그래프' }).click();
     await expect(page.getByTestId('graph-global-stats')).toContainText('개 노드', { timeout: 15000 });
     await page.getByLabel('노드 찾기').fill('개요노');
     await page.getByRole('listbox', { name: '찾은 노드' }).getByRole('option', { name: /개요노트/ }).click();
@@ -3231,11 +3251,13 @@ views:
     expect(foot!.height).toBe(36);
     const button = await btn.boundingBox();
     const icon = await btn.locator('svg').boundingBox();
-    const label = await btn.locator('span').boundingBox();
-    // 아이콘·라벨이 버튼 세로 중앙에 오고 간격이 균일하다
+    // 아이콘 버튼은 28×28 이고 아이콘이 가운데 온다. 테마 이름은 글자 대신 title 로 둔다
+    expect(button!.width).toBe(28);
+    expect(button!.height).toBe(28);
+    expect(await btn.locator('span').count()).toBe(0);
+    expect(await btn.getAttribute('title')).toContain('시스템');
+    expect(Math.abs(icon!.x + icon!.width / 2 - (button!.x + button!.width / 2))).toBeLessThan(1);
     expect(Math.abs(icon!.y + icon!.height / 2 - (button!.y + button!.height / 2))).toBeLessThan(1);
-    expect(Math.abs(label!.y + label!.height / 2 - (button!.y + button!.height / 2))).toBeLessThan(1);
-    expect(label!.x - (icon!.x + icon!.width)).toBeGreaterThanOrEqual(5);
     // currentColor 를 따른다
     expect((await iconShape()).stroke).toBe(await btn.evaluate((el) => getComputedStyle(el).color));
 

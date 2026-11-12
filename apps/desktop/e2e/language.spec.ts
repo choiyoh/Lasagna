@@ -105,7 +105,7 @@ test('switches between Korean and English, keeps <html lang> in sync, and surviv
   await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
   const sidebar = page.locator('aside.sidebar');
   await expect(sidebar.getByRole('button', { name: /새 노트/ })).toBeVisible();
-  await expect(page.getByPlaceholder('본문 검색')).toBeVisible();
+  await expect(page.getByTestId('sidebar-search')).toBeVisible();
 
   await openSettings(page);
 
@@ -143,7 +143,7 @@ test('switches between Korean and English, keeps <html lang> in sync, and surviv
   await expect(page.getByRole('dialog').getByRole('heading', { name: 'Settings' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(sidebar.getByRole('button', { name: /New note/ })).toBeVisible();
-  await expect(page.getByPlaceholder('Search notes')).toBeVisible();
+  await expect(page.getByTestId('sidebar-search')).toBeVisible();
   // 같은 줄의 탭 라벨도 한 언어로: Files · ★(Bookmarks) · DB · Tags
   await expect(page.getByRole('tab', { name: 'Bookmarks', exact: true })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Tags', exact: true })).toBeVisible();

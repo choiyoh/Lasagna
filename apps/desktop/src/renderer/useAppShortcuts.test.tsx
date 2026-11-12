@@ -31,7 +31,7 @@ const actions = (over: Partial<ShortcutActions> = {}): ShortcutActions => ({
   toggleBookmark: vi.fn(),
   openDaily: vi.fn(),
   togglePanel: vi.fn(),
-  focusSearch: vi.fn(),
+  openBodySearch: vi.fn(),
   dbOpen: false,
   ...over,
 });
@@ -138,10 +138,10 @@ describe('useAppShortcuts', () => {
     expect(a.togglePanel).toHaveBeenCalledTimes(1);
 
     keydown({ key: 'F', code: 'KeyF', metaKey: true, shiftKey: true });
-    expect(a.focusSearch).toHaveBeenCalledTimes(1);
+    expect(a.openBodySearch).toHaveBeenCalledTimes(1);
     // ⇧ 없는 ⌘F 는 편집기 찾기라 앱 단축키가 가로채지 않는다
     keydown({ key: 'f', code: 'KeyF', metaKey: true });
-    expect(a.focusSearch).toHaveBeenCalledTimes(1);
+    expect(a.openBodySearch).toHaveBeenCalledTimes(1);
   });
 });
 

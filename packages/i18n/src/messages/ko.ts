@@ -183,8 +183,8 @@ export const ko = {
   'settings.writerDailyGoalHint': "오늘 쓴 글자수와 비교합니다. 비우면 표시하지 않아요.",
 
   'settings.writer': "작가 모드",
-  'settings.writerMode': "글자수 상태줄",
-  'settings.writerModeHint': "노트 아래에 글자수를 보여 줍니다. 노트 내용은 바뀌지 않습니다.",
+  'settings.writerMode': "작가 모드 사용",
+  'settings.writerModeHint': "원고 집필용 기능을 켭니다(글자수, 작품·회차, 집중 모드 등). 노트 내용은 바뀌지 않아요.",
   'settings.writerSpacing': "글자수 기준",
   'settings.writerSpacing.include': "공백 포함",
   'settings.writerSpacing.exclude': "공백 제외",

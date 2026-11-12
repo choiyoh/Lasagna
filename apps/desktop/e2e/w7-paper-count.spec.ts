@@ -77,6 +77,8 @@ test.beforeAll(async () => {
   // 1화 = 2자 + 본문 '가' 4,000자 + 공백 50자 + '나' 319자 = 4,371자(공백 포함) / 4,321자(제외)
   // (줄 끝 공백은 마크다운이 지우므로 공백은 글자 사이에 둔다.)
   writeExternalNote(path.join(vaultDir, '작품', '회차', '1화.md'), `# 1화\n\n${'가'.repeat(4000)}${' '.repeat(50)}${'나'.repeat(319)}\n`);
+  // 2화 = 문서 목표(5,000자)가 있는 같은 분량의 회차(영어 접힘 측정용)
+  writeExternalNote(path.join(vaultDir, '작품', '회차', '2화.md'), `---\ngoal_chars: 5000\n---\n# 2화\n\n${'가'.repeat(4000)}${' '.repeat(50)}${'나'.repeat(319)}\n`);
   writeExternalNote(path.join(vaultDir, '작품', '캐릭터', '주인공.md'), '# 주인공\n\n외모\n');
   app = await launch();
 });
@@ -139,12 +141,53 @@ test('920px 에서는 라벨을 줄이고 상태줄 높이·가로 넘침이 그
   await page.setViewportSize({ width: 1440, height: 900 });
 });
 
-test('영어에서는 manuscript pages 로 보인다', async () => {
+test('영어에서는 짧은 pages 문구로 보인다', async () => {
   const page = await app.firstWindow();
   await openEpisode(page);
   await setWriter(page, true, 'en');
-  await expect(page.getByTestId('writer-paper')).toHaveText(' · 21.9 manuscript pages');
+  await expect(page.getByTestId('writer-paper')).toHaveText(' · 21.9 pages');
   await setWriter(page);
+});
+
+test('영어에서 문서 목표+일일 목표+매수 표시가 겹쳐도 상태줄은 한 줄(≤37px)이다', async () => {
+  const page = await app.firstWindow();
+  await setWriter(page, true, 'en');
+  await openVaultIfNeeded(page);
+  await page.locator('aside.sidebar [data-path="작품/회차/2화.md"]').click();
+  await expect(page.locator('.ProseMirror h1')).toHaveText('2화');
+  await page.evaluate(() => window.nops.settings.setLanguage({ writerDailyGoal: 5000 }));
+  // 매수 표시를 켠 상태로 맞춘다(앞 테스트가 꺼 두었을 수 있다).
+  if ((await page.evaluate(async () => (await window.nops.settings.language()).writerPaperCount)) !== true) await togglePaperSetting(page, true);
+  await expect(page.getByTestId('writer-goal')).toBeVisible();
+  await expect(page.getByTestId('writer-today')).toBeVisible();
+
+  // 기본 레이아웃(도크는 1,340px 이하에서 접힘)에서 잰다 — 도크를 열어 둔 채 좁히면 본문이 528px 로 눌린다.
+  const dockClose = page.locator('.dockbody__close');
+  if ((await dockClose.count()) > 0) await dockClose.click();
+  for (const width of [1440, 1200, 1000]) {
+    await page.setViewportSize({ width, height: 900 });
+    const box = await page.evaluate(() => {
+      const bar = document.querySelector('[data-testid="writer-status"]')!;
+      return {
+        height: bar.getBoundingClientRect().height,
+        maxChild: Math.max(...[...bar.children].map((el) => el.getBoundingClientRect().height)),
+        width: Math.round(bar.getBoundingClientRect().width),
+      };
+    });
+    console.log(`[W7-en ${width}] ${JSON.stringify(box)}`);
+    expect(box.height).toBeLessThanOrEqual(37);
+    expect(box.maxChild).toBeLessThanOrEqual(30); // 항목 안에서 줄바꿈 없음(한 줄 ≈18px)
+    expect(box.width).toBeGreaterThan(550); // 도크가 접힌 기본 레이아웃
+  }
+
+  // 같은 조건의 한국어는 그대로 한 줄
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await setWriter(page);
+  const ko = await page.evaluate(() => document.querySelector('[data-testid="writer-status"]')!.getBoundingClientRect().height);
+  expect(ko).toBeLessThanOrEqual(37);
+
+  await page.evaluate(() => window.nops.settings.setLanguage({ writerDailyGoal: null }));
+  await setWriter(page, false);
 });
 
 test('캐릭터 노트·작가 모드 OFF 에서는 표시가 없다', async () => {

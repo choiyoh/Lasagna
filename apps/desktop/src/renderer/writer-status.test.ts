@@ -30,12 +30,12 @@ describe('원고지 매수 문구', () => {
     expect(paperText({ locale: 'ko', chars: 0, narrow: false })).toBe('원고지 0.0매');
   });
 
-  it('좁은 창에서는 라벨을 줄이고, 영어는 pages 로 고정한다', () => {
+  it('좁은 창에서는 라벨을 줄이고, 영어는 폭과 무관하게 짧은 pages 문구', () => {
     expect(paperText({ locale: 'ko', chars: 5000, narrow: true })).toBe('25.0매');
-    expect(paperText({ locale: 'en', chars: 5000, narrow: false })).toBe('25.0 manuscript pages');
-    expect(paperText({ locale: 'en', chars: 200, narrow: false })).toBe('1.0 manuscript pages');
+    expect(paperText({ locale: 'en', chars: 5000, narrow: false })).toBe('25.0 pages');
+    expect(paperText({ locale: 'en', chars: 200, narrow: false })).toBe('1.0 pages');
     expect(paperText({ locale: 'en', chars: 5000, narrow: true })).toBe('25.0 pages');
-    expect(paperText({ locale: 'en', chars: 1234, narrow: false })).toBe('6.2 manuscript pages');
+    expect(paperText({ locale: 'en', chars: 1234, narrow: false })).toBe('6.2 pages');
   });
 });
 

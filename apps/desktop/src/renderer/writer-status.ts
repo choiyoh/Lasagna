@@ -8,12 +8,13 @@ function formatSheets(value: number, locale: 'ko' | 'en'): string {
 
 /**
  * 원고지 매수 문구 — 전체 글자수 뒤에 붙인다. 좁은 창에서는 '원고지' 라벨만 줄인다.
- * 영어는 'manuscript pages' 로 고정한다(1.0 도 pages — 소수라 단수 처리를 하지 않는다).
+ * 영어는 폭이 넓어도 긴 'manuscript pages' 가 상태줄을 두 줄로 접히게 하므로 짧은 문구만 쓴다
+ * (1.0 도 pages — 소수라 단수 처리를 하지 않는다). 한국어·꺼진 상태의 표시는 그대로다.
  */
 export function paperText(opts: { locale: 'ko' | 'en'; chars: number; narrow: boolean }): string {
   const { locale, chars, narrow } = opts;
   const count = formatSheets(paperSheets(chars), locale);
-  return translate(locale, narrow ? 'writer.paperShort' : 'writer.paper', { count });
+  return translate(locale, narrow || locale === 'en' ? 'writer.paperShort' : 'writer.paper', { count });
 }
 
 /** 글자수 상태줄 문구(한국어는 글자수만, 영어는 글자수+단어수). 좁은 창에서는 한국어 기준을 줄인다. */

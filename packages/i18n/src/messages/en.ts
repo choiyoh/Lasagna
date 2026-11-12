@@ -182,8 +182,8 @@ export const en: Record<MessageKey, string> = {
   'settings.writerDailyGoalHint': "Compared with today's writing. Leave empty to hide it.",
 
   'settings.writer': "Writer mode",
-  'settings.writerMode': "Character count bar",
-  'settings.writerModeHint': "Shows a character count under the note. Note content is never changed.",
+  'settings.writerMode': "Use writer mode",
+  'settings.writerModeHint': "Turns on tools for writing manuscripts (character count, works and episodes, focus mode and more). Your notes are never changed.",
   'settings.writerSpacing': "Count spaces",
   'settings.writerSpacing.include': "Include spaces",
   'settings.writerSpacing.exclude': "Exclude spaces",

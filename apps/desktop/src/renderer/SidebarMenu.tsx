@@ -7,6 +7,8 @@ export interface SidebarMenuItem {
   hint?: string;
   /** 이 항목 앞에 구분선을 둔다 */
   separator?: boolean;
+  /** e2e 가 항목을 집을 때 쓰는 표식 */
+  testId?: string;
   onRun: () => void;
 }
 
@@ -65,6 +67,7 @@ export function SidebarMenu({ anchor, items, onClose }: Props) {
             {item.separator && <hr />}
             <button
               role="menuitem"
+              data-testid={item.testId}
               onClick={() => {
                 onClose();
                 item.onRun();

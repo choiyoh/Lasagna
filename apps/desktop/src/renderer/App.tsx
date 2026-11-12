@@ -621,6 +621,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           <WorkSection
             locale={locale}
             works={works}
+            currentPath={selected}
             goalTitles={Object.fromEntries(
               works.map((w) => {
                 const goal = workGoals[w.name];

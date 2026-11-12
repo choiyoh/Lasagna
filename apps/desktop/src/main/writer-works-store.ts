@@ -62,6 +62,23 @@ export class WriterWorksStore {
     return this.load().vaults[vaultId] ?? {};
   }
 
+  /**
+   * 작품 폴더 이름이 바뀌었을 때 목표 키를 옮긴다. 새 키에 이미 목표가 있으면 **덮어쓰지 않고**
+   * 이전 키도 지우지 않는다(데이터를 잃지 않는 쪽). 옮길 것이 없으면 false.
+   */
+  move(vaultId: string, from: string, to: string): boolean {
+    if (!from || !to || from === to) return false;
+    const data = this.load();
+    const works = data.vaults[vaultId] ?? {};
+    if (!(from in works) || to in works) return false;
+    const nextWorks: Record<string, WorkGoal> = { ...works, [to]: works[from]! };
+    delete nextWorks[from];
+    const next: WriterWorksFile = { version: 1, vaults: { ...data.vaults, [vaultId]: nextWorks } };
+    atomicWrite(this.file, `${JSON.stringify(next, null, 2)}\n`);
+    this.data = next;
+    return true;
+  }
+
   set(vaultId: string, work: string, goal: WorkGoal | null): Record<string, WorkGoal> {
     const data = this.load();
     const works = { ...(data.vaults[vaultId] ?? {}) };

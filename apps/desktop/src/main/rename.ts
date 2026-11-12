@@ -40,10 +40,18 @@ export function planRename(root: string, snapshot: VaultSnapshot, from: string, 
   return { plan: planMoves({ notes: snapshot.notes, assets: snapshot.assets, moves }), moves };
 }
 
+export interface UndoGoalMove {
+  vaultId: string;
+  from: string;
+  to: string;
+}
+
 interface UndoRecord {
   moves: Move[];
   edits: { path: string; newPath: string; before: string; afterHash: string }[];
   createdDirs: string[];
+  /** 이름 바꾸기와 함께 옮긴 작품 목표 키. undo 는 이 기록만 보고 역이동하며 경로로 추정하지 않는다. */
+  goalMoves?: UndoGoalMove[];
 }
 
 const undoPath = (root: string, id: string) => path.join(root, '.nopsidian', 'ops', `rename-${id}.json`);
@@ -122,8 +130,23 @@ function pruneEmptyDirs(dirs: string[]) {
   }
 }
 
+/**
+ * 이름 바꾸기 기록에 작품 목표 이동 내역을 남긴다(undo 가 앱 재시작 뒤에도 추정 없이 역이동하도록).
+ * 기록이 없거나 쓰기가 실패하면 조용히 넘어간다 — 이름 바꾸기 자체를 막지 않는다.
+ */
+export function setUndoGoalMoves(root: string, id: string, goalMoves: UndoGoalMove[]): void {
+  const file = undoPath(root, id);
+  try {
+    if (!existsSync(file)) return;
+    const record = JSON.parse(readFileSync(file, 'utf8')) as UndoRecord;
+    writeFileSync(file, JSON.stringify({ ...record, goalMoves }));
+  } catch {
+    // 목표 기록 실패는 이름 바꾸기·undo 를 막지 않는다(목표 이동은 다음 rename 에서 다시 시도된다).
+  }
+}
+
 /** 이름 변경을 되돌린다. 그 뒤에 사용자가 같은 노트를 또 고쳤다면 그 노트의 내용은 덮어쓰지 않고 건너뛴다. */
-export function undoRename(root: string, id: string): { restored: number; skipped: string[]; moves: Move[] } {
+export function undoRename(root: string, id: string): { restored: number; skipped: string[]; moves: Move[]; goalMoves: UndoGoalMove[] } {
   const file = undoPath(root, id);
   if (!existsSync(file)) throw new CodedError('main.err.noRevertRecord');
   const record = JSON.parse(readFileSync(file, 'utf8')) as UndoRecord;
@@ -154,5 +177,5 @@ export function undoRename(root: string, id: string): { restored: number; skippe
   for (const m of [...record.moves].reverse()) relocateComments(root, m.to, m.from); // 댓글도 원래 이름으로
   pruneEmptyDirs([...new Set(record.moves.map((m) => path.dirname(resolveInVault(root, m.to))))]);
   writeFileSync(file, JSON.stringify({ ...record, undone: true }));
-  return { restored, skipped, moves: record.moves };
+  return { restored, skipped, moves: record.moves, goalMoves: record.goalMoves ?? [] };
 }

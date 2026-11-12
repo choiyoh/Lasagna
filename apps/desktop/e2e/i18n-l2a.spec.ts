@@ -123,7 +123,7 @@ test('English smoke: shortcuts, links panel, find bar, and switcher have no Kore
   await page.keyboard.press('ControlOrMeta+o');
   const switcher = page.getByRole('dialog', { name: 'Quick switcher' });
   await expect(switcher).toBeVisible();
-  await expect(switcher.getByPlaceholder('Note title, alias, or path')).toBeVisible();
+  await expect(switcher.getByPlaceholder('Search note titles and text')).toBeVisible();
   expect(await switcher.innerText()).not.toMatch(HANGUL);
   await page.keyboard.press('Escape');
 

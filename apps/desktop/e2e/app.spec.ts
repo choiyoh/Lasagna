@@ -154,7 +154,7 @@ test('볼트를 열고 목록·검색·미리보기가 동작한다', async () =
   const switcher = page.getByRole('dialog', { name: '빠른 전환기' });
   await expect(switcher).toBeVisible();
   await expect(switcher.getByTestId('quick-chip-body')).toHaveAttribute('aria-pressed', 'true');
-  await switcher.getByPlaceholder(/노트 이름·별칭/).fill('읽기 쉬운');
+  await switcher.getByPlaceholder(/노트 제목·본문 검색/).fill('읽기 쉬운');
   const hit = switcher.getByRole('option', { name: /Nopsidian/ });
   await expect(hit).toBeVisible();
   await hit.click();
@@ -187,7 +187,7 @@ test('앱 밖에서 만든 파일이 목록과 검색에 반영된다', async ()
   await expect(page.locator('aside.sidebar').getByRole('button', { name: '외부 편집' })).toBeVisible({ timeout: 15000 });
   await page.getByTestId('sidebar-search').click();
   const switcher = page.getByRole('dialog', { name: '빠른 전환기' });
-  await switcher.getByPlaceholder(/노트 이름·별칭/).fill('바나나우유');
+  await switcher.getByPlaceholder(/노트 제목·본문 검색/).fill('바나나우유');
   await expect(switcher.getByRole('option', { name: /외부 편집/ })).toBeVisible({ timeout: 15000 });
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
@@ -918,7 +918,7 @@ test.describe('링크 코어', () => {
   test('빠른 전환기(⌘O): 한글 초성으로 찾아 열고, 없으면 새 노트를 만든다', async () => {
     const page = await app.firstWindow();
     await page.keyboard.press('ControlOrMeta+o');
-    const input = page.getByPlaceholder(/노트 이름·별칭/);
+    const input = page.getByPlaceholder(/노트 제목·본문 검색/);
     await expect(input).toBeVisible();
     await input.fill('ㅋㄹㅋㄷ');
     await expect(page.locator('.switcher__item.is-active')).toContainText('클린 코드');
@@ -926,12 +926,12 @@ test.describe('링크 코어', () => {
     await expect(page.locator('.ProseMirror h1')).toHaveText('클린 코드');
 
     await page.keyboard.press('ControlOrMeta+o');
-    await page.getByPlaceholder(/노트 이름·별칭/).fill('cleancode');
+    await page.getByPlaceholder(/노트 제목·본문 검색/).fill('cleancode');
     await expect(page.locator('.switcher__item.is-active')).toContainText('클린 코드'); // 별칭 Clean Code 퍼지
     await page.keyboard.press('Escape');
 
     await page.keyboard.press('ControlOrMeta+o');
-    await page.getByPlaceholder(/노트 이름·별칭/).fill('전환기로 만든 노트');
+    await page.getByPlaceholder(/노트 제목·본문 검색/).fill('전환기로 만든 노트');
     await expect(page.locator('.switcher__item.is-active')).toContainText('새 노트 만들기');
     await page.keyboard.press('Enter');
     await expect.poll(() => existsSync(path.join(vaultDir, '전환기로 만든 노트.md')), { timeout: 15000 }).toBe(true);

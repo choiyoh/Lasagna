@@ -112,7 +112,7 @@ test('통합 검색 팝업: ⌘O 로 제목 열기·만들기, ⌘Enter 새 탭,
   const popup = switcher(page);
   await expect(popup).toBeVisible();
   await expect(popup.getByTestId('quick-chip-all')).toHaveAttribute('aria-pressed', 'true');
-  const input = popup.getByPlaceholder(/노트 이름·별칭/);
+  const input = popup.getByPlaceholder(/노트 제목·본문 검색/);
   await input.fill('메모');
   await expect(page.locator('.switcher__item.is-active')).toContainText('메모');
   await page.keyboard.press('Enter');

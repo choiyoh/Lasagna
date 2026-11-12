@@ -322,7 +322,7 @@ export const ko = {
   'tab.close': '{title} 탭 닫기',
   'tab.empty': '이 칸에 열 노트를 선택하세요',
   'quick.title': '빠른 전환기',
-  'quick.placeholder': '노트 이름·별칭·경로 (한글 초성 가능)',
+  'quick.placeholder': '노트 제목·본문 검색 (한글 초성 가능)',
   'quick.create': '“{name}” 새 노트 만들기',
   'quick.scope': '검색 범위',
   'quick.chip.all': '전체',

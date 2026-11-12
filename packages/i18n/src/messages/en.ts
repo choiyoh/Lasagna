@@ -321,7 +321,7 @@ export const en: Record<MessageKey, string> = {
   'tab.close': 'Close the {title} tab',
   'tab.empty': 'Pick a note to open in this pane',
   'quick.title': 'Quick switcher',
-  'quick.placeholder': 'Note title, alias, or path',
+  'quick.placeholder': 'Search note titles and text',
   'quick.create': 'Create “{name}”',
   'quick.scope': 'Search scope',
   'quick.chip.all': 'All',

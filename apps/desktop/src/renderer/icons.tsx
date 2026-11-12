@@ -40,6 +40,17 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+/** 머리줄 `⋯` — 더 보기 메뉴 */
+export function MoreIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={0}>
+      <circle cx="3.4" cy="8" r="1.1" fill="currentColor" />
+      <circle cx="8" cy="8" r="1.1" fill="currentColor" />
+      <circle cx="12.6" cy="8" r="1.1" fill="currentColor" />
+    </Icon>
+  );
+}
+
 export function NewFolderIcon(props: IconProps) {
   return (
     <Icon {...props}>

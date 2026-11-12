@@ -69,7 +69,8 @@ test('English smoke: graph screen, settings, stats and empty state have no Korea
   await page.keyboard.press('Escape');
 
   // 그래프 화면
-  await page.locator('aside.sidebar').getByRole('button', { name: /Graph/ }).first().click();
+  await page.getByTestId('sidebar-more').click();
+  await page.getByRole('menuitem', { name: /Graph/ }).click();
   const screen = page.getByTestId('graph-screen');
   await expect(screen).toBeVisible();
   await expect(screen.locator('.graphscreen__bar strong')).toHaveText('Graph');

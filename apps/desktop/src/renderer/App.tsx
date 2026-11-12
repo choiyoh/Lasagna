@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { formatNumber, t, tPlural } from '@nopsidian/i18n';
-import type { NoteSummary, SearchHit, SyncStatus, VaultInfo } from '@nopsidian/ipc-contract';
+import { formatNumber, t } from '@nopsidian/i18n';
+import type { NoteSummary, SyncStatus, VaultInfo } from '@nopsidian/ipc-contract';
 import { NoteEditor } from './NoteEditor';
 import { useAssetStore } from './assets';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -42,22 +42,15 @@ import { initialTabs, parseTabs, selectedOf, tabsReducer } from './tabs';
 import { DatabaseScreen } from './db/DatabaseScreen';
 import { DbList } from './db/DbList';
 import { SyncDialog } from './SyncDialog';
-import { EmptyState } from './components/EmptyState';
 import { SyncBar } from './components/SyncBar';
 import { GraphScreen, LocalGraph } from './graph/GraphScreen';
 import { linkNameFor } from './link-host';
-import { QuickSwitcher } from './QuickSwitcher';
+import { QuickSwitcher, type SearchScope } from './QuickSwitcher';
 import { CommandPalette, type PaletteCommand } from './CommandPalette';
+import { SidebarMenu, type SidebarMenuItem } from './SidebarMenu';
 import { TagPanel } from './TagPanel';
 import { dockAvailable, loadDockMode, nextDockMode, resolveDockOpen, saveDockMode, type DockMode } from './dock';
-import { cleanSearchSnippet } from './link-snippet';
-import { matchParts } from './search-highlight';
-import { GraphIcon, NewFolderIcon, PlusIcon, SearchIcon, SettingsIcon, SunIcon, TrashIcon } from './icons';
-
-/** 검색 결과에서 일치한 글자만 강조한다(원문은 그대로) */
-function Marked({ text, query }: { text: string; query: string }) {
-  return <>{matchParts(text, query).map((p, i) => (p.hit ? <mark key={i}>{p.text}</mark> : p.text))}</>;
-}
+import { MoreIcon, PlusIcon, SearchIcon, SettingsIcon, TrashIcon } from './icons';
 
 export function App() {
   useLocale();
@@ -109,9 +102,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [focusMode, setFocusMode] = useState(false);
   const [chromeShown, setChromeShown] = useState(true);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [query, setQuery] = useState('');
-  const [hits, setHits] = useState<SearchHit[] | null>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+  /** 사이드바 머리줄 `⋯` 메뉴(연 버튼의 좌표) */
+  const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
   const [tabs, dispatchTabs] = useReducer(tabsReducer, undefined, initialTabs);
   const selected = selectedOf(tabs);
   /** 현재 탭에서 노트를 연다(이미 다른 탭에 열려 있으면 그 탭으로 간다) */
@@ -208,6 +201,12 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     setPanelOpenMode('open');
   }, []);
   const [switcher, setSwitcher] = useState(false);
+  /** 통합 검색 팝업의 처음 칩: ⌘O 는 전체, ⌘⇧F 는 본문 */
+  const [switcherScope, setSwitcherScope] = useState<SearchScope>('all');
+  const openSwitcher = useCallback((scope: SearchScope = 'all') => {
+    setSwitcherScope(scope);
+    setSwitcher(true);
+  }, []);
   /** 전환기에서 고른 노트를 새 탭으로 열 때 */
   const [switcherNewTab, setSwitcherNewTab] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
@@ -251,12 +250,6 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     };
   }, [refresh]);
 
-  useEffect(() => {
-    if (!query.trim()) return setHits(null);
-    const t = setTimeout(() => void window.nops.search.query({ q: query, limit: 50 }).then(setHits), 120);
-    return () => clearTimeout(t);
-  }, [query]);
-
   const { openLink, peekHost, linkHost, live } = useLinkHosts({ notes, selected, assets, setSelected, setFocus });
 
   const treeRef = useRef<TreeNode[]>([]);
@@ -294,9 +287,10 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   }, [writerOn]);
 
   // 집중 모드에서 도크·설정 등 다른 화면을 열면 집중 모드를 끝낸다.
+  // 통합 검색 팝업(switcher)은 집중 모드에서도 쓰는 도구라 여기에 넣지 않는다.
   useEffect(() => {
     if (focusMode) setFocusMode(false);
-  }, [settingsOpen, trashOpen, shortcutsOpen, palette, switcher, syncOpen, graphOpen, dbOpen]);
+  }, [settingsOpen, trashOpen, shortcutsOpen, palette, syncOpen, graphOpen, dbOpen]);
 
   // 도크를 **새로 여는** 경로(단축키·팔레트·레일 클릭)에서 집중 모드를 끝낸다.
   // (집중 모드에 들어갈 때 이미 열려 있던 도크는 숨기기만 하고, 진입을 막지는 않는다.)
@@ -334,7 +328,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       setDbOpen(null);
     },
     selected,
-    openSwitcher: () => setSwitcher(true),
+    openSwitcher: () => openSwitcher('all'),
     toggleGraph: () => {
       setDbOpen(null);
       setGraphOpen((o) => !o);
@@ -350,7 +344,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     togglePanel: () => {
       if (dockVisible) togglePanel();
     },
-    focusSearch: () => searchRef.current?.focus(),
+    openBodySearch: () => openSwitcher('body'),
   });
 
   // 시작: `?open=` 로 열린 창이면 그 노트, 아니면 저장된 탭·분할 배치를 복원한다
@@ -409,7 +403,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
 
   const commands = useMemo<PaletteCommand[]>(
     () => [
-      { id: 'quick', label: t('palette.quick'), hint: '⌘O', keywords: ['open', '열기', '전환', 'ㅇㄱ'], run: () => setSwitcher(true) },
+      { id: 'quick', label: t('palette.quick'), hint: '⌘O', keywords: ['open', '열기', '전환', 'ㅇㄱ'], run: () => openSwitcher('all') },
       { id: 'new-folder', label: t('palette.newFolder'), keywords: ['folder', 'new', '폴더', '새로'], run: () => void newFolder('') },
       { id: 'trash', label: t('palette.trash'), keywords: ['trash', 'restore', '휴지통', '복원'], run: () => setTrashOpen(true) },
       { id: 'settings', label: t('palette.settings'), hint: '⌘,', keywords: ['settings', 'preferences', '설정', '환경'], run: () => setSettingsOpen(true) },
@@ -434,7 +428,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'import-md-files', label: t('palette.importFiles'), keywords: ['import', 'markdown', 'md', '가져오기', '마크다운'], run: () => void importMarkdown('files') },
       { id: 'import-md-folder', label: t('palette.importFolder'), keywords: ['import', 'markdown', 'folder', 'obsidian', '옵시디언', '가져오기', '폴더'], run: () => void importMarkdown('folder') },
       { id: 'import-notion', label: t('palette.importNotion'), keywords: ['import', 'notion', '노션', '가져오기'], run: () => void importNotion() },
-      { id: 'tab-new', label: t('palette.tabNew'), keywords: ['tab', '탭'], run: () => { setSwitcherNewTab(true); setSwitcher(true); } },
+      { id: 'tab-new', label: t('palette.tabNew'), keywords: ['tab', '탭'], run: () => { setSwitcherNewTab(true); openSwitcher('all'); } },
       { id: 'tab-close', label: t('palette.tabClose'), hint: '⌘W', keywords: ['close', 'tab', '탭', '닫기'], enabled: !!selected, run: () => selected && dispatchTabs({ type: 'close', pane: tabs.activePane, path: selected }) },
       ...(writerOn
         ? [
@@ -456,6 +450,25 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
     ],
     [selected, dockVisible, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, importMarkdown, cycleTheme, deleteEntry, newFolder, quickNote, onClose, openPanel, tabs.activePane, tabs.panes.length, locale, writerOn, previous, openPrevious],
   );
+
+  /** 사이드바 머리줄 `⋯` 메뉴. 같은 동작은 ⌘P 팔레트·단축키로도 닿는다. */
+  const moreItems: SidebarMenuItem[] = [
+    { id: 'new-folder', label: t('palette.newFolder'), onRun: () => void newFolder('') },
+    { id: 'daily', label: t('nav.today'), hint: keys('⌘⌥D'), onRun: () => void openDaily() },
+    {
+      id: 'graph',
+      label: t('nav.graph'),
+      hint: keys('⌘⇧G'),
+      onRun: () => {
+        setDbOpen(null);
+        setGraphOpen((o) => !o);
+      },
+    },
+    { id: 'trash', label: t('nav.trash'), separator: true, onRun: () => setTrashOpen(true) },
+    { id: 'sync', label: t('palette.sync'), onRun: () => setSyncOpen(true) },
+    { id: 'export', label: t('palette.exportVault'), onRun: () => void exportVault() },
+    { id: 'vault', label: t('palette.switchVault'), separator: true, onRun: onClose },
+  ];
 
   useEffect(() => {
     if (!toast) return;
@@ -532,45 +545,52 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       data-testid="workspace"
     >
       <aside className="sidebar">
-        <header className="drag">
-          <strong>{vault.name}</strong>
-          <button className="link" onClick={onClose} title={t('nav.switchVault')}>
-            ⇄
+        <header
+          className="sidebar__head drag"
+          role="toolbar"
+          aria-label={t('nav.toolbar')}
+          onKeyDown={(e) => {
+            // 툴바 안에서 ←/→ 로 `＋`·`⋯` 사이를 옮긴다(초점이 버튼에 있을 때만).
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            const buttons = [...(e.currentTarget.querySelectorAll<HTMLElement>('button'))];
+            const at = buttons.indexOf(document.activeElement as HTMLElement);
+            if (at < 0) return;
+            e.preventDefault();
+            buttons[(at + (e.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length].focus();
+          }}
+        >
+          <strong title={vault.name}>{vault.name}</strong>
+          <button className="iconbtn iconbtn--accent" onClick={() => void quickNote('')} title={keys(`${t('nav.newNote')} (⌘N)`)} aria-label={t('nav.newNote')} data-testid="sidebar-new-note">
+            <PlusIcon />
+          </button>
+          <button
+            ref={moreRef}
+            className="iconbtn"
+            onClick={(e) => {
+              const box = e.currentTarget.getBoundingClientRect();
+              setMoreMenu({ x: box.left, y: box.bottom + 4 });
+            }}
+            title={t('nav.more')}
+            aria-label={t('nav.more')}
+            aria-haspopup="menu"
+            aria-expanded={moreMenu !== null}
+            data-testid="sidebar-more"
+          >
+            <MoreIcon />
           </button>
         </header>
-        <nav className="sidebar__nav" aria-label={t('nav.menu')}>
-          <button className="navitem" onClick={() => setSwitcher(true)} title={keys(`${t('nav.quickSwitch')} — ${t('nav.quickSwitchSub')} (⌘O)`)} aria-label={t('nav.findNote')}>
-            <span className="navitem__icon" aria-hidden><SearchIcon /></span>
-            <span className="navitem__label">
-              {t('nav.quickSwitch')}<span className="navitem__sub">{t('nav.quickSwitchSub')}</span>
-            </span>
-            <kbd>{keys('⌘O')}</kbd>
-          </button>
-          <button className="navitem" onClick={() => void quickNote('')} title={keys(`${t('nav.newNote')} (⌘N)`)} aria-label={t('nav.newNote')}>
-            <span className="navitem__icon" aria-hidden><PlusIcon /></span>
-            <span className="navitem__label">{t('nav.newNote')}</span>
-          </button>
-          <button className="navitem" onClick={() => void newFolder('')} aria-label={t('nav.newFolder')}>
-            <span className="navitem__icon" aria-hidden><NewFolderIcon /></span>
-            <span className="navitem__label">{t('nav.newFolder')}</span>
-          </button>
-          <button className="navitem" onClick={() => void openDaily()} title={keys(`${t('nav.today')} (⌘⌥D)`)} aria-label={t('nav.todayShort')}>
-            <span className="navitem__icon" aria-hidden><SunIcon /></span>
-            <span className="navitem__label">{t('nav.today')}</span>
-          </button>
-          <button className="navitem" onClick={() => { setDbOpen(null); setGraphOpen((o) => !o); }} title={keys(`${t('nav.graph')} (⌘⇧G)`)} aria-label={t('nav.graph')}>
-            <span className="navitem__icon" aria-hidden><GraphIcon /></span>
-            <span className="navitem__label">{t('nav.graph')}</span>
-          </button>
-          <button className="navitem" onClick={() => setTrashOpen(true)} aria-label={t('nav.trash')}>
-            <span className="navitem__icon" aria-hidden><TrashIcon /></span>
-            <span className="navitem__label">{t('nav.trash')}</span>
-          </button>
-        </nav>
-        <label className="searchbox">
-          <span className="searchbox__icon" aria-hidden><SearchIcon size={14} /></span>
-          <input ref={searchRef} className="search" type="search" placeholder={t('nav.search')} aria-label={t('nav.search')} value={query} onChange={(e) => setQuery(e.target.value)} />
-        </label>
+        <button
+          className="sidebar__searchbtn"
+          onClick={() => openSwitcher('all')}
+          title={keys(`${t('nav.searchButton')} (⌘O · ⌘⇧F)`)}
+          aria-label={t('nav.searchButton')}
+          aria-keyshortcuts={keys('⌘O ⌘⇧F')}
+          data-testid="sidebar-search"
+        >
+          <SearchIcon size={14} />
+          <span className="sidebar__searchlabel">{t(viewportWidth <= 920 ? 'nav.searchButtonShort' : 'nav.searchButton')}</span>
+          {viewportWidth > 920 && <kbd>{keys('⌘O')}</kbd>}
+        </button>
         <div className="sidebar__tabs" role="tablist">
           <button role="tab" aria-selected={sideTab === 'files'} className={sideTab === 'files' ? 'active' : ''} onClick={() => setSideTab('files')}>
             {t('nav.files')}
@@ -676,33 +696,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             setMenu({ path: '', isFolder: true, x: e.clientX, y: e.clientY });
           }}
         >
-          {hits ? (
-            hits.length === 0 ? (
-              <EmptyState
-                title={t('search.emptyTitle')}
-                description={t('search.emptyBody')}
-                onReset={() => setQuery('')}
-                resetLabel={t('search.clear')}
-              />
-            ) : (
-              <>
-                <p className="searchcount muted small" role="status">
-                  {tPlural('search.count', hits.length, { n: `${hits.length}${hits.length >= 50 ? '+' : ''}` })}
-                </p>
-                {hits.map((h) => (
-                  <button key={h.path} className="hit" onClick={() => setSelected(h.path)}>
-                    <strong>
-                      <Marked text={h.title} query={query} />
-                    </strong>
-                    <span className="muted small">{h.path}</span>
-                    <span className="snippet small">
-                      <Marked text={cleanSearchSnippet(h.snippet)} query={query} />
-                    </span>
-                  </button>
-                ))}
-              </>
-            )
-          ) : sideTab === 'marks' ? (
+          {sideTab === 'marks' ? (
             <div className="marks" data-testid="bookmarks">
               {selected && (
                 <button className="marks__toggle" onClick={() => toggleBookmark(selected)} data-testid="bookmark-toggle">
@@ -734,12 +728,20 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         </nav>
         <div className="sidebar__foot">
           <SyncBar status={sync} onOpen={() => setSyncOpen(true)} />
-          <button className="themebtn" onClick={() => setSettingsOpen(true)} title={keys(`${t('nav.settings')} (⌘,)`)} aria-label={t('nav.settings')} data-testid="settings-btn">
-            <SettingsIcon />
+          <button className="iconbtn" onClick={() => setTrashOpen(true)} title={t('nav.trash')} aria-label={t('nav.trash')} data-testid="trash-btn">
+            <TrashIcon />
           </button>
-          <button className="themebtn" onClick={cycleTheme} title={t('nav.themeTitle')} aria-label={t('nav.themeAria', { theme: t(THEME_KEY[theme]) })} data-testid="theme-toggle">
+          <button
+            className="iconbtn"
+            onClick={cycleTheme}
+            title={`${t(THEME_KEY[theme])} — ${t('nav.themeTitle')}`}
+            aria-label={t('nav.themeAria', { theme: t(THEME_KEY[theme]) })}
+            data-testid="theme-toggle"
+          >
             <ThemeIcon />
-            <span>{t(THEME_KEY[theme])}</span>
+          </button>
+          <button className="iconbtn" onClick={() => setSettingsOpen(true)} title={keys(`${t('nav.settings')} (⌘,)`)} aria-label={t('nav.settings')} data-testid="settings-btn">
+            <SettingsIcon />
           </button>
         </div>
       </aside>
@@ -819,7 +821,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
                 actions={[
                   { icon: '＋', label: t('welcome.action.new'), hint: '', run: () => void quickNote('') },
                   { icon: '☀', label: t('palette.daily'), hint: '⌘⌥D', run: () => void openDaily() },
-                  { icon: '⌕', label: t('welcome.action.find'), hint: '⌘O', run: () => setSwitcher(true) },
+                  { icon: '⌕', label: t('welcome.action.find'), hint: '⌘O', run: () => openSwitcher('all') },
                   { icon: '⌘', label: t('welcome.action.palette'), hint: '⌘P', run: () => setPalette(true) },
                   { icon: '◎', label: t('welcome.action.graph'), hint: '⌘⇧G', run: () => { setDbOpen(null); setGraphOpen(true); } },
                   { icon: '⇩', label: t('welcome.action.importMarkdown'), hint: '', run: () => void importMarkdown('files') },
@@ -900,7 +902,17 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
         </div>
       )}
       {switcher && (
-        <QuickSwitcher notes={notes} onOpen={(p) => (switcherNewTab ? openInNewTab(p) : setSelected(p))} onCreate={(n) => void createNote(n)} onClose={() => { setSwitcher(false); setSwitcherNewTab(false); }} />
+        <QuickSwitcher
+          notes={notes}
+          initialScope={switcherScope}
+          indexing={progress !== null}
+          onOpen={(p, newTab) => (newTab || switcherNewTab ? openInNewTab(p) : setSelected(p))}
+          onCreate={(n) => void createNote(n)}
+          onClose={() => {
+            setSwitcher(false);
+            setSwitcherNewTab(false);
+          }}
+        />
       )}
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       {syncOpen && <SyncDialog status={sync} onClose={() => setSyncOpen(false)} onOpenNote={setSelected} />}
@@ -999,6 +1011,16 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
           onSubmit={(name, kind) => {
             setWorkDialog(false);
             void createWork(name, kind);
+          }}
+        />
+      )}
+      {moreMenu && (
+        <SidebarMenu
+          anchor={moreMenu}
+          items={moreItems}
+          onClose={() => {
+            setMoreMenu(null);
+            moreRef.current?.focus();
           }}
         />
       )}

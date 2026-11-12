@@ -18,8 +18,8 @@ export interface ShortcutActions {
   openDaily: () => void;
   /** 오른쪽 링크 도크 열기·닫기(⌘⇧\) */
   togglePanel: () => void;
-  /** 사이드바 본문 검색으로 초점(⌘⇧F) */
-  focusSearch: () => void;
+  /** 통합 검색 팝업을 본문 범위로 연다(⌘⇧F) */
+  openBodySearch: () => void;
   /** 집중 모드 사용 가능(작가 모드) */
   focusAvailable?: boolean;
   /** 지금 집중 모드인가 */
@@ -89,7 +89,7 @@ export function useAppShortcuts(actions: ShortcutActions) {
         a.toggleFocus?.();
       } else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyF') {
         e.preventDefault();
-        a.focusSearch();
+        a.openBodySearch();
       } else if (mod && e.shiftKey && !e.altKey && e.code === 'Backslash') {
         // ⇧\\ 는 글자로는 | 가 되므로 자리(code)로 본다
         e.preventDefault();

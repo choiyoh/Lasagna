@@ -79,7 +79,8 @@ test('English defaults are created in English and comments still store 나', asy
   await expect(page.locator('.ProseMirror')).toBeVisible();
 
   // 2) 데일리 노트: Journal/<날짜>.md (예전 한국어 폴더가 없으므로 영어 기본 폴더)
-  await page.locator('aside.sidebar').getByRole('button', { name: /Today/ }).click();
+  await page.getByTestId('sidebar-more').click();
+  await page.getByRole('menuitem', { name: /Today/ }).click();
   await expect.poll(() => existsSync(path.join(vaultDir, 'Journal', `${day()}.md`)), { timeout: 10_000 }).toBe(true);
   expect(existsSync(path.join(vaultDir, '일기'))).toBe(false);
 

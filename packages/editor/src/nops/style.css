@@ -226,6 +226,8 @@ body:has(.nops-side-drop) .prosemirror-dropcursor-block { display: none; }
 
 /* 비어 있는 노트 제목 안내 */
 .ProseMirror h1.nops-empty-title::before { content: attr(data-placeholder); color: var(--oh-editor-text-muted, #9b9a97); opacity: 0.6; float: left; height: 0; pointer-events: none; }
+/* 제목이 빈 동안에는 본문 안내문이 제목 줄 안에 절대배치되어 겹친다 — 그동안만 숨긴다. */
+.ProseMirror h1.nops-empty-title .oh-editor__placeholder { display: none; }
 
 
 /* 각주 */

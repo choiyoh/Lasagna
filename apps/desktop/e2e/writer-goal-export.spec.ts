@@ -3,6 +3,7 @@ import {mkdirSync, mkdtempSync, readFileSync, rmSync, statSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { waitForWatcher, writeExternalNote } from './watcher';
+import { workCard, workMenuItem } from './work-list';
 
 // 작가 모드(W4e): 작품 목표·마감 계산, 일일 목표 연결, 복사용 미리보기/클립보드.
 function packagedExecutable(): string {
@@ -96,13 +97,13 @@ test('작품 목표를 저장하면 카드 목표선이 보이고 재시작 후 
   await createWork(page, '달빛');
   // 회차 두 개
   for (const name of ['1화', '2화']) {
-    await page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('new-episode').click();
+    await (await workCard(page, '달빛')).getByTestId('new-episode').click();
     const input = page.locator('.nops-prompt input');
     await expect(input).toBeVisible();
     await input.fill(name);
     await input.press('Enter');
   }
-  const line = page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-goal-line');
+  const line = (await workCard(page, '달빛')).getByTestId('work-goal-line');
   await expect(line).toHaveText(/목표 설정/);
   await line.click();
   await page.getByTestId('work-goal-preset-naver').click();
@@ -125,14 +126,14 @@ test('작품 목표를 저장하면 카드 목표선이 보이고 재시작 후 
   app = await launch();
   const again = await app.firstWindow();
   await openVaultIfNeeded(again);
-  await expect(again.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-goal-line')).toHaveText(/완결 2\/80화/);
+  await expect((await workCard(again, '달빛')).getByTestId('work-goal-line')).toHaveText(/완결 2\/80화/);
 });
 
 test('일일 목표로 설정을 누르면 전역 일일 목표가 계산값으로 바뀐다', async () => {
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   await resetWriter(page);
-  const line = page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-goal-line');
+  const line = (await workCard(page, '달빛')).getByTestId('work-goal-line');
   await line.click();
   const perDay = await page.getByTestId('work-goal-summary').innerText();
   const value = Number((perDay.match(/하루 ([\d,]+)자/) ?? [])[1]?.replace(/,/g, '') ?? '0');
@@ -184,7 +185,7 @@ test('카카오 장르 힌트는 선택한 장르 하나만, 오늘 비교 줄�
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   await resetWriter(page);
-  await page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-goal-line').click();
+  await (await workCard(page, '달빛')).getByTestId('work-goal-line').click();
   await page.getByTestId('work-goal-preset-kakao').click();
   await expect(page.getByTestId('work-goal-hint')).toContainText(/장르를 고르면/);
   await page.getByTestId('work-goal-genre').selectOption('romance');
@@ -209,8 +210,8 @@ test('영어 문구로 보인다', async () => {
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   await resetWriter(page, { locale: 'en' });
-  await expect(page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-goal-line')).toHaveText(/episodes/);
-  await page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-goal-line').click();
+  await expect((await workCard(page, '달빛')).getByTestId('work-goal-line')).toHaveText(/episodes/);
+  await (await workCard(page, '달빛')).getByTestId('work-goal-line').click();
   await expect(page.getByTestId('work-goal-dialog')).toContainText('Work goal');
   // 영어 복수형: 현재 회차가 1 이하일 때 단수 문구가 나온다(데이터는 2회차라 other).
   await expect(page.getByTestId('work-goal-summary')).toContainText(/episodes left/);
@@ -222,7 +223,7 @@ test('작품 폴더 이름을 바꾸거나 되돌리거나 옮겨도 작품 목�
   await openVaultIfNeeded(page);
   await resetWriter(page);
   await createWork(page, '목표추적');
-  const card = (name: string) => page.getByTestId('work-card').filter({ hasText: name });
+  const card = (name: string) => workCard(page, name);
   const prompt = async (text: string) => {
     const input = page.locator('.nops-prompt input');
     await expect(input).toBeVisible();
@@ -230,16 +231,16 @@ test('작품 폴더 이름을 바꾸거나 되돌리거나 옮겨도 작품 목�
     await input.press('Enter');
   };
   // 작품으로 인식되려면 회차·캐릭터 폴더에 파일이 있어야 한다(빈 폴더는 rename 이동 대상이 아니다).
-  await card('목표추적').getByTestId('new-episode').click();
+  await (await card('목표추적')).getByTestId('new-episode').click();
   await prompt('1화');
-  await card('목표추적').getByTestId('new-character').click();
+  await workMenuItem(page, '+ 새 캐릭터');
   await prompt('주인공');
-  await card('목표추적').getByTestId('work-goal-line').click();
+  await (await card('목표추적')).getByTestId('work-goal-line').click();
   await page.getByTestId('work-goal-preset-naver').click();
   await page.getByTestId('work-goal-episodes').fill('20');
   await page.getByTestId('work-goal-deadline').fill('2027-12-31');
   await page.getByTestId('work-goal-save').click();
-  await expect(card('목표추적').getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
+  await expect((await card('목표추적')).getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
 
   // 이름 바꾸기(사이드바 폴더 ✎) → 새 이름 카드에 같은 목표선
   const renameFolder = async (from: string, to: string) => {
@@ -251,30 +252,30 @@ test('작품 폴더 이름을 바꾸거나 되돌리거나 옮겨도 작품 목�
   };
   await renameFolder('목표추적', '목표추적2');
   await expect
-    .poll(async () => (await card('목표추적2').count()) > 0, { timeout: 15000 })
-    .toBe(true);
-  await expect(card('목표추적2').getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
+    .poll(async () => (await card('목표추적2')).count(), { timeout: 15000 })
+    .toBeGreaterThan(0);
+  await expect((await card('목표추적2')).getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
 
   // 되돌리기 → 원래 이름에서도 목표 유지
   await page.locator('.toast').getByRole('button', { name: '되돌리기' }).click();
   await expect
-    .poll(async () => (await card('목표추적').count()) > 0, { timeout: 15000 })
-    .toBe(true);
-  await expect(card('목표추적').getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
+    .poll(async () => (await card('목표추적')).count(), { timeout: 15000 })
+    .toBeGreaterThan(0);
+  await expect((await card('목표추적')).getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
 
   // 다른 루트 이름으로 이동해도 목표 유지
   await renameFolder('목표추적', '새작품이름');
   await expect
-    .poll(async () => (await card('새작품이름').count()) > 0, { timeout: 15000 })
-    .toBe(true);
-  await expect(card('새작품이름').getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
+    .poll(async () => (await card('새작품이름')).count(), { timeout: 15000 })
+    .toBeGreaterThan(0);
+  await expect((await card('새작품이름')).getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
 });
 
 test('다른 작품 안으로 옮겼다 되돌려도 목적지 작품의 목표가 따라오지 않는다', async () => {
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);
   await resetWriter(page);
-  const card = (name: string) => page.getByTestId('work-card').filter({ hasText: name });
+  const card = (name: string) => workCard(page, name);
   const prompt = async (text: string) => {
     const input = page.locator('.nops-prompt input');
     await expect(input).toBeVisible();
@@ -290,17 +291,17 @@ test('다른 작품 안으로 옮겼다 되돌려도 목적지 작품의 목표�
   await createWork(page, '안쪽작품');
   await createWork(page, '바깥작품');
   for (const name of ['안쪽작품', '바깥작품']) {
-    await card(name).getByTestId('new-episode').click();
+    await (await card(name)).getByTestId('new-episode').click();
     await prompt('1화');
-    await card(name).getByTestId('new-character').click();
+    await workMenuItem(page, '+ 새 캐릭터');
     await prompt('주인공');
   }
-  await card('바깥작품').getByTestId('work-goal-line').click();
+  await (await card('바깥작품')).getByTestId('work-goal-line').click();
   await page.getByTestId('work-goal-preset-naver').click();
   await page.getByTestId('work-goal-episodes').fill('20');
   await page.getByTestId('work-goal-save').click();
-  await expect(card('바깥작품').getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
-  const goalBefore = await card('바깥작품').getByTestId('work-goal-line').innerText();
+  await expect((await card('바깥작품')).getByTestId('work-goal-line')).toContainText(/완결 1\/20화/);
+  const goalBefore = await (await card('바깥작품')).getByTestId('work-goal-line').innerText();
   const storedBefore = await goals();
   expect(Object.keys(storedBefore)).not.toContain('안쪽작품');
 
@@ -311,7 +312,7 @@ test('다른 작품 안으로 옮겼다 되돌려도 목적지 작품의 목표�
   await input.fill('바깥작품/안쪽작품');
   await input.press('Enter');
   await expect.poll(async () => (await folders()).includes('바깥작품/안쪽작품'), { timeout: 15000 }).toBe(true);
-  await expect(card('바깥작품').getByTestId('work-goal-line')).toHaveText(goalBefore);
+  await expect((await card('바깥작품')).getByTestId('work-goal-line')).toHaveText(goalBefore);
 
   // 되돌리기: 안쪽작품이 루트로 돌아오고, 바깥작품 목표는 그대로다(다른 작품으로 옮겨가지 않는다).
   await page.locator('.toast').getByRole('button', { name: '되돌리기' }).click();
@@ -321,8 +322,8 @@ test('다른 작품 안으로 옮겼다 되돌려도 목적지 작품의 목표�
       return list.includes('안쪽작품') && !list.includes('바깥작품/안쪽작품');
     }, { timeout: 15000 })
     .toBe(true);
-  await expect(card('바깥작품').getByTestId('work-goal-line')).toHaveText(goalBefore);
-  await expect(card('안쪽작품').getByTestId('work-goal-line')).toHaveText('목표 설정');
+  await expect((await card('바깥작품')).getByTestId('work-goal-line')).toHaveText(goalBefore);
+  await expect((await card('안쪽작품')).getByTestId('work-goal-line')).toHaveText('목표 설정');
   // 화면 갱신에 기대지 않고 저장된 목표 키 자체를 확인한다 — 바깥작품 목표가 안쪽작품으로 옮겨가면 실패.
   await expect.poll(goals, { timeout: 15000 }).toEqual(storedBefore);
 });

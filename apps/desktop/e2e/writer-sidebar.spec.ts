@@ -3,6 +3,7 @@ import {mkdirSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { waitForWatcher, writeExternalNote } from './watcher';
+import { workCard } from './work-list';
 
 // 작가 모드(W3): 사이드바 '작품' 섹션 — 카드·칩·새 캐릭터·글자수 갱신·일반 모드 불변.
 function packagedExecutable(): string {
@@ -65,9 +66,17 @@ async function prompt(page: Page, text: string): Promise<void> {
 /** 필요하면 작품을 만든다(테스트 간 의존 제거). */
 async function ensureWork(page: Page, name: string): Promise<void> {
   await expect(page.getByTestId('work-section')).toBeVisible({ timeout: 15_000 });
-  const card = page.getByTestId('work-card').filter({ hasText: name });
-  if ((await card.count()) === 0) await createWork(page, name);
-  await expect(page.getByTestId('work-card').filter({ hasText: name })).toBeVisible({ timeout: 15_000 });
+  const found = page.locator(`[data-testid="work-card"][data-work="${name}"], [data-testid="work-row"][data-work="${name}"]`);
+  if ((await found.count()) === 0) await createWork(page, name);
+  await expect(found.first()).toBeVisible({ timeout: 15_000 });
+}
+
+/** 열린 작품의 `⋯` 메뉴에서 새 캐릭터를 만든다(UX-1b: 버튼이 메뉴로 들어갔다). */
+async function createCharacter(page: Page, name: string): Promise<void> {
+  // 언어에 따라 메뉴 문구가 달라지므로 testid 로 고른다.
+  await page.getByTestId('work-more').click();
+  await page.getByTestId('new-character').click();
+  await prompt(page, name);
 }
 
 
@@ -76,7 +85,7 @@ async function openStatsEpisode(page: Page): Promise<Locator> {
   await ensureWork(page, '프리셋작품');
   let row = page.locator('aside.sidebar [data-path$="/1화.md"]').first();
   if ((await row.count()) === 0) {
-    await page.getByTestId('work-card').filter({ hasText: '프리셋작품' }).getByTestId('new-episode').click();
+    await (await workCard(page, '프리셋작품')).getByTestId('new-episode').click();
     await prompt(page, '1화');
   }
   row = page.locator('aside.sidebar [data-path$="/1화.md"]').first();
@@ -120,16 +129,14 @@ test('작품 카드가 0회차·0자로 보이고, 새 캐릭터가 시트로 �
   await expect(page.getByTestId('work-meta')).toHaveText(/0회차 · 0자/);
   await expect(page.getByTestId('work-chip-characters')).toHaveText(/캐릭터 0/);
 
-  await page.getByTestId('new-character').click();
-  await prompt(page, '서연');
+  await createCharacter(page, '서연');
   await expect(page.locator('.ProseMirror h1')).toHaveText('서연');
   const file = path.join(vaultDir, '달빛 조각사', '캐릭터', '서연.md');
   expect(readFileSync(file, 'utf8')).toContain('name: 서연');
   await expect(page.getByTestId('work-chip-characters')).toHaveText(/캐릭터 1/);
 
   // 두 번째 캐릭터를 만들면 노트 제목(첫 H1)이 각자 이름이다 — 둘 다 '캐릭터 시트'로 보이지 않는다.
-  await page.getByTestId('new-character').click();
-  await prompt(page, '도윤');
+  await createCharacter(page, '도윤');
   await expect(page.locator('.ProseMirror h1')).toHaveText('도윤');
   expect(readFileSync(path.join(vaultDir, '달빛 조각사', '캐릭터', '도윤.md'), 'utf8')).toContain('name: 도윤');
   await expect(page.locator('aside.sidebar [data-path="달빛 조각사/캐릭터/도윤.md"]')).toContainText('도윤');
@@ -200,8 +207,7 @@ test('한국어로 만든 작품을 영어 UI 에서 열어도 그 작품의 한
   await openVaultIfNeeded(page);
   await resetWriter(page, { locale: 'en' });
   await ensureWork(page, '달빛 조각사');
-  await page.getByTestId('new-character').click();
-  await prompt(page, 'Ha-eun');
+  await createCharacter(page, 'Ha-eun');
   // 작품 템플릿(한국어)을 그대로 복사 — 영어 기본 시트(Appearance)로 대체되지 않는다
   await expect(page.locator('.ProseMirror h1')).toHaveText('Ha-eun', { timeout: 15_000 });
   await expect(page.locator('.ProseMirror')).toContainText('외모');
@@ -213,8 +219,8 @@ test('새 회차를 만들면 회차 행 글자수 배지가 보이고 입력하
   await openVaultIfNeeded(page);
   await resetWriter(page);
   await createWork(page, '배지작품');
-  // 작품 카드가 여러 개면 전역 로케이터가 2개를 잡는다 — 이 작품 카드로 한정한다.
-  await page.getByTestId('work-card').filter({ hasText: '배지작품' }).getByTestId('new-episode').click();
+  // 목록형에서는 접힌 작품을 먼저 펼친다.
+  await (await workCard(page, '배지작품')).getByTestId('new-episode').click();
   await prompt(page, '2화');
   await expect(page.locator('.ProseMirror h1')).toHaveText('2화');
   // 실제로 만들어진 경로를 트리에서 확인한다(작품 이름이 중복되면 번호가 붙을 수 있다).

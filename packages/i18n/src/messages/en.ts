@@ -153,6 +153,8 @@ export const en: Record<MessageKey, string> = {
   'work.storyBible': "Story bible {count}",
   'work.today': "Today",
   'work.newCharacter': "+ New character",
+  'work.menu': "Work menu",
+  'work.openStoryBible': "Open story bible folder",
   'character.namePrompt': "Character name",
   'character.err.empty': "Enter a character name",
   'character.err.tooLong': "That character name is too long (80 characters max)",

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '@nopsidian/i18n';
-import { chipText, workMetaText } from './WorkSection';
+import { chipText, workMetaText, workRowLabel } from './WorkSection';
 
 afterEach(() => setLocale('ko'));
 
@@ -10,6 +10,15 @@ describe('작품 카드 meta', () => {
     expect(workMetaText('ko', work, 'include')).toBe('12회차 · 84,200자');
     expect(workMetaText('ko', work, 'exclude')).toBe('12회차 · 80,100자');
     expect(workMetaText('en', work, 'include')).toBe('12 episodes · 84,200 characters');
+  });
+});
+
+describe('접힌 작품 행 접근성 이름', () => {
+  it('이름과 회차 수를 함께 읽고, 영어는 단·복수를 지킨다', () => {
+    expect(workRowLabel('ko', '메모작', 0)).toBe('메모작, 0회차');
+    expect(workRowLabel('ko', '달빛', 12)).toBe('달빛, 12회차');
+    expect(workRowLabel('en', 'Moonlight', 1)).toBe('Moonlight, 1 episode');
+    expect(workRowLabel('en', 'Moonlight', 12)).toBe('Moonlight, 12 episodes');
   });
 });
 

@@ -3,6 +3,7 @@ import {mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync} fro
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { waitForWatcher, writeExternalNote } from './watcher';
+import { workCard } from './work-list';
 
 // 작가 모드(W2): '작품 만들기' — 폴더 구조·템플릿 노트·중복/이름 검증·일반 모드 불변.
 function packagedExecutable(): string {
@@ -231,10 +232,10 @@ test('출판형 구조를 고르면 폴더 8개와 템플릿만 만들고, 새 �
   // 원고·교정 폴더에는 샘플 파일을 만들지 않는다
   expect(readdirSync(path.join(vaultDir, '출판작', '원고'))).toEqual([]);
   expect(readdirSync(path.join(vaultDir, '출판작', '교정'))).toEqual([]);
-  await expect(page.getByTestId('work-card').filter({ hasText: '출판작' })).toBeVisible({ timeout: 15_000 });
+  await expect(await workCard(page, '출판작')).toBeVisible({ timeout: 15_000 });
 
   // + 새 회차 → 원고 폴더 바로 아래
-  await page.getByTestId('work-card').filter({ hasText: '출판작' }).getByTestId('new-episode').click();
+  await (await workCard(page, '출판작')).getByTestId('new-episode').click();
   await prompt(page, '1화');
   const row = page.locator('aside.sidebar [data-path$="출판작/원고/1화.md"]');
   await expect(row).toBeVisible({ timeout: 15_000 });
@@ -243,7 +244,7 @@ test('출판형 구조를 고르면 폴더 8개와 템플릿만 만들고, 새 �
   // 교정 폴더 노트는 회차 수·글자수에서 제외된다
   writeExternalNote(path.join(vaultDir, '출판작', '교정', '1교.md'), '# 1교\n\n교정 메모 문장\n');
   await expect.poll(
-    async () => (await page.getByTestId('work-card').filter({ hasText: '출판작' }).getByTestId('work-meta').innerText()),
+    async () => (await (await workCard(page, '출판작')).getByTestId('work-meta').innerText()),
     { timeout: 15_000 },
   ).toMatch(/1회차 · 2자/); // 원고/1화('1화' 2자)만 — 교정 노트는 제외
 });

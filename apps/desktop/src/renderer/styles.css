@@ -954,22 +954,36 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
 /* 작가 모드 '작품' 섹션 — 일반 모드에서는 렌더되지 않는다 */
 .works { padding: 8px 10px 4px; border-bottom: 1px solid var(--border); }
 .works__head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 2px 4px 6px; letter-spacing: .02em; }
-.works__list { display: flex; flex-direction: column; gap: 6px; max-height: 34vh; overflow: auto; }
-.workcard { border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; background: var(--bg); display: flex; flex-direction: column; gap: 5px; }
-.workcard__title { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workcard__meta { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.works__list { display: flex; flex-direction: column; gap: 2px; max-height: 34vh; overflow: auto; }
+/* 목록형: 열린 작품 1개만 4줄로 펼치고 나머지는 이름 한 줄 */
+.workcard { border-left: 2px solid var(--accent); border-radius: 6px; padding: 5px 6px 6px 8px; background: color-mix(in srgb, var(--accent) 3.5%, transparent); display: flex; flex-direction: column; gap: 3px; }
+.workcard__head { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.workcard__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; text-align: left; }
+.workcard__name:hover { color: var(--accent); }
+.workcard__more { width: 22px; height: 22px; }
+.workcard__meta { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; padding-left: 1px; }
+.workcard__goal-line { font-size: 11px; color: var(--muted); text-align: left; padding: 0 0 0 1px; }
+.workcard__goal-line:hover { color: var(--fg); }
 .workcard__goal { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 .workcard__goal .note-editor__goalbar { flex: 0 0 64px; }
 .workcard__goalnum { font-variant-numeric: tabular-nums; }
-.workcard__links { display: flex; gap: 6px; flex-wrap: wrap; }
+.workcard__links { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 11px; }
+.workcard__link { font-size: 11px; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+.workcard__link:hover { color: var(--accent); }
+.workcard__dot { color: var(--muted); }
+.workcard__new { flex: none; font-size: 11.5px; color: var(--accent); background: none; border: 0; padding: 0 2px; cursor: pointer; }
 .workchip { font-size: 11px; border: 1px solid var(--border); border-radius: 99px; padding: 1px 8px; background: none; color: var(--fg); cursor: pointer; }
 .workchip:hover { background: var(--hover); }
-.workcard__new { align-self: flex-start; font-size: 11.5px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.workrow { display: flex; align-items: center; gap: 4px; width: 100%; padding: 3px 7px; border-radius: 6px; font-size: 12.5px; color: var(--fg); text-align: left; }
+.workrow:hover { background: var(--hover); }
+.workrow__chev, .workcard__chev { flex: none; font-size: 10px; line-height: 1; color: var(--muted); }
+.workrow__name { flex: 1; min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workrow__count { flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .works__add { width: 100%; margin-top: 6px; font-size: 11.5px; color: var(--muted); background: none; border: 1px dashed var(--border); border-radius: 8px; padding: 6px; cursor: pointer; }
 .works__add:hover { color: var(--fg); border-color: var(--accent); }
 @media (max-width: 920px) {
   .works { padding: 6px 8px 2px; }
-  .workcard { padding: 7px 8px; }
+  .workcard { padding: 4px 6px 5px 8px; }
   .workcard__today { display: none; }
   .workcard__goal .note-editor__goalbar { flex-basis: 48px; }
 }
@@ -980,7 +994,6 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
   .row:has(.tree__badge) { padding-right: 8px; }
   .tree__badge { display: none; }
 }
-.workcard__newrow { display: flex; gap: 10px; flex-wrap: wrap; }
 .note-editor__goalform { flex-wrap: wrap; row-gap: 6px; }
 .note-editor__presets { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .note-editor__preset { font-size: 11px; border: 1px dashed var(--border); border-radius: 99px; padding: 1px 8px; background: none; color: var(--muted); cursor: pointer; }

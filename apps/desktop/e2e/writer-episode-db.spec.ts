@@ -3,6 +3,7 @@ import {existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync} f
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { waitForWatcher, writeExternalNote } from './watcher';
+import { workCard } from './work-list';
 
 // 작가 모드(W4c): 회차 DB — 칩을 눌러야 _db.yaml 생성, 자동 열(글자수·목표 달성), 한/영.
 function packagedExecutable(): string {
@@ -80,7 +81,7 @@ test('회차 DB 칩을 눌러야 _db.yaml 이 생기고, 자동 열이 계산된
   // 작품 만들기만으로는 만들지 않는다
   expect(() => readFileSync(dbFile, 'utf8')).toThrow();
 
-  await page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('work-chip-db').click();
+  await (await workCard(page, '달빛')).getByTestId('work-chip-db').click();
   await expect.poll(() => { const y = readFileSync(dbFile, 'utf8'); return y.includes('note_chars') && y.includes('goal_met') && y.includes('id: v1') && y.includes('calc'); }, { timeout: 15_000 }).toBe(true);
   await page.waitForTimeout(300); // 뷰 저장이 끝난 뒤 비교한다
   const yaml = readFileSync(dbFile, 'utf8');
@@ -110,7 +111,7 @@ test('회차 DB 칩을 눌러야 _db.yaml 이 생기고, 자동 열이 계산된
   await expect(page.getByTestId('db-table')).toContainText('2화', { timeout: 15_000 });
 
   // 회차 노트를 만들면 행이 생기고 글자수가 계산된다
-  await page.getByTestId('work-card').filter({ hasText: '달빛' }).getByTestId('new-episode').click();
+  await (await workCard(page, '달빛')).getByTestId('new-episode').click();
   const prompt = page.locator('.nops-prompt input');
   await expect(prompt).toBeVisible();
   await prompt.fill('3화');
@@ -180,7 +181,7 @@ test('언어를 바꿔 다시 열어도 기존 회차 DB 는 그대로다(열·�
   await expect(page.getByTestId('work-dialog')).toHaveCount(0);
   await page.keyboard.press('Escape');
   const dbFile = path.join(vaultDir, '영어작', '회차', '_db.yaml');
-  await page.getByTestId('work-card').filter({ hasText: '영어작' }).getByTestId('work-chip-db').click();
+  await (await workCard(page, '영어작')).getByTestId('work-chip-db').click();
   await expect.poll(() => { const y = readFileSync(dbFile, 'utf8'); return y.includes('note_chars') && y.includes('goal_met') && y.includes('id: v1') && y.includes('calc'); }, { timeout: 15_000 }).toBe(true);
   await page.waitForTimeout(300); // 뷰 저장이 끝난 뒤 비교한다
   const before = readFileSync(dbFile, 'utf8');
@@ -192,8 +193,8 @@ test('언어를 바꿔 다시 열어도 기존 회차 DB 는 그대로다(열·�
   await openVaultIfNeeded(again);
   await resetWriter(again, 'en');
   await again.getByRole('tab', { name: /파일|Files/ }).click();
-  await expect(again.getByTestId('work-card').filter({ hasText: '영어작' })).toBeVisible({ timeout: 15_000 });
-  await again.getByTestId('work-card').filter({ hasText: '영어작' }).getByTestId('work-chip-db').click();
+  await expect(await workCard(again, '영어작')).toBeVisible({ timeout: 15_000 });
+  await (await workCard(again, '영어작')).getByTestId('work-chip-db').click();
   await expect(again.getByTestId('db-screen')).toBeVisible();
   // 기존 한국어 열 그대로, 새 Episode/Characters 열이 생기지 않는다
   await expect(again.getByTestId('th-회차')).toBeVisible();
@@ -210,7 +211,7 @@ test('영어 회차 DB 도 뷰 4개와 합계 행(총 글자수·n/m)이 보인�
   await page.getByRole('tab', { name: /Files|파일/ }).click();
   await createWork(page, 'Moon');
   const dbFile = path.join(vaultDir, 'Moon', 'Episodes', '_db.yaml');
-  await page.getByTestId('work-card').filter({ hasText: 'Moon' }).getByTestId('work-chip-db').click();
+  await (await workCard(page, 'Moon')).getByTestId('work-chip-db').click();
   await expect.poll(() => { try { return readFileSync(dbFile, 'utf8').includes('calc'); } catch { return false; } }, { timeout: 15_000 }).toBe(true);
   const yaml = readFileSync(dbFile, 'utf8');
   expect([...yaml.matchAll(/^\s*-\s+id:\s*(\S+)/gm)].map((m) => m[1])).toEqual(['v1', 'status-0', 'status-1', 'status-2']);

@@ -154,6 +154,8 @@ export const ko = {
   'work.storyBible': "설정집 {count}",
   'work.today': "오늘",
   'work.newCharacter': "+ 새 캐릭터",
+  'work.menu': "작품 메뉴",
+  'work.openStoryBible': "설정집 폴더 열기",
   'character.namePrompt': "캐릭터 이름",
   'character.err.empty': "캐릭터 이름을 입력해 주세요",
   'character.err.tooLong': "캐릭터 이름이 너무 길어요(80자 이하)",

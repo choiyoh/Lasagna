@@ -28,7 +28,8 @@ import {
   SELF_AUTHOR,
   isWorkTemplatePath,
 } from '@nopsidian/core';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { readFile as readFileAsync, readdir as readdirAsync, stat as statAsync } from 'node:fs/promises';
 import { readAudit } from '@nopsidian/mcp/audit';
 import { RevertError, applyRestore, logRevert, planRevert } from '@nopsidian/mcp/revert';
 import { readPolicyFile, writePolicyFile } from '@nopsidian/mcp/policy-file';
@@ -307,30 +308,42 @@ function registerHandlers() {
     const roots = detectWorkRoots(folders);
     if (roots.length === 0) return [];
     // 색인 준비를 기다리지 않고 파일 시스템에서 직접 센다(앱을 막 열었을 때도 카드가 바로 보인다).
-    const stats = new Map<string, { chars: number; charsNoSpace: number }>();
+    // 큰 볼트에서 메인 이벤트 루프를 막지 않도록 폴더 순회·stat·읽기를 비동기 배치로 처리한다.
     const all: string[] = [];
+    const episodes: string[] = [];
     for (const root of roots) {
       for (const folder of root.episodeFolders) {
-        for (const rel of walkMarkdown(v.info.path, folder)) {
-          all.push(rel);
+        const found = await walkMarkdownAsync(v.info.path, folder);
+        episodes.push(...found);
+        all.push(...found);
+      }
+      // 캐릭터·설정집 수도 색인 없이 파일 시스템에서 센다.
+      for (const folder of [...root.characterFolders, ...root.storyBibleFolders]) all.push(...(await walkMarkdownAsync(v.info.path, folder)));
+    }
+    const stats = new Map<string, { chars: number; charsNoSpace: number }>();
+    const BATCH = 25;
+    for (let i = 0; i < episodes.length; i += BATCH) {
+      const batch = episodes.slice(i, i + BATCH);
+      await Promise.all(
+        batch.map(async (rel) => {
           try {
             const full = resolveInVault(v.info.path, rel);
-            const st = statSync(full);
+            const st = await statAsync(full);
             const cached = workCharCache.get(rel);
             if (cached && cached.mtime === st.mtimeMs && cached.size === st.size) {
               stats.set(rel, { chars: cached.chars, charsNoSpace: cached.charsNoSpace });
-              continue;
+              return;
             }
-            const counted = countMarkdown(readFileSync(full, 'utf8'));
+            const counted = countMarkdown(await readFileAsync(full, 'utf8'));
             workCharCache.set(rel, { mtime: st.mtimeMs, size: st.size, chars: counted.chars, charsNoSpace: counted.charsNoSpace });
             stats.set(rel, counted);
           } catch {
             // 읽기 실패(삭제 경합 등)는 이번 계산에서만 건너뛴다.
           }
-        }
-      }
-      // 캐릭터·설정집 수도 색인 없이 파일 시스템에서 센다.
-      for (const folder of [...root.characterFolders, ...root.storyBibleFolders]) all.push(...walkMarkdown(v.info.path, folder));
+        }),
+      );
+      // 한 배치(25개)를 끝낼 때마다 이벤트 루프를 양보해 IPC·입력이 막히지 않게 한다.
+      await new Promise<void>((resolve) => setImmediate(resolve));
     }
     return summarizeWorks(roots, all, stats);
   });
@@ -788,24 +801,24 @@ function registerHandlers() {
 }
 
 
-/** 볼트 안 폴더의 마크다운 노트 경로(하위 폴더 포함, 숨김 제외). */
-function walkMarkdown(root: string, relDir: string): string[] {
+/** 볼트 안 폴더의 마크다운 노트 경로(하위 폴더 포함, 숨김 제외). 큰 볼트에서도 메인을 막지 않게 비동기로 훑는다. */
+async function walkMarkdownAsync(root: string, relDir: string): Promise<string[]> {
   const out: string[] = [];
-  const walk = (rel: string) => {
+  const walk = async (rel: string) => {
     let entries;
     try {
-      entries = readdirSync(resolveInVault(root, rel), { withFileTypes: true });
+      entries = await readdirAsync(resolveInVault(root, rel), { withFileTypes: true });
     } catch {
       return;
     }
     for (const ent of entries) {
       if (ent.name.startsWith('.') || ent.name === 'node_modules') continue;
       const child = `${rel}/${ent.name}`;
-      if (ent.isDirectory()) walk(child);
+      if (ent.isDirectory()) await walk(child);
       else if (/\.md$/i.test(ent.name)) out.push(child);
     }
   };
-  walk(relDir);
+  await walk(relDir);
   return out;
 }
 

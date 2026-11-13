@@ -729,15 +729,39 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .oh-editor .ProseMirror { font-size: var(--nops-font-size, 16px); }
 :root[data-width='wide'] .note-editor { max-width: 1040px; }
 :root[data-width='full'] .note-editor { max-width: none; }
-.settings { width: min(560px, 94vw); display: flex; flex-direction: column; max-height: 88vh; padding: 0; overflow: hidden; border: 1px solid var(--border); }
+.settings { width: min(860px, 94vw); height: min(600px, 88vh); display: flex; flex-direction: column; padding: 0; overflow: hidden; border: 1px solid var(--border); }
 .settings__head { flex: none; height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--border); }
 .settings__head h2 { margin: 0; font-size: 15px; }
 .settings__x { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; color: var(--muted); font-size: 18px; line-height: 1; }
 .settings__x:hover { background: var(--hover); color: var(--fg); }
-.settings__body { flex: 1; min-height: 0; overflow: auto; padding: 0 20px 20px; }
+/* 왼쪽 페이지 목록 + 오른쪽 페이지 */
+.settings__main { flex: 1; min-height: 0; display: flex; }
+.settings__rail { flex: none; width: 168px; display: flex; flex-direction: column; gap: 2px; padding: 8px; overflow: auto; border-right: 1px solid var(--border); }
+.settings__tab { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px; border-radius: 6px; color: var(--muted); font-size: 13px; text-align: left; }
+.settings__tab:hover { background: var(--hover); color: var(--fg); }
+.settings__tab.is-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+.settings__tabicon { flex: none; width: 16px; text-align: center; font-size: 13px; }
+.settings__tablabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings__tabdot { flex: none; width: 6px; height: 6px; margin-left: auto; border-radius: 50%; background: var(--accent); }
+.settings__pages { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.settings section.settings__page { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 20px 0; border-top: 0; }
+.settings section.settings__page[hidden] { display: none; }
+.settings__pagetitle { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.settings__page .settings__body { flex: 1; min-height: 0; overflow: auto; padding: 0 0 20px; }
 .settings section { padding: 10px 0; border-top: 1px solid var(--border); }
 .settings section:first-of-type { border-top: 0; }
 .settings h3 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; }
+@media (max-width: 920px) {
+  .settings { width: min(720px, 96vw); height: min(560px, 90vh); }
+  .settings__rail { width: 150px; }
+}
+@media (max-width: 700px) {
+  .settings__rail { width: 56px; padding: 8px 6px; }
+  .settings__tab { justify-content: center; padding: 8px 0; }
+  .settings__tablabel { display: none; }
+  .settings__tabicon { width: auto; font-size: 15px; }
+  .settings__tabdot { position: absolute; top: 5px; right: 7px; margin: 0; }
+}
 .settings__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 6px 0; font-size: 14px; }
 .settings__row small { display: block; margin-top: 2px; font-size: 12px; }
 .settings__row select { padding: 4px 8px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg); color: var(--fg); }

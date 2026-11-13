@@ -3,6 +3,7 @@ import {mkdirSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { waitForWatcher, writeExternalNote } from './watcher';
+import { selectSettingsPage } from './settings';
 
 // 작가 모드(W1): 토글·글자수 상태줄(총계)·공백 기준·언어 전환·재시작 유지, 그리고 노트 파일 불변.
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
@@ -133,6 +134,7 @@ test('작가 모드를 켜면 글자수 상태줄이 보이고, 노트 파일은
 
   // 공백 제외로 바꾸면 기준 표기가 바뀐다
   await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, '작가 모드');
   await page.getByRole('radiogroup', { name: '글자수 기준' }).getByRole('radio', { name: '공백 제외' }).click();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('writer-chars')).toHaveText(/^12자 · 공백 제외$/);

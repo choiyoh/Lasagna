@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import path from 'node:path';
 import { waitForWatcher, writeExternalNote } from './watcher';
+import { selectSettingsPage } from './settings';
 
 // `pnpm package` 로 만든 앱을 실행한다(Fuses·asar·네이티브 모듈까지 함께 검증).
 /** 패키징한 앱의 실행 파일. darwin 은 .app 번들 안, win32 는 .exe, linux 는 실행 파일이다. NOPS_E2E_EXECUTABLE 로 덮어쓸 수 있다. */
@@ -1102,6 +1103,7 @@ test.describe('링크 코어', () => {
     // 꺼짐 + idle 에서는 사이드바 하단 버튼을 렌더하지 않는다. 진입점은 설정이다.
     await expect(page.getByTestId('sync-bar')).toHaveCount(0);
     await page.keyboard.press('Meta+,');
+    await selectSettingsPage(page, '동기화');
     await page.getByRole('dialog', { name: '설정' }).getByRole('button', { name: /Google Drive 동기화/ }).click();
     const dialog = page.getByRole('dialog', { name: 'Google Drive 동기화' });
     await expect(dialog).toBeVisible();
@@ -2694,6 +2696,7 @@ views:
   test('AI 에이전트(MCP): 설정에 연결 방법이 나오고, 번들된 서버로 에이전트가 쓴 노트가 앱에 바로 나타나며 기록되고, 허용 밖은 거부된다', async () => {
     const page = await app.firstWindow();
     await page.keyboard.press('ControlOrMeta+,');
+    await selectSettingsPage(page, '연결·고급');
     const settings = page.getByRole('dialog', { name: '설정' });
     await settings.getByRole('tab', { name: 'Claude Code' }).click();
     const cli = settings.getByTestId('mcp-cli');
@@ -2741,6 +2744,7 @@ views:
 
     // 설정의 "최근 에이전트 작업" 에 남는다
     await page.keyboard.press('ControlOrMeta+,');
+    await selectSettingsPage(page, '연결·고급');
     const audit = page.getByRole('dialog', { name: '설정' }).getByTestId('mcp-audit');
     await expect(audit).toContainText('AI/에이전트노트.md', { timeout: 15000 });
     await expect(audit).toContainText('e2e-agent');
@@ -2772,6 +2776,7 @@ views:
   test('AI 에이전트(MCP): 앱 스위치를 끄면 이미 연결된 세션의 다음 쓰기가 거부되고 다시 켜면 복구된다', async () => {
     const page = await app.firstWindow();
     await page.keyboard.press('ControlOrMeta+,');
+    await selectSettingsPage(page, '연결·고급');
     const settings = page.getByRole('dialog', { name: '설정' });
     const write = settings.getByLabel('에이전트가 노트 쓰기 허용');
     const policyFile = path.join(vaultDir, '.nopsidian', 'mcp-policy.json');
@@ -3171,15 +3176,19 @@ views:
     // 설정: 글자 크기·본문 너비·제목 동기화(이 기기에만 저장)
     await page.keyboard.press('ControlOrMeta+,');
     await expect(settings).toBeVisible();
+    await selectSettingsPage(page, '외형');
     await settings.getByLabel('본문 글자 크기').selectOption('18');
     await expect.poll(() => page.locator('.oh-editor .ProseMirror').first().evaluate((el) => getComputedStyle(el).fontSize)).toBe('18px');
     await settings.getByRole('radio', { name: '넓게' }).click();
     expect(await page.evaluate(() => document.documentElement.dataset.width)).toBe('wide');
+    await selectSettingsPage(page, '편집');
     await settings.getByLabel('제목을 바꾸면 파일 이름도 맞추기').uncheck();
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('nops.prefs') ?? '{}'))).toEqual({ fontSize: 18, width: 'wide', titleSync: false });
     // 원래대로
+    await selectSettingsPage(page, '외형');
     await settings.getByLabel('본문 글자 크기').selectOption('16');
     await settings.getByRole('radio', { name: '보통' }).click();
+    await selectSettingsPage(page, '편집');
     await settings.getByLabel('제목을 바꾸면 파일 이름도 맞추기').check();
     await page.keyboard.press('Escape');
     await expect(settings).toHaveCount(0);

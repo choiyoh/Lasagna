@@ -94,10 +94,17 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsBtnRef = useRef<HTMLButtonElement>(null);
-  /** 설정을 닫고 초점을 연 버튼(사이드바 설정)으로 돌려준다. */
+  /** 설정을 닫고 초점을 연 버튼(사이드바 설정)으로 돌려준다.
+   *  같은 틱에 팔레트·대화상자가 열렸다면 그쪽이 초점을 가져야 하므로 복귀를 생략한다. */
   const closeSettings = useCallback(() => {
     setSettingsOpen(false);
-    requestAnimationFrame(() => settingsBtnRef.current?.focus());
+    requestAnimationFrame(() => {
+      if (document.querySelector('.dialog-backdrop, .switcher, .nops-prompt, .ctxmask')) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && (active.isContentEditable || active.closest('.dialog-backdrop, .switcher, .nops-prompt'))) return;
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement) return;
+      settingsBtnRef.current?.focus();
+    });
   }, []);
   /** 작품 만들기 대화상자(이름+구조). 설정·사이드바가 같은 것을 연다 */
   const [workDialog, setWorkDialog] = useState(false);

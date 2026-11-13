@@ -182,6 +182,22 @@ test('페이지별 대표 설정이 동작한다(외형·편집·동기화·단�
   await expect(trash).toHaveCount(0);
 });
 
+test('Esc 로 닫은 직후 같은 틱에 ⌘P 를 눌러도 팔레트가 초점을 갖는다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await openSettings(page);
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', metaKey: true, ctrlKey: true, bubbles: true }));
+  });
+  const palette = page.getByTestId('command-palette');
+  await expect(palette).toBeVisible();
+  await expect(palette.locator('input')).toBeFocused();
+  await expect(page.getByTestId('settings-btn')).not.toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(palette).toHaveCount(0);
+});
+
 test('920px·700px 미만·영어에서도 목록과 페이지가 겹치지 않는다', async () => {
   const page = await app.firstWindow();
   await openVaultIfNeeded(page);

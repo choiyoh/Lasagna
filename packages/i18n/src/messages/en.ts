@@ -14,7 +14,7 @@ export const en: Record<MessageKey, string> = {
   'settings.page.writer': 'Writer mode',
   'settings.page.sync': 'Sync',
   'settings.page.shortcuts': 'Shortcuts',
-  'settings.page.advanced': 'Connections & advanced',
+  'settings.page.advanced': 'Advanced',
   'settings.close': 'Close',
   'settings.closeHint': 'Close (Esc)',
   'settings.appearance': 'Appearance',

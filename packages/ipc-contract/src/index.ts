@@ -351,6 +351,8 @@ export const appLanguage = z.object({
   writerDailyGoal: z.number().int().min(0).nullable().optional(),
   writerFont: z.enum(['sans', 'serif', 'mono']).optional(),
   writerTypewriter: z.boolean().optional(),
+  /** 원고지 매수 표시(작가 모드, 기본 꺼짐) */
+  writerPaperCount: z.boolean().optional(),
 });
 export type LanguageSetting = z.infer<typeof languageSetting>;
 export type AppLanguage = z.infer<typeof appLanguage>;
@@ -706,6 +708,7 @@ export const contract = {
       writerDailyGoal: z.number().int().min(0).max(10_000_000).nullable().optional(),
       writerFont: z.enum(['sans', 'serif', 'mono']).optional(),
       writerTypewriter: z.boolean().optional(),
+      writerPaperCount: z.boolean().optional(),
     }),
     output: appLanguage,
   },

@@ -11,7 +11,7 @@ import { FindBar } from './FindBar';
 import { carrySelection, freshNotes, titleInSync, titleRenameTarget } from './note-title';
 import { loadPrefs } from './prefs';
 import { countMarkdown, countPlain, platformText, readGoalChars, type TextStats } from '@nopsidian/core';
-import { WRITER_PENDING, writerCountsText, writerDelay } from './writer-status';
+import { WRITER_PENDING, paperText, writerCountsText, writerDelay } from './writer-status';
 import { basisChars, goalProgress, goalText, presetHintBasis, todayText } from './writer-goal';
 import { editorTotalStats } from '@nopsidian/editor/nops';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
@@ -1128,7 +1128,13 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
                 <i style={{ width: `${Math.round(goalProgress(basisChars(writerStats, spacing), noteGoal).ratio * 100)}%` }} />
               </span>
               <span className="note-editor__goalnum" data-testid="writer-goal-text">
-                {goalText({ locale, chars: basisChars(writerStats, spacing), goal: noteGoal, narrow })}
+                {goalText({
+                  locale,
+                  chars: basisChars(writerStats, spacing),
+                  goal: noteGoal,
+                  // 영어는 매수 표시가 켜지면 상태줄이 길어져 1000px 근처에서 접힌다 — 목표 단위를 줄인다.
+                  narrow: narrow || (locale === 'en' && language.writerPaperCount === true),
+                })}
               </span>
               {goalProgress(basisChars(writerStats, spacing), noteGoal).over > 0 && (
                 <span className="note-editor__goalover" data-testid="writer-goal-over">
@@ -1234,7 +1240,15 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
               )}
             </span>
           ) : (
-            <span data-testid="writer-chars">{writerStats ? writerCountsText({ locale, spacing, stats: writerStats, narrow }) : WRITER_PENDING}</span>
+            <span data-testid="writer-chars">
+              {writerStats ? writerCountsText({ locale, spacing, stats: writerStats, narrow }) : WRITER_PENDING}
+              {writerStats && language.writerPaperCount === true && (
+                <span data-testid="writer-paper">
+                  {' · '}
+                  {paperText({ locale, chars: spacing === 'include' ? writerStats.chars : writerStats.charsNoSpace, narrow })}
+                </span>
+              )}
+            </span>
           )}
           {writerStats && (
             <span className="note-editor__today" data-testid="writer-today">

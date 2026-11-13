@@ -1,4 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import { selectSettingsPage } from './settings';
 import {mkdirSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -61,6 +62,7 @@ async function prompt(page: Page, text: string): Promise<void> {
 
 async function createWork(page: Page, name: string): Promise<void> {
   await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, '작가 모드');
   await page.getByTestId('work-create').click();
   await expect(page.getByTestId('work-dialog')).toBeVisible();
   await page.getByTestId('work-dialog-name').fill(name);

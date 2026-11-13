@@ -3,6 +3,7 @@ import {mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync} from 'node:f
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { waitForWatcher, writeExternalNote } from './watcher';
+import { selectSettingsPage } from './settings';
 
 // 패키징한 앱을 실행해 언어 설정이 화면·<html lang>·재시작 후에도 유지되는지 확인한다.
 function packagedExecutable(): string {
@@ -108,6 +109,7 @@ test('switches between Korean and English, keeps <html lang> in sync, and surviv
   await expect(page.getByTestId('sidebar-search')).toBeVisible();
 
   await openSettings(page);
+  await selectSettingsPage(page, '외형');
 
   // 테마 라디오도 같은 컴포넌트: 화살표·Home/End 로 이동하며 선택하고, 동작(테마 적용)은 그대로다.
   const themeGroup = page.getByRole('radiogroup', { name: '테마' });
@@ -125,6 +127,7 @@ test('switches between Korean and English, keeps <html lang> in sync, and surviv
   await expect(systemTheme).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'system');
 
+  await selectSettingsPage(page, '일반');
   // 설정의 언어 라디오그룹은 표준 키보드 패턴: 선택된 항목만 Tab 으로 닿고 화살표·Home/End 로 이동한다.
   const languageGroup = page.getByRole('radiogroup', { name: '언어' });
   const systemRadio = languageGroup.getByRole('radio', { name: '시스템 따르기' });

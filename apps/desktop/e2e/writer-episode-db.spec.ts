@@ -1,4 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import { selectSettingsPage } from './settings';
 import {existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -51,6 +52,7 @@ async function resetWriter(page: Page, locale: 'ko' | 'en' = 'ko'): Promise<void
 
 async function createWork(page: Page, name: string): Promise<void> {
   await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, '작가 모드');
   await page.getByTestId('work-create').click();
   await page.getByTestId('work-dialog-name').fill(name);
   await page.getByTestId('work-dialog-create').click();
@@ -175,6 +177,7 @@ test('언어를 바꿔 다시 열어도 기존 회차 DB 는 그대로다(열·�
   await page.getByRole('tab', { name: '파일' }).click();
   // 이 테스트만 따로 돌아도 되게 자기 작품을 만든다.
   await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, '작가 모드');
   await page.getByTestId('work-create').click();
   await page.getByTestId('work-dialog-name').fill('영어작');
   await page.getByTestId('work-dialog-create').click();

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { waitForWatcher, writeExternalNote } from './watcher';
+import { selectSettingsPage } from './settings';
 
 // W7: 원고지 매수 표시 — 회차 노트 상태줄의 전체 글자수 뒤에만, 작가 모드 설정을 켰을 때.
 function packagedExecutable(): string {
@@ -61,6 +62,7 @@ async function openEpisode(page: Page): Promise<void> {
 /** 설정의 원고지 스위치(설정은 바로 저장된다). */
 async function togglePaperSetting(page: Page, on: boolean): Promise<void> {
   await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, '작가 모드');
   const box = page.getByTestId('writer-paper-count');
   await expect(box).toBeVisible();
   if (on) await box.check();

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { t } from '@nopsidian/i18n';
 import type { LanguageSetting } from '@nopsidian/ipc-contract';
 import { applyPrefs, FONT_SIZES, loadPrefs, type Prefs } from './prefs';
@@ -7,6 +7,7 @@ import { keys } from './keys';
 import { changeLanguage, changeWriterSettings } from './language';
 import { useLanguage } from './useLocale';
 import { McpSettings } from './McpSettings';
+import { moveSettingsPage, resolveSettingsPage, settingsPages, type SettingsPage } from './settings-pages';
 
 interface Props {
   theme: ThemeChoice;
@@ -25,6 +26,16 @@ const LANGUAGE_KEY: Record<LanguageSetting, Parameters<typeof t>[0]> = {
   system: 'settings.language.system',
   ko: 'settings.language.ko',
   en: 'settings.language.en',
+};
+
+const PAGE_KEY: Record<SettingsPage, Parameters<typeof t>[0]> = {
+  general: 'settings.page.general',
+  editing: 'settings.page.editing',
+  appearance: 'settings.page.appearance',
+  writer: 'settings.page.writer',
+  sync: 'settings.page.sync',
+  shortcuts: 'settings.page.shortcuts',
+  advanced: 'settings.page.advanced',
 };
 
 interface SegOption<T extends string> {
@@ -106,12 +117,18 @@ function RadioSeg<T extends string>({
   );
 }
 
-/** 설정(⌘,): 모양·편집·동기화·도움말. 값은 이 기기에만 저장된다. */
+/** 설정(⌘,): 왼쪽 페이지 목록 + 오른쪽 페이지. 값은 지금처럼 바로 저장된다. */
 export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShortcuts, onOpenTrash, onOpenNote, onReverted, onCreateWork }: Props) {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [languageError, setLanguageError] = useState(false);
   const [writerError, setWriterError] = useState(false);
   const language = useLanguage();
+  const writerOn = language.writerMode === true;
+  const pages = settingsPages(writerOn);
+  const [page, setPage] = useState<SettingsPage>('general');
+  const active = resolveSettingsPage(page, writerOn);
+  const tabRefs = useRef(new Map<SettingsPage, HTMLButtonElement | null>());
+
   const chooseLanguage = async (option: LanguageSetting): Promise<boolean> => {
     setLanguageError(false);
     try {
@@ -135,6 +152,136 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const tabId = (id: SettingsPage) => `settings-tab-${id}`;
+  const panelId = (id: SettingsPage) => `settings-page-${id}`;
+  const selectPage = (next: SettingsPage, focus = false) => {
+    setPage(next);
+    if (focus) requestAnimationFrame(() => tabRefs.current.get(next)?.focus());
+  };
+
+  const onRailKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const next = moveSettingsPage(pages, active, event.key);
+    if (next === active) return;
+    event.preventDefault();
+    selectPage(next, true);
+  };
+
+  const panel = (id: SettingsPage, title: string, body: ReactNode) => (
+    <section className="settings__page" role="tabpanel" id={panelId(id)} aria-labelledby={tabId(id)} hidden={active !== id}>
+      <h2 className="settings__pagetitle">{title}</h2>
+      <div className="settings__body">{body}</div>
+    </section>
+  );
+
+  const languageRow = (
+    <div className="settings__row">
+      <span>{t('settings.language')}</span>
+      <RadioSeg
+        label={t('settings.language')}
+        value={language.setting}
+        options={(['system', 'ko', 'en'] as const).map((option) => ({ value: option, label: t(LANGUAGE_KEY[option]) }))}
+        onSelect={(option) => chooseLanguage(option)}
+      />
+    </div>
+  );
+
+  const writerModeRow = (
+    <label className="settings__row">
+      <span>
+        {t('settings.writerMode')}
+        <small className="muted">{t('settings.writerModeHint')}</small>
+      </span>
+      <input
+        type="checkbox"
+        data-testid="writer-mode"
+        checked={writerOn}
+        onChange={(e) => void changeWriterSettings({ mode: e.target.checked }).catch(() => setWriterError(true))}
+        aria-label={t('settings.writerMode')}
+      />
+    </label>
+  );
+
+  const writerPage = (
+    <>
+      <label className="settings__row">
+        <span>
+          {t('settings.writerDailyGoal')}
+          <small className="muted">{t('settings.writerDailyGoalHint')}</small>
+        </span>
+        <input
+          type="number"
+          min={1}
+          inputMode="numeric"
+          className="settings__input"
+          data-testid="writer-daily-goal"
+          aria-label={t('settings.writerDailyGoal')}
+          value={language.writerDailyGoal ?? ''}
+          onChange={(e) => {
+            const value = Number(e.target.value);
+            void changeWriterSettings({ dailyGoal: Number.isFinite(value) && value > 0 ? Math.floor(value) : null }).catch(() => setWriterError(true));
+          }}
+        />
+      </label>
+      <div className="settings__row">
+        <span>{t('settings.writerSpacing')}</span>
+        <RadioSeg
+          label={t('settings.writerSpacing')}
+          value={language.writerSpacing ?? 'include'}
+          options={(['include', 'exclude'] as const).map((option) => ({ value: option, label: t(`settings.writerSpacing.${option}`) }))}
+          onSelect={(option) => void changeWriterSettings({ spacing: option }).catch(() => setWriterError(true))}
+        />
+      </div>
+      <label className="settings__row">
+        <span>
+          {t('settings.writerPaperCount')}
+          <small className="muted">{t('settings.writerPaperCountHint')}</small>
+        </span>
+        <input
+          type="checkbox"
+          data-testid="writer-paper-count"
+          checked={language.writerPaperCount === true}
+          onChange={(e) => void changeWriterSettings({ paperCount: e.target.checked }).catch(() => setWriterError(true))}
+          aria-label={t('settings.writerPaperCount')}
+        />
+      </label>
+      <div className="settings__row">
+        <span>{t('settings.writerFont')}</span>
+        <RadioSeg
+          label={t('settings.writerFont')}
+          value={language.writerFont ?? 'sans'}
+          options={(['sans', 'serif', 'mono'] as const).map((font) => ({ value: font, label: t(`writer.focus.font.${font}`) }))}
+          onSelect={(font) => void changeWriterSettings({ font }).catch(() => setWriterError(true))}
+        />
+      </div>
+      <label className="settings__row">
+        <span>
+          {t('settings.writerTypewriter')}
+          <small className="muted">{t('settings.writerTypewriterHint')}</small>
+        </span>
+        <input
+          type="checkbox"
+          data-testid="writer-typewriter"
+          checked={language.writerTypewriter !== false}
+          onChange={(e) => void changeWriterSettings({ typewriter: e.target.checked }).catch(() => setWriterError(true))}
+          aria-label={t('settings.writerTypewriter')}
+        />
+      </label>
+      <p className="muted small" data-testid="writer-focus-hint">{t('settings.writerFocusHint')}</p>
+      {onCreateWork ? (
+        <div className="settings__row">
+          <span>
+            {t('settings.workCreate')}
+            <small className="muted">{t('settings.workCreateHint')}</small>
+          </span>
+          <button data-testid="work-create" onClick={() => onCreateWork()}>
+            {t('settings.workCreate')}
+          </button>
+        </div>
+      ) : null}
+      {writerError ? <p className="error" role="alert">{t('settings.writer.error')}</p> : null}
+    </>
+  );
+
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog settings" role="dialog" aria-modal="true" aria-label={t('settings.title')}>
@@ -144,173 +291,120 @@ export function SettingsDialog({ theme, onTheme, onClose, onOpenSync, onOpenShor
             ×
           </button>
         </header>
-        <div className="settings__body">
-          <section>
-            <h3>{t('settings.appearance')}</h3>
-            <div className="settings__row">
-              <span>{t('settings.theme')}</span>
-              <RadioSeg
-                label={t('settings.theme')}
-                value={theme}
-                options={(['system', 'light', 'dark'] as const).map((choice) => ({ value: choice, label: t(THEME_KEY[choice]) }))}
-                onSelect={(choice) => {
-                  applyTheme(choice);
-                  onTheme(choice);
+        <div className="settings__main">
+          <div className="settings__rail" role="tablist" aria-orientation="vertical" aria-label={t('settings.sections')} onKeyDown={onRailKeyDown}>
+            {pages.map(({ id, icon }) => (
+              <button
+                key={id}
+                ref={(node) => {
+                  tabRefs.current.set(id, node);
                 }}
-              />
-            </div>
-            <div className="settings__row">
-              <span>{t('settings.language')}</span>
-              <RadioSeg
-                label={t('settings.language')}
-                value={language.setting}
-                options={(['system', 'ko', 'en'] as const).map((option) => ({ value: option, label: t(LANGUAGE_KEY[option]) }))}
-                onSelect={(option) => chooseLanguage(option)}
-              />
-            </div>
-            {languageError ? <p className="error" role="alert">{t('settings.language.error')}</p> : null}
-            <label className="settings__row">
-              <span>{t('settings.fontSize')}</span>
-              <select value={prefs.fontSize} onChange={(e) => set({ fontSize: Number(e.target.value) })} aria-label={t('settings.fontSize')}>
-                {FONT_SIZES.map((n) => (
-                  <option key={n} value={n}>
-                    {n === 16 ? t('settings.fontSizeDefault', { size: n }) : t('settings.fontSizeValue', { size: n })}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="settings__row">
-              <span>{t('settings.width')}</span>
-              <div className="seg" role="radiogroup" aria-label={t('settings.width')}>
-                {(['normal', 'wide', 'full'] as const).map((width) => (
-                  <button key={width} role="radio" aria-checked={prefs.width === width} className={prefs.width === width ? 'on' : ''} onClick={() => set({ width })}>
-                    {t(`settings.width.${width}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-          <section>
-            <h3>{t('settings.writer')}</h3>
-            <label className="settings__row">
-              <span>
-                {t('settings.writerMode')}
-                <small className="muted">{t('settings.writerModeHint')}</small>
-              </span>
-              <input
-                type="checkbox"
-                data-testid="writer-mode"
-                checked={language.writerMode === true}
-                onChange={(e) => void changeWriterSettings({ mode: e.target.checked }).catch(() => setWriterError(true))}
-                aria-label={t('settings.writerMode')}
-              />
-            </label>
-            {language.writerMode === true && (
+                type="button"
+                role="tab"
+                id={tabId(id)}
+                aria-selected={active === id}
+                aria-controls={panelId(id)}
+                tabIndex={active === id ? 0 : -1}
+                className={active === id ? 'settings__tab is-active' : 'settings__tab'}
+                data-testid={`settings-tab-${id}`}
+                aria-label={t(PAGE_KEY[id])}
+                title={t(PAGE_KEY[id])}
+                onClick={() => selectPage(id)}
+              >
+                <span className="settings__tabicon" aria-hidden>
+                  {icon}
+                </span>
+                <span className="settings__tablabel">{t(PAGE_KEY[id])}</span>
+                {id === 'writer' && <span className="settings__tabdot" aria-hidden />}
+              </button>
+            ))}
+          </div>
+          <div className="settings__pages">
+            {panel(
+              'general',
+              t('settings.page.general'),
+              <>
+                {languageRow}
+                {languageError ? <p className="error" role="alert">{t('settings.language.error')}</p> : null}
+                {writerModeRow}
+                {writerError ? <p className="error" role="alert">{t('settings.writer.error')}</p> : null}
+              </>,
+            )}
+            {panel(
+              'editing',
+              t('settings.page.editing'),
               <label className="settings__row">
                 <span>
-                  {t('settings.writerDailyGoal')}
-                  <small className="muted">{t('settings.writerDailyGoalHint')}</small>
+                  {t('settings.titleSync')}
+                  <small className="muted">{t('settings.titleSyncHint')}</small>
                 </span>
-                <input
-                  type="number"
-                  min={1}
-                  inputMode="numeric"
-                  className="settings__input"
-                  data-testid="writer-daily-goal"
-                  aria-label={t('settings.writerDailyGoal')}
-                  value={language.writerDailyGoal ?? ''}
-                  onChange={(e) => {
-                    const value = Number(e.target.value);
-                    void changeWriterSettings({ dailyGoal: Number.isFinite(value) && value > 0 ? Math.floor(value) : null }).catch(() => setWriterError(true));
-                  }}
-                />
-              </label>
+                <input type="checkbox" checked={prefs.titleSync} onChange={(e) => set({ titleSync: e.target.checked })} aria-label={t('settings.titleSync')} />
+              </label>,
             )}
-            {language.writerMode === true && (
-              <label className="settings__row">
-                <span>
-                  {t('settings.writerPaperCount')}
-                  <small className="muted">{t('settings.writerPaperCountHint')}</small>
-                </span>
-                <input
-                  type="checkbox"
-                  data-testid="writer-paper-count"
-                  checked={language.writerPaperCount === true}
-                  onChange={(e) => void changeWriterSettings({ paperCount: e.target.checked }).catch(() => setWriterError(true))}
-                  aria-label={t('settings.writerPaperCount')}
-                />
-              </label>
-            )}
-            {language.writerMode === true && (
-              <div className="settings__row">
-                <span>{t('settings.writerSpacing')}</span>
-                <RadioSeg
-                  label={t('settings.writerSpacing')}
-                  value={language.writerSpacing ?? 'include'}
-                  options={(['include', 'exclude'] as const).map((option) => ({ value: option, label: t(`settings.writerSpacing.${option}`) }))}
-                  onSelect={(option) => void changeWriterSettings({ spacing: option }).catch(() => setWriterError(true))}
-                />
-              </div>
-            )}
-            {language.writerMode === true && (
+            {panel(
+              'appearance',
+              t('settings.page.appearance'),
               <>
                 <div className="settings__row">
-                  <span>{t('settings.writerFont')}</span>
+                  <span>{t('settings.theme')}</span>
                   <RadioSeg
-                    label={t('settings.writerFont')}
-                    value={language.writerFont ?? 'sans'}
-                    options={(['sans', 'serif', 'mono'] as const).map((font) => ({ value: font, label: t(`writer.focus.font.${font}`) }))}
-                    onSelect={(font) => void changeWriterSettings({ font }).catch(() => setWriterError(true))}
+                    label={t('settings.theme')}
+                    value={theme}
+                    options={(['system', 'light', 'dark'] as const).map((choice) => ({ value: choice, label: t(THEME_KEY[choice]) }))}
+                    onSelect={(choice) => {
+                      applyTheme(choice);
+                      onTheme(choice);
+                    }}
                   />
                 </div>
                 <label className="settings__row">
-                  <span>
-                    {t('settings.writerTypewriter')}
-                    <small className="muted">{t('settings.writerTypewriterHint')}</small>
-                  </span>
-                  <input
-                    type="checkbox"
-                    data-testid="writer-typewriter"
-                    checked={language.writerTypewriter !== false}
-                    onChange={(e) => void changeWriterSettings({ typewriter: e.target.checked }).catch(() => setWriterError(true))}
-                    aria-label={t('settings.writerTypewriter')}
-                  />
+                  <span>{t('settings.fontSize')}</span>
+                  <select value={prefs.fontSize} onChange={(e) => set({ fontSize: Number(e.target.value) })} aria-label={t('settings.fontSize')}>
+                    {FONT_SIZES.map((n) => (
+                      <option key={n} value={n}>
+                        {n === 16 ? t('settings.fontSizeDefault', { size: n }) : t('settings.fontSizeValue', { size: n })}
+                      </option>
+                    ))}
+                  </select>
                 </label>
-                <p className="muted small" data-testid="writer-focus-hint">{t('settings.writerFocusHint')}</p>
-              </>
+                <div className="settings__row">
+                  <span>{t('settings.width')}</span>
+                  <div className="seg" role="radiogroup" aria-label={t('settings.width')}>
+                    {(['normal', 'wide', 'full'] as const).map((width) => (
+                      <button key={width} role="radio" aria-checked={prefs.width === width} className={prefs.width === width ? 'on' : ''} onClick={() => set({ width })}>
+                        {t(`settings.width.${width}`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>,
             )}
-            {language.writerMode === true && onCreateWork ? (
-              <div className="settings__row">
-                <span>
-                  {t('settings.workCreate')}
-                  <small className="muted">{t('settings.workCreateHint')}</small>
-                </span>
-                <button data-testid="work-create" onClick={() => onCreateWork()}>
-                  {t('settings.workCreate')}
-                </button>
-              </div>
-            ) : null}
-            {writerError ? <p className="error" role="alert">{t('settings.writer.error')}</p> : null}
-          </section>
-          <section>
-            <h3>{t('settings.editing')}</h3>
-            <label className="settings__row">
-              <span>
-                {t('settings.titleSync')}
-                <small className="muted">{t('settings.titleSyncHint')}</small>
-              </span>
-              <input type="checkbox" checked={prefs.titleSync} onChange={(e) => set({ titleSync: e.target.checked })} aria-label={t('settings.titleSync')} />
-            </label>
-          </section>
-          <McpSettings onOpenNote={(p) => { onOpenNote(p); onClose(); }} onReverted={onReverted} />
-          <section>
-            <h3>{t('settings.vault')}</h3>
-            <div className="settings__links">
-              <button onClick={onOpenSync}>☁ {t('settings.vault.sync')}</button>
-              <button onClick={onOpenTrash}>🗑 {t('settings.vault.trash')}</button>
-              <button onClick={onOpenShortcuts}>⌨ {t('settings.vault.shortcuts', { key: keys('F1') })}</button>
-            </div>
-          </section>
+            {writerOn && panel('writer', t('settings.page.writer'), writerPage)}
+            {panel(
+              'sync',
+              t('settings.page.sync'),
+              <div className="settings__links">
+                <button onClick={onOpenSync}>☁ {t('settings.vault.sync')}</button>
+              </div>,
+            )}
+            {panel(
+              'shortcuts',
+              t('settings.page.shortcuts'),
+              <div className="settings__links">
+                <button onClick={onOpenShortcuts}>⌨ {t('settings.vault.shortcuts', { key: keys('F1') })}</button>
+              </div>,
+            )}
+            {panel(
+              'advanced',
+              t('settings.page.advanced'),
+              <>
+                <McpSettings onOpenNote={(p) => { onOpenNote(p); onClose(); }} onReverted={onReverted} />
+                <div className="settings__links">
+                  <button onClick={onOpenTrash}>🗑 {t('settings.vault.trash')}</button>
+                </div>
+              </>,
+            )}
+          </div>
         </div>
       </div>
     </div>

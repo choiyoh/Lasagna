@@ -3,6 +3,7 @@ import {chmodSync, mkdirSync, mkdtempSync, rmSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { waitForWatcher, writeExternalNote } from './watcher';
+import { selectSettingsPage } from './settings';
 
 // L4a 영어 스모크: MCP 설정 화면 문구가 영어이고, 복사 스니펫의 명령·키는 그대로인지 확인한다.
 const HANGUL = /[\u3131-\u318e\uac00-\ud7a3]/;
@@ -68,6 +69,7 @@ test('English smoke: MCP settings and command palette, snippet command unchanged
 
   // 설정 → MCP
   await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, '연결·고급');
   const mcp = page.getByTestId('mcp-settings');
   await expect(mcp).toBeVisible();
   await expect(mcp).toContainText('Connect an AI agent (MCP)');
@@ -115,15 +117,20 @@ test('깨진 정책 파일·빈 폴더도 화면 언어로 안내한다', async 
   const englishRadio = page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: 'English' });
   const koreanRadio = page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: '한국어' });
   await englishRadio.click();
+  await selectSettingsPage(page, '연결·고급');
   const mcp = page.getByTestId('mcp-settings');
   await expect(mcp).toContainText('The policy file is not valid JSON');
   expect(await mcp.innerText()).not.toMatch(HANGUL);
 
   // 한국어로 바꾸면 base 문구, 다시 영어로 바꾸면 영어 (혼합 언어·자리표시자 리터럴 없음)
+  await selectSettingsPage(page, '일반');
   await koreanRadio.click();
+  await selectSettingsPage(page, '연결·고급');
   await expect(mcp).toContainText('정책 파일이 올바른 JSON 이 아니에요');
   expect(await mcp.innerText()).not.toMatch(/policy file/);
+  await selectSettingsPage(page, '일반');
   await englishRadio.click();
+  await selectSettingsPage(page, '연결·고급');
   await expect(mcp).toContainText('The policy file is not valid JSON');
   expect(await mcp.innerText()).not.toMatch(HANGUL);
   // 경고·안내 문구(스니펫 JSON 은 제외)에 자리표시자 리터럴이 없다
@@ -138,11 +145,15 @@ test('깨진 정책 파일·빈 폴더도 화면 언어로 안내한다', async 
   await openVaultIfNeeded(page);
   await page.getByTestId('settings-btn').click();
   await englishRadio.click();
+  await selectSettingsPage(page, '연결·고급');
   const mcp2 = page.getByTestId('mcp-settings');
   await expect(mcp2).toContainText('The policy file has the wrong shape');
   expect(await mcp2.innerText()).not.toMatch(HANGUL);
+  await selectSettingsPage(page, '일반');
   await koreanRadio.click();
+  await selectSettingsPage(page, '연결·고급');
   await expect(mcp2).toContainText('정책 파일 형식이 올바르지 않아요');
+  await selectSettingsPage(page, '일반');
   await englishRadio.click();
 
   // 읽을 수 없는 정책 파일(권한)도 영어/한국어 안내
@@ -152,25 +163,34 @@ test('깨진 정책 파일·빈 폴더도 화면 언어로 안내한다', async 
     await openVaultIfNeeded(page);
     await page.getByTestId('settings-btn').click();
     await englishRadio.click();
+    await selectSettingsPage(page, '연결·고급');
     const unreadable = page.getByTestId('mcp-settings');
     await expect(unreadable).toContainText('Could not read the policy file');
     expect(await unreadable.locator('[data-testid="mcp-policy-warning"]').first().innerText()).not.toMatch(HANGUL);
+    await selectSettingsPage(page, '일반');
     await koreanRadio.click();
+    await selectSettingsPage(page, '연결·고급');
     await expect(page.getByTestId('mcp-settings')).toContainText('정책 파일을 읽을 수 없어요');
+    await selectSettingsPage(page, '일반');
     await englishRadio.click();
   } finally {
     chmodSync(path.join(vaultDir, '.nopsidian', 'mcp-policy.json'), 0o644);
   }
 
   // 쓰기를 켠 채 폴더를 비우면 폴더 이름이 문장에 채워지고 {…} 리터럴이 없다(영→한→영)
+  await selectSettingsPage(page, '연결·고급');
   await mcp2.getByRole('checkbox', { name: 'Let agents write notes' }).check();
   await mcp2.getByLabel('Folders agents can write').fill('');
   const warn = () => mcp2.locator('[data-testid="mcp-policy-warning"], [data-testid="mcp-folder-warning"]').first().innerText();
   expect(await warn()).not.toMatch(/[{}]/);
+  await selectSettingsPage(page, '일반');
   await koreanRadio.click();
+  await selectSettingsPage(page, '연결·고급');
   expect(await warn()).not.toMatch(/[{}]/);
   expect(await mcp2.locator('[data-testid="mcp-folder-warning"]').first().innerText()).toContain('쓸 폴더를 입력하세요');
+  await selectSettingsPage(page, '일반');
   await englishRadio.click();
+  await selectSettingsPage(page, '연결·고급');
   expect(await warn()).not.toMatch(/[{}]/);
   expect(await warn()).not.toMatch(HANGUL);
   await page.keyboard.press('Escape');
@@ -183,6 +203,7 @@ test('잘못된 폴더·VSCode 탭·복사·언어 전환이 모두 화면 언�
   await page.getByRole('radiogroup', { name: /Language|언어/ }).getByRole('radio', { name: 'English' }).click();
   await page.keyboard.press('Escape');
   await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, '연결·고급');
   const mcp = page.getByTestId('mcp-settings');
 
   // VSCode 탭: 경로는 그대로, 설명만 번역
@@ -206,11 +227,15 @@ test('잘못된 폴더·VSCode 탭·복사·언어 전환이 모두 화면 언�
   expect(await warning.innerText()).not.toMatch(HANGUL);
 
   // 같은 설정 창 안에서 언어만 바꾼다 — 상태 문구가 즉시 새 언어로 바뀌어야 한다
+  await selectSettingsPage(page, '일반');
   await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: '한국어' }).click();
+  await selectSettingsPage(page, '연결·고급');
   await expect(mcp.locator('[data-testid="mcp-folder-warning"]')).toContainText('쓰기 폴더로 쓸 수 없는 경로예요');
   // 한국어 경고에 영어가 섞이지 않는다
   expect(await mcp.locator('[data-testid="mcp-folder-warning"]').innerText()).not.toMatch(/Fix|folder|can’t/);
+  await selectSettingsPage(page, '일반');
   await page.getByRole('radiogroup', { name: '언어' }).getByRole('radio', { name: 'English' }).click();
+  await selectSettingsPage(page, '연결·고급');
   const enWarning = await mcp.locator('[data-testid="mcp-folder-warning"]').innerText();
   expect(enWarning).toContain('Fix the folder “../bad” first');
   expect(enWarning).not.toMatch(HANGUL);

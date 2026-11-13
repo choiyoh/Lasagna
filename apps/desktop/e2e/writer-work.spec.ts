@@ -1,4 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import { selectSettingsPage } from './settings';
 import {mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -96,6 +97,7 @@ async function prompt(page: Page, text: string): Promise<void> {
 
 async function createWork(page: Page, name: string, kind: 'serial' | 'publish' = 'serial'): Promise<void> {
   await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, '작가 모드');
   await page.getByTestId('work-create').click();
   await expect(page.getByTestId('work-dialog')).toBeVisible();
   await page.getByTestId('work-dialog-name').fill(name);
@@ -178,6 +180,7 @@ test('쓸 수 없는 이름은 대화상자에서 거부하고 아무것도 만�
   await resetWriter(page);
   const before = readdirSync(vaultDir).sort();
   await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, '작가 모드');
   await page.getByTestId('work-create').click();
   await page.getByTestId('work-dialog-name').fill('가/나');
   await page.getByTestId('work-dialog-create').click();
@@ -254,6 +257,7 @@ test('이름이 비면 오류를 보여 주고 구조 선택은 유지된다', a
   await openVaultIfNeeded(page);
   await resetWriter(page);
   await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, '작가 모드');
   await page.getByTestId('work-create').click();
   await page.getByTestId('work-structure-publish').click();
   await expect(page.getByTestId('work-structure-publish')).toHaveAttribute('aria-checked', 'true');

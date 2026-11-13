@@ -55,6 +55,100 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const episodeData = (): DbData => ({
+  folder: '작품/회차',
+  schema: {
+    version: 1,
+    rowsFolder: '.',
+    properties: {
+      회차: { type: 'number', format: 'number' },
+      상태: { type: 'status', options: [{ name: '초고', group: 'todo' }, { name: '퇴고', group: 'doing' }] },
+      '목표 달성': { type: 'formula', expr: 'goal_met()' },
+      수정일: { type: 'updated_time' },
+    },
+    views: [],
+    templates: [],
+  },
+  issues: [],
+  view: { id: 'v1', name: '전체', type: 'table', sort: [], columns: ['회차', 'title', '상태', '목표 달성', '수정일'] },
+  total: 3,
+  matched: 0,
+  rows: [],
+  groups: null,
+  calc: {},
+  errors: {},
+});
+
+describe('회차 DB 표시(episode)', () => {
+  it('상태는 칩으로 보이고, 누르면 드롭다운 편집기가 열린다', () => {
+    const rows: DbRowDto[] = [{ path: 'r1.md', title: '1화', values: { 상태: '초고', '목표 달성': true, 수정일: new Date(2026, 10, 13, 14, 5).toISOString() } }];
+    render(
+      <TableView
+        data={episodeData()}
+        rows={rows}
+        episode
+        onOpen={() => undefined}
+        onEdit={() => undefined}
+        onWidth={() => undefined}
+        notes={[]}
+      />,
+    );
+    const cell = container.querySelector<HTMLElement>('[role="cell"][data-prop="상태"]')!;
+    expect(cell.querySelector('.chip')?.textContent).toBe('초고');
+    expect(cell.querySelector('select')).toBeNull();
+    act(() => cell.click());
+    expect(cell.querySelector('select')).not.toBeNull();
+  });
+
+  it('수정일은 사람이 읽는 형식, goal_met 은 달성/미달/목표 없음 3상태', () => {
+    const rows: DbRowDto[] = [
+      { path: 'r1.md', title: '1화', values: { 상태: '초고', '목표 달성': true, 수정일: new Date(2026, 10, 13, 14, 5).toISOString() } },
+      { path: 'r2.md', title: '2화', values: { 상태: '초고', '목표 달성': false, 수정일: new Date(2026, 10, 13, 14, 6).toISOString() } },
+      { path: 'r3.md', title: '3화', values: { 상태: '초고', '목표 달성': null, 수정일: new Date(2026, 10, 13, 14, 7).toISOString() } },
+    ];
+    render(
+      <TableView
+        data={episodeData()}
+        rows={rows}
+        episode
+        onOpen={() => undefined}
+        onEdit={() => undefined}
+        onWidth={() => undefined}
+        notes={[]}
+      />,
+    );
+    const goal = (title: string) =>
+      [...container.querySelectorAll('.dbtable__row')]
+        .find((el) => el.textContent?.includes(title))!
+        .querySelector('[role="cell"][data-prop="목표 달성"]')!.textContent;
+    expect(goal('1화')).toBe('달성');
+    expect(goal('2화')).toBe('미달');
+    expect(goal('3화')).toBe('—');
+    const updated = container.querySelector('[role="cell"][data-prop="수정일"]')!.textContent;
+    expect(updated).toBe('2026-11-13 14:05');
+  });
+
+  it('일반 DB 는 상태 선택기와 수정일 원문 표시가 그대로다', () => {
+    const general = episodeData();
+    general.folder = '일반DB';
+    const rows: DbRowDto[] = [{ path: 'g1.md', title: '행1', values: { 상태: '초고', 수정일: new Date(2026, 10, 13, 14, 5).toISOString() } }];
+    render(
+      <TableView
+        data={general}
+        rows={rows}
+        onOpen={() => undefined}
+        onEdit={() => undefined}
+        onWidth={() => undefined}
+        notes={[]}
+      />,
+    );
+    const cell = container.querySelector<HTMLElement>('[role="cell"][data-prop="상태"]')!;
+    expect(cell.querySelector('select')).not.toBeNull();
+    expect(cell.querySelector('.chip')).toBeNull();
+    expect(container.querySelector('[role="cell"][data-prop="수정일"]')!.textContent).toContain('T');
+  });
+});
+
 describe('TableView', () => {
   it('0행이어도 헤더와 열 메뉴를 남기고 빈 상태를 본문에 그린다', () => {
     const onSort = vi.fn();

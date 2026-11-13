@@ -588,7 +588,7 @@ export function useEntryActions(deps: EntryActionDeps) {
         await ensure(cols.goal, { type: 'formula', expr: 'goal_met()' });
         await ensure(cols.updated, { type: 'updated_time' });
         const calc = { [cols.chars]: 'sum', [cols.goal]: 'checked' };
-        const columns = ['title', cols.episode, cols.status, cols.chars, cols.goal, cols.updated];
+        const columns = [cols.episode, 'title', cols.status, cols.chars, cols.goal, cols.updated];
         const sort = [{ prop: cols.episode, dir: 'desc' }];
         // 기본 v1 을 '전체' 정의로 덮어써 첫 화면부터 회차 내림차순·합계·제목 열이 보이게 한다.
         await window.nops.db

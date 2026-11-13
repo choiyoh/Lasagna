@@ -361,6 +361,10 @@ html[lang='en'] .dockbody__tabs { flex-wrap: wrap; row-gap: 2px; }
 .dbtable__td input[type='text'], .dbtable__td select { width: 100%; box-sizing: border-box; }
 .dbtable__td.editing { background: var(--bg); outline: 2px solid var(--accent); outline-offset: -2px; }
 .dbtable__title { color: var(--accent); font-weight: 600; text-align: left; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.cell__goal { font-variant-numeric: tabular-nums; }
+.cell__goal.met { color: var(--accent); font-weight: 600; }
+.cell__goal.miss { color: var(--warn); }
+.cell__goal.none { color: var(--muted); }
 .dbtable__calc { display: flex; border-top: 1px solid var(--border); background: var(--bg-side); }
 .chip { display: inline-block; padding: 0 8px; margin-right: 4px; border-radius: 10px; background: var(--hover); font-size: 12px; line-height: 20px; }
 .chip.on { background: var(--accent); color: var(--on-accent); }

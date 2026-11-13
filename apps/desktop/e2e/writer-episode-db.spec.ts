@@ -228,3 +228,45 @@ test('영어 회차 DB 도 뷰 4개와 합계 행(총 글자수·n/m)이 보인�
   await expect(page.locator('.dbtable__calc')).toContainText('2');
   await expect(page.locator('.dbtable__calc')).toContainText('1/1');
 });
+
+test('회차 DB 다듬기: 새 열 순서·상태 칩 편집·수정일 형식·goal_met 3상태', async () => {
+  const page = await app.firstWindow();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openVaultIfNeeded(page);
+  await resetWriter(page, 'ko');
+  await page.getByRole('tab', { name: /파일|Files/ }).click();
+
+  // 1) 새 회차 DB 의 기본 열 순서는 회차 → 제목 …
+  await createWork(page, '순서작');
+  const dbFile = path.join(vaultDir, '순서작', '회차', '_db.yaml');
+  await (await workCard(page, '순서작')).getByTestId('work-chip-db').click();
+  await expect(page.getByTestId('db-screen')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('th-회차')).toBeVisible({ timeout: 15_000 });
+  const headers = await page.locator('.dbtable__head [role="columnheader"]').evaluateAll((els) => els.map((el) => el.getAttribute('data-prop')));
+  expect(headers.slice(0, 2)).toEqual(['회차', 'title']);
+
+  // 2) 상태는 색 칩으로 보이고, 눌러서 값(초고→퇴고)을 바꾸면 파일에 저장된다
+  await page.getByRole('button', { name: /\+ 첫 회차/ }).click();
+  const firstRow = page.getByTestId('db-table').locator('.dbtable__row').first();
+  const statusCell = firstRow.locator('[role="cell"][data-prop="상태"]');
+  await expect(statusCell.locator('.chip')).toHaveText('초고', { timeout: 15_000 });
+  await statusCell.click();
+  await statusCell.locator('select').selectOption('퇴고');
+  await expect(statusCell.locator('.chip')).toHaveText('퇴고');
+  const episodeFile = path.join(vaultDir, '순서작', '회차', '1화.md');
+  await expect.poll(() => readFileSync(episodeFile, 'utf8').includes('퇴고'), { timeout: 15_000 }).toBe(true);
+
+  // 3) 수정일은 ISO 대신 사람이 읽는 형식(YYYY-MM-DD HH:mm)
+  const updated = firstRow.locator('[role="cell"][data-prop="수정일"]');
+  await expect(updated).toHaveText(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+
+  // 4) goal_met 3상태: 달성 / 미달 / 목표 없음
+  writeExternalNote(episodeFile, '---\ngoal_chars: 1\nstatus: 퇴고\n---\n# 1화\n\n본문\n');
+  writeExternalNote(path.join(vaultDir, '순서작', '회차', '2화.md'), '---\ngoal_chars: 9999\n---\n# 2화\n');
+  writeExternalNote(path.join(vaultDir, '순서작', '회차', '3화.md'), '# 3화\n');
+  const goalCell = (title: string) => page.getByTestId('db-table').locator('.dbtable__row', { hasText: title }).locator('[role="cell"][data-prop="목표 달성"]');
+  await expect(goalCell('1화')).toHaveText('달성', { timeout: 15_000 });
+  await expect(goalCell('2화')).toHaveText('미달');
+  await expect(goalCell('3화')).toHaveText('—');
+  void dbFile;
+});

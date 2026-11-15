@@ -45,10 +45,12 @@ const editor = (page: Page) => page.locator('.ProseMirror:visible');
 
 /** 본문에서 낱말을 선택(브라우저 선택 영역)하고 팔레트에서 색을 고른다. */
 async function selectWord(page: Page, word: string): Promise<void> {
-  await page.evaluate((w) => {
+  await page.evaluate(async (w) => {
     const pm = [...document.querySelectorAll('.ProseMirror')].find((el) => el.getClientRects().length > 0);
     if (!pm) throw new Error('editor not visible');
     (pm as HTMLElement).focus();
+    // 포커스를 받으면 에디터가 자기 선택을 DOM 에 다시 적용할 수 있어 한 프레임 뒤에 선택한다.
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
     const walker = document.createTreeWalker(pm, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const at = (node.textContent ?? '').indexOf(w);
@@ -80,6 +82,7 @@ test.beforeAll(async () => {
   mkdirSync(vaultDir, { recursive: true });
   writeExternalNote(path.join(vaultDir, '색.md'), '# 색\n\n빨강\n\n파랑\n');
   writeExternalNote(path.join(vaultDir, '다른.md'), '# 다른\n\n본문\n');
+  writeExternalNote(path.join(vaultDir, '입력.md'), '# 입력\n\n낱말\n');
   app = await launch();
 });
 
@@ -158,7 +161,7 @@ test('마우스로 열어도 Tab 이 팔레트 안에서만 돌고, 닫으면 �
   await expect(page.getByTestId('text-color-red')).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('color-palette')).toHaveCount(0);
-  await expect(page.getByTestId('text-color')).toBeFocused();
+  await expect(editor(page)).toBeFocused();
   await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15_000 }).toContain('<span style="color:#c0392b">파랑</span>');
   // 닫힌 뒤에도 선택이 남아 있어 바로 다시 색을 줄 수 있다
   await expect(page.getByTestId('text-color')).toBeEnabled();
@@ -169,4 +172,39 @@ test('마우스로 열어도 Tab 이 팔레트 안에서만 돌고, 닫으면 �
   await expect(page.getByTestId('color-palette')).toHaveCount(0);
   await expect(page.getByTestId('text-color')).toBeFocused();
   await expect(page.getByTestId('text-color')).toBeEnabled();
+});
+
+test('색을 적용한 직후 바로 타이핑하면 편집기에 들어간다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await page.locator('aside.sidebar').getByRole('button', { name: '입력', exact: true }).click();
+  await expect(editor(page).locator('h1')).toHaveText('입력');
+  await page.waitForTimeout(300);
+  const file = path.join(vaultDir, '입력.md');
+
+  await paint(page, '낱말', 'green');
+  await expect(editor(page)).toBeFocused();
+  await page.keyboard.type('ZZ');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15_000 }).toContain('ZZ');
+});
+
+test('팔레트 Esc 직후 같은 틱에 ⌘P 를 눌러도 명령 팔레트가 초점을 갖는다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await page.locator('aside.sidebar').getByRole('button', { name: '색', exact: true }).click();
+  await expect(editor(page).locator('h1')).toHaveText('색');
+  await page.waitForTimeout(300);
+
+  await selectWord(page, '파랑');
+  await page.getByTestId('text-color').click();
+  await expect(page.getByTestId('color-palette')).toBeVisible();
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', metaKey: true, ctrlKey: true, bubbles: true }));
+  });
+  const palette = page.getByTestId('command-palette');
+  await expect(palette).toBeVisible();
+  await expect(palette.locator('input')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(palette).toHaveCount(0);
 });

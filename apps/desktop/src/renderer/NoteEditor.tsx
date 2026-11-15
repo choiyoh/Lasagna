@@ -16,6 +16,7 @@ import { basisChars, goalProgress, goalText, presetHintBasis, todayText } from '
 import { editorTotalStats } from '@nopsidian/editor/nops';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
+import { canRestoreFocus } from './focus-guard';
 import type { DbEmbedHost } from './db/EmbeddedDb';
 import { relativePath, vaultUrl } from '@nopsidian/core/assets';
 import { TextSelection } from 'prosemirror-state';
@@ -915,10 +916,28 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     return () => document.removeEventListener('selectionchange', update);
   }, [mode, path, epoch]);
 
-  /** 팔레트를 닫고 초점을 연 버튼으로 돌려준다(선택 영역은 그대로 둔다). */
-  const closeColorPicker = useCallback(() => {
+  /**
+   * 팔레트를 닫는다. 색을 적용했으면 편집기로(선택 복원), Esc·마스크면 버튼으로 초점을 돌린다.
+   * rAF 시점에 다른 overlay 가 열렸으면(같은 틱 ⌘P 등) 복귀를 생략한다.
+   */
+  const closeColorPicker = useCallback((returnTo: 'editor' | 'button' = 'button', restore?: { from: number; to: number }) => {
     setColorPicker(null);
-    requestAnimationFrame(() => colorBtnRef.current?.focus());
+    requestAnimationFrame(() => {
+      if (returnTo === 'editor') {
+        const view = editorRef.current?.getView();
+        if (!view) return;
+        if (restore && restore.to > restore.from) {
+          const size = view.state.doc.content.size;
+          const from = Math.min(restore.from, size);
+          const to = Math.min(restore.to, size);
+          view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to)));
+        }
+        view.focus();
+        return;
+      }
+      if (!canRestoreFocus()) return;
+      if (colorBtnRef.current && !colorBtnRef.current.disabled) colorBtnRef.current.focus();
+    });
   }, []);
 
   // 팔레트가 열려 있으면 Esc 로 닫고, Tab 은 팔레트 안에서만 돈다(배경 버튼으로 새지 않게).
@@ -969,9 +988,11 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         const tr = view.state.tr.removeMark(from, to, type);
         if (color) tr.addMark(from, to, type.create({ color }));
         view.dispatch(tr);
+        closeColorPicker('editor', { from, to });
+        return;
       }
     }
-    closeColorPicker();
+    closeColorPicker('button');
   };
 
   // 같은 노트가 열린 채로 이동할 곳이 바뀌면(노트 안 링크 클릭 등) 그 자리로 옮긴다.

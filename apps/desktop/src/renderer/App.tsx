@@ -48,6 +48,7 @@ import { linkNameFor } from './link-host';
 import { QuickSwitcher, type SearchScope } from './QuickSwitcher';
 import { CommandPalette, type PaletteCommand } from './CommandPalette';
 import { SidebarMenu, type SidebarMenuItem } from './SidebarMenu';
+import { canRestoreFocus } from './focus-guard';
 import { TagPanel } from './TagPanel';
 import { dockAvailable, loadDockMode, nextDockMode, resolveDockOpen, saveDockMode, type DockMode } from './dock';
 import { MoreIcon, PlusIcon, SearchIcon, SettingsIcon, TrashIcon } from './icons';
@@ -99,11 +100,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const closeSettings = useCallback(() => {
     setSettingsOpen(false);
     requestAnimationFrame(() => {
-      if (document.querySelector('.dialog-backdrop, .switcher, .nops-prompt, .ctxmask')) return;
-      const active = document.activeElement;
-      if (active instanceof HTMLElement && (active.isContentEditable || active.closest('.dialog-backdrop, .switcher, .nops-prompt'))) return;
-      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement) return;
-      settingsBtnRef.current?.focus();
+      if (canRestoreFocus()) settingsBtnRef.current?.focus();
     });
   }, []);
   /** 작품 만들기 대화상자(이름+구조). 설정·사이드바가 같은 것을 연다 */

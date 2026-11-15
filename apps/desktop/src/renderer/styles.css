@@ -120,6 +120,20 @@ button.link { color: var(--muted); }
 .note-editor__mode { padding: 3px 8px; border: 0; border-radius: var(--radius); color: var(--muted); background: transparent; }
 .note-editor__mode:hover { color: var(--fg); background: var(--hover); }
 .note-editor__mode[aria-pressed='true'] { color: var(--accent); background: var(--hover); }
+.note-editor__mode:disabled { opacity: 0.45; cursor: default; }
+/* 글씨색 팔레트(선택 영역에 적용) */
+.colorpop__mask { position: fixed; inset: 0; z-index: 40; }
+.colorpop { position: fixed; z-index: 41; width: 196px; display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22); }
+.colorpop__swatches { display: flex; gap: 6px; }
+.colorpop__swatch { width: 24px; height: 24px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--fg) 20%, transparent); }
+.colorpop__swatch:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+.colorpop__default { padding: 6px 8px; border-radius: 6px; font-size: 12.5px; color: var(--fg); text-align: left; }
+.colorpop__default:hover { background: var(--hover); }
+/* 파일에는 고정 hex 로 저장하고, 어두운 화면에서만 읽히도록 표시 색을 밝힌다(파일 불변). */
+:root[data-theme='dark'] .ProseMirror .nops-color { filter: brightness(1.45); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .ProseMirror .nops-color { filter: brightness(1.45); }
+}
 .note-editor__source { min-height: 60vh; }
 .note-editor__source[hidden], .note-editor__host[hidden] { display: none; }
 .note-editor__status[data-state='error'] { color: var(--danger); }

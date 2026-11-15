@@ -3,6 +3,7 @@ import type { MarkSpec, NodeSpec } from 'prosemirror-model';
 import { tableNodes } from 'prosemirror-tables';
 
 import { marks as baseMarks, nodes as baseNodes } from '@oh-new-editor/core';
+import { colorFromStyle } from './text-color';
 
 /**
  * Nopsidian 스키마 = 업스트림 기본 노드 + 콜아웃·토글·열·위키링크·임베드·수식·원문 보존 노드 + 표.
@@ -267,6 +268,22 @@ const highlight: MarkSpec = {
   toDOM: () => ['mark', 0]
 };
 
+/** 글씨색: 파일에는 `<span style="color:#RRGGBB">` 로 저장하고, 화면에서는 같은 값을 인라인 색으로 쓴다. */
+const textColor: MarkSpec = {
+  attrs: { color: {} },
+  inclusive: false,
+  parseDOM: [
+    {
+      tag: 'span[style]',
+      getAttrs: (dom) => {
+        const color = colorFromStyle((dom as HTMLElement).getAttribute('style') ?? '');
+        return color ? { color } : false;
+      }
+    }
+  ],
+  toDOM: (mark) => ['span', { style: `color:${mark.attrs.color}`, 'data-color': mark.attrs.color, class: 'nops-color' }, 0]
+};
+
 function withAttrs(spec: NodeSpec | undefined, attrs: NonNullable<NodeSpec['attrs']>): NodeSpec {
   // 이 함수는 스키마를 만들 때(모듈 로드) 불린다 — t() 를 부르면 로드 시점 언어로 고정되므로 코드만 붙인다.
   if (!spec) throw Object.assign(new Error('editor.err.upstreamNode'), { key: 'editor.err.upstreamNode', params: {} });
@@ -350,7 +367,7 @@ function buildNodes() {
 }
 
 export const nopsNodes = buildNodes();
-export const nopsMarks = (baseMarks as import('orderedmap').default<MarkSpec>).addToEnd('highlight', highlight);
+export const nopsMarks = (baseMarks as import('orderedmap').default<MarkSpec>).addToEnd('highlight', highlight).addToEnd('color', textColor);
 
 export function createNopsSchema(): Schema {
   return new Schema({ nodes: nopsNodes, marks: nopsMarks });

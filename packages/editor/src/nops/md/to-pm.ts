@@ -10,6 +10,7 @@ import type {
 } from 'mdast';
 import { decodeInline, parseWikiInner, type EditorParse, type InlineToken } from '@nopsidian/core/markdown';
 import { parseSizeSpec } from '@nopsidian/core/assets';
+import { colorSpanOpen, isColorSpanClose } from '../text-color';
 
 /** 최상위 PM 블록 하나와, 그것을 만들어 낸 원문 구간 [start, end) (파일 전체 기준 오프셋). */
 export interface Segment {
@@ -97,11 +98,20 @@ function hasClosingU(children: PhrasingContent[], from: number): boolean {
   return children.slice(from).some((c) => c.type === 'html' && c.value.toLowerCase() === '</u>');
 }
 
-export function inlineToPm(ctx: Ctx, children: PhrasingContent[], marks: readonly Mark[] = []): PMNode[] {
+interface InlineState {
+  /** 열린 글씨색 span 의 색(중첩되면 마지막이 이긴다). */
+  color: string | null;
+}
+
+export function inlineToPm(ctx: Ctx, children: PhrasingContent[], marks: readonly Mark[] = [], state: InlineState = { color: null }): PMNode[] {
   const { schema } = ctx;
   const out: PMNode[] = [];
   let underline = false;
-  const cur = () => (underline ? schema.marks.underline!.create().addToSet(marks) : marks);
+  const cur = () => {
+    let next = underline ? schema.marks.underline!.create().addToSet(marks) : marks;
+    if (state.color) next = schema.marks.color!.create({ color: state.color }).addToSet(next);
+    return next;
+  };
 
   children.forEach((child, i) => {
     switch (child.type) {
@@ -109,13 +119,13 @@ export function inlineToPm(ctx: Ctx, children: PhrasingContent[], marks: readonl
         out.push(...textNodes(ctx, child.value, cur()));
         break;
       case 'emphasis':
-        out.push(...inlineToPm(ctx, child.children, schema.marks.em!.create().addToSet(cur())));
+        out.push(...inlineToPm(ctx, child.children, schema.marks.em!.create().addToSet(cur()), state));
         break;
       case 'strong':
-        out.push(...inlineToPm(ctx, child.children, schema.marks.strong!.create().addToSet(cur())));
+        out.push(...inlineToPm(ctx, child.children, schema.marks.strong!.create().addToSet(cur()), state));
         break;
       case 'delete':
-        out.push(...inlineToPm(ctx, child.children, schema.marks.strike!.create().addToSet(cur())));
+        out.push(...inlineToPm(ctx, child.children, schema.marks.strike!.create().addToSet(cur()), state));
         break;
       case 'inlineCode':
         out.push(schema.text(lf(child.value), schema.marks.code!.create().addToSet(cur())));
@@ -126,6 +136,7 @@ export function inlineToPm(ctx: Ctx, children: PhrasingContent[], marks: readonl
             ctx,
             child.children,
             schema.marks.link!.create({ href: child.url, title: child.title ?? null }).addToSet(cur()),
+            state,
           ),
         );
         break;
@@ -148,6 +159,15 @@ export function inlineToPm(ctx: Ctx, children: PhrasingContent[], marks: readonl
         );
         break;
       case 'html': {
+        const color = colorSpanOpen(child.value);
+        if (color) {
+          state.color = color;
+          break;
+        }
+        if (state.color && isColorSpanClose(child.value)) {
+          state.color = null;
+          break;
+        }
         const v = child.value.toLowerCase();
         if (v === '<u>' && !underline && hasClosingU(children, i + 1)) underline = true;
         else if (v === '</u>' && underline) underline = false;

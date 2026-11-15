@@ -14,6 +14,11 @@ describe('renderNoteBody', () => {
     expect(h).toContain('<strong>굵게</strong>');
     expect(h).not.toContain('title: x');
   });
+  it('글씨색 span 은 HTML 내보내기에도 색이 남는다', () => {
+    const h = renderNoteBody('<span style="color:#c0392b">빨강</span> 글\n', opts);
+    expect(h).toContain('<span style="color:#c0392b">빨강</span>');
+  });
+
   it('위키링크: 있으면 링크(제목·블록 조각 포함), 없으면 미해결 표시, 별칭', () => {
     const h = renderNoteBody('[[있는노트#세부 내용|보기]] [[없는노트]] [[있는노트#^abc]]', opts);
     expect(h).toContain('<a class="wikilink" href="있는노트.html#세부-내용">보기</a>');

@@ -14,6 +14,7 @@ import { changeWriterSettings } from './language';
 import { WorkSection } from './WorkSection';
 import { WorkCreateDialog } from './WorkCreateDialog';
 import { WorkGoalDialog } from './WorkGoalDialog';
+import { MergeExportDialog } from './MergeExportDialog';
 import { calcWorkGoal, goalLineText, goalTooltip, parseLocalDay, type WorkGoal } from '@nopsidian/core';
 import { OutlinePanel } from './OutlinePanel';
 import { CommentsPanel } from './CommentsPanel';
@@ -105,6 +106,9 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   }, []);
   /** 작품 만들기 대화상자(이름+구조). 설정·사이드바가 같은 것을 연다 */
   const [workDialog, setWorkDialog] = useState(false);
+  /** 원고 합본 내보내기 대상 작품 / 지금 열린 작품(팔레트가 같은 작품을 쓴다) */
+  const [mergeWork, setMergeWork] = useState<string | null>(null);
+  const [openWorkName, setOpenWorkName] = useState<string | null>(null);
   /** 작품 목표(앱 데이터)와 목표 대화상자 */
   const [workGoals, setWorkGoals] = useState<Record<string, WorkGoal>>({});
   const [goalWork, setGoalWork] = useState<string | null>(null);
@@ -449,6 +453,13 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               enabled: !!previous,
               run: () => selected && previous && openPrevious(selected, previous),
             },
+            {
+              id: 'merge-export',
+              label: t('palette.mergeExport'),
+              keywords: ['merge', 'export', 'docx', 'txt'],
+              enabled: works.length > 0,
+              run: () => setMergeWork(openWorkName ?? works[0]?.name ?? null),
+            },
           ]
         : []),
       { id: 'split-right', label: t('palette.splitRight'), keywords: ['split', '분할', '좌우'], run: () => dispatchTabs({ type: 'split', dir: 'row' }) },
@@ -674,6 +685,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               const summary = works.find((w) => w.name === work);
               if (summary) void openEpisodeDb(summary.episodeFolder, work);
             }}
+            onMergeExport={(work) => setMergeWork(work)}
+            onOpenWorkChange={setOpenWorkName}
             onCreateEpisode={(work) => {
               void showTextPrompt(t('episode.namePrompt'), '').then((name) => {
                 if (name === null) return;
@@ -1011,6 +1024,24 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               onSetDaily={(perDay) => {
                 // 일일 목표만 바꾼다 — 작품 목표는 사용자가 저장을 눌렀을 때만 저장하고, 대화상자는 닫지 않는다.
                 void changeWriterSettings({ dailyGoal: perDay }).catch(() => undefined);
+              }}
+            />
+          );
+        })()}
+      {mergeWork &&
+        (() => {
+          const work = works.find((w) => w.name === mergeWork);
+          if (!work) return null;
+          return (
+            <MergeExportDialog
+              work={work}
+              notes={notes}
+              locale={locale}
+              spacing={language.writerSpacing ?? 'include'}
+              onClose={() => setMergeWork(null)}
+              onSaved={(saved) => {
+                setMergeWork(null);
+                setToast({ message: t('merge.saved', { name: saved.slice(saved.lastIndexOf('/') + 1) }) });
               }}
             />
           );

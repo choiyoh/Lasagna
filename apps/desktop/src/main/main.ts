@@ -27,6 +27,10 @@ import {
   setCommentResolved,
   SELF_AUTHOR,
   isWorkTemplatePath,
+  platformText,
+  mergePlainText,
+  mergeTxtBytes,
+  buildMergeDocxParts,
 } from '@nopsidian/core';
 import { existsSync, readFileSync } from 'node:fs';
 import { readFile as readFileAsync, readdir as readdirAsync, stat as statAsync } from 'node:fs/promises';
@@ -77,6 +81,7 @@ import { createFolder, listFolders, listTrash, moveToTrash, purgeTrash, restoreF
 import { importMarkdownInto } from './markdown-import';
 import { importNotionInto, readZipEntries } from './notion-import';
 import { exportVaultSite, renderNoteDocument, type ExportContext } from './export';
+import { zipSync } from 'fflate';
 import { addRow, createDatabase, editSchema, exportCsv, importCsvApply, importCsvPreview, updateCell } from './db';
 
 // Forge Vite 플러그인이 주입하는 전역
@@ -485,6 +490,28 @@ function registerHandlers() {
     const doc = renderNoteDocument(ctx, rel, content, { inlineAssets: true, siteLinks: false });
     if (format === 'html') atomicWrite(r.filePath, doc);
     else atomicWrite(r.filePath, await htmlToPdf(doc));
+    return { saved: r.filePath };
+  });
+  handle('export.merge', async ({ work, format, defaultName, summary, includeTitles, separator, episodes }, e) => {
+    const v = requireVault();
+    const parent = BrowserWindow.fromWebContents(e.sender);
+    const opts = {
+      title: t('main.dialog.exportMerge'),
+      defaultPath: defaultName,
+      filters: [format === 'docx' ? { name: 'Word', extensions: ['docx'] } : { name: 'Text', extensions: ['txt'] }],
+    };
+    const r = parent ? await dialog.showSaveDialog(parent, opts) : await dialog.showSaveDialog(opts);
+    if (r.canceled || !r.filePath) return { saved: null };
+    const parts = episodes.map((episode) => ({
+      title: episode.title,
+      body: platformText(readFileSync(resolveInVault(v.info.path, episode.path), 'utf8')),
+    }));
+    if (format === 'txt') {
+      atomicWrite(r.filePath, mergeTxtBytes(mergePlainText(parts, { includeTitles, separator, summary })));
+    } else {
+      const files = buildMergeDocxParts({ title: work, summary, parts, includeTitles, separator });
+      atomicWrite(r.filePath, zipSync(files, { level: 6 }));
+    }
     return { saved: r.filePath };
   });
   handle('import.notion', async (_i, e) => {

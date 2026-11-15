@@ -461,6 +461,22 @@ export const contract = {
   'history.snapshotDelete': { input: z.object({ path: relPath, id: z.string().max(100) }), output: z.object({ ok: z.boolean() }) },
   /** 노트를 HTML 또는 PDF 파일로 내보낸다(저장 대화상자). 취소하면 saved 가 null */
   'export.note': { input: z.object({ path: relPath, format: z.enum(['html', 'pdf']) }), output: z.object({ saved: z.string().nullable() }) },
+  /** 작품 회차 여러 개를 .docx / .txt 한 파일로 합쳐 저장한다(작가 모드, 노트는 읽기만). */
+  'export.merge': {
+    input: z.object({
+      work: z.string().min(1).max(300),
+      format: z.enum(['docx', 'txt']),
+      /** 저장 대화상자의 기본 파일 이름(확장자 포함) */
+      defaultName: z.string().min(1).max(300),
+      /** 맨 앞 글자수 요약(없으면 null) */
+      summary: z.string().max(1000).nullable(),
+      includeTitles: z.boolean(),
+      separator: z.enum(['page', 'blank', 'rule']),
+      /** 정렬된 회차(경로·표시 제목) — 본문은 main 이 디스크에서 읽는다 */
+      episodes: z.array(z.object({ path: relPath, title: z.string().max(500) })).min(1).max(2000),
+    }),
+    output: z.object({ saved: z.string().nullable() }),
+  },
   /** 볼트 전체를 정적 HTML 사이트로 폴더에 내보낸다(폴더 선택 대화상자) */
   'export.vault': { input: z.undefined(), output: z.object({ dir: z.string().nullable(), notes: z.number(), assets: z.number() }) },
   /** Notion 내보내기 ZIP(Markdown & CSV)을 골라 볼트의 새 폴더로 가져온다. 취소하면 folder 가 null */

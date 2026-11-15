@@ -1023,6 +1023,21 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
 .workrow__count { flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .works__add { width: 100%; margin-top: 6px; font-size: 11.5px; color: var(--muted); background: none; border: 1px dashed var(--border); border-radius: 8px; padding: 6px; cursor: pointer; }
 .works__add:hover { color: var(--fg); border-color: var(--accent); }
+
+/* 원고 합본 내보내기 대화상자 */
+.mergedlg { width: min(520px, 94vw); max-height: 88vh; overflow: auto; }
+.mergedlg__sub { margin: 2px 0 10px; }
+.mergedlg__section { padding: 8px 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.mergedlg h3 { margin: 0; font-size: 12px; color: var(--muted); font-weight: 600; }
+.mergedlg__range { display: flex; align-items: center; gap: 6px; }
+.mergedlg__range select { flex: 1; min-width: 0; padding: 4px 8px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+.mergedlg__radio, .mergedlg__check { display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; }
+.mergedlg__radio small, .mergedlg__check small { display: block; margin-top: 1px; font-size: 12px; }
+.mergedlg__radio input, .mergedlg__check input { margin-top: 3px; accent-color: var(--accent); }
+.mergedlg__sep { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+.mergedlg__sep small { display: block; margin-top: 1px; font-size: 12px; }
+.mergedlg .seg button:disabled { opacity: 0.45; cursor: default; }
+.mergedlg .dialog__actions { margin-top: 10px; }
 @media (max-width: 920px) {
   .works { padding: 6px 8px 2px; }
   .workcard { padding: 4px 6px 5px 8px; }

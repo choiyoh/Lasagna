@@ -91,11 +91,19 @@ export function serializeDocument(doc: PMNode, baseline: Baseline | null): strin
     return eol === '\r\n' ? md.replace(/\r?\n/g, '\r\n') : md;
   };
 
+  const newlines = (text: string) => (text.match(/\r?\n/g) ?? []).length;
   let out = '';
   let emitted = 0;
   let prevJ = -1;
   let lastEmittedJ = -1;
+  /** 저장 대기 중인 빈 문단 수 — 블록 사이에만 여분 빈 줄로 쓴다(맨 앞·맨 뒤는 버린다). */
+  let pendingEmpty = 0;
   children.forEach((node, i) => {
+    // 빈 문단은 그 자체로는 아무것도 쓰지 않고, 다음 블록과의 간격을 한 줄 늘린다.
+    if (node.type.name === 'paragraph' && node.childCount === 0 && !node.attrs.blockId) {
+      if (emitted > 0) pendingEmpty++;
+      return;
+    }
     const j = matched[i]!;
     const text = j >= 0 ? baseline!.source.slice(segments[j]!.start, segments[j]!.end) : fresh(node);
     if (text === '') return;
@@ -103,15 +111,17 @@ export function serializeDocument(doc: PMNode, baseline: Baseline | null): strin
     if (emitted === 0) {
       out += j === 0 && baseline ? baseline.leading : baseline?.frontmatter ? baseline.frontmatter + eol : '';
     } else {
-      out +=
-        j >= 0 && prevJ >= 0 && j === prevJ + 1
-          ? baseline!.source.slice(segments[prevJ]!.end, segments[j]!.start)
-          : eol + eol;
+      const adjacent = j >= 0 && prevJ >= 0 && j === prevJ + 1;
+      const sourceGap = adjacent ? baseline!.source.slice(segments[prevJ]!.end, segments[j]!.start) : '';
+      // 원문 간격의 빈 문단 수와 지금 문서의 빈 문단 수가 같으면 원문 바이트 그대로 둔다.
+      const sourceEmpties = adjacent ? Math.max(0, newlines(sourceGap) - 2) : -1;
+      out += adjacent && pendingEmpty === sourceEmpties ? sourceGap : eol.repeat(2 + pendingEmpty);
     }
     out += text;
     emitted++;
     prevJ = j;
     lastEmittedJ = j;
+    pendingEmpty = 0;
   });
 
   if (emitted === 0) return baseline?.frontmatter ?? '';

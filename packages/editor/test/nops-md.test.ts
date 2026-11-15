@@ -254,6 +254,63 @@ describe('새로 직렬화한 Markdown은 다시 읽으면 같은 문서가 된�
   });
 });
 
+describe('문단 띄우기(빈 문단) 저장·복원', () => {
+  const emptyP = () => nopsSchema.nodes.paragraph!.create();
+
+  it('여분 빈 줄 1개는 빈 문단이 되고, 열기만 하면 바이트가 그대로다', () => {
+    const src = '# 제목\n\n첫 문단\n\n\n둘째 문단\n';
+    const { doc, baseline } = parseDocument(src);
+    expect(types(doc)).toEqual(['heading', 'paragraph', 'paragraph', 'paragraph']);
+    expect(kids(doc)[2]!.childCount).toBe(0);
+    expect(serializeDocument(doc, baseline)).toBe(src);
+  });
+
+  it('빈 문단 2·3개도 왕복한다', () => {
+    const src = '가\n\n\n\n나\n\n\n\n\n다\n';
+    const { doc, baseline } = parseDocument(src);
+    expect(kids(doc).map((n) => n.childCount)).toEqual([1, 0, 0, 1, 0, 0, 0, 1]);
+    expect(serializeDocument(doc, baseline)).toBe(src);
+  });
+
+  it('한 문단만 고쳐도 사이 간격(빈 줄 수)이 줄지 않는다', () => {
+    const { doc, baseline } = parseDocument('가\n\n\n나\n');
+    const children = kids(doc);
+    children[2] = nopsSchema.nodes.paragraph!.create(null, nopsSchema.text('나다'));
+    expect(serializeDocument(nopsSchema.nodes.doc!.create(null, children), baseline)).toBe('가\n\n\n나다\n');
+  });
+
+  it('새로 쓴 문서도 빈 문단을 여분 빈 줄로 남겨 다시 읽으면 같은 문서다', () => {
+    const doc = nopsSchema.nodes.doc!.create(null, [
+      nopsSchema.nodes.paragraph!.create(null, nopsSchema.text('가')),
+      emptyP(),
+      nopsSchema.nodes.paragraph!.create(null, nopsSchema.text('나')),
+    ]);
+    const md = serializeDocument(doc, null);
+    expect(md).toBe('가\n\n\n나\n');
+    expect(parseDocument(md).doc.toJSON()).toEqual(doc.toJSON());
+  });
+
+  it('맨 앞·맨 뒤의 빈 문단은 기존처럼 저장하지 않는다', () => {
+    const front = nopsSchema.nodes.doc!.create(null, [emptyP(), nopsSchema.nodes.paragraph!.create(null, nopsSchema.text('가'))]);
+    const back = nopsSchema.nodes.doc!.create(null, [nopsSchema.nodes.paragraph!.create(null, nopsSchema.text('가')), emptyP()]);
+    expect(serializeDocument(front, null)).toBe('가\n');
+    expect(serializeDocument(back, null)).toBe('가\n');
+  });
+
+  it('프런트매터가 있어도 빈 문단이 왕복한다', () => {
+    const src = '---\nid: X\n---\n\n가\n\n\n나\n';
+    const { doc, baseline } = parseDocument(src);
+    expect(serializeDocument(doc, baseline)).toBe(src);
+  });
+
+  it('목록·인용·코드 블록 안의 빈 줄은 그대로 둔다', () => {
+    for (const src of ['```\n가\n\n나\n```\n', '> 가\n>\n> 나\n', '- 가\n\n  나\n']) {
+      const { doc, baseline } = parseDocument(src);
+      expect(serializeDocument(doc, baseline)).toBe(src);
+    }
+  });
+});
+
 describe('blockToMarkdown', () => {
   it('빈 문단은 아무것도 쓰지 않는다', () => {
     expect(blockToMarkdown(nopsSchema.nodes.paragraph!.create())).toBe('');

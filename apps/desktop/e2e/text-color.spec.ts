@@ -101,8 +101,8 @@ test('선택한 글자에 색을 주면 span 으로 저장되고, 다시 열어�
 
   await paint(page, '빨강', 'red');
   await paint(page, '파랑', 'blue');
-  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15_000 }).toContain('<span style="color:#c0392b">빨강</span>');
-  expect(readFileSync(file, 'utf8')).toContain('<span style="color:#2f6f9f">파랑</span>');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15_000 }).toContain('<span style="color:#2f6f9f">파랑</span>');
+  expect(readFileSync(file, 'utf8')).toContain('<span style="color:#c0392b">빨강</span>');
 
   // 다른 노트를 갔다 와도(디스크 다시 읽기) 색이 유지된다
   await page.locator('aside.sidebar').getByRole('button', { name: '다른', exact: true }).click();
@@ -137,4 +137,36 @@ test('다크에서도 읽히고(표시만 밝게), 기본 색으로 되돌리면
   expect(readFileSync(file, 'utf8')).toContain('빨강');
   expect(readFileSync(file, 'utf8')).toContain('<span style="color:#2f6f9f">파랑</span>');
   await expect(editor(page).locator('.nops-color')).toHaveCount(1);
+});
+
+test('마우스로 열어도 Tab 이 팔레트 안에서만 돌고, 닫으면 선택이 유지된다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await page.locator('aside.sidebar').getByRole('button', { name: '색', exact: true }).click();
+  await expect(editor(page).locator('h1')).toHaveText('색');
+  await page.waitForTimeout(300);
+  const file = path.join(vaultDir, '색.md');
+
+  await selectWord(page, '파랑');
+  await page.getByTestId('text-color').click();
+  await expect(page.getByTestId('text-color-gray')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByTestId('text-color-red')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByTestId('text-color-orange')).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.getByTestId('text-color-red')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('color-palette')).toHaveCount(0);
+  await expect(page.getByTestId('text-color')).toBeFocused();
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15_000 }).toContain('<span style="color:#c0392b">파랑</span>');
+  // 닫힌 뒤에도 선택이 남아 있어 바로 다시 색을 줄 수 있다
+  await expect(page.getByTestId('text-color')).toBeEnabled();
+
+  await page.getByTestId('text-color').click();
+  await expect(page.getByTestId('color-palette')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('color-palette')).toHaveCount(0);
+  await expect(page.getByTestId('text-color')).toBeFocused();
+  await expect(page.getByTestId('text-color')).toBeEnabled();
 });

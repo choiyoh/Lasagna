@@ -1,6 +1,6 @@
 import { formatNumber, t, translate } from '@nopsidian/i18n';
 import { useLanguage, useLocale } from './useLocale';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Editor, NopsPeekHost } from '@nopsidian/editor/nops';
 import { createDbViewHost } from './db/dbview-host';
 import { createRowPropsHost } from './db/RowProps';
@@ -145,6 +145,10 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   /** 글씨색 팔레트 위치(선택 영역이 있을 때만 연다) */
   const [colorPicker, setColorPicker] = useState<{ left: number; top: number } | null>(null);
   const [hasTextSelection, setHasTextSelection] = useState(false);
+  const colorBtnRef = useRef<HTMLButtonElement>(null);
+  const colorPopRef = useRef<HTMLDivElement>(null);
+  /** 팔레트를 열 때의 선택 범위 — 포커스가 버튼으로 옮겨가도 색 적용이 이어지게 한다. */
+  const colorRangeRef = useRef<{ from: number; to: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   const insertTemplateRef = useRef<(templatePath: string) => Promise<void>>(async () => undefined);
@@ -911,45 +915,63 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     return () => document.removeEventListener('selectionchange', update);
   }, [mode, path, epoch]);
 
-  // 팔레트가 열려 있으면 Esc 로만 닫는다(집중 모드 Esc 등 상위 동작에 새지 않게).
+  /** 팔레트를 닫고 초점을 연 버튼으로 돌려준다(선택 영역은 그대로 둔다). */
+  const closeColorPicker = useCallback(() => {
+    setColorPicker(null);
+    requestAnimationFrame(() => colorBtnRef.current?.focus());
+  }, []);
+
+  // 팔레트가 열려 있으면 Esc 로 닫고, Tab 은 팔레트 안에서만 돈다(배경 버튼으로 새지 않게).
   useEffect(() => {
     if (!colorPicker) return;
+    colorPopRef.current?.querySelector<HTMLElement>('button')?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.preventDefault();
       e.stopPropagation();
-      setColorPicker(null);
+      closeColorPicker();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [colorPicker]);
+  }, [colorPicker, closeColorPicker]);
+
+  const trapColorFocus = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab') return;
+    const nodes = [...(colorPopRef.current?.querySelectorAll<HTMLElement>('button') ?? [])];
+    if (nodes.length === 0) return;
+    e.preventDefault();
+    const at = nodes.indexOf(document.activeElement as HTMLElement);
+    const next = e.shiftKey ? (at <= 0 ? nodes.length - 1 : at - 1) : (at + 1) % nodes.length;
+    nodes[next]?.focus();
+  };
 
   /** 선택 글자에 색을 적용하고, 기본 색이면 마크를 뗀다. */
   const applyTextColor = (color: string | null) => {
     const view = editorRef.current?.getView();
     if (view) {
-      // 클릭 직후 ProseMirror 상태 선택이 아직 DOM 선택과 다를 수 있어 DOM 범위를 위치로 옮긴다.
-      const sel = window.getSelection();
-      const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
-      let from = view.state.selection.from;
-      let to = view.state.selection.to;
-      if (range && !sel!.isCollapsed && view.dom.contains(range.commonAncestorContainer)) {
-        try {
-          from = view.posAtDOM(range.startContainer, range.startOffset);
-          to = view.posAtDOM(range.endContainer, range.endOffset);
-        } catch {
-          // 위치로 옮길 수 없으면 지금 상태 선택을 쓴다.
+      // 팔레트를 열 때 저장한 위치를 우선한다(포커스가 버튼으로 옮겨가도 선택이 유지된다).
+      let range = colorRangeRef.current;
+      if (!range) {
+        const sel = window.getSelection();
+        const dom = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+        if (dom && sel && !sel.isCollapsed && view.dom.contains(dom.commonAncestorContainer)) {
+          try {
+            range = { from: view.posAtDOM(dom.startContainer, dom.startOffset), to: view.posAtDOM(dom.endContainer, dom.endOffset) };
+          } catch {
+            range = null;
+          }
         }
       }
+      const from = range?.from ?? view.state.selection.from;
+      const to = range?.to ?? view.state.selection.to;
       const type = view.state.schema.marks.color;
       if (type && to > from) {
         const tr = view.state.tr.removeMark(from, to, type);
         if (color) tr.addMark(from, to, type.create({ color }));
         view.dispatch(tr);
-        view.focus();
       }
     }
-    setColorPicker(null);
+    closeColorPicker();
   };
 
   // 같은 노트가 열린 채로 이동할 곳이 바뀌면(노트 안 링크 클릭 등) 그 자리로 옮긴다.
@@ -1040,6 +1062,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
           </button>
         )}
         <button
+          ref={colorBtnRef}
           className="note-editor__mode note-editor__mode--color"
           data-testid="text-color"
           disabled={!hasTextSelection}
@@ -1050,6 +1073,17 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
           onMouseDown={(e) => e.preventDefault()}
           onClick={(e) => {
             if (!hasTextSelection) return;
+            const view = editorRef.current?.getView();
+            const sel = window.getSelection();
+            const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+            colorRangeRef.current = null;
+            if (view && range && sel && !sel.isCollapsed && view.dom.contains(range.commonAncestorContainer)) {
+              try {
+                colorRangeRef.current = { from: view.posAtDOM(range.startContainer, range.startOffset), to: view.posAtDOM(range.endContainer, range.endOffset) };
+              } catch {
+                colorRangeRef.current = null;
+              }
+            }
             const box = e.currentTarget.getBoundingClientRect();
             setColorPicker({ left: Math.max(8, Math.min(box.left, window.innerWidth - 212)), top: box.bottom + 6 });
           }}
@@ -1058,8 +1092,22 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
         </button>
         {colorPicker && (
           <>
-            <div className="colorpop__mask" onMouseDown={() => setColorPicker(null)} />
-            <div className="colorpop" role="menu" aria-label={t('color.open')} style={{ left: colorPicker.left, top: colorPicker.top }} data-testid="color-palette">
+            <div
+              className="colorpop__mask"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                closeColorPicker();
+              }}
+            />
+            <div
+              ref={colorPopRef}
+              className="colorpop"
+              role="menu"
+              aria-label={t('color.open')}
+              style={{ left: colorPicker.left, top: colorPicker.top }}
+              data-testid="color-palette"
+              onKeyDown={trapColorFocus}
+            >
               <div className="colorpop__swatches">
                 {TEXT_COLOR_PALETTE.map(({ name, value }) => (
                   <button

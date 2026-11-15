@@ -387,10 +387,24 @@ export interface ConvertedDocument {
   segments: Segment[];
 }
 
+/** 블록 사이 여분 빈 줄 수(기본 2줄 = 빈 문단 0개). 빈 문단 하나당 한 줄이 더 있다. */
+function blankParagraphs(gap: string): number {
+  return Math.max(0, (gap.match(/\r?\n/g) ?? []).length - 2);
+}
+
 export function convertParsed(schema: Schema, ep: EditorParse): ConvertedDocument {
   const ctx: Ctx = { schema, body: ep.body, tokens: ep.tokens, nextFootnoteKey: 0 };
   const segments = convertRange(ctx, ep, 0, ep.note.blocks.length);
-  const children = segments.map((s) => s.node);
+  const children: PMNode[] = [];
+  segments.forEach((segment, i) => {
+    if (i > 0) {
+      const prev = segments[i - 1]!;
+      // 원문의 여분 빈 줄만큼 빈 문단을 넣는다(맨 앞·맨 뒤는 기존처럼 만들지 않는다).
+      const gap = ep.body.slice(prev.end - ep.bodyOffset, segment.start - ep.bodyOffset);
+      for (let k = blankParagraphs(gap); k > 0; k--) children.push(schema.nodes.paragraph!.create());
+    }
+    children.push(segment.node);
+  });
   const doc = schema.topNodeType.create(null, children.length ? children : [schema.nodes.paragraph!.create()]);
   return { doc, segments };
 }

@@ -72,11 +72,14 @@ async function stubSave(app: ElectronApplication, file: string): Promise<void> {
   }, file);
 }
 
-async function openMerge(page: Page): Promise<void> {
-  await (await workCard(page, '달빛')).getByTestId('work-more').click();
+async function openMerge(page: Page, name = '달빛'): Promise<void> {
+  await (await workCard(page, name)).getByTestId('work-more').click();
   await page.getByTestId('work-menu-merge').click();
   await expect(page.getByTestId('merge-dialog')).toBeVisible();
 }
+
+/** 초점이 대화상자 안에 있는지(포커스 트랩 검사용). */
+const focusInside = (page: Page) => page.evaluate(() => document.activeElement?.closest('[data-testid="merge-dialog"]') !== null);
 
 test.beforeAll(async () => {
   base = mkdtempSync(path.join(tmpdir(), 'nops-merge-'));
@@ -116,6 +119,20 @@ test('작품 ⋯ 메뉴에서 .docx 합본을 내보낸다(순서·제목·색 s
   await (await workCard(page, '달빛')).getByTestId('work-more').click();
   await expect(page.getByTestId('work-menu-merge')).toBeVisible();
   await page.keyboard.press('Escape');
+
+  await openMerge(page);
+
+  // 초기 포커스는 대화상자 안, Tab/Shift+Tab 은 대화상자 안에서만 순환한다.
+  await expect.poll(() => focusInside(page)).toBe(true);
+  await page.keyboard.press('Shift+Tab');
+  expect(await focusInside(page)).toBe(true);
+  await page.keyboard.press('Tab');
+  expect(await focusInside(page)).toBe(true);
+
+  // Esc 로 닫히고, 연 곳(작품 ⋯ 버튼)으로 초점이 돌아온다.
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('merge-dialog')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('data-testid'))).toBe('work-more');
 
   await openMerge(page);
   const file = path.join(out(), 'full.docx');
@@ -202,4 +219,30 @@ test('범위를 고르면 그 회차만, 작가 모드 OFF 면 진입점이 없�
   await expect(palette).toBeVisible();
   await expect(palette.getByRole('option', { name: /원고 합본|Merge & export/ })).toHaveCount(0);
   await page.keyboard.press('Escape');
+
+  // 회차가 없는 작품: 대화상자는 열되 안내 문구를 보이고 저장은 잠근다.
+  await setWriter(page);
+  await createWork(page, '빈작품');
+  await openMerge(page, '빈작품');
+  await expect(page.getByTestId('merge-empty')).toContainText('회차가 없어요');
+  await expect(page.getByTestId('merge-export')).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('merge-dialog')).toHaveCount(0);
+});
+
+test('영어에서는 회차 수를 단수/복수로 맞춘다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await setWriter(page, true, 'en');
+  await openMerge(page);
+  await page.getByTestId('merge-start').selectOption('0');
+  await page.getByTestId('merge-end').selectOption('0');
+  await expect(page.getByTestId('merge-summary')).toContainText('Selected: 1 episode ·');
+  await expect(page.getByTestId('merge-summary')).toContainText('spaces included');
+  await page.getByTestId('merge-start').selectOption('0');
+  await page.getByTestId('merge-end').selectOption('2');
+  await expect(page.getByTestId('merge-summary')).toContainText('Selected: 3 episodes ·');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('merge-dialog')).toHaveCount(0);
+  await setWriter(page);
 });

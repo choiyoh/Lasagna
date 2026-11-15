@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
-import { formatNumber, t } from '@nopsidian/i18n';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { formatNumber, pluralCategory, t } from '@nopsidian/i18n';
 import { compareEpisodePaths, type WorkSummary } from '@nopsidian/core';
 import type { NoteSummary } from '@nopsidian/ipc-contract';
 import { flushAll } from './flush';
+import { canRestoreFocus, trapFocus } from './focus-guard';
 import { userMessage } from './user-message';
 
 type Format = 'docx' | 'txt';
@@ -40,13 +41,46 @@ export function MergeExportDialog({ work, notes, locale, spacing, onClose, onSav
   const [summary, setSummary] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const firstRef = useRef<HTMLSelectElement | null>(null);
+  /** 이 대화상자를 연 요소 — 닫으면 여기로 초점을 돌려준다. */
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = requestAnimationFrame(() => {
+      if (boxRef.current?.contains(document.activeElement)) return;
+      (firstRef.current ?? boxRef.current?.querySelector<HTMLElement>('select, input, button') ?? boxRef.current)?.focus();
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      const opener = openerRef.current;
+      requestAnimationFrame(() => {
+        if (opener?.isConnected && canRestoreFocus()) opener.focus();
+      });
+    };
+  }, []);
+
+  // 다른 대화상자와 같이, 어디에 초점이 있어도 Esc 로 닫는다(내보내는 중에는 닫지 않는다).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!busy) onClose();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [busy, onClose]);
 
   const from = Math.min(start, end);
   const to = Math.max(start, end);
   const chosen = episodes.slice(from, to + 1);
   const total = chosen.reduce((sum, row) => sum + (spacing === 'include' ? row.chars : row.charsNoSpace), 0);
-  const unit = spacing === 'include' ? t('settings.writerSpacing.include') : t('settings.writerSpacing.exclude');
+  const unit = t(spacing === 'include' ? 'merge.spacing.include' : 'merge.spacing.exclude');
+  const plural = pluralCategory(locale, chosen.length);
   const separatorHint = format === 'txt' ? t('merge.separatorHintTxt') : t('merge.separatorHint');
+  const count = formatNumber(chosen.length, locale);
   const defaultName = `${safe(`${work.name}_${chosen[0]?.title ?? ''}~${chosen[chosen.length - 1]?.title ?? ''}`) || safe(work.name)}.${format}`;
 
   const pickFormat = (next: Format) => {
@@ -65,7 +99,7 @@ export function MergeExportDialog({ work, notes, locale, spacing, onClose, onSav
     try {
       await flushAll(); // 미저장 편집이 있으면 먼저 저장한 뒤 디스크에서 읽는다
       const summaryText = summary
-        ? t('merge.summaryLine', { work: work.name, episodes: formatNumber(chosen.length, locale), chars: formatNumber(total, locale) })
+        ? t(`merge.summaryLine.${plural}`, { work: work.name, episodes: count, chars: formatNumber(total, locale) })
         : null;
       const result = await window.nops.export.merge({
         work: work.name,
@@ -86,14 +120,30 @@ export function MergeExportDialog({ work, notes, locale, spacing, onClose, onSav
 
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="dialog mergedlg" role="dialog" aria-modal="true" aria-label={t('merge.title')} data-testid="merge-dialog">
+      <div
+        className="dialog mergedlg"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('merge.title')}
+        data-testid="merge-dialog"
+        ref={boxRef}
+        tabIndex={-1}
+        onKeyDown={(event) => trapFocus(event, boxRef.current)}
+      >
         <h2>{t('merge.title')}</h2>
         <p className="muted small mergedlg__sub">{work.name} — {t('merge.subtitle')}</p>
 
         <section className="mergedlg__section">
           <h3>{t('merge.range')}</h3>
+          {episodes.length === 0 ? (
+            <p className="muted small" role="status" data-testid="merge-empty">
+              {t('merge.empty')}
+            </p>
+          ) : (
+            <>
           <div className="mergedlg__range">
             <select
+              ref={firstRef}
               aria-label={t('merge.rangeStart')}
               data-testid="merge-start"
               value={from}
@@ -118,8 +168,10 @@ export function MergeExportDialog({ work, notes, locale, spacing, onClose, onSav
             </select>
           </div>
           <p className="muted small" data-testid="merge-summary">
-            {t('merge.selected', { episodes: formatNumber(chosen.length, locale) })} · {t('merge.total', { chars: formatNumber(total, locale), spacing: unit })}
+            {t(`merge.selected.${plural}`, { episodes: count })} · {t('merge.total', { chars: formatNumber(total, locale), spacing: unit })}
           </p>
+            </>
+          )}
         </section>
 
         <section className="mergedlg__section">

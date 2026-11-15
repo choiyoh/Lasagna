@@ -20,6 +20,10 @@ interface Props {
   onCreateWork: () => void;
   onCreateCharacter: (work: string) => void;
   onCreateEpisode: (work: string) => void;
+  /** 원고 합본 내보내기 대화상자를 연다 */
+  onMergeExport: (work: string) => void;
+  /** 지금 열린 작품(명령 팔레트가 같은 작품을 쓴다) */
+  onOpenWorkChange?: (work: string | null) => void;
   /** 회차 DB 열기(없으면 그때 만든다) */
   onOpenEpisodeDb: (work: string) => void;
   /** 작품별 목표선 문구(없으면 목표 설정 버튼) */
@@ -69,7 +73,7 @@ export function workRowLabel(locale: 'ko' | 'en', name: string, episodes: number
  * 작가용 사이드바의 '작품' 섹션(목록형). 작가 모드에서만 렌더된다(일반 모드는 이 DOM 자체가 없다).
  * 열린 작품 1개만 4줄로 펼치고(이름+회차+⋯ / 회차·글자수 / 목표 / 칩 줄), 나머지는 이름 한 줄이다.
  */
-export function WorkSection({ locale, works, currentPath, spacing, narrow, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter, onCreateEpisode, goalLines, goalTitles, onOpenGoal, onOpenEpisodeDb }: Props) {
+export function WorkSection({ locale, works, currentPath, spacing, narrow, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter, onCreateEpisode, onMergeExport, onOpenWorkChange, goalLines, goalTitles, onOpenGoal, onOpenEpisodeDb }: Props) {
   const tr = (key: Parameters<typeof translate>[1], params?: Record<string, string | number>) => translate(locale, key, params);
   const count = (n: number) => formatNumber(n, locale);
   const ratio = dailyGoal !== null && dailyGoal > 0 ? Math.min(1, Math.max(0, today / dailyGoal)) : 0;
@@ -94,6 +98,10 @@ export function WorkSection({ locale, works, currentPath, spacing, narrow, today
   const openName = choice === null && works.length > 1 ? null : auto;
 
   useEffect(() => {
+    onOpenWorkChange?.(openName);
+  }, [openName, onOpenWorkChange]);
+
+  useEffect(() => {
     if (!openName || openName === last) return;
     setLast(openName);
     try {
@@ -110,6 +118,7 @@ export function WorkSection({ locale, works, currentPath, spacing, narrow, today
         ...(menuWork.storyBibleFolder
           ? [{ id: 'story-bible', testId: 'work-menu-story', label: tr('work.openStoryBible'), onRun: () => onOpenFolder(menuWork.storyBibleFolder!) }]
           : []),
+        { id: 'merge-export', testId: 'work-menu-merge', label: tr('work.mergeExport'), separator: true, onRun: () => onMergeExport(menuWork.name) },
       ]
     : [];
 

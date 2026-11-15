@@ -261,12 +261,30 @@ test('회차 DB 다듬기: 새 열 순서·상태 칩 편집·수정일 형식·
   await expect(updated).toHaveText(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
 
   // 4) goal_met 3상태: 달성 / 미달 / 목표 없음
-  writeExternalNote(episodeFile, '---\ngoal_chars: 1\nstatus: 퇴고\n---\n# 1화\n\n본문\n');
+  writeExternalNote(episodeFile, '---\ngoal_chars: 1\n상태: 퇴고\n---\n# 1화\n\n본문\n');
   writeExternalNote(path.join(vaultDir, '순서작', '회차', '2화.md'), '---\ngoal_chars: 9999\n---\n# 2화\n');
   writeExternalNote(path.join(vaultDir, '순서작', '회차', '3화.md'), '# 3화\n');
   const goalCell = (title: string) => page.getByTestId('db-table').locator('.dbtable__row', { hasText: title }).locator('[role="cell"][data-prop="목표 달성"]');
   await expect(goalCell('1화')).toHaveText('달성', { timeout: 15_000 });
   await expect(goalCell('2화')).toHaveText('미달');
   await expect(goalCell('3화')).toHaveText('—');
+
+  // 5) 상태 칩 색: 초고(회색)·퇴고(주황)·완료(초록)가 서로 다른 색으로 보인다(파일에는 색을 쓰지 않는다)
+  writeExternalNote(path.join(vaultDir, '순서작', '회차', '2화.md'), '---\ngoal_chars: 9999\n상태: 초고\n---\n# 2화\n');
+  writeExternalNote(path.join(vaultDir, '순서작', '회차', '3화.md'), '---\n상태: 완료\n---\n# 3화\n');
+  const chipColors = () =>
+    page.getByTestId('db-table').evaluate((table) => {
+      const out = new Map<string, string>();
+      for (const row of table.querySelectorAll('.dbtable__row')) {
+        const title = row.querySelector('.dbtable__title')?.textContent ?? '';
+        const chip = row.querySelector('[role="cell"][data-prop="상태"] .chip');
+        if (title && chip) out.set(title, getComputedStyle(chip).backgroundColor);
+      }
+      return [...out.entries()];
+    });
+  await expect.poll(async () => (await chipColors()).length, { timeout: 15_000 }).toBe(3);
+  const colors = await chipColors();
+  expect(new Set(colors.map(([, color]) => color)).size).toBe(3);
+  expect(colors.every(([, color]) => color !== 'rgba(0, 0, 0, 0)')).toBe(true);
   void dbFile;
 });

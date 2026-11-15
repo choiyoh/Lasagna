@@ -1,4 +1,19 @@
-import type { CellValue } from './types';
+import { optionsOf } from '@nopsidian/core/db/values';
+import type { CellValue, Property } from './types';
+
+/** 회차 DB 상태 그룹의 표시 색(시안: 초고=회색·퇴고=주황·완료=초록). 파일에는 쓰지 않는다. */
+const STATUS_GROUP_COLOR: Record<'todo' | 'doing' | 'done', string> = { todo: 'gray', doing: 'orange', done: 'green' };
+
+/**
+ * 회차 DB 상태 칩 색 — 옵션에 색이 없으면 그룹으로 고른다.
+ * `_db.yaml` 에 색을 새로 쓰지 않고 화면에서만 입힌다(기존·일반 DB 불변).
+ */
+export function episodeStatusColor(prop: Property | undefined, value: string): string | undefined {
+  if (prop?.type !== 'status') return undefined;
+  const option = optionsOf(prop).find((o) => o.name === value);
+  if (option?.color) return option.color;
+  return option?.group ? STATUS_GROUP_COLOR[option.group] : undefined;
+}
 
 /**
  * 회차 DB 수정일 열: 원문 ISO 대신 사람이 읽는 `YYYY-MM-DD HH:mm`(기기 로컬)로 보여 준다.

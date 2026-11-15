@@ -455,7 +455,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                           ⚠ {data.errors[row.path]![c]}
                         </span>
                       ) : (
-                        <CellView prop={prop} value={value} />
+                        <CellView prop={prop} value={value} episode={episode} />
                       )}
                     </div>
                   );

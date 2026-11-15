@@ -6,6 +6,7 @@ import { linkNameFor } from '@nopsidian/core/links';
 import { cellText, optionsOf } from '@nopsidian/core/db/values';
 import type { CellValue, Property } from './types';
 import { chipStyle } from './chip-color';
+import { episodeStatusColor } from './episode-display';
 
 interface Props {
   prop: Property;
@@ -105,11 +106,12 @@ export const isEditable = (p: Property) => EDITABLE.has(p.type);
 
 const optionColor = (prop: Property, name: string) => optionsOf(prop).find((o) => o.name === name)?.color;
 
-/** 읽기 전용 표시 */
-export function CellView({ prop, value }: { prop: Property | undefined; value: CellValue }) {
+/** 읽기 전용 표시. episode 면 회차 DB 상태 칩에 그룹 색을 입힌다(파일에 저장하지 않는다). */
+export function CellView({ prop, value, episode }: { prop: Property | undefined; value: CellValue; episode?: boolean }) {
   if (value === null || (Array.isArray(value) && !value.length)) return <span className="cell__empty" />;
   if (prop && (prop.type === 'select' || prop.type === 'status')) {
-    return <span className="chip" style={chipStyle(optionColor(prop, String(value)))}>{String(value)}</span>;
+    const color = optionColor(prop, String(value)) ?? (episode ? episodeStatusColor(prop, String(value)) : undefined);
+    return <span className="chip" style={chipStyle(color)}>{String(value)}</span>;
   }
   if (prop?.type === 'relation' && Array.isArray(value)) {
     return (

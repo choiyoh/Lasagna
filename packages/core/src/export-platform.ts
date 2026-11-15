@@ -19,6 +19,8 @@ export function platformText(markdown: string): string {
 
   const inline = (text: string): string =>
     text
+      // 글씨색 span 은 태그만 걷어 내고 글자는 남긴다(태그는 글자수에 세지 않는다).
+      .replace(/<\/?span\b[^>]*>/gi, '')
       .replace(/!\[\[([^\]|]*)(?:\|([^\]]*))?\]\]/g, (_m, target: string, alias?: string) => alias ?? target)
       .replace(/\[\[([^\]|]*)(?:\|([^\]]*))?\]\]/g, (_m, target: string, alias?: string) => alias ?? target)
       .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')

@@ -311,6 +311,56 @@ describe('문단 띄우기(빈 문단) 저장·복원', () => {
   });
 });
 
+describe('글씨색 마크', () => {
+  const marksOf = (doc: PMNode): string[] => {
+    const out: string[] = [];
+    doc.descendants((n) => {
+      for (const m of n.marks) if (m.type.name === 'color') out.push(`${n.textContent}:${m.attrs.color}`);
+    });
+    return out;
+  };
+
+  it('span 을 색 마크로 읽고, 다시 쓰면 바이트가 같다', () => {
+    const src = '가 <span style="color:#c0392b">빨강</span> 나\n';
+    const { doc, baseline } = parseDocument(src);
+    expect(marksOf(doc)).toEqual(['빨강:#c0392b']);
+    expect(serializeDocument(doc, baseline)).toBe(src);
+    expect(parseDocument(serializeDocument(doc, null)).doc.toJSON()).toEqual(doc.toJSON());
+  });
+
+  it('굵게와 겹쳐도 왕복한다(색이 바깥)', () => {
+    const src = '<span style="color:#2f6f9f">**굵은 파랑**</span>\n';
+    const { doc, baseline } = parseDocument(src);
+    expect(marksOf(doc)).toEqual(['굵은 파랑:#2f6f9f']);
+    let strong = false;
+    doc.descendants((n) => {
+      if (n.marks.some((m) => m.type.name === 'strong')) strong = true;
+    });
+    expect(strong).toBe(true);
+    expect(serializeDocument(doc, baseline)).toBe(src);
+  });
+
+  it('허용 밖 style·색 span 은 원문 그대로 둔다(편집 불가 raw)', () => {
+    for (const src of ['<span style="font-size:20px">큰</span>\n', '<span style="color:notacolor">x</span>\n', '<span style="color:#fff">짧은</span>\n']) {
+      const { doc, baseline } = parseDocument(src);
+      expect(types(doc)).toEqual(['paragraph']);
+      let raw = 0;
+      doc.descendants((n) => {
+        if (n.type.name === 'raw_inline') raw++;
+      });
+      expect(raw).toBeGreaterThan(0);
+      expect(serializeDocument(doc, baseline)).toBe(src);
+    }
+  });
+
+  it('색 이름(red)도 허용한다', () => {
+    const src = '<span style="color:red">빨강</span>\n';
+    const { doc, baseline } = parseDocument(src);
+    expect(marksOf(doc)).toEqual(['빨강:red']);
+    expect(serializeDocument(doc, baseline)).toBe(src);
+  });
+});
+
 describe('blockToMarkdown', () => {
   it('빈 문단은 아무것도 쓰지 않는다', () => {
     expect(blockToMarkdown(nopsSchema.nodes.paragraph!.create())).toBe('');

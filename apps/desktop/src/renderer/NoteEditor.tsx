@@ -22,6 +22,7 @@ import { TextSelection } from 'prosemirror-state';
 import {
   createNopsEditor,
   firstTitle,
+  TEXT_COLOR_PALETTE,
   flashBlock,
   insertMarkdown,
   parseDocument,
@@ -141,6 +142,9 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const sourceHostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SaveState>('saved');
   const [mode, setModeState] = useState<Mode>('edit');
+  /** 글씨색 팔레트 위치(선택 영역이 있을 때만 연다) */
+  const [colorPicker, setColorPicker] = useState<{ left: number; top: number } | null>(null);
+  const [hasTextSelection, setHasTextSelection] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   const insertTemplateRef = useRef<(templatePath: string) => Promise<void>>(async () => undefined);
@@ -892,6 +896,62 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     };
   }, [path, vaultId, assets, epoch]);
 
+  // 글씨색 버튼은 선택 영역이 있을 때만 쓸 수 있다(선택 변화는 DOM selectionchange 로 온다).
+  // ProseMirror 상태 선택이 클릭 직후 늦게 맞춰지는 경우가 있어 DOM 선택을 기준으로 본다.
+  useEffect(() => {
+    const update = () => {
+      const view = editorRef.current?.getView();
+      const sel = window.getSelection();
+      const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+      const next = mode === 'edit' && !!view && !!sel && !sel.isCollapsed && !!range && view.dom.contains(range.commonAncestorContainer);
+      setHasTextSelection((cur) => (cur === next ? cur : next));
+    };
+    document.addEventListener('selectionchange', update);
+    update();
+    return () => document.removeEventListener('selectionchange', update);
+  }, [mode, path, epoch]);
+
+  // 팔레트가 열려 있으면 Esc 로만 닫는다(집중 모드 Esc 등 상위 동작에 새지 않게).
+  useEffect(() => {
+    if (!colorPicker) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      setColorPicker(null);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [colorPicker]);
+
+  /** 선택 글자에 색을 적용하고, 기본 색이면 마크를 뗀다. */
+  const applyTextColor = (color: string | null) => {
+    const view = editorRef.current?.getView();
+    if (view) {
+      // 클릭 직후 ProseMirror 상태 선택이 아직 DOM 선택과 다를 수 있어 DOM 범위를 위치로 옮긴다.
+      const sel = window.getSelection();
+      const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+      let from = view.state.selection.from;
+      let to = view.state.selection.to;
+      if (range && !sel!.isCollapsed && view.dom.contains(range.commonAncestorContainer)) {
+        try {
+          from = view.posAtDOM(range.startContainer, range.startOffset);
+          to = view.posAtDOM(range.endContainer, range.endOffset);
+        } catch {
+          // 위치로 옮길 수 없으면 지금 상태 선택을 쓴다.
+        }
+      }
+      const type = view.state.schema.marks.color;
+      if (type && to > from) {
+        const tr = view.state.tr.removeMark(from, to, type);
+        if (color) tr.addMark(from, to, type.create({ color }));
+        view.dispatch(tr);
+        view.focus();
+      }
+    }
+    setColorPicker(null);
+  };
+
   // 같은 노트가 열린 채로 이동할 곳이 바뀌면(노트 안 링크 클릭 등) 그 자리로 옮긴다.
   // 처음 여는 노트는 load() 가 이미 옮겨 주므로, 다 읽은 뒤의 변화만 다룬다.
   useEffect(() => {
@@ -978,6 +1038,49 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
           >
             {t('copy.open')}
           </button>
+        )}
+        <button
+          className="note-editor__mode note-editor__mode--color"
+          data-testid="text-color"
+          disabled={!hasTextSelection}
+          title={t('color.open')}
+          aria-label={t('color.open')}
+          aria-haspopup="menu"
+          aria-expanded={colorPicker !== null}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            if (!hasTextSelection) return;
+            const box = e.currentTarget.getBoundingClientRect();
+            setColorPicker({ left: Math.max(8, Math.min(box.left, window.innerWidth - 212)), top: box.bottom + 6 });
+          }}
+        >
+          {t('color.open')}
+        </button>
+        {colorPicker && (
+          <>
+            <div className="colorpop__mask" onMouseDown={() => setColorPicker(null)} />
+            <div className="colorpop" role="menu" aria-label={t('color.open')} style={{ left: colorPicker.left, top: colorPicker.top }} data-testid="color-palette">
+              <div className="colorpop__swatches">
+                {TEXT_COLOR_PALETTE.map(({ name, value }) => (
+                  <button
+                    key={name}
+                    type="button"
+                    role="menuitem"
+                    className="colorpop__swatch"
+                    style={{ background: value }}
+                    title={t(`color.name.${name}` as Parameters<typeof t>[0])}
+                    aria-label={t(`color.name.${name}` as Parameters<typeof t>[0])}
+                    data-testid={`text-color-${name}`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => applyTextColor(value)}
+                  />
+                ))}
+              </div>
+              <button type="button" role="menuitem" className="colorpop__default" data-testid="text-color-default" onClick={() => applyTextColor(null)}>
+                {t('color.default')}
+              </button>
+            </div>
+          </>
         )}
         <button
           className="note-editor__mode"

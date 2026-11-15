@@ -28,6 +28,14 @@ const md = [
   '끝 문단',
 ].join('\n');
 
+describe('platformText 와 글씨색 span', () => {
+  it('span 태그만 걷어 내고 글자는 그대로 남긴다(태그는 글자수에 세지 않는다)', () => {
+    const md = '가 <span style="color:#c0392b">빨강</span> 나\n';
+    expect(platformText(md)).toBe('가 빨강 나');
+    expect(platformText(md).length).toBe('가 빨강 나'.length);
+  });
+});
+
 describe('플랫폼용 텍스트 변환', () => {
   it('frontmatter·첫 H1 제외, 기호 제거, 링크·이미지·표·코드 처리, 빈 줄 정리', () => {
     expect(platformText(md)).toBe(

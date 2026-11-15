@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { t } from '@nopsidian/i18n';
+import { getLocale, t, translate } from '@nopsidian/i18n';
 import { CellEditor, CellView, isEditable } from './CellEditor';
 import { COL_MIN, columnWidths } from './column-widths';
 import { calcLabel, groupLabel } from './labels';
 import { movedColumns, movedRows } from './view-edit';
 import { cellOf, TITLE, visibleColumns, type CellValue, type DbData, type DbGroupDto, type DbRowDto } from './types';
+import { formatUpdatedAt, goalMetState, isGoalMetFormula } from './episode-display';
 
 type Item =
   | { kind: 'row'; row: DbRowDto }
@@ -391,7 +392,8 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                       role="cell"
                       onClick={() => {
                         if (c === TITLE) return;
-                        if (prop && isEditable(prop) && prop.type !== 'checkbox' && prop.type !== 'select' && prop.type !== 'status') setEditing({ path: row.path, prop: c });
+                        // 회차 DB 의 상태 칩은 눌러서 고친다(칩 → 드롭다운). 일반 DB 는 지금처럼 늘 편집기다.
+                        if (prop && isEditable(prop) && prop.type !== 'checkbox' && prop.type !== 'select' && prop.type !== 'multi_select' && prop.type !== 'relation' && (prop.type !== 'status' || episode)) setEditing({ path: row.path, prop: c });
                       }}
                     >
                       {c === TITLE ? (
@@ -434,7 +436,7 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                             {row.title}
                           </button>
                         )
-                      ) : prop && isEditable(prop) && (isEd || prop.type === 'checkbox' || prop.type === 'select' || prop.type === 'status' || prop.type === 'multi_select' || prop.type === 'relation' || (prop.type === 'number' && prop.format === 'stars')) ? (
+                      ) : prop && isEditable(prop) && (isEd || prop.type === 'checkbox' || prop.type === 'select' || (prop.type === 'status' && !episode) || prop.type === 'multi_select' || prop.type === 'relation' || (prop.type === 'number' && prop.format === 'stars')) ? (
                         <div
                           onBlurCapture={(e) => {
                             // 날짜 고르기 창(화면 위에 띄움)으로 초점이 옮겨 가는 것은 편집을 끝낸 것이 아니다
@@ -444,12 +446,16 @@ export function TableView({ data, rows, onOpen, onEdit, onWidth, notes, onRename
                         >
                           <CellEditor prop={prop} value={value} notes={notes} autoFocus={isEd} onDone={() => setEditing(null)} onCommit={(nv) => { onEdit(row, c, nv); if (isEd && prop.type !== 'date') setEditing(null); }} />
                         </div>
+                      ) : episode && prop?.type === 'updated_time' && typeof value === 'string' ? (
+                        <span title={value}>{formatUpdatedAt(value)}</span>
+                      ) : episode && prop?.type === 'formula' && isGoalMetFormula(prop.expr) ? (
+                        <span className={`cell__goal ${goalMetState(value)}`}>{translate(getLocale(), `db.goalMet.${goalMetState(value)}` as Parameters<typeof translate>[1])}</span>
                       ) : data.errors[row.path]?.[c] ? (
                         <span className="cell__error" title={data.errors[row.path]![c]} role="img" aria-label={t('db.cellError', { message: data.errors[row.path]![c] })}>
                           ⚠ {data.errors[row.path]![c]}
                         </span>
                       ) : (
-                        <CellView prop={prop} value={value} />
+                        <CellView prop={prop} value={value} episode={episode} />
                       )}
                     </div>
                   );

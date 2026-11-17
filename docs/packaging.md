@@ -1,14 +1,17 @@
 # 패키징·설치 파일
 
 ## 만들기
-- 개발 중 폴더만: `pnpm --filter @nopsidian/desktop package` → `apps/desktop/out/Nopsidian-<플랫폼>-<arch>/`
+- 개발 중 폴더만: `pnpm --filter @nopsidian/desktop package` → `apps/desktop/out/Lasagna-<플랫폼>-<arch>/`
 - 설치 파일: `pnpm --filter @nopsidian/desktop make`
-  - macOS → `out/make/dmg/<arch>/Nopsidian.dmg` + `out/make/zip/darwin/<arch>/*.zip`
-  - Windows → `out/make/squirrel.windows/<arch>/Nopsidian-Setup.exe` (+ `.nupkg`, `RELEASES`) + `out/make/zip/win32/<arch>/*.zip`(설치 없이 쓰는 휴대용)
+  - macOS → `out/make/dmg/<arch>/Lasagna.dmg` + `out/make/zip/darwin/<arch>/*.zip`
+  - Windows → `out/make/squirrel.windows/<arch>/Lasagna-Setup.exe` (+ `.nupkg`, `RELEASES`) + `out/make/zip/win32/<arch>/*.zip`(설치 없이 쓰는 휴대용)
 - **각 OS 에서 빌드해야 한다.** `better-sqlite3`·`@parcel/watcher` 가 플랫폼별 네이티브 모듈이고 `native-modules.ts` 가 현재 OS 용 바이너리만 앱에 넣는다. 그래서 맥에서 Windows 설치 파일을 만들 수 없다.
-- **빌드 결과물과 문서는 GitHub 에서 만들지 않는다.** 각 PC 에서 `make` 로 만들고(맥: dmg·zip, 윈도우: Setup.exe·zip) 구글 드라이브 `AI Works/Nopsidian/빌드/<버전>/` 에 둔다. 문서 사본은 `AI Works/Nopsidian/문서/`.
-  - 설치 파일은 `node scripts/collect-build.mjs "<구글 드라이브 데스크톱의 AI Works/Nopsidian/빌드 경로>"` 로 `v<버전>/` 폴더에 복사한다(맥·윈도우 공통). 크기가 100MB 이상이라 에이전트 도구로는 못 올려서, 드라이브 데스크톱이 동기화하는 폴더로 복사하는 방식을 쓴다.
-- CI(`.github/workflows/build.yml`): 푸시/PR 에서 리눅스 러너로 린트·타입·테스트만 돌린다(비공개 저장소 무료 분량 월 2000분, macOS 10배·Windows 2배 계산). 세 OS 전체 테스트는 Actions 탭에서 수동 실행(`all-os`). 워크플로 변경(ubuntu-24.04 고정·수동 `e2e` 작업)은 PR 설명의 패치로 따로 넣는다.
+- macOS 는 각 PC 에서 `make` 로 만들 수 있고, Windows 설치 파일은 릴리스 때 GitHub Actions 가 만든다(아래 CI).
+- 로컬에서 만든 설치 파일을 보관하려면 `node scripts/collect-build.mjs "<동기화 폴더>"` 로 `v<버전>/` 폴더에 복사한다(맥·윈도우 공통). 크기가 100MB 이상이라 에이전트 도구로는 올리기 어려워, 동기화 폴더로 복사하는 방식을 쓴다.
+- CI(`.github/workflows/build.yml`): 푸시/PR 에서 리눅스 러너로 린트·타입·테스트만 돌린다. 세 OS 전체 테스트는 Actions 탭에서 수동 실행(`all-os`). 워크플로 변경(ubuntu-24.04 고정·수동 `e2e` 작업)은 PR 설명의 패치로 따로 넣는다.
+- Windows 릴리스(`.github/workflows/release-windows.yml`): 릴리스가 게시되면(`release: published`) `windows-latest` 에서 `pnpm --filter @nopsidian/desktop make` 를 돌려 `Lasagna-Setup.exe`·`.nupkg`·`RELEASES`·휴대용 zip 을 만들고, **같은 릴리스에 첨부**한다. 이미 게시된 릴리스는 Actions → release-windows → Run workflow 에 태그(예: `v0.14.1`)를 넣어 다시 만들 수 있다. 실행 로그의 아티팩트에도 산출물이 남는다(14일 보관).
+  - 권한은 워크플로 전체 `contents: read`, 첨부하는 job 만 `contents: write` 이고 `GITHUB_TOKEN` 외 시크릿은 쓰지 않는다. 포크 PR 에서는 첨부 단계를 실행하지 않는다.
+  - 코드 서명이 없어 Windows SmartScreen 경고가 나올 수 있다(추가 정보 → 실행). 설치 후 동작 확인은 Windows PC 에서 사람이 한다.
 
 ## E2E(Playwright) 실행
 - 리눅스(CI 의 e2e 작업과 같음). `apps/desktop` 에서:
@@ -19,7 +22,7 @@
   - 스펙이 리눅스에서만 `--no-sandbox` 를 붙인다(GitHub Actions 러너는 `chrome-sandbox` 에 setuid 를 걸 수 없다).
   - GPU 가 없는 xvfb 에서도 그래프가 그려지도록 리눅스에서 `--enable-unsafe-swiftshader --ignore-gpu-blocklist`(소프트웨어 WebGL)도 붙인다.
   - 동기화 테스트(클라이언트 ID 저장)는 `safeStorage` 가 필요해서 Secret Service 키링(gnome-keyring 등)이 없는 리눅스에서는 실패한다(앱이 일부러 평문 저장을 쓰지 않는다). 나머지 테스트는 키링 없이 돈다.
-  - `NOPS_E2E_EXECUTABLE` 로 실행 파일 경로를 덮어쓸 수 있다(기본: `out/Nopsidian-<플랫폼>-<arch>/` 아래, macOS 는 `.app` 번들 안).
+  - `NOPS_E2E_EXECUTABLE` 로 실행 파일 경로를 덮어쓸 수 있다(기본: `out/Lasagna-<플랫폼>-<arch>/` 아래, macOS 는 `.app` 번들 안).
 - macOS·Windows 는 `pnpm --filter @nopsidian/desktop e2e` 로 패키징과 실행을 한 번에 한다.
 - 새 클론에서 `node_modules/electron/dist` 가 없어 `pnpm start` 가 "Electron failed to install correctly" 로 죽으면 `node scripts/ensure-electron.mjs` 를 실행한다(루트 `postinstall` 로 `pnpm install` 때 자동으로 시도한다. 오프라인이면 경고만 하고 넘어간다).
 - 실패하면 그 시점 화면이 `apps/desktop/test-results` 에 남고, CI e2e 작업은 이것을 아티팩트로 올린다(`_electron` 은 자동 스크린샷이 없어 스펙의 `afterEach` 가 직접 남긴다).

@@ -75,8 +75,9 @@ pnpm format                              # Prettier
 
 ## 설치 파일 만들기
 
-`pnpm --filter @nopsidian/desktop make` — 설치 파일은 **각 OS 에서 직접** 만들어요(네이티브 모듈 때문에
-맥에서 Windows 설치 파일을 만들 수 없어요). 자세한 내용과 서명·Gatekeeper 주의 사항은
+`pnpm --filter @nopsidian/desktop make` — macOS 설치 파일은 직접 만들어요(네이티브 모듈 때문에
+맥에서 Windows 설치 파일을 만들 수 없어요). Windows 설치 파일은 릴리스가 게시되면 GitHub Actions 가
+만들어 같은 릴리스에 첨부해요. 자세한 내용과 서명·Gatekeeper 주의 사항은
 [docs/packaging.md](docs/packaging.md) 에 있어요.
 
 ## AI 에이전트에 연결하기

@@ -5,9 +5,13 @@ out/
 *.log
 .DS_Store
 .env*
-.claude/settings.local.json
 test-results/
 playwright-report/
 .scratch/
 
 !apps/desktop/.env.gdrive.local.example
+
+# 개인 작업 도구 — 저장소에는 올리지 않고 로컬에서만 쓴다
+CLAUDE.md
+.claude/
+docs/deepseek-agents.md

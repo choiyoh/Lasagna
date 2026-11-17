@@ -1,6 +1,7 @@
 /* global console, process */
 // 방금 만든 설치 파일(apps/desktop/out/make)을 `<대상 폴더>/<버전>/` 으로 복사한다.
-// 대상은 구글 드라이브 데스크톱이 동기화하는 폴더(예: `AI Works/Nopsidian/빌드`)를 넘기면 된다. macOS·Windows 모두 동작.
+// 대상은 동기화 폴더(예: `<동기화 폴더>/빌드`)를 넘기면 된다. macOS·Windows 모두 동작.
+// Windows 설치 파일은 보통 release-windows.yml 이 릴리스에 첨부하므로, 이 스크립트는 로컬 보관용이다.
 // 사용: node scripts/collect-build.mjs "<대상 폴더>"
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';

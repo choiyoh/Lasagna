@@ -1,7 +1,8 @@
 name: build
 
-# GitHub 에서는 설치 파일을 만들지 않는다(빌드 결과물은 각 PC 에서 만들어 구글 드라이브 `AI Works/Nopsidian/빌드` 에 둔다).
-# 여기서는 가장 싼 Linux 에서 린트·타입·테스트만 돌린다. 세 OS 전체 테스트가 필요하면 Actions 탭에서 수동 실행(all-os).
+# 여기서는 가장 싼 Linux 에서 린트·타입·테스트만 돌린다.
+# Windows 설치 파일은 release-windows.yml 이 릴리스 게시 때 만들어 같은 릴리스에 첨부하고,
+# 세 OS 전체 테스트가 필요하면 Actions 탭에서 수동 실행(all-os).
 
 on:
   push:

@@ -12,11 +12,6 @@ on:
         description: '빌드해 첨부할 릴리스 태그(예: v0.14.1)'
         required: true
         type: string
-  # PR 검증용: 이 워크플로 파일이 바뀐 PR 에서만 빌드·아티팩트 업로드까지 확인한다.
-  # 머지 전에 이 트리거를 제거한다(릴리스 첨부 단계는 PR 에서 실행되지 않는다).
-  pull_request:
-    paths:
-      - '.github/workflows/release-windows.yml'
 
 permissions:
   contents: read
@@ -35,14 +30,9 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
-      - name: Checkout release tag
-        if: github.event_name != 'pull_request'
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_TAG }}
-      - name: Checkout pull request
-        if: github.event_name == 'pull_request'
-        uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -54,7 +44,7 @@ jobs:
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lasagna-windows-${{ env.RELEASE_TAG || github.sha }}
+          name: lasagna-windows-${{ env.RELEASE_TAG }}
           if-no-files-found: error
           retention-days: 14
           path: |
@@ -63,7 +53,6 @@ jobs:
             apps/desktop/out/make/squirrel.windows/**/RELEASES
             apps/desktop/out/make/zip/win32/**/*.zip
       - name: Attach to release
-        if: github.event_name != 'pull_request'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

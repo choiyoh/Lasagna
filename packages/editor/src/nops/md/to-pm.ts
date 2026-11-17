@@ -10,7 +10,8 @@ import type {
 } from 'mdast';
 import { decodeInline, parseWikiInner, type EditorParse, type InlineToken } from '@nopsidian/core/markdown';
 import { parseSizeSpec } from '@nopsidian/core/assets';
-import { colorSpanOpen, isColorSpanClose } from '../text-color';
+import { colorSpanOpen } from '../text-color';
+import { sizeSpanOpen } from '../text-size';
 
 /** 최상위 PM 블록 하나와, 그것을 만들어 낸 원문 구간 [start, end) (파일 전체 기준 오프셋). */
 export interface Segment {
@@ -98,19 +99,83 @@ function hasClosingU(children: PhrasingContent[], from: number): boolean {
   return children.slice(from).some((c) => c.type === 'html' && c.value.toLowerCase() === '</u>');
 }
 
+type SpanKind = 'color' | 'textSize';
+type SpanFrame = { kind: SpanKind; color?: string; percent?: number };
 interface InlineState {
-  /** 열린 글씨색 span 의 색(중첩되면 마지막이 이긴다). */
-  color: string | null;
+  /** 열린 span 마크(바깥→안쪽). 중첩·같은 종류 겹침도 순서대로 쌓아 잃지 않는다. */
+  open: SpanFrame[];
 }
 
-export function inlineToPm(ctx: Ctx, children: PhrasingContent[], marks: readonly Mark[] = [], state: InlineState = { color: null }): PMNode[] {
+type SpanRole = 'color-open' | 'color-close' | 'size-open' | 'size-close' | 'raw';
+const SPAN_OPEN = /^<span(\s|>)/i;
+const SPAN_CLOSE = /^<\/span\s*>$/i;
+
+/**
+ * 문단 안 span 여닫음을 문서 순서로 짝지어 역할을 정한다.
+ * - 인식한 span 이 짝을 만나면 마크(open/close)
+ * - 인식 못 한 span·짝 없는 여는/닫는 태그는 raw 로 남겨 내용·태그를 잃지 않는다.
+ */
+function spanRoles(children: PhrasingContent[]): Map<PhrasingContent, SpanRole> {
+  const html: Extract<PhrasingContent, { type: 'html' }>[] = [];
+  const walk = (nodes: PhrasingContent[]) => {
+    for (const node of nodes) {
+      if (node.type === 'html') html.push(node);
+      if ('children' in node && Array.isArray(node.children)) walk(node.children as PhrasingContent[]);
+    }
+  };
+  walk(children);
+
+  const roles = new Map<PhrasingContent, SpanRole>();
+  const stack: { node: PhrasingContent; frame: SpanFrame | null }[] = [];
+  for (const node of html) {
+    const value = node.value;
+    if (SPAN_OPEN.test(value.trim())) {
+      const color = colorSpanOpen(value);
+      const percent = color ? null : sizeSpanOpen(value);
+      stack.push({ node, frame: color ? { kind: 'color', color } : percent ? { kind: 'textSize', percent } : null });
+      continue;
+    }
+    if (!SPAN_CLOSE.test(value.trim())) continue;
+    const opened = stack.pop();
+    if (!opened?.frame) {
+      roles.set(node, 'raw');
+      continue;
+    }
+    roles.set(opened.node, opened.frame.kind === 'color' ? 'color-open' : 'size-open');
+    roles.set(node, opened.frame.kind === 'color' ? 'color-close' : 'size-close');
+  }
+  // 닫히지 않은 span 은 raw 로 남긴다(내용은 그대로, 태그도 사라지지 않는다).
+  for (const opened of stack) roles.set(opened.node, 'raw');
+  return roles;
+}
+
+export function inlineToPm(
+  ctx: Ctx,
+  children: PhrasingContent[],
+  marks: readonly Mark[] = [],
+  state: InlineState = { open: [] },
+  roles: Map<PhrasingContent, SpanRole> = spanRoles(children),
+): PMNode[] {
   const { schema } = ctx;
   const out: PMNode[] = [];
   let underline = false;
   const cur = () => {
     let next = underline ? schema.marks.underline!.create().addToSet(marks) : marks;
-    if (state.color) next = schema.marks.color!.create({ color: state.color }).addToSet(next);
+    for (const frame of state.open) {
+      next =
+        frame.kind === 'color'
+          ? schema.marks.color!.create({ color: frame.color }).addToSet(next)
+          : schema.marks.textSize!.create({ percent: frame.percent }).addToSet(next);
+    }
     return next;
+  };
+  const closeSpan = (kind: SpanKind) => {
+    for (let i = state.open.length - 1; i >= 0; i--) {
+      if (state.open[i]!.kind === kind) {
+        state.open.splice(i, 1);
+        return;
+      }
+    }
   };
 
   children.forEach((child, i) => {
@@ -119,13 +184,13 @@ export function inlineToPm(ctx: Ctx, children: PhrasingContent[], marks: readonl
         out.push(...textNodes(ctx, child.value, cur()));
         break;
       case 'emphasis':
-        out.push(...inlineToPm(ctx, child.children, schema.marks.em!.create().addToSet(cur()), state));
+        out.push(...inlineToPm(ctx, child.children, schema.marks.em!.create().addToSet(cur()), state, roles));
         break;
       case 'strong':
-        out.push(...inlineToPm(ctx, child.children, schema.marks.strong!.create().addToSet(cur()), state));
+        out.push(...inlineToPm(ctx, child.children, schema.marks.strong!.create().addToSet(cur()), state, roles));
         break;
       case 'delete':
-        out.push(...inlineToPm(ctx, child.children, schema.marks.strike!.create().addToSet(cur()), state));
+        out.push(...inlineToPm(ctx, child.children, schema.marks.strike!.create().addToSet(cur()), state, roles));
         break;
       case 'inlineCode':
         out.push(schema.text(lf(child.value), schema.marks.code!.create().addToSet(cur())));
@@ -137,6 +202,7 @@ export function inlineToPm(ctx: Ctx, children: PhrasingContent[], marks: readonl
             child.children,
             schema.marks.link!.create({ href: child.url, title: child.title ?? null }).addToSet(cur()),
             state,
+            roles,
           ),
         );
         break;
@@ -159,13 +225,20 @@ export function inlineToPm(ctx: Ctx, children: PhrasingContent[], marks: readonl
         );
         break;
       case 'html': {
-        const color = colorSpanOpen(child.value);
-        if (color) {
-          state.color = color;
+        const role = roles.get(child);
+        if (role === 'color-open' || role === 'size-open') {
+          const color = colorSpanOpen(child.value);
+          const percent = color ? null : sizeSpanOpen(child.value);
+          if (color) state.open.push({ kind: 'color', color });
+          else if (percent) state.open.push({ kind: 'textSize', percent });
           break;
         }
-        if (state.color && isColorSpanClose(child.value)) {
-          state.color = null;
+        if (role === 'color-close') {
+          closeSpan('color');
+          break;
+        }
+        if (role === 'size-close') {
+          closeSpan('textSize');
           break;
         }
         const v = child.value.toLowerCase();

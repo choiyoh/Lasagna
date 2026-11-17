@@ -7,6 +7,7 @@ export { insertCallout, insertToggle, insertColumns, insertMathBlock, insertMark
 export type { WikiLinkTarget } from './plugins';
 export * from './blocks';
 export * from './text-color';
+export * from './text-size';
 export type { NopsRowPropsHost } from './row-props';
 export type { NopsPeekHost } from './peek-host';
 export type { NopsAssetHost } from './asset-host';

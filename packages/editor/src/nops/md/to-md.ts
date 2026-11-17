@@ -4,6 +4,7 @@ import type { Handle, Options, State } from 'mdast-util-to-markdown';
 import { gfmToMarkdown } from 'mdast-util-gfm';
 import { mathToMarkdown } from 'mdast-util-math';
 import { colorSpanMarkdown } from '../text-color';
+import { sizeSpanMarkdown } from '../text-size';
 
 // mdast에 없는 노드는 느슨한 타입으로 다룬다(핸들러가 직접 출력한다).
 type Any = { type: string; [key: string]: unknown };
@@ -13,7 +14,7 @@ const raw = (value: string): Any => ({ type: 'nopsRaw', value });
 // ───────────────────────── 인라인 ─────────────────────────
 
 /** 바깥쪽부터 감싸는 순서. code는 가장 안쪽이다. */
-const MARK_ORDER = ['link', 'color', 'strong', 'em', 'strike', 'highlight', 'underline', 'code'];
+const MARK_ORDER = ['link', 'color', 'textSize', 'strong', 'em', 'strike', 'highlight', 'underline', 'code'];
 
 function markRank(m: Mark): number {
   const i = MARK_ORDER.indexOf(m.type.name);
@@ -34,6 +35,8 @@ function wrapMark(m: Mark, children: Any[]): Any[] {
       return [{ type: 'nopsHighlight', children }];
     case 'color':
       return [{ type: 'html', value: colorSpanMarkdown(m.attrs.color) }, ...children, { type: 'html', value: '</span>' }];
+    case 'textSize':
+      return [{ type: 'html', value: sizeSpanMarkdown(m.attrs.percent) }, ...children, { type: 'html', value: '</span>' }];
     case 'underline':
       return [{ type: 'html', value: '<u>' }, ...children, { type: 'html', value: '</u>' }];
     default:

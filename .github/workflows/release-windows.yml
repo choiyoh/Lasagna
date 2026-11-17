@@ -1,6 +1,7 @@
 name: release-windows
 
-# 공개 릴리스에 Windows 설치 파일(.exe·.nupkg·RELEASES·휴대용 zip)을 자동으로 만들어 첨부한다.
+# 공개 릴리스에 Windows 설치 파일(Lasagna-Setup.exe) 하나를 자동으로 만들어 첨부한다.
+# 릴리스 첨부는 맥 Lasagna.dmg + Windows Lasagna-Setup.exe 두 파일만 둔다(zip·nupkg·RELEASES 는 올리지 않는다).
 # 수동 실행(workflow_dispatch)은 이미 게시된 릴리스의 태그를 입력해 같은 일을 한다.
 # 서명 인증서가 없어 SmartScreen 경고가 나올 수 있다(릴리스 노트에 안내).
 on:
@@ -12,6 +13,12 @@ on:
         description: '빌드해 첨부할 릴리스 태그(예: v0.14.1)'
         required: true
         type: string
+
+  # PR 검증용(임시): 이 워크플로 파일이 바뀐 PR 에서만 빌드·아티팩트 업로드까지 확인한다.
+  # 머지 전에 이 트리거를 제거한다(릴리스 첨부 단계는 PR 에서 실행되지 않는다).
+  pull_request:
+    paths:
+      - '.github/workflows/release-windows.yml'
 
 permissions:
   contents: read
@@ -44,25 +51,21 @@ jobs:
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lasagna-windows-${{ env.RELEASE_TAG }}
+          name: lasagna-windows-setup-${{ env.RELEASE_TAG || github.sha }}
           if-no-files-found: error
           retention-days: 14
-          path: |
-            apps/desktop/out/make/squirrel.windows/**/*.exe
-            apps/desktop/out/make/squirrel.windows/**/*.nupkg
-            apps/desktop/out/make/squirrel.windows/**/RELEASES
-            apps/desktop/out/make/zip/win32/**/*.zip
+          path: apps/desktop/out/make/squirrel.windows/**/Lasagna-Setup.exe
       - name: Attach to release
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gh release view "$RELEASE_TAG" --json tagName >/dev/null
-          mapfile -t files < <(find apps/desktop/out/make -type f \
-            \( -name '*.exe' -o -name '*.nupkg' -o -name 'RELEASES' -o -name '*.zip' \) | sort)
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "첨부할 설치 파일이 없습니다." >&2
+          mapfile -t files < <(find apps/desktop/out/make -type f -name 'Lasagna-Setup.exe' | sort)
+          if [ "${#files[@]}" -ne 1 ]; then
+            echo "Lasagna-Setup.exe 를 정확히 하나 찾지 못했습니다(${#files[@]}개)." >&2
             exit 1
           fi
           gh release upload "$RELEASE_TAG" "${files[@]}" --clobber

@@ -6,10 +6,20 @@
   - macOS → `out/make/dmg/<arch>/Lasagna.dmg` + `out/make/zip/darwin/<arch>/*.zip`
   - Windows → `out/make/squirrel.windows/<arch>/Lasagna-Setup.exe` (+ `.nupkg`, `RELEASES`) + `out/make/zip/win32/<arch>/*.zip`(설치 없이 쓰는 휴대용)
 - **각 OS 에서 빌드해야 한다.** `better-sqlite3`·`@parcel/watcher` 가 플랫폼별 네이티브 모듈이고 `native-modules.ts` 가 현재 OS 용 바이너리만 앱에 넣는다. 그래서 맥에서 Windows 설치 파일을 만들 수 없다.
-- macOS 는 각 PC 에서 `make` 로 만들 수 있고, Windows 설치 파일은 릴리스 때 GitHub Actions 가 만든다(아래 CI).
+- macOS 는 각 PC 에서 `make` 로 만들 수 있고, Windows 설치 파일은 릴리스 때 GitHub Actions 가 만든다(아래 CI). `make` 는 zip·nupkg·RELEASES 도 만들지만 **릴리스에는 올리지 않는다**(아래 '릴리스에 올리는 파일').
 - 로컬에서 만든 설치 파일을 보관하려면 `node scripts/collect-build.mjs "<동기화 폴더>"` 로 `v<버전>/` 폴더에 복사한다(맥·윈도우 공통). 크기가 100MB 이상이라 에이전트 도구로는 올리기 어려워, 동기화 폴더로 복사하는 방식을 쓴다.
 - CI(`.github/workflows/build.yml`): 푸시/PR 에서 리눅스 러너로 린트·타입·테스트만 돌린다. 세 OS 전체 테스트는 Actions 탭에서 수동 실행(`all-os`). 워크플로 변경(ubuntu-24.04 고정·수동 `e2e` 작업)은 PR 설명의 패치로 따로 넣는다.
-- Windows 릴리스(`.github/workflows/release-windows.yml`): 릴리스가 게시되면(`release: published`) `windows-latest` 에서 `pnpm --filter @nopsidian/desktop make` 를 돌려 `Lasagna-Setup.exe`·`.nupkg`·`RELEASES`·휴대용 zip 을 만들고, **같은 릴리스에 첨부**한다. 이미 게시된 릴리스는 Actions → release-windows → Run workflow 에 태그(예: `v0.14.1`)를 넣어 다시 만들 수 있다. 실행 로그의 아티팩트에도 산출물이 남는다(14일 보관).
+- Windows 릴리스(`.github/workflows/release-windows.yml`): 릴리스가 게시되면(`release: published`) `windows-latest` 에서 `pnpm --filter @nopsidian/desktop make` 를 돌려 **`Lasagna-Setup.exe` 하나만** 같은 릴리스에 첨부한다(`.nupkg`·`RELEASES`·휴대용 zip 은 올리지 않는다). 이미 게시된 릴리스는 Actions → release-windows → Run workflow 에 태그(예: `v0.14.1`)를 넣어 다시 만들 수 있다. 실행 로그의 아티팩트에는 Setup.exe 가 남는다(14일 보관).
+
+## 릴리스에 올리는 파일 (2개)
+릴리스 자산은 **`Lasagna.dmg`(macOS) + `Lasagna-Setup.exe`(Windows)** 두 개만 둔다. 앱에 자동 업데이트가 없어 zip·nupkg·RELEASES 는 필요 없다.
+
+| 파일 | 만드는 곳 | 올리는 방법 |
+|---|---|---|
+| `Lasagna.dmg` | 맥에서 `pnpm --filter @nopsidian/desktop make` | **수동**으로 릴리스에 첨부(`gh release upload <tag> out/make/dmg/<arch>/Lasagna.dmg`) |
+| `Lasagna-Setup.exe` | GitHub Actions `release-windows.yml` | 릴리스 게시(또는 workflow_dispatch) 때 **자동** 첨부 |
+
+- 휴대용 zip(`Lasagna-<os>-<arch>-<version>.zip`)은 만들 수는 있지만 릴리스에는 올리지 않는다.
   - 권한은 워크플로 전체 `contents: read`, 첨부하는 job 만 `contents: write` 이고 `GITHUB_TOKEN` 외 시크릿은 쓰지 않는다. 포크 PR 에서는 첨부 단계를 실행하지 않는다.
   - 코드 서명이 없어 Windows SmartScreen 경고가 나올 수 있다(추가 정보 → 실행). 설치 후 동작 확인은 Windows PC 에서 사람이 한다.
 

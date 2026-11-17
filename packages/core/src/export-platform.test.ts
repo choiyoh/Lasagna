@@ -34,6 +34,12 @@ describe('platformText 와 글씨색 span', () => {
     expect(platformText(md)).toBe('가 빨강 나');
     expect(platformText(md).length).toBe('가 빨강 나'.length);
   });
+
+  it('글자 크기 span 도 태그만 걷어 내고, 색·크기가 겹쳐도 글자수는 같다', () => {
+    const md = '<span style="font-size:120%">큰</span> <span style="color:#2f6f9f"><span style="font-size:150%">색큰</span></span>\n';
+    expect(platformText(md)).toBe('큰 색큰');
+    expect(platformText(md).length).toBe('큰 색큰'.length);
+  });
 });
 
 describe('플랫폼용 텍스트 변환', () => {

@@ -16,7 +16,7 @@ import { basisChars, goalProgress, goalText, presetHintBasis, todayText } from '
 import { editorTotalStats } from '@nopsidian/editor/nops';
 import { OUTLINE_EVENT, OUTLINE_JUMP, OUTLINE_REQUEST, SELECTION_REPLY, SELECTION_REQUEST, type OutlineItem } from './outline';
 import { keys } from './keys';
-import { canRestoreFocus } from './focus-guard';
+import { canRestoreFocus, trapFocus } from './focus-guard';
 import type { DbEmbedHost } from './db/EmbeddedDb';
 import { relativePath, vaultUrl } from '@nopsidian/core/assets';
 import { TextSelection } from 'prosemirror-state';
@@ -24,6 +24,7 @@ import {
   createNopsEditor,
   firstTitle,
   TEXT_COLOR_PALETTE,
+  TEXT_SIZE_STEPS,
   flashBlock,
   insertMarkdown,
   parseDocument,
@@ -145,11 +146,17 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
   const [mode, setModeState] = useState<Mode>('edit');
   /** 글씨색 팔레트 위치(선택 영역이 있을 때만 연다) */
   const [colorPicker, setColorPicker] = useState<{ left: number; top: number } | null>(null);
+  /** 글자 크기 팝업 위치(작가 모드 + 선택 영역이 있을 때만) */
+  const [sizePicker, setSizePicker] = useState<{ left: number; top: number } | null>(null);
   const [hasTextSelection, setHasTextSelection] = useState(false);
   const colorBtnRef = useRef<HTMLButtonElement>(null);
   const colorPopRef = useRef<HTMLDivElement>(null);
+  const sizeBtnRef = useRef<HTMLButtonElement>(null);
+  const sizePopRef = useRef<HTMLDivElement>(null);
   /** 팔레트를 열 때의 선택 범위 — 포커스가 버튼으로 옮겨가도 색 적용이 이어지게 한다. */
   const colorRangeRef = useRef<{ from: number; to: number } | null>(null);
+  /** 크기 팝업을 열 때의 선택 범위(색과 같은 이유) */
+  const sizeRangeRef = useRef<{ from: number; to: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   const insertTemplateRef = useRef<(templatePath: string) => Promise<void>>(async () => undefined);
@@ -924,6 +931,7 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
     setColorPicker(null);
     requestAnimationFrame(() => {
       if (returnTo === 'editor') {
+        if (!canRestoreFocus()) return;
         const view = editorRef.current?.getView();
         if (!view) return;
         if (restore && restore.to > restore.from) {
@@ -993,6 +1001,72 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
       }
     }
     closeColorPicker('button');
+  };
+
+  /** 크기 팝업을 닫는다. 적용했으면 편집기로(선택 복원), Esc·마스크면 버튼으로 초점을 돌린다. */
+  const closeSizePicker = useCallback((returnTo: 'editor' | 'button' = 'button', restore?: { from: number; to: number }) => {
+    setSizePicker(null);
+    requestAnimationFrame(() => {
+      if (returnTo === 'editor') {
+        if (!canRestoreFocus()) return;
+        const view = editorRef.current?.getView();
+        if (!view) return;
+        if (restore && restore.to > restore.from) {
+          const size = view.state.doc.content.size;
+          const from = Math.min(restore.from, size);
+          const to = Math.min(restore.to, size);
+          view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to)));
+        }
+        view.focus();
+        return;
+      }
+      if (!canRestoreFocus()) return;
+      if (sizeBtnRef.current && !sizeBtnRef.current.disabled) sizeBtnRef.current.focus();
+    });
+  }, []);
+
+  // 크기 팝업: 열면 첫 항목에 초점, Esc 로 닫고, Tab 은 팝업 안에서만 돈다.
+  useEffect(() => {
+    if (!sizePicker) return;
+    sizePopRef.current?.querySelector<HTMLElement>('button')?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeSizePicker();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [sizePicker, closeSizePicker]);
+
+  /** 선택 글자에 크기를 적용하고, 기본 크기면 마크를 뗀다. */
+  const applyTextSize = (percent: number | null) => {
+    const view = editorRef.current?.getView();
+    if (view) {
+      let range = sizeRangeRef.current;
+      if (!range) {
+        const sel = window.getSelection();
+        const dom = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+        if (dom && sel && !sel.isCollapsed && view.dom.contains(dom.commonAncestorContainer)) {
+          try {
+            range = { from: view.posAtDOM(dom.startContainer, dom.startOffset), to: view.posAtDOM(dom.endContainer, dom.endOffset) };
+          } catch {
+            range = null;
+          }
+        }
+      }
+      const from = range?.from ?? view.state.selection.from;
+      const to = range?.to ?? view.state.selection.to;
+      const type = view.state.schema.marks.textSize;
+      if (type && to > from) {
+        const tr = view.state.tr.removeMark(from, to, type);
+        if (percent) tr.addMark(from, to, type.create({ percent }));
+        view.dispatch(tr);
+        closeSizePicker('editor', { from, to });
+        return;
+      }
+    }
+    closeSizePicker('button');
   };
 
   // 같은 노트가 열린 채로 이동할 곳이 바뀌면(노트 안 링크 클릭 등) 그 자리로 옮긴다.
@@ -1147,6 +1221,75 @@ export function NoteEditor({ path, vaultId, assets, links, onOpenLink, onRename,
               </div>
               <button type="button" role="menuitem" className="colorpop__default" data-testid="text-color-default" onClick={() => applyTextColor(null)}>
                 {t('color.default')}
+              </button>
+            </div>
+          </>
+        )}
+        {writer && (
+          <button
+            ref={sizeBtnRef}
+            className="note-editor__mode note-editor__mode--size"
+            data-testid="text-size"
+            disabled={!hasTextSelection}
+            title={t('size.open')}
+            aria-label={t('size.open')}
+            aria-haspopup="menu"
+            aria-expanded={sizePicker !== null}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              if (!hasTextSelection) return;
+              const view = editorRef.current?.getView();
+              const sel = window.getSelection();
+              const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+              sizeRangeRef.current = null;
+              if (view && range && sel && !sel.isCollapsed && view.dom.contains(range.commonAncestorContainer)) {
+                try {
+                  sizeRangeRef.current = { from: view.posAtDOM(range.startContainer, range.startOffset), to: view.posAtDOM(range.endContainer, range.endOffset) };
+                } catch {
+                  sizeRangeRef.current = null;
+                }
+              }
+              const box = e.currentTarget.getBoundingClientRect();
+              setSizePicker({ left: Math.max(8, Math.min(box.left, window.innerWidth - 168)), top: box.bottom + 6 });
+            }}
+          >
+            {t('size.open')}
+          </button>
+        )}
+        {sizePicker && (
+          <>
+            <div
+              className="colorpop__mask"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                closeSizePicker();
+              }}
+            />
+            <div
+              ref={sizePopRef}
+              className="colorpop colorpop--size"
+              role="menu"
+              aria-label={t('size.open')}
+              style={{ left: sizePicker.left, top: sizePicker.top }}
+              data-testid="size-palette"
+              onKeyDown={(e) => trapFocus(e, sizePopRef.current)}
+            >
+              {TEXT_SIZE_STEPS.map(({ name, percent }) => (
+                <button
+                  key={name}
+                  type="button"
+                  role="menuitem"
+                  className="colorpop__default colorpop__size"
+                  style={{ fontSize: `${percent}%` }}
+                  data-testid={`text-size-${name}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => applyTextSize(percent)}
+                >
+                  {t(`size.${name}` as Parameters<typeof t>[0])}
+                </button>
+              ))}
+              <button type="button" role="menuitem" className="colorpop__default" data-testid="text-size-default" onClick={() => applyTextSize(null)}>
+                {t('size.default')}
               </button>
             </div>
           </>

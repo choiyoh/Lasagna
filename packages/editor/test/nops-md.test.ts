@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Node as PMNode } from 'prosemirror-model';
+import { Transform } from 'prosemirror-transform';
 import { generateNote, randomGarbage } from '@nopsidian/core/testing';
 import { nopsSchema } from '../src/nops/schema';
 import { blockToMarkdown, parseDocument, serializeDocument } from '../src/nops/md';
@@ -349,6 +350,82 @@ describe('글씨색 마크', () => {
         if (n.type.name === 'raw_inline') raw++;
       });
       expect(raw).toBeGreaterThan(0);
+      expect(serializeDocument(doc, baseline)).toBe(src);
+    }
+  });
+
+  it('글자 크기 span 을 마크로 읽고, 다시 쓰면 바이트가 같다(85·120·150%)', () => {
+    for (const percent of [85, 120, 150]) {
+      const src = `가 <span style="font-size:${percent}%">큰</span> 나\n`;
+      const { doc, baseline } = parseDocument(src);
+      const sizes: string[] = [];
+      doc.descendants((n) => {
+        for (const m of n.marks) if (m.type.name === 'textSize') sizes.push(`${n.textContent}:${m.attrs.percent}`);
+      });
+      expect(sizes).toEqual([`큰:${percent}`]);
+      expect(serializeDocument(doc, baseline)).toBe(src);
+    }
+  });
+
+  it('허용 밖 크기(임의 값·단위·대문자·공백 변형·색과 결합)는 raw 로 둔다', () => {
+    for (const src of [
+      '<span style="font-size:200%">x</span>\n',
+      '<span style="font-size:12px">x</span>\n',
+      '<span style="FONT-SIZE:120%">x</span>\n',
+      '<span style="font-size: 120%">x</span>\n',
+      '<span style="font-size:120 %">x</span>\n',
+      '<span style="color:#c0392b;font-size:120%">x</span>\n',
+    ]) {
+      const { doc, baseline } = parseDocument(src);
+      let raw = 0;
+      doc.descendants((n) => {
+        if (n.type.name === 'raw_inline') raw++;
+      });
+      expect(raw, src).toBeGreaterThan(0);
+      expect(serializeDocument(doc, baseline)).toBe(src);
+    }
+  });
+
+  it('색과 크기를 겹쳐도 잃지 않고, 색 바깥·크기 안쪽으로 저장한다', () => {
+    for (const src of [
+      '<span style="color:#2f6f9f"><span style="font-size:120%">가</span>나</span>\n',
+      '<span style="font-size:120%"><span style="color:#2f6f9f">가</span>나</span>\n',
+      '<span style="font-size:120%"><span style="color:#2f6f9f">가</span></span><span style="font-size:120%">나</span>\n',
+    ]) {
+      const { doc } = parseDocument(src);
+      const marks = new Map<string, string[]>();
+      doc.descendants((n) => {
+        if (n.isText) marks.set(n.textContent, n.marks.map((m) => `${m.type.name}:${m.attrs.color ?? m.attrs.percent}`));
+      });
+      expect(marks.get('가')).toEqual(expect.arrayContaining(['color:#2f6f9f', 'textSize:120']));
+      expect(marks.get('나')?.length).toBe(1);
+      const saved = serializeDocument(doc, null);
+      expect(saved).toContain('가');
+      expect(saved).toContain('나');
+      expect((saved.match(/<span\b/g) ?? []).length).toBe((saved.match(/<\/span>/g) ?? []).length);
+      expect(serializeDocument(parseDocument(saved).doc, null)).toBe(saved);
+    }
+  });
+
+  it('중첩된 같은 종류 span 을 열어 고쳐 저장해도 여닫음 균형과 내용이 유지된다', () => {
+    const src = '<span style="color:red"><span style="color:blue">가</span>나</span>다\n';
+    const { doc } = parseDocument(src);
+    const tr = new Transform(doc);
+    doc.descendants((n, pos) => {
+      if (n.isText && n.text === '나') tr.replaceWith(pos, pos + n.nodeSize, doc.type.schema.text('나!', n.marks));
+    });
+    const saved = serializeDocument(tr.doc, null);
+    expect(saved).toContain('가');
+    expect(saved).toContain('나!');
+    expect(saved).toContain('다');
+    expect((saved.match(/<span\b/g) ?? []).length).toBe((saved.match(/<\/span>/g) ?? []).length);
+    const again = serializeDocument(parseDocument(saved).doc, null);
+    expect(again).toBe(saved);
+  });
+
+  it('짝 없는 여는 span·닫는 span·인식 못 한 span 은 원문 그대로 보존한다', () => {
+    for (const src of ['<span style="color:red">가\n', '나</span>\n', '<span class="x">다</span>\n']) {
+      const { doc, baseline } = parseDocument(src);
       expect(serializeDocument(doc, baseline)).toBe(src);
     }
   });

@@ -4,6 +4,7 @@ import { tableNodes } from 'prosemirror-tables';
 
 import { marks as baseMarks, nodes as baseNodes } from '@oh-new-editor/core';
 import { colorFromStyle } from './text-color';
+import { sizeFromStyle } from './text-size';
 
 /**
  * Nopsidian 스키마 = 업스트림 기본 노드 + 콜아웃·토글·열·위키링크·임베드·수식·원문 보존 노드 + 표.
@@ -284,6 +285,22 @@ const textColor: MarkSpec = {
   toDOM: (mark) => ['span', { style: `color:${mark.attrs.color}`, 'data-color': mark.attrs.color, class: 'nops-color' }, 0]
 };
 
+/** 글자 크기: 파일에는 `<span style="font-size:120%">` 로 저장하고, 화면에서는 같은 퍼센트를 인라인 크기로 쓴다. */
+const textSize: MarkSpec = {
+  attrs: { percent: {} },
+  inclusive: false,
+  parseDOM: [
+    {
+      tag: 'span[style]',
+      getAttrs: (dom) => {
+        const percent = sizeFromStyle((dom as HTMLElement).getAttribute('style') ?? '');
+        return percent ? { percent } : false;
+      }
+    }
+  ],
+  toDOM: (mark) => ['span', { style: `font-size:${mark.attrs.percent}%`, 'data-size': String(mark.attrs.percent), class: 'nops-size' }, 0]
+};
+
 function withAttrs(spec: NodeSpec | undefined, attrs: NonNullable<NodeSpec['attrs']>): NodeSpec {
   // 이 함수는 스키마를 만들 때(모듈 로드) 불린다 — t() 를 부르면 로드 시점 언어로 고정되므로 코드만 붙인다.
   if (!spec) throw Object.assign(new Error('editor.err.upstreamNode'), { key: 'editor.err.upstreamNode', params: {} });
@@ -367,7 +384,8 @@ function buildNodes() {
 }
 
 export const nopsNodes = buildNodes();
-export const nopsMarks = (baseMarks as import('orderedmap').default<MarkSpec>).addToEnd('highlight', highlight).addToEnd('color', textColor);
+export const nopsMarks = (baseMarks as import('orderedmap').default<MarkSpec>).addToEnd('highlight', highlight).addToEnd('color', textColor)
+  .addToEnd('textSize', textSize);
 
 export function createNopsSchema(): Schema {
   return new Schema({ nodes: nopsNodes, marks: nopsMarks });

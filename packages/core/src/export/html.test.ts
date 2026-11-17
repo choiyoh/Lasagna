@@ -18,6 +18,12 @@ describe('renderNoteBody', () => {
     const h = renderNoteBody('<span style="color:#c0392b">빨강</span> 글\n', opts);
     expect(h).toContain('<span style="color:#c0392b">빨강</span>');
   });
+  it('글자 크기 span 도 HTML 내보내기에 남고, 색과 겹쳐도 둘 다 유지된다', () => {
+    const h = renderNoteBody('<span style="color:#2f6f9f"><span style="font-size:120%">색큰</span></span>\n', opts);
+    expect(h).toContain('color:#2f6f9f');
+    expect(h).toContain('font-size:120%');
+    expect(h).toContain('색큰');
+  });
 
   it('위키링크: 있으면 링크(제목·블록 조각 포함), 없으면 미해결 표시, 별칭', () => {
     const h = renderNoteBody('[[있는노트#세부 내용|보기]] [[없는노트]] [[있는노트#^abc]]', opts);

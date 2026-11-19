@@ -61,7 +61,23 @@ export function requireVault(): OpenVault {
   return current;
 }
 
-export async function openVaultAt(root: string): Promise<VaultInfo> {
+/** 볼트 전환을 한 줄로 세우는 사슬 — 이전 전환의 index.close() 가 끝난 뒤 다음 전환이 시작된다. */
+let switching: Promise<unknown> = Promise.resolve();
+
+/**
+ * 볼트를 연다. 빠른 연속 전환(열기 직후 다른 볼트 열기)에서도 한 번에 하나만 진행되게 직렬화한다
+ * (겹치면 이전 워커가 감시 구독 도중에 종료돼 메인까지 죽는 창이 생긴다).
+ */
+export function openVaultAt(root: string): Promise<VaultInfo> {
+  const next = switching.then(
+    () => doOpenVaultAt(root),
+    () => doOpenVaultAt(root),
+  );
+  switching = next.catch(() => undefined);
+  return next;
+}
+
+async function doOpenVaultAt(root: string): Promise<VaultInfo> {
   const real = path.resolve(root);
   if (!statSync(real).isDirectory()) throw new Error(t('main.err.notFolder'));
   const dotDir = path.join(real, '.nopsidian');

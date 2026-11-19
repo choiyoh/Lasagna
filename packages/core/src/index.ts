@@ -14,6 +14,7 @@ export * from './errors.js';
 export * from './text-stats.js';
 export * from './writer-goal.js';
 export * from './writer-daily.js';
+export * from './writer-stats.js';
 export * from './paper-sheets.js';
 export * from './work.js';
 export * from './work-sidebar.js';

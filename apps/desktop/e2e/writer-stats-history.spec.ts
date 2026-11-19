@@ -82,6 +82,15 @@ async function dayStart(page: Page, offsetDays: number): Promise<{ vaultId: stri
   }, offsetDays);
 }
 
+/** 통계 파일을 새로 시작하고 싶을 때: userData 를 새 폴더로 바꿔 앱을 다시 띄운다. */
+async function freshApp(suffix: string): Promise<Page> {
+  await app.close();
+  userDataDir = path.join(base, `userdata-${suffix}`);
+  mkdirSync(userDataDir, { recursive: true });
+  app = await launch();
+  return app.firstWindow();
+}
+
 test.beforeAll(async () => {
   test.setTimeout(240_000);
   base = mkdtempSync(path.join(tmpdir(), 'nops-stats-'));
@@ -90,7 +99,10 @@ test.beforeAll(async () => {
   mkdirSync(noteDir, { recursive: true });
   mkdirSync(path.join(vaultDir, '작품', '캐릭터'), { recursive: true });
   userDataDir = path.join(base, 'userdata');
+  mkdirSync(userDataDir, { recursive: true });
   writeExternalNote(path.join(noteDir, '1화.md'), '# 1화\n\n처음\n');
+  // 작품 인식(회차+캐릭터 폴더)과 폴더 이름 바꾸기 뒤에도 남는 폴더를 위해 캐릭터 노트도 둔다.
+  writeExternalNote(path.join(vaultDir, '작품', '캐릭터', '주인공.md'), '# 주인공\n');
   writeExternalNote(path.join(noteDir, '2화.md'), '# 2화\n\n처음\n');
   app = await launch();
 });
@@ -156,4 +168,105 @@ test('날짜가 바뀌면 그날 합계가 history 로 남고, 날짜별 조회�
     [before.vaultId, before.date],
   );
   expect(afterRestart).toEqual({ [before.date]: { total: todayChars, works: { 작품: todayChars }, goal: 500 } });
+});
+
+test('같은 날 이름을 바꿔도 그날 값이 :outside 가 되지 않고, undo 는 되돌린다', async () => {
+  const page = await freshApp('rename');
+  await resetWriter(page);
+  await openEpisode(page);
+  const d0 = await dayStart(page, 0);
+
+  await page.locator('.ProseMirror p').last().click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' 이름을 바꾼 날의 문장입니다');
+  await expect(page.locator('.note-editor__status')).toHaveAttribute('data-state', 'saved', { timeout: 15_000 });
+  await expect(page.getByTestId('writer-today')).toContainText(/[1-9]/, { timeout: 15_000 });
+  const chars = await page.evaluate(async (vaultId) => (await window.nops.settings.writerToday({ vaultId })).chars, d0.vaultId);
+
+  // 작품 폴더 이름을 바꾸고(오늘 값이 아직 닫히지 않았다) 자정을 넘긴다.
+  const { undoId } = await page.evaluate(() => window.nops.note.rename({ from: '작품', to: '작품나' }));
+  expect(undoId).toBeTruthy();
+  await shiftDays(1);
+  await dayStart(page, 1);
+  await page.evaluate(async (vaultId) => window.nops.settings.writerToday({ vaultId }), d0.vaultId);
+  const day = await page.evaluate(
+    async ([vaultId, date]) => window.nops.settings.writerHistory({ vaultId: vaultId!, from: date!, to: date! }),
+    [d0.vaultId, d0.date],
+  );
+  expect(day[d0.date]).toEqual({ total: chars, works: { 작품나: chars }, goal: 500 });
+
+  // 이름 바꾸기 취소 → 그날 작품 키도 원래 이름으로 돌아간다.
+  await page.evaluate((id) => window.nops.note.undoRename({ undoId: id }), undoId);
+  const after = await page.evaluate(
+    async ([vaultId, date]) => window.nops.settings.writerHistory({ vaultId: vaultId!, from: date!, to: date! }),
+    [d0.vaultId, d0.date],
+  );
+  expect(after[d0.date]).toEqual({ total: chars, works: { 작품: chars }, goal: 500 });
+
+  // 자정을 넘긴 뒤(다음 날 아침) 이름을 바꿔도 그 전날 값은 원래 작품으로 확정된다.
+  await openEpisode(page);
+  await page.locator('.ProseMirror p').last().click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' 다음 날 아침 문장');
+  await expect(page.locator('.note-editor__status')).toHaveAttribute('data-state', 'saved', { timeout: 15_000 });
+  const d1 = await dayStart(page, 1);
+  const day1Chars = await page.evaluate(async (vaultId) => (await window.nops.settings.writerToday({ vaultId })).chars, d1.vaultId);
+  await shiftDays(2);
+  await dayStart(page, 2);
+  const morning = await page.evaluate(() => window.nops.note.rename({ from: '작품', to: '작품나' }));
+  const closed = await page.evaluate(
+    async ([vaultId, date]) => window.nops.settings.writerHistory({ vaultId: vaultId!, from: date!, to: date! }),
+    [d1.vaultId, d1.date],
+  );
+  // 마감은 rename 전에 옛 이름으로 끝나고(작품 밖이 아님), rename 이 그 키를 새 이름으로 옮긴다.
+  expect(closed[d1.date]).toEqual({ total: day1Chars, works: { 작품나: day1Chars }, goal: 500 });
+  await page.evaluate((id) => window.nops.note.undoRename({ undoId: id }), morning.undoId);
+  const restored = await page.evaluate(
+    async ([vaultId, date]) => window.nops.settings.writerHistory({ vaultId: vaultId!, from: date!, to: date! }),
+    [d1.vaultId, d1.date],
+  );
+  expect(restored[d1.date]).toEqual({ total: day1Chars, works: { 작품: day1Chars }, goal: 500 });
+  await shiftDays(0);
+});
+
+test('다른 볼트를 연 채 자정이 지나도 닫힌 볼트의 값이 :outside 로 확정되지 않는다', async () => {
+  const page = await freshApp('multi');
+  await resetWriter(page);
+  await openEpisode(page);
+  const a = await dayStart(page, 0);
+
+  await page.locator('.ProseMirror p').last().click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' 볼트 A 의 문장');
+  await expect(page.locator('.note-editor__status')).toHaveAttribute('data-state', 'saved', { timeout: 15_000 });
+  const aChars = await page.evaluate(async (vaultId) => (await window.nops.settings.writerToday({ vaultId })).chars, a.vaultId);
+  expect(aChars).toBeGreaterThan(0);
+
+  // 두 번째 볼트로 전환하고, 그 볼트를 연 채 자정이 지나게 한다.
+  const second = path.join(base, 'Second');
+  mkdirSync(path.join(second, '겨울', '회차'), { recursive: true });
+  mkdirSync(path.join(second, '겨울', '캐릭터'), { recursive: true });
+  writeExternalNote(path.join(second, '겨울', '회차', '1화.md'), '# 1화\n\n겨울\n');
+  await app.evaluate(({ dialog }, dir) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as typeof dialog.showOpenDialog;
+  }, second);
+  const b = await page.evaluate(async () => {
+    const opened = await window.nops.vault.pick();
+    return { id: opened!.id };
+  });
+  await expect.poll(async () => page.evaluate(async () => (await window.nops.vault.current())?.id)).toBe(b.id);
+  await page.evaluate(async (vaultId) => window.nops.settings.writerToday({ vaultId }), b.id);
+  await shiftDays(1);
+  await dayStart(page, 1);
+  await page.evaluate(async (vaultId) => window.nops.settings.writerToday({ vaultId }), b.id);
+
+  // 아직 볼트 A 를 열지 않았으므로 그날 값은 닫히지 않고 보류된다(작품 밖으로 확정되지 않는다).
+  const saved = JSON.parse(readFileSync(path.join(userDataDir, 'writer-stats.json'), 'utf8')) as {
+    history: Record<string, Record<string, unknown>>;
+    pending: Record<string, { date: string; vaults: Record<string, number> }[]>;
+  };
+  expect(saved.history[a.vaultId]).toBeUndefined();
+  expect(saved.pending[a.vaultId]?.[0]).toEqual({ date: a.date, vaults: { '작품/회차/1화.md': aChars } });
+  // 그 볼트를 나중에 열면 그때 작품 이름으로 닫힌다(단위 테스트로 고정) — 여기서는 파일에 남은 경로가 증거다.
+  expect(Object.keys(saved.pending[a.vaultId]?.[0]?.vaults ?? {})).toEqual(['작품/회차/1화.md']);
 });

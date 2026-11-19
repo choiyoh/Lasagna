@@ -51,6 +51,9 @@ export interface UndoStatMove extends UndoGoalMove {
   dates: string[];
 }
 
+/** 이름 바꾸기와 함께 옮긴 '오늘의 문서 키'(아직 닫히지 않은 날). undo 는 역방향으로 되돌린다. */
+export type UndoTodayMove = UndoGoalMove;
+
 interface UndoRecord {
   moves: Move[];
   edits: { path: string; newPath: string; before: string; afterHash: string }[];
@@ -59,6 +62,8 @@ interface UndoRecord {
   goalMoves?: UndoGoalMove[];
   /** 이름 바꾸기와 함께 옮긴 작품별 통계 키(날짜별). 같은 이유로 기록만 보고 되돌린다. */
   statMoves?: UndoStatMove[];
+  /** 이름 바꾸기와 함께 새 경로로 옮긴 오늘의 문서 키. */
+  todayMoves?: UndoTodayMove[];
 }
 
 const undoPath = (root: string, id: string) => path.join(root, '.nopsidian', 'ops', `rename-${id}.json`);
@@ -167,8 +172,30 @@ export function setUndoStatMoves(root: string, id: string, statMoves: UndoStatMo
   }
 }
 
+/**
+ * 이름 바꾸기 기록에 '오늘의 문서 키' 이동 내역을 남긴다(undo 가 역방향으로 되돌리도록).
+ * 기록이 없거나 쓰기가 실패하면 조용히 넘어간다 — 이름 바꾸기·undo 를 막지 않는다.
+ */
+export function setUndoTodayMoves(root: string, id: string, todayMoves: UndoTodayMove[]): void {
+  const file = undoPath(root, id);
+  try {
+    if (!existsSync(file)) return;
+    const record = JSON.parse(readFileSync(file, 'utf8')) as UndoRecord;
+    writeFileSync(file, JSON.stringify({ ...record, todayMoves }));
+  } catch {
+    // 오늘 키 기록 실패는 이름 바꾸기·undo 를 막지 않는다.
+  }
+}
+
 /** 이름 변경을 되돌린다. 그 뒤에 사용자가 같은 노트를 또 고쳤다면 그 노트의 내용은 덮어쓰지 않고 건너뛴다. */
-export function undoRename(root: string, id: string): { restored: number; skipped: string[]; moves: Move[]; goalMoves: UndoGoalMove[]; statMoves: UndoStatMove[] } {
+export function undoRename(root: string, id: string): {
+  restored: number;
+  skipped: string[];
+  moves: Move[];
+  goalMoves: UndoGoalMove[];
+  statMoves: UndoStatMove[];
+  todayMoves: UndoTodayMove[];
+} {
   const file = undoPath(root, id);
   if (!existsSync(file)) throw new CodedError('main.err.noRevertRecord');
   const record = JSON.parse(readFileSync(file, 'utf8')) as UndoRecord;
@@ -199,5 +226,12 @@ export function undoRename(root: string, id: string): { restored: number; skippe
   for (const m of [...record.moves].reverse()) relocateComments(root, m.to, m.from); // 댓글도 원래 이름으로
   pruneEmptyDirs([...new Set(record.moves.map((m) => path.dirname(resolveInVault(root, m.to))))]);
   writeFileSync(file, JSON.stringify({ ...record, undone: true }));
-  return { restored, skipped, moves: record.moves, goalMoves: record.goalMoves ?? [], statMoves: record.statMoves ?? [] };
+  return {
+    restored,
+    skipped,
+    moves: record.moves,
+    goalMoves: record.goalMoves ?? [],
+    statMoves: record.statMoves ?? [],
+    todayMoves: record.todayMoves ?? [],
+  };
 }

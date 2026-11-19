@@ -1,7 +1,7 @@
 import squirrelStartup from 'electron-squirrel-startup';
 import { app, BrowserWindow, Menu, dialog, safeStorage, session, shell } from 'electron';
 import { createHash } from 'node:crypto';
-import { applyRename, planRename, setUndoGoalMoves, setUndoStatMoves, undoRename } from './rename';
+import { applyRename, planRename, setUndoGoalMoves, setUndoStatMoves, setUndoTodayMoves, undoRename } from './rename';
 import { linkMention } from '../workers/index/mention-link';
 import path from 'node:path';
 import {
@@ -42,7 +42,7 @@ import { resolveLocale, setLocale, t } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
 import { WriterStatsStore } from './writer-stats-store';
 import { WriterWorksStore } from './writer-works-store';
-import { OUTSIDE_WORK, deleteSnapshot, listSnapshots, moveNoteHistory, readSnapshot, renameSnapshot, saveSnapshot } from '@nopsidian/core';
+import { deleteSnapshot, listSnapshots, moveNoteHistory, readSnapshot, renameSnapshot, saveSnapshot } from '@nopsidian/core';
 import { detectWorkRoots, summarizeWorks } from '@nopsidian/core';
 import { countMarkdown } from '@nopsidian/core';
 import { configureIpc, handle, registerWebContents } from './ipc';
@@ -370,6 +370,8 @@ function registerHandlers() {
   handle('note.rename', async ({ from, to }) => {
     const v = requireVault();
     await v.index.ready;
+    // 이름을 바꾸기 전에 지난 날짜를 **지금 작품 이름으로** 닫아 둔다(마감 뒤 rename 때문에 `:outside` 가 되지 않게).
+    writerStatsStore().settle();
     const { plan, moves } = planRename(v.info.path, await snapshotVault(v), from, to);
     const { undoId } = applyRename(v.info.path, moves, plan);
     // 이름·폴더가 바뀐 노트의 자동 이력·스냅샷도 새 경로 키로 따라간다(실패해도 이름 바꾸기는 성공).
@@ -381,6 +383,8 @@ function registerHandlers() {
     // 작품별 쓰기 통계의 지난 날짜 키도 새 이름으로 따라간다(옮긴 날짜를 기록해 undo 가 정확히 되돌린다).
     const movedStats = moveWorkStats(v, from, to);
     if (movedStats) setUndoStatMoves(v.info.path, undoId, [movedStats]);
+    // 아직 닫히지 않은 '오늘'의 문서 키도 새 경로로 옮긴다(안 옮기면 그날 값이 `:outside` 로 확정된다).
+    if (writerStatsStore().moveToday(v.info.id, from, to)) setUndoTodayMoves(v.info.path, undoId, [{ vaultId: v.info.id, from, to }]);
     writerWorkCache = null; // 작품 폴더 이름이 바뀌었다
     // 앱이 기억하던 노트 내용(3-way 병합의 기준)은 이동·갱신 뒤에는 무효다
     v.bases.clear();
@@ -406,6 +410,15 @@ function registerHandlers() {
     for (const s of r.statMoves) {
       try {
         writerStatsStore().undoMove(s.vaultId, s.from, s.to, s.dates);
+      } catch {
+        // 통계 파일 문제가 undo 자체를 막지 않는다.
+      }
+    }
+    // 오늘 값은 원래 경로로 되돌리고, 그 값이 그새 마감됐다면 그 날짜의 작품 키도 되돌린다.
+    for (const s of r.todayMoves) {
+      try {
+        writerStatsStore().moveToday(s.vaultId, s.to, s.from);
+        writerStatsStore().undoMove(s.vaultId, s.from, s.to, null);
       } catch {
         // 통계 파일 문제가 undo 자체를 막지 않는다.
       }
@@ -922,7 +935,7 @@ let writerStats: WriterStatsStore | null = null;
 let writerDayOffset = 0;
 const writerClock = () => new Date(Date.now() + writerDayOffset * 86_400_000);
 function writerStatsStore(): WriterStatsStore {
-  writerStats ??= new WriterStatsStore(path.join(app.getPath('userData'), 'writer-stats.json'), writerClock, writerWorkFor, () => settingsStore().value.writerDailyGoal ?? null);
+  writerStats ??= new WriterStatsStore(path.join(app.getPath('userData'), 'writer-stats.json'), writerClock, writerWorkRoots, () => settingsStore().value.writerDailyGoal ?? null);
   return writerStats;
 }
 
@@ -950,12 +963,6 @@ function writerWorkRoots(vaultId: string): string[] | null {
     return writerWorkCache?.vaultId === vaultId ? writerWorkCache.roots : null;
   }
 }
-function writerWorkFor(vaultId: string, notePath: string): string {
-  const folder = notePath.split('/')[0] ?? '';
-  const roots = writerWorkRoots(vaultId);
-  return folder && roots?.includes(folder) ? folder : OUTSIDE_WORK;
-}
-
 // e2e 전용: 날짜를 넘겨 하루 닫기를 확인한다(테스트 빌드에서만 노출, 배포 앱은 훅 자체가 없다).
 if (BACKGROUND_E2E) {
   (globalThis as { __nopsE2ESetWriterDayOffset?: (days: number) => void }).__nopsE2ESetWriterDayOffset = (days) => {

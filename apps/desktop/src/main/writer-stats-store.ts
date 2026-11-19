@@ -1,14 +1,14 @@
 import { atomicWrite } from '@nopsidian/core';
 import {
-  OUTSIDE_WORK,
   addDailyDelta,
   closeWriterDay,
   dayKey,
   historyRange,
+  moveTodayNoteKeys,
   moveWorkHistory,
   parseWriterDailyFile,
   todayChars,
-  type WorkResolver,
+  type WorkRoots,
   type WriterDailyFile,
   type WriterHistoryDay,
 } from '@nopsidian/core';
@@ -25,7 +25,7 @@ export class WriterStatsStore {
   constructor(
     private readonly path: string,
     private readonly now: () => Date = () => new Date(),
-    private readonly resolveWork: WorkResolver = () => OUTSIDE_WORK,
+    private readonly workRoots: WorkRoots = () => null,
     /** 하루 목표(닫는 시점 값). 없으면 null — 과거 날짜의 달성 여부는 그때 목표로 고정된다. */
     private readonly dailyGoal: () => number | null = () => null,
   ) {}
@@ -50,7 +50,8 @@ export class WriterStatsStore {
 
   private load(): WriterDailyFile {
     const today = this.todayKey();
-    if (this.file && this.file.today.date === today) return this.file;
+    // 메모리에 있어도 다시 닫아 본다 — 보류해 둔 볼트의 작품을 이제 알 수 있으면 그때 닫힌다.
+    if (this.file) return this.close(this.file, today);
     let raw: string | null = null;
     try {
       raw = readFileSync(this.path, 'utf8');
@@ -59,19 +60,30 @@ export class WriterStatsStore {
     }
     const parsed = parseWriterDailyFile(raw, today);
     if (!parsed.valid && raw !== null) this.backup();
-    const closed = closeWriterDay(parsed.file, today, this.resolveWork, this.dailyGoal());
-    // 닫은 기록은 바로 남긴다(닫기 직후 앱이 죽어도 지난 날이 사라지지 않게). 실패해도 조회는 계속된다.
-    if (closed !== parsed.file) {
-      try {
-        this.persist(closed);
-        return closed;
-      } catch {
-        this.file = closed;
-        return closed;
-      }
+    return this.close(parsed.file, today);
+  }
+
+  /**
+   * 날짜가 바뀌었거나 보류한 볼트를 알게 됐으면 닫고 바로 저장한다
+   * (닫기 직후 앱이 죽어도 지난 날이 사라지지 않게). 저장에 실패해도 조회는 계속된다.
+   */
+  private close(file: WriterDailyFile, today: string): WriterDailyFile {
+    const closed = closeWriterDay(file, today, this.workRoots, this.dailyGoal());
+    if (closed === file) {
+      this.file = file;
+      return file;
     }
-    this.file = closed;
+    try {
+      this.persist(closed);
+    } catch {
+      this.file = closed;
+    }
     return closed;
+  }
+
+  /** 지난 날짜를 지금 알 수 있는 작품 이름으로 닫아 둔다(이름 바꾸기 전에 호출해 귀속을 지킨다). */
+  settle(): void {
+    this.load();
   }
 
   /** 오늘 쓴 글자수와 오늘 날짜(자정을 넘겼으면 0). */
@@ -95,7 +107,18 @@ export class WriterStatsStore {
    */
   range(vaultId: string, from: string, to: string): Record<string, WriterHistoryDay> {
     const file = this.load();
-    return historyRange(file, vaultId, from, to, this.todayKey(), this.resolveWork);
+    return historyRange(file, vaultId, from, to, this.todayKey(), this.workRoots);
+  }
+
+  /**
+   * 오늘의 문서 키를 이름이 바뀐 경로로 옮긴다(같은 날 rename 뒤 마감할 때 `:outside` 로 확정되지 않게).
+   * 옮긴 것이 있으면 true — undo 가 역방향으로 호출한다.
+   */
+  moveToday(vaultId: string, from: string, to: string): boolean {
+    const loaded = this.load();
+    const { file, moved } = moveTodayNoteKeys(loaded, vaultId, from, to);
+    if (moved) this.persist(file);
+    return moved;
   }
 
   /**
@@ -109,8 +132,11 @@ export class WriterStatsStore {
     return moved;
   }
 
-  /** 이름 바꾸기 취소 — 옮겼던 날짜만 역방향으로 되돌린다(경로 추정 없음). */
-  undoMove(vaultId: string, from: string, to: string, dates: readonly string[]): string[] {
+  /**
+   * 이름 바꾸기 취소 — 옮겼던 날짜만 역방향으로 되돌린다(경로 추정 없음).
+   * `dates` 가 null 이면 모든 날짜를 되돌린다(아직 닫히지 않은 오늘 값을 옮긴 뒤 그 값이 마감된 경우).
+   */
+  undoMove(vaultId: string, from: string, to: string, dates: readonly string[] | null): string[] {
     const loaded = this.load();
     const { file, moved } = moveWorkHistory(loaded, vaultId, to, from, dates);
     if (moved.length > 0) this.persist(file);

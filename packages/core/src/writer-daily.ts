@@ -276,6 +276,7 @@ function prunePending(pending: Record<string, WriterPendingDay[]>, today: string
 export function closeWriterDay(file: WriterDailyFile, today: string, roots: WorkRoots | null, goal: number | null = null): WriterDailyFile {
   const history: Record<string, Record<string, WriterHistoryDay>> = { ...file.history };
   const pending: Record<string, WriterPendingDay[]> = { ...file.pending };
+  const dayChanged = file.today.date !== today;
   let changed = false;
 
   // 1) 보류해 둔 날짜 중 이제 작품을 아는 볼트를 닫는다.
@@ -290,8 +291,8 @@ export function closeWriterDay(file: WriterDailyFile, today: string, roots: Work
     changed = true;
   }
 
-  // 2) 오늘이 바뀌었으면 닫는다 — 작품을 모르는 볼트는 보류한다.
-  if (file.today.date !== today) {
+  // 2) 오늘이 바뀌었으면 닫는다 — 작품을 모르는 볼트는 보류한다. (보류만 풀었을 때는 오늘 값을 건드리지 않는다.)
+  if (dayChanged) {
     for (const [vaultId, docs] of Object.entries(file.today.vaults)) {
       const known = roots?.(vaultId) ?? null;
       if (!known) {
@@ -305,7 +306,13 @@ export function closeWriterDay(file: WriterDailyFile, today: string, roots: Work
   }
 
   if (!changed) return file;
-  return { version: 2, today: { date: today, vaults: {} }, history: prune(history, today), pending: prunePending(pending, today) };
+  return {
+    version: 2,
+    // 날짜가 실제로 바뀐 경우에만 오늘을 비운다 — 보류를 풀었다고 다른 볼트의 오늘 값이 지워지면 안 된다.
+    today: dayChanged ? { date: today, vaults: {} } : file.today,
+    history: prune(history, today),
+    pending: prunePending(pending, today),
+  };
 }
 
 /**

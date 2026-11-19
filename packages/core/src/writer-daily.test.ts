@@ -270,3 +270,73 @@ describe('쓰기 통계 파일 — 같은 날 이름 바꾸기', () => {
     expect(moveTodayNoteKeys(file, 'v1', '없는/경로.md', '다른.md')).toEqual({ file, moved: false });
   });
 });
+
+describe('다른 볼트·다른 날짜·다른 작품 값은 바뀌지 않는다', () => {
+  const baseFile = (): ReturnType<typeof parseWriterDaily> => ({
+    version: 2,
+    today: { date: '2026-03-05', vaults: { a: { '가을/1화.md': 100 }, b: { '겨울/1화.md': 500 } } },
+    history: {
+      a: { '2026-02-01': { total: 1200, works: { 봄: 900, 가을: 300 }, goal: 500 } },
+      b: { '2026-02-01': { total: 40, works: { 겨울: 40 } } },
+    },
+    pending: {},
+  });
+
+  it('자정 마감은 다른 볼트·날짜·작품을 바꾸지 않는다', () => {
+    const before = baseFile();
+    const after = closeWriterDay(before, '2026-03-06', (vault) => (vault === 'a' ? ['가을'] : ['겨울']), 700);
+    expect(after.history.a?.['2026-02-01']).toEqual(before.history.a!['2026-02-01']);
+    expect(after.history.b?.['2026-02-01']).toEqual(before.history.b!['2026-02-01']);
+    expect(after.history.a?.['2026-03-05']).toEqual({ total: 100, works: { 가을: 100 }, goal: 700 });
+    expect(after.history.b?.['2026-03-05']).toEqual({ total: 500, works: { 겨울: 500 }, goal: 700 });
+    expect(after.today).toEqual({ date: '2026-03-06', vaults: {} });
+  });
+
+  it('보류를 풀어도 오늘 값(다른 볼트)은 지워지지 않는다', () => {
+    const file = { ...baseFile(), pending: { a: [{ date: '2026-03-04', vaults: { '가을/2화.md': 70 } }] } };
+    const after = closeWriterDay(file, '2026-03-05', (vault) => (vault === 'a' ? ['가을'] : null), 500);
+    expect(after.today).toEqual(file.today);
+    expect(todayChars(after, 'b')).toBe(500);
+    expect(after.history.a?.['2026-03-04']).toEqual({ total: 70, works: { 가을: 70 }, goal: 500 });
+    expect(after.history.b?.['2026-02-01']).toEqual(file.history.b!['2026-02-01']);
+    expect(after.pending).toEqual({});
+  });
+
+  it('rename 이동·undo 는 지정한 날짜의 그 작품 키만 바꾼다', () => {
+    const file = baseFile();
+    file.history.a!['2026-02-02'] = { total: 50, works: { 가을: 50 } };
+    const moved = moveWorkHistory(file, 'a', '가을', '겨울나무');
+    expect(moved.moved).toEqual(['2026-02-01', '2026-02-02']);
+    expect(moved.file.history.a?.['2026-02-01']).toEqual({ total: 1200, works: { 봄: 900, 겨울나무: 300 }, goal: 500 });
+
+    const back = moveWorkHistory(moved.file, 'a', '겨울나무', '가을', ['2026-02-02']);
+    expect(back.moved).toEqual(['2026-02-02']);
+    expect(back.file.history.a?.['2026-02-01']).toEqual({ total: 1200, works: { 봄: 900, 겨울나무: 300 }, goal: 500 }); // 다른 날짜는 그대로
+    expect(back.file.history.a?.['2026-02-02']).toEqual({ total: 50, works: { 가을: 50 } });
+    expect(back.file.history.b).toEqual(file.history.b);
+    expect(back.file.today).toEqual(file.today);
+  });
+
+  it('3650일 정리는 오래된 날짜만 지우고 다른 볼트·오늘 값은 그대로 둔다', () => {
+    const file = baseFile();
+    file.history.a!['2015-01-01'] = { total: 5, works: { 가을: 5 } };
+    const after = closeWriterDay(file, '2026-03-06', () => null);
+    expect(after.history.a?.['2015-01-01']).toBeUndefined();
+    expect(after.history.a?.['2026-02-01']).toEqual(file.history.a!['2026-02-01']);
+    expect(after.history.b).toEqual(file.history.b);
+  });
+
+  it('같은 날짜를 다시 닫아도 다른 볼트·작품 값을 낮추지 않는다', () => {
+    const file = baseFile();
+    const first = closeWriterDay(file, '2026-03-06', () => ['가을', '겨울'], 500);
+    const again = closeWriterDay(
+      { ...first, today: { date: '2026-03-05', vaults: { a: { '가을/1화.md': 10 }, b: { '겨울/1화.md': 20 } } } },
+      '2026-03-06',
+      () => ['가을', '겨울'],
+      300,
+    );
+    expect(again.history.a?.['2026-03-05']).toEqual({ total: 100, works: { 가을: 100 }, goal: 500 });
+    expect(again.history.b?.['2026-03-05']).toEqual({ total: 500, works: { 겨울: 500 }, goal: 500 });
+    expect(again.history.a?.['2026-02-01']).toEqual(file.history.a!['2026-02-01']);
+  });
+});

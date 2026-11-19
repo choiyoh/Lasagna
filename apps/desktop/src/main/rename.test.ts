@@ -201,11 +201,11 @@ describe('작품별 쓰기 통계 undo 기록', () => {
     const store = new WriterStatsStore(path.join(mkdtempSync(path.join(tmpdir(), 'nops-stats-')), 'writer-stats.json'), () => at, () => ['A']);
     store.add('v1', 'A/회차/001화.md', 100);
     const { undoId } = run('A', 'B');
-    expect(store.moveToday('v1', 'A', 'B')).toBe(true);
-    setUndoTodayMoves(root, undoId, [{ vaultId: 'v1', from: 'A', to: 'B' }]);
+    expect(store.moveToday('v1', 'A', 'B').moved).toBe(true);
+    setUndoTodayMoves(root, undoId, [{ vaultId: 'v1', from: 'A', to: 'B', date: '2026-03-05' }]);
 
     const r = undoRename(root, undoId);
-    expect(r.todayMoves).toEqual([{ vaultId: 'v1', from: 'A', to: 'B' }]);
+    expect(r.todayMoves).toEqual([{ vaultId: 'v1', from: 'A', to: 'B', date: '2026-03-05' }]);
     for (const t of r.todayMoves) store.moveToday(t.vaultId, t.to, t.from);
     // 아직 마감 전인 오늘 값이 원래 작품 이름으로 돌아간다.
     expect(store.range('v1', '2026-03-05', '2026-03-05')).toEqual({ '2026-03-05': { total: 100, works: { A: 100 } } });
@@ -213,6 +213,6 @@ describe('작품별 쓰기 통계 undo 기록', () => {
 
   it('기록이 없는 undoId 에 통계 내역을 남기려 해도 오류 없이 넘어간다', () => {
     expect(() => setUndoStatMoves(root, 'nope-123', [{ vaultId: 'v1', from: 'A', to: 'B', dates: ['2026-03-05'] }])).not.toThrow();
-    expect(() => setUndoTodayMoves(root, 'nope-123', [{ vaultId: 'v1', from: 'A', to: 'B' }])).not.toThrow();
+    expect(() => setUndoTodayMoves(root, 'nope-123', [{ vaultId: 'v1', from: 'A', to: 'B', date: '2026-03-05' }])).not.toThrow();
   });
 });

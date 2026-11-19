@@ -1,6 +1,7 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { waitForWatcher, writeExternalNote } from './watcher';
 
@@ -84,11 +85,22 @@ async function dayStart(page: Page, offsetDays: number): Promise<{ vaultId: stri
 
 /** 통계 파일을 새로 시작하고 싶을 때: userData 를 새 폴더로 바꿔 앱을 다시 띄운다. */
 async function freshApp(suffix: string): Promise<Page> {
+  return freshAppWith(suffix, null);
+}
+
+/** 앱이 읽기 전에 통계 파일을 미리 만들어 두고 띄운다(첫 통계 접근이 그 파일을 읽는다). */
+async function freshAppWith(suffix: string, seed: unknown | null): Promise<Page> {
   await app.close();
   userDataDir = path.join(base, `userdata-${suffix}`);
   mkdirSync(userDataDir, { recursive: true });
+  if (seed !== null) writeFileSync(path.join(userDataDir, 'writer-stats.json'), JSON.stringify(seed));
   app = await launch();
   return app.firstWindow();
+}
+
+/** 볼트 id = 앱이 쓰는 규칙(path.resolve 한 경로의 sha256 앞 12자). 파일을 미리 심을 때 쓴다. */
+function vaultIdOf(dir: string): string {
+  return createHash('sha256').update(path.resolve(dir)).digest('hex').slice(0, 12);
 }
 
 test.beforeAll(async () => {
@@ -269,4 +281,72 @@ test('다른 볼트를 연 채 자정이 지나도 닫힌 볼트의 값이 :outs
   expect(saved.pending[a.vaultId]?.[0]).toEqual({ date: a.date, vaults: { '작품/회차/1화.md': aChars } });
   // 그 볼트를 나중에 열면 그때 작품 이름으로 닫힌다(단위 테스트로 고정) — 여기서는 파일에 남은 경로가 증거다.
   expect(Object.keys(saved.pending[a.vaultId]?.[0]?.vaults ?? {})).toEqual(['작품/회차/1화.md']);
+});
+
+test('보류를 풀어도 다른 볼트의 오늘 값이 지워지지 않는다', async () => {
+  const { today, yesterday } = (() => {
+    const key = (offset: number) => {
+      const at = new Date(Date.now() + offset * 86_400_000);
+      return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+    };
+    return { today: key(0), yesterday: key(-1) };
+  })();
+  const id = vaultIdOf(vaultDir);
+  // A(작품)의 어제 값은 보류, 오늘은 B 라는 볼트에서 500자를 쓴 상태를 미리 만들어 둔다.
+  const page = await freshAppWith('pending', {
+    version: 2,
+    today: { date: today, vaults: { otherVault: { '겨울/1화.md': 500 } } },
+    history: {},
+    pending: { [id]: [{ date: yesterday, vaults: { '작품/회차/1화.md': 300 } }] },
+  });
+  await resetWriter(page);
+  await openEpisode(page); // 첫 통계 읽기에서 보류가 풀린다
+  const live = await page.evaluate(async (vaultId) => window.nops.settings.writerToday({ vaultId }), id);
+  expect(live.chars).toBe(0);
+  const past = await page.evaluate(
+    async ([vaultId, date]) => window.nops.settings.writerHistory({ vaultId: vaultId!, from: date!, to: date! }),
+    [id, yesterday],
+  );
+  expect(past[yesterday]).toEqual({ total: 300, works: { 작품: 300 }, goal: 500 });
+
+  const saved = JSON.parse(readFileSync(path.join(userDataDir, 'writer-stats.json'), 'utf8')) as {
+    today: { vaults: Record<string, Record<string, number>> };
+    pending: Record<string, unknown>;
+  };
+  // 다른 볼트의 오늘 값과 보류 흔적이 그대로다(지워지지 않았다).
+  expect(saved.today.vaults.otherVault).toEqual({ '겨울/1화.md': 500 });
+  expect(saved.pending[id]).toBeUndefined();
+});
+
+test('이름 바꾸기 취소는 그 rename 의 날짜만 되돌리고 다른 작품 키는 건드리지 않는다', async () => {
+  const id = vaultIdOf(vaultDir);
+  const at = new Date();
+  const today = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+  const page = await freshAppWith('undo', {
+    version: 2,
+    // 아직 닫히지 않은 오늘 값 — rename 이 이 키를 옮기고 undo 가 되돌린다(undo 레코드가 생기는 조건).
+    today: { date: today, vaults: { [id]: { '작품/회차/1화.md': 100 } } },
+    history: {
+      [id]: {
+        // 이번 rename 과 무관한 날짜 — 새 이름과 같은 이름의 다른 작품
+        '2026-01-15': { total: 900, works: { 작품나: 900 } },
+        // rename 이 옮길 날짜
+        '2026-02-01': { total: 1200, works: { 봄: 900, 작품: 300 } },
+      },
+    },
+    pending: {},
+  });
+  await resetWriter(page);
+  await openEpisode(page);
+  expect(await page.evaluate(async () => (await window.nops.vault.current())!.id)).toBe(id);
+
+  const { undoId } = await page.evaluate(() => window.nops.note.rename({ from: '작품', to: '작품나' }));
+  await page.evaluate((undoIdValue) => window.nops.note.undoRename({ undoId: undoIdValue }), undoId);
+  const range = await page.evaluate(
+    async (vaultId) => window.nops.settings.writerHistory({ vaultId, from: '2026-01-15', to: '2026-02-01' }),
+    id,
+  );
+  // 이번 rename 이 옮긴 날짜만 원래대로 돌아오고, 다른 날짜의 '작품나' 는 그대로다.
+  expect(range['2026-01-15']).toEqual({ total: 900, works: { 작품나: 900 } });
+  expect(range['2026-02-01']).toEqual({ total: 1200, works: { 봄: 900, 작품: 300 } });
 });

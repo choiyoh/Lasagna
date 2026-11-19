@@ -112,13 +112,14 @@ export class WriterStatsStore {
 
   /**
    * 오늘의 문서 키를 이름이 바뀐 경로로 옮긴다(같은 날 rename 뒤 마감할 때 `:outside` 로 확정되지 않게).
-   * 옮긴 것이 있으면 true — undo 가 역방향으로 호출한다.
+   * `date` 는 그 값이 마감될 날짜다 — undo 가 그 날짜만 되돌린다. 옮긴 것이 없으면 moved=false.
    */
-  moveToday(vaultId: string, from: string, to: string): boolean {
+  moveToday(vaultId: string, from: string, to: string): { moved: boolean; date: string } {
     const loaded = this.load();
+    const date = loaded.today.date;
     const { file, moved } = moveTodayNoteKeys(loaded, vaultId, from, to);
     if (moved) this.persist(file);
-    return moved;
+    return { moved, date };
   }
 
   /**

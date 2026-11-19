@@ -52,7 +52,10 @@ export interface UndoStatMove extends UndoGoalMove {
 }
 
 /** 이름 바꾸기와 함께 옮긴 '오늘의 문서 키'(아직 닫히지 않은 날). undo 는 역방향으로 되돌린다. */
-export type UndoTodayMove = UndoGoalMove;
+export interface UndoTodayMove extends UndoGoalMove {
+  /** 옮긴 값이 마감될 날짜(YYYY-MM-DD). undo 는 이 날짜의 작품 키만 되돌린다. */
+  date: string;
+}
 
 interface UndoRecord {
   moves: Move[];

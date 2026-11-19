@@ -185,7 +185,7 @@ describe('WriterStatsStore — 리뷰 재현 시나리오', () => {
     // rename: 마감 전에 지난 날짜를 지금 이름으로 닫고, 오늘 키를 새 경로로 옮긴다.
     store.settle();
     store.move('v1', '작품가', '작품나');
-    expect(store.moveToday('v1', '작품가', '작품나')).toBe(true);
+    expect(store.moveToday('v1', '작품가', '작품나').moved).toBe(true);
     roots.value = ['작품나'];
     store.add('v1', '작품나/회차/1화.md', 300);
 
@@ -201,11 +201,11 @@ describe('WriterStatsStore — 리뷰 재현 시나리오', () => {
     const store = new WriterStatsStore(file, () => clock.at, () => roots.value);
     store.add('v1', '작품가/회차/1화.md', 100);
     store.move('v1', '작품가', '작품나');
-    expect(store.moveToday('v1', '작품가', '작품나')).toBe(true);
+    expect(store.moveToday('v1', '작품가', '작품나').moved).toBe(true);
     roots.value = ['작품나'];
 
     // undo: 오늘 키를 원래 경로로 되돌린다(아직 닫히지 않았으므로 되돌릴 것이 있다).
-    expect(store.moveToday('v1', '작품나', '작품가')).toBe(true);
+    expect(store.moveToday('v1', '작품나', '작품가').moved).toBe(true);
     roots.value = ['작품가'];
     store.add('v1', '작품가/회차/1화.md', 50);
     clock.at = new Date(2026, 2, 6, 9, 0, 0);
@@ -234,5 +234,61 @@ describe('WriterStatsStore — 리뷰 재현 시나리오', () => {
     known.vaults = ['a'];
     expect(store.range('a', '2026-03-05', '2026-03-05')).toEqual({ '2026-03-05': { total: 200, works: { 작품가: 200 } } });
     expect(read(file).pending).toEqual({});
+  });
+});
+
+describe('WriterStatsStore — 2회차 리뷰 재현', () => {
+  it('보류(pending)를 풀어도 다른 볼트의 오늘 값이 지워지지 않는다', () => {
+    const file = join(dir(), 'writer-stats.json');
+    const clock = { at: new Date(2026, 2, 5, 10, 0, 0) };
+    // A 의 어제 값이 보류돼 있고, 오늘은 B 에서 500자를 쓴 상태의 파일.
+    writeFileSync(
+      file,
+      JSON.stringify({
+        version: 2,
+        today: { date: '2026-03-05', vaults: { b: { '겨울/1화.md': 500 } } },
+        history: {},
+        pending: { a: [{ date: '2026-03-04', vaults: { '가을/1화.md': 300 } }] },
+      }),
+    );
+    const known = { a: false };
+    const store = new WriterStatsStore(file, () => clock.at, (vaultId) => (vaultId === 'a' && !known.a ? null : vaultId === 'a' ? ['가을'] : ['겨울']));
+    expect(store.todayStats('b').chars).toBe(500);
+
+    // 볼트 A 를 열어 보류가 풀린다 — B 의 오늘 값은 그대로여야 한다.
+    known.a = true;
+    expect(store.todayStats('a').chars).toBe(0);
+    expect(store.todayStats('b').chars).toBe(500);
+    expect(read(file).today.vaults.b['겨울/1화.md']).toBe(500);
+    expect(read(file).history.a['2026-03-04']).toEqual({ total: 300, works: { 가을: 300 } });
+  });
+
+  it('undo 는 그 이름 바꾸기의 날짜만 되돌리고 다른 날짜·작품 키는 건드리지 않는다', () => {
+    const file = join(dir(), 'writer-stats.json');
+    const clock = { at: new Date(2026, 2, 5, 9, 0, 0) };
+    writeFileSync(
+      file,
+      JSON.stringify({
+        version: 2,
+        today: { date: '2026-03-05', vaults: {} },
+        history: {
+          v1: {
+            // 이번 rename 과 무관한 과거 날짜(다른 작품 이름)
+            '2026-02-01': { total: 1200, works: { 봄: 900, 가을: 300 } },
+            // rename 이 실제로 옮긴 날짜
+            '2026-03-04': { total: 300, works: { 가을: 300 } },
+          },
+        },
+        pending: {},
+      }),
+    );
+    const store = new WriterStatsStore(file, () => clock.at, () => ['가을']);
+    expect(store.move('v1', '가을', '겨울나무')).toEqual(['2026-02-01', '2026-03-04']);
+    // 오늘 값 이동 뒤 그 값이 마감된 상황: undo 는 그 날짜(03-05)만 되돌린다.
+    expect(store.undoMove('v1', '가을', '겨울나무', ['2026-03-04'])).toEqual(['2026-03-04']);
+    expect(store.range('v1', '2026-02-01', '2026-02-01')).toEqual({
+      '2026-02-01': { total: 1200, works: { 봄: 900, 겨울나무: 300 } },
+    });
+    expect(store.range('v1', '2026-03-04', '2026-03-04')).toEqual({ '2026-03-04': { total: 300, works: { 가을: 300 } } });
   });
 });

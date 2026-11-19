@@ -384,7 +384,8 @@ function registerHandlers() {
     const movedStats = moveWorkStats(v, from, to);
     if (movedStats) setUndoStatMoves(v.info.path, undoId, [movedStats]);
     // 아직 닫히지 않은 '오늘'의 문서 키도 새 경로로 옮긴다(안 옮기면 그날 값이 `:outside` 로 확정된다).
-    if (writerStatsStore().moveToday(v.info.id, from, to)) setUndoTodayMoves(v.info.path, undoId, [{ vaultId: v.info.id, from, to }]);
+    const movedToday = writerStatsStore().moveToday(v.info.id, from, to);
+    if (movedToday.moved) setUndoTodayMoves(v.info.path, undoId, [{ vaultId: v.info.id, from, to, date: movedToday.date }]);
     writerWorkCache = null; // 작품 폴더 이름이 바뀌었다
     // 앱이 기억하던 노트 내용(3-way 병합의 기준)은 이동·갱신 뒤에는 무효다
     v.bases.clear();
@@ -418,7 +419,8 @@ function registerHandlers() {
     for (const s of r.todayMoves) {
       try {
         writerStatsStore().moveToday(s.vaultId, s.to, s.from);
-        writerStatsStore().undoMove(s.vaultId, s.from, s.to, null);
+        // 그 값이 그새 마감됐다면 **그 날짜의 작품 키만** 되돌린다(다른 날짜·다른 작품은 건드리지 않는다).
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s.date)) writerStatsStore().undoMove(s.vaultId, s.from, s.to, [s.date]);
       } catch {
         // 통계 파일 문제가 undo 자체를 막지 않는다.
       }

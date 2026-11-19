@@ -13,6 +13,8 @@ export interface WriterHistoryDay {
   total: number;
   /** 작품 이름 → 그날 작품 합계(0 미만 없음) */
   works: Record<string, number>;
+  /** 그날의 하루 목표(닫는 시점 값). 목표가 없던 날은 키가 없다 — 나중에 목표를 바꿔도 과거 달성 여부는 불변. */
+  goal?: number;
 }
 
 export interface WriterDailyFile {
@@ -72,7 +74,7 @@ function cleanVaults(raw: unknown): Record<string, Record<string, number>> {
 
 function cleanDay(raw: unknown): WriterHistoryDay | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const value = raw as { total?: unknown; works?: unknown };
+  const value = raw as { total?: unknown; works?: unknown; goal?: unknown };
   const total = isFiniteInt(value.total) ? Math.max(0, value.total) : 0;
   const works: Record<string, number> = {};
   if (value.works && typeof value.works === 'object' && !Array.isArray(value.works)) {
@@ -83,7 +85,8 @@ function cleanDay(raw: unknown): WriterHistoryDay | null {
     }
   }
   if (total === 0 && Object.keys(works).length === 0) return null;
-  return { total, works };
+  const goal = isFiniteInt(value.goal) && value.goal > 0 ? value.goal : null;
+  return goal === null ? { total, works } : { total, works, goal };
 }
 
 /**
@@ -191,11 +194,16 @@ function prune(history: Record<string, Record<string, WriterHistoryDay>>, today:
   return out;
 }
 
+/** 하루 목표 값(1 이상)만 유효하다. 없거나 0 이하면 null. */
+const validGoal = (goal: number | null | undefined): number | null =>
+  typeof goal === 'number' && Number.isFinite(goal) && Math.trunc(goal) > 0 ? Math.trunc(goal) : null;
+
 /**
  * 날짜가 바뀌었으면(자정·시계 변경) 그 날짜의 합계를 history 로 닫고 오늘을 비운다.
  * 같은 날짜가 이미 기록돼 있으면 **줄이지 않는다**(항목별 max).
+ * `goal` 은 닫는 시점의 하루 목표다. 같은 날짜에 이미 목표가 기록돼 있으면 그 값을 지킨다.
  */
-export function closeWriterDay(file: WriterDailyFile, today: string, resolve: WorkResolver | null = null): WriterDailyFile {
+export function closeWriterDay(file: WriterDailyFile, today: string, resolve: WorkResolver | null = null, goal: number | null = null): WriterDailyFile {
   if (file.today.date === today) return file;
   const history: Record<string, Record<string, WriterHistoryDay>> = { ...file.history };
   for (const [vaultId, docs] of Object.entries(file.today.vaults)) {
@@ -203,12 +211,16 @@ export function closeWriterDay(file: WriterDailyFile, today: string, resolve: Wo
     if (day.total === 0 && Object.keys(day.works).length === 0) continue;
     const days = { ...(history[vaultId] ?? {}) };
     const prev = days[file.today.date];
+    const goalForDay = prev?.goal ?? validGoal(goal);
     days[file.today.date] = prev
       ? {
           total: Math.max(prev.total, day.total),
           works: { ...prev.works, ...Object.fromEntries(Object.entries(day.works).map(([w, n]) => [w, Math.max(n, prev.works[w] ?? 0)])) },
+          ...(goalForDay === null ? {} : { goal: goalForDay }),
         }
-      : day;
+      : goalForDay === null
+        ? day
+        : { ...day, goal: goalForDay };
     history[vaultId] = days;
   }
   return { version: 2, today: { date: today, vaults: {} }, history: prune(history, today) };

@@ -26,6 +26,8 @@ export class WriterStatsStore {
     private readonly path: string,
     private readonly now: () => Date = () => new Date(),
     private readonly resolveWork: WorkResolver = () => OUTSIDE_WORK,
+    /** 하루 목표(닫는 시점 값). 없으면 null — 과거 날짜의 달성 여부는 그때 목표로 고정된다. */
+    private readonly dailyGoal: () => number | null = () => null,
   ) {}
 
   private todayKey(): string {
@@ -57,7 +59,7 @@ export class WriterStatsStore {
     }
     const parsed = parseWriterDailyFile(raw, today);
     if (!parsed.valid && raw !== null) this.backup();
-    const closed = closeWriterDay(parsed.file, today, this.resolveWork);
+    const closed = closeWriterDay(parsed.file, today, this.resolveWork, this.dailyGoal());
     // 닫은 기록은 바로 남긴다(닫기 직후 앱이 죽어도 지난 날이 사라지지 않게). 실패해도 조회는 계속된다.
     if (closed !== parsed.file) {
       try {

@@ -756,7 +756,12 @@ export const contract = {
     }),
     output: z.record(
       z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      z.object({ total: z.number().int().min(0), works: z.record(z.string().max(300), z.number().int().min(0)) }),
+      z.object({
+        total: z.number().int().min(0),
+        works: z.record(z.string().max(300), z.number().int().min(0)),
+        /** 그날의 하루 목표(닫는 시점 값). 목표가 없던 날은 키가 없다. */
+        goal: z.number().int().min(1).optional(),
+      }),
     ),
   },
 } as const;

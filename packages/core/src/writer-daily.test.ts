@@ -72,6 +72,35 @@ describe('쓰기 통계 파일 — 날짜별 기록(history)', () => {
     expect(f.history.v1?.['2026-03-05']?.total).toBe(900);
   });
 
+  it('닫을 때 그 시점의 하루 목표를 날짜에 남긴다(없으면 키 없음)', () => {
+    let f = parseWriterDaily(null, '2026-03-05');
+    f = addDailyDelta(f, '2026-03-05', 'v1', 'a.md', 600);
+    const withGoal = closeWriterDay(f, '2026-03-06', null, 500);
+    expect(withGoal.history.v1?.['2026-03-05']).toEqual({ total: 600, works: { ':outside': 600 }, goal: 500 });
+    const noGoal = closeWriterDay(f, '2026-03-06', null, 0);
+    expect(noGoal.history.v1?.['2026-03-05']).toEqual({ total: 600, works: { ':outside': 600 } });
+  });
+
+  it('이미 기록된 목표는 나중 목표로 바꾸지 않는다', () => {
+    let f = parseWriterDaily(null, '2026-03-05');
+    f = addDailyDelta(f, '2026-03-05', 'v1', 'a.md', 600);
+    f = closeWriterDay(f, '2026-03-06', null, 500);
+    // 시계를 되돌려 같은 날짜를 다시 닫아도(다른 목표) 기존 목표를 지킨다.
+    const again = closeWriterDay({ ...f, today: { date: '2026-03-05', vaults: { v1: { 'a.md': 200 } } } }, '2026-03-06', null, 300);
+    expect(again.history.v1?.['2026-03-05']?.goal).toBe(500);
+  });
+
+  it('저장된 목표를 읽고, 잘못된 값은 버린다', () => {
+    const file = {
+      version: 2,
+      today: { date: '2026-03-05', vaults: {} },
+      history: { v1: { '2026-03-01': { total: 100, works: { A: 100 }, goal: 900 }, '2026-03-02': { total: 50, works: { A: 50 }, goal: 0 } } },
+    };
+    const parsed = parseWriterDaily(JSON.stringify(file), TODAY);
+    expect(parsed.history.v1?.['2026-03-01']?.goal).toBe(900);
+    expect(parsed.history.v1?.['2026-03-02']).toEqual({ total: 50, works: { A: 50 } });
+  });
+
   it('작품별로 나누고 각각 0 미만은 없다', () => {
     let f = parseWriterDaily(null, '2026-03-05');
     f = addDailyDelta(f, '2026-03-05', 'v1', '달빛/회차/1화.md', 1000);
@@ -94,8 +123,8 @@ describe('쓰기 통계 파일 — 날짜별 기록(history)', () => {
   it('v1 파일의 지난 날짜도 잃지 않고 그 날짜로 닫는다', () => {
     const parsed = parseWriterDailyFile(v1('2026-03-04', { v1: { 'a.md': 700 } }), TODAY);
     expect(parsed.valid).toBe(true);
-    const closed = closeWriterDay(parsed.file, TODAY, () => OUTSIDE_WORK);
-    expect(closed.history.v1?.['2026-03-04']).toEqual({ total: 700, works: { ':outside': 700 } });
+    const closed = closeWriterDay(parsed.file, TODAY, () => OUTSIDE_WORK, 500);
+    expect(closed.history.v1?.['2026-03-04']).toEqual({ total: 700, works: { ':outside': 700 }, goal: 500 });
     expect(closed.today).toEqual({ date: TODAY, vaults: {} });
   });
 

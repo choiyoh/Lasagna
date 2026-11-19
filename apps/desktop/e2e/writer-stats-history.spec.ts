@@ -60,9 +60,9 @@ async function openEpisode(page: Page): Promise<void> {
   await expect(page.locator('.ProseMirror')).toBeVisible();
 }
 
-/** 테스트 전제조건(한국어·공백 포함·작가 모드 켬). */
+/** 테스트 전제조건(한국어·공백 포함·작가 모드 켬·하루 목표 500자). */
 async function resetWriter(page: Page): Promise<void> {
-  await page.evaluate(() => window.nops.settings.setLanguage({ language: 'ko', writerMode: true, writerSpacing: 'include' }));
+  await page.evaluate(() => window.nops.settings.setLanguage({ language: 'ko', writerMode: true, writerSpacing: 'include', writerDailyGoal: 500 }));
   await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
 }
 
@@ -132,7 +132,8 @@ test('날짜가 바뀌면 그날 합계가 history 로 남고, 날짜별 조회�
     async ([vaultId, date]) => window.nops.settings.writerHistory({ vaultId: vaultId!, from: date!, to: date! }),
     [before.vaultId, before.date],
   );
-  expect(past).toEqual({ [before.date]: { total: todayChars, works: { 작품: todayChars } } });
+  // 닫는 시점의 하루 목표가 그 날짜에 남는다(나중에 목표를 바꿔도 그대로).
+  expect(past).toEqual({ [before.date]: { total: todayChars, works: { 작품: todayChars }, goal: 500 } });
 
   // 파일에는 version 2 로 남고, 노트 파일은 그대로다.
   const saved = JSON.parse(readFileSync(path.join(userDataDir, 'writer-stats.json'), 'utf8')) as {
@@ -154,5 +155,5 @@ test('날짜가 바뀌면 그날 합계가 history 로 남고, 날짜별 조회�
     async ([vaultId, date]) => window.nops.settings.writerHistory({ vaultId: vaultId!, from: date!, to: date! }),
     [before.vaultId, before.date],
   );
-  expect(afterRestart).toEqual({ [before.date]: { total: todayChars, works: { 작품: todayChars } } });
+  expect(afterRestart).toEqual({ [before.date]: { total: todayChars, works: { 작품: todayChars }, goal: 500 } });
 });

@@ -922,7 +922,7 @@ let writerStats: WriterStatsStore | null = null;
 let writerDayOffset = 0;
 const writerClock = () => new Date(Date.now() + writerDayOffset * 86_400_000);
 function writerStatsStore(): WriterStatsStore {
-  writerStats ??= new WriterStatsStore(path.join(app.getPath('userData'), 'writer-stats.json'), writerClock, writerWorkFor);
+  writerStats ??= new WriterStatsStore(path.join(app.getPath('userData'), 'writer-stats.json'), writerClock, writerWorkFor, () => settingsStore().value.writerDailyGoal ?? null);
   return writerStats;
 }
 

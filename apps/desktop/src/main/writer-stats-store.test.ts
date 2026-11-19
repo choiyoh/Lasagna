@@ -8,7 +8,7 @@ const dir = () => mkdtempSync(join(tmpdir(), 'writer-stats-'));
 interface SavedFile {
   version: number;
   today: { date: string; vaults: Record<string, Record<string, number>> };
-  history: Record<string, Record<string, { total: number; works: Record<string, number> }>>;
+  history: Record<string, Record<string, { total: number; works: Record<string, number>; goal?: number }>>;
 }
 const read = (file: string) => JSON.parse(readFileSync(file, 'utf8')) as SavedFile;
 
@@ -37,6 +37,35 @@ describe('WriterStatsStore', () => {
     expect(new WriterStatsStore(file, () => clock.at).range('v1', '2026-03-05', '2026-03-05')).toEqual({
       '2026-03-05': { total: 900, works: { ':outside': 900 } },
     });
+  });
+
+  it('하루를 닫을 때 그 시점의 하루 목표를 남기고, 나중에 목표를 바꿔도 지난 날짜는 그대로다', () => {
+    const file = join(dir(), 'writer-stats.json');
+    const clock = { at: new Date(2026, 2, 5, 23, 0, 0) };
+    const goal = { value: 500 as number | null };
+    const store = new WriterStatsStore(file, () => clock.at, () => ':outside', () => goal.value);
+    store.add('v1', 'a.md', 600);
+    clock.at = new Date(2026, 2, 6, 1, 0, 0);
+    store.todayStats('v1'); // 03-05 를 닫는다(목표 500)
+    goal.value = 300;
+    expect(read(file).history.v1['2026-03-05'].goal).toBe(500);
+
+    store.add('v1', 'a.md', 100);
+    clock.at = new Date(2026, 2, 7, 1, 0, 0);
+    store.todayStats('v1'); // 03-06 을 닫는다(목표 300)
+    expect(read(file).history.v1['2026-03-06']).toEqual({ total: 100, works: { ':outside': 100 }, goal: 300 });
+    goal.value = null;
+    expect(store.range('v1', '2026-03-05', '2026-03-05')['2026-03-05']?.goal).toBe(500);
+  });
+
+  it('목표가 없으면 날짜에 goal 키를 쓰지 않는다', () => {
+    const file = join(dir(), 'writer-stats.json');
+    const clock = { at: new Date(2026, 2, 5, 23, 0, 0) };
+    const store = new WriterStatsStore(file, () => clock.at);
+    store.add('v1', 'a.md', 40);
+    clock.at = new Date(2026, 2, 6, 1, 0, 0);
+    store.todayStats('v1');
+    expect(read(file).history.v1['2026-03-05']).toEqual({ total: 40, works: { ':outside': 40 } });
   });
 
   it('작품 폴더 안 노트는 작품별로, 작품 밖은 :outside 로 센다', () => {

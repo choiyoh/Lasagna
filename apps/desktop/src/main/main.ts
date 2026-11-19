@@ -1,7 +1,7 @@
 import squirrelStartup from 'electron-squirrel-startup';
 import { app, BrowserWindow, Menu, dialog, safeStorage, session, shell } from 'electron';
 import { createHash } from 'node:crypto';
-import { applyRename, planRename, setUndoGoalMoves, undoRename } from './rename';
+import { applyRename, planRename, setUndoGoalMoves, setUndoStatMoves, undoRename } from './rename';
 import { linkMention } from '../workers/index/mention-link';
 import path from 'node:path';
 import {
@@ -42,7 +42,7 @@ import { resolveLocale, setLocale, t } from '@nopsidian/i18n';
 import { AppSettingsStore, readAppSettings } from './app-settings';
 import { WriterStatsStore } from './writer-stats-store';
 import { WriterWorksStore } from './writer-works-store';
-import { deleteSnapshot, listSnapshots, moveNoteHistory, readSnapshot, renameSnapshot, saveSnapshot } from '@nopsidian/core';
+import { OUTSIDE_WORK, deleteSnapshot, listSnapshots, moveNoteHistory, readSnapshot, renameSnapshot, saveSnapshot } from '@nopsidian/core';
 import { detectWorkRoots, summarizeWorks } from '@nopsidian/core';
 import { countMarkdown } from '@nopsidian/core';
 import { configureIpc, handle, registerWebContents } from './ipc';
@@ -304,6 +304,7 @@ function registerHandlers() {
   handle('note.trash', ({ path: rel }) => {
     const v = requireVault();
     v.bases.delete(rel);
+    writerWorkCache = null; // 작품 폴더가 사라졌을 수 있다
     return moveToTrash(v.info.path, rel);
   });
   handle('note.duplicate', ({ path: rel }) => ({ path: duplicateNote(requireVault().info.path, rel) }));
@@ -353,7 +354,10 @@ function registerHandlers() {
     }
     return summarizeWorks(roots, all, stats);
   });
-  handle('folder.create', ({ path: rel }) => ({ path: createFolder(requireVault().info.path, rel) }));
+  handle('folder.create', ({ path: rel }) => {
+    writerWorkCache = null; // 새 작품 폴더가 바로 인식되게
+    return { path: createFolder(requireVault().info.path, rel) };
+  });
   handle('trash.list', () => listTrash(requireVault().info.path));
   handle('trash.purge', ({ trashId }) => ({ removed: purgeTrash(requireVault().info.path, trashId) }));
   handle('note.restore', ({ trashId }) => ({ path: restoreFromTrash(requireVault().info.path, trashId) }));
@@ -374,6 +378,10 @@ function registerHandlers() {
     // 작품 폴더(볼트 루트) 이름이 바뀌면 앱 데이터의 작품 목표도 새 키로 따라간다(실패해도 이름 바꾸기는 성공).
     const movedGoal = moveWorkGoal(v, from, to);
     if (movedGoal) setUndoGoalMoves(v.info.path, undoId, [{ vaultId: v.info.id, ...movedGoal }]);
+    // 작품별 쓰기 통계의 지난 날짜 키도 새 이름으로 따라간다(옮긴 날짜를 기록해 undo 가 정확히 되돌린다).
+    const movedStats = moveWorkStats(v, from, to);
+    if (movedStats) setUndoStatMoves(v.info.path, undoId, [movedStats]);
+    writerWorkCache = null; // 작품 폴더 이름이 바뀌었다
     // 앱이 기억하던 노트 내용(3-way 병합의 기준)은 이동·갱신 뒤에는 무효다
     v.bases.clear();
     v.selfWrites.clear();
@@ -391,6 +399,15 @@ function registerHandlers() {
         writerWorksStore().move(g.vaultId, g.to, g.from);
       } catch {
         // 목표 파일 문제가 undo 자체를 막지 않는다.
+      }
+    }
+    writerWorkCache = null; // 폴더 이름이 원래대로 돌아왔다
+    // 작품별 통계 키는 rename 때 옮겼던 날짜만 역방향으로 되돌린다.
+    for (const s of r.statMoves) {
+      try {
+        writerStatsStore().undoMove(s.vaultId, s.from, s.to, s.dates);
+      } catch {
+        // 통계 파일 문제가 undo 자체를 막지 않는다.
       }
     }
     v.bases.clear();
@@ -819,6 +836,7 @@ function registerHandlers() {
   handle('settings.workGoals', ({ vaultId }) => writerWorksStore().all(vaultId));
   handle('settings.setWorkGoal', ({ vaultId, work, goal }) => writerWorksStore().set(vaultId, work, goal));
   handle('settings.writerAddDelta', ({ vaultId, path: notePath, delta }) => writerStatsStore().add(vaultId, notePath, delta));
+  handle('settings.writerHistory', ({ vaultId, from, to }) => writerStatsStore().range(vaultId, from, to));
   handle('settings.setLanguage', ({ language, writerMode, writerSpacing, writerDailyGoal, writerFont, writerTypewriter, writerPaperCount }) => {
     if (language !== undefined) settingsStore().setLanguage(language);
     if (writerMode !== undefined || writerSpacing !== undefined || writerDailyGoal !== undefined || writerFont !== undefined || writerTypewriter !== undefined || writerPaperCount !== undefined) {
@@ -898,11 +916,63 @@ function currentLanguage(): AppLanguage {
   };
 }
 
-/** 작가 모드 통계(오늘 쓴 글자수) — userData 에만 쓰고 볼트는 건드리지 않는다. */
+/** 작가 모드 통계(오늘 쓴 글자수 + 날짜별 기록) — userData 에만 쓰고 볼트는 건드리지 않는다. */
 let writerStats: WriterStatsStore | null = null;
+/** e2e 전용 날짜 오프셋(일). 배포 빌드는 훅이 없어 항상 0 이다. */
+let writerDayOffset = 0;
+const writerClock = () => new Date(Date.now() + writerDayOffset * 86_400_000);
 function writerStatsStore(): WriterStatsStore {
-  writerStats ??= new WriterStatsStore(path.join(app.getPath('userData'), 'writer-stats.json'));
+  writerStats ??= new WriterStatsStore(path.join(app.getPath('userData'), 'writer-stats.json'), writerClock, writerWorkFor);
   return writerStats;
+}
+
+/**
+ * 노트 경로 → 작품 폴더 이름(작품 밖이면 `:outside`). 작품 인식은 사이드바·회차 판정과 같은 규칙을 쓴다.
+ * 폴더 목록은 e2e 에서 날짜를 넘겨도 쓸 수 있게 잠깐 캐시한다(하루가 닫힐 때만 쓰인다).
+ */
+const WORK_ROOT_TTL_MS = 60_000;
+let writerWorkCache: { vaultId: string; at: number; roots: string[] } | null = null;
+function writerWorkRoots(vaultId: string): string[] | null {
+  const now = Date.now();
+  if (writerWorkCache && writerWorkCache.vaultId === vaultId && now - writerWorkCache.at < WORK_ROOT_TTL_MS) return writerWorkCache.roots;
+  let v: ReturnType<typeof requireVault>;
+  try {
+    v = requireVault();
+  } catch {
+    return writerWorkCache?.vaultId === vaultId ? writerWorkCache.roots : null;
+  }
+  if (v.info.id !== vaultId) return writerWorkCache?.vaultId === vaultId ? writerWorkCache.roots : null;
+  try {
+    const roots = detectWorkRoots(listFolders(v.info.path)).map((r) => r.name);
+    writerWorkCache = { vaultId, at: now, roots };
+    return roots;
+  } catch {
+    return writerWorkCache?.vaultId === vaultId ? writerWorkCache.roots : null;
+  }
+}
+function writerWorkFor(vaultId: string, notePath: string): string {
+  const folder = notePath.split('/')[0] ?? '';
+  const roots = writerWorkRoots(vaultId);
+  return folder && roots?.includes(folder) ? folder : OUTSIDE_WORK;
+}
+
+// e2e 전용: 날짜를 넘겨 하루 닫기를 확인한다(테스트 빌드에서만 노출, 배포 앱은 훅 자체가 없다).
+if (BACKGROUND_E2E) {
+  (globalThis as { __nopsE2ESetWriterDayOffset?: (days: number) => void }).__nopsE2ESetWriterDayOffset = (days) => {
+    writerDayOffset = Number.isFinite(days) ? Math.trunc(days) : 0;
+  };
+}
+
+/** 작품 폴더 이름 바꾸기 뒤 통계 키를 옮긴다. 옮긴 날짜가 없으면 null(이름 바꾸기는 계속). */
+function moveWorkStats(v: ReturnType<typeof requireVault>, from: string, to: string): { vaultId: string; from: string; to: string; dates: string[] } | null {
+  const k = workGoalKeyForRename(from, to);
+  if (!k) return null;
+  try {
+    const dates = writerStatsStore().move(v.info.id, k.from, k.to);
+    return dates.length > 0 ? { vaultId: v.info.id, ...k, dates } : null;
+  } catch {
+    return null;
+  }
 }
 
 /** 작품 목표 — userData 에만 저장(볼트·노트 무기록). */

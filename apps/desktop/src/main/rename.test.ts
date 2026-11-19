@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFil
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { applyRename, expandMoves, planRename, setUndoGoalMoves, undoRename, type VaultSnapshot } from './rename';
+import { applyRename, expandMoves, planRename, setUndoGoalMoves, setUndoStatMoves, undoRename, type VaultSnapshot } from './rename';
+import { WriterStatsStore } from './writer-stats-store';
 import { WriterWorksStore } from './writer-works-store';
 import { workGoalKeyForRename } from './work-goal-key';
 
@@ -171,5 +172,30 @@ describe('작품 목표 undo 기록', () => {
 
   it('기록이 없는 undoId 에 목표 내역을 남기려 해도 오류 없이 넘어간다', () => {
     expect(() => setUndoGoalMoves(root, 'nope-123', [{ vaultId: 'v1', from: 'A', to: 'B' }])).not.toThrow();
+  });
+});
+
+describe('작품별 쓰기 통계 undo 기록', () => {
+  const clock = { at: new Date(2026, 2, 5, 10, 0, 0) };
+
+  it('이름 바꾸기로 옮긴 날짜를 기록하고, undo 는 그 날짜만 되돌린다', () => {
+    put('A/회차/001화.md', '# 1화\n');
+    const store = new WriterStatsStore(path.join(mkdtempSync(path.join(tmpdir(), 'nops-stats-')), 'writer-stats.json'), () => clock.at, () => 'A');
+    store.add('v1', 'A/회차/001화.md', 400);
+    clock.at = new Date(2026, 2, 6, 10, 0, 0);
+    store.todayStats('v1'); // 03-05 를 닫는다
+    const { undoId } = run('A', 'B');
+    const dates = store.move('v1', 'A', 'B');
+    expect(dates).toEqual(['2026-03-05']);
+    setUndoStatMoves(root, undoId, [{ vaultId: 'v1', from: 'A', to: 'B', dates }]);
+
+    const r = undoRename(root, undoId);
+    expect(r.statMoves).toEqual([{ vaultId: 'v1', from: 'A', to: 'B', dates: ['2026-03-05'] }]);
+    for (const s of r.statMoves) store.undoMove(s.vaultId, s.from, s.to, s.dates);
+    expect(store.range('v1', '2026-03-05', '2026-03-05')).toEqual({ '2026-03-05': { total: 400, works: { A: 400 } } });
+  });
+
+  it('기록이 없는 undoId 에 통계 내역을 남기려 해도 오류 없이 넘어간다', () => {
+    expect(() => setUndoStatMoves(root, 'nope-123', [{ vaultId: 'v1', from: 'A', to: 'B', dates: ['2026-03-05'] }])).not.toThrow();
   });
 });

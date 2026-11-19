@@ -744,6 +744,26 @@ export const contract = {
     input: z.object({ vaultId: z.string().max(200), path: relPath, delta: z.number().int().min(-10_000_000).max(10_000_000) }),
     output: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), chars: z.number().int().min(0) }),
   },
+  /**
+   * 기간(from~to, 포함)의 날짜별 확정 합계 — userData/writer-stats.json 의 history.
+   * 날짜 키가 없으면 그날은 기록이 없다. 오늘 날짜는 아직 저장 전인 현재 값을 계산해 돌려준다.
+   */
+  'settings.writerHistory': {
+    input: z.object({
+      vaultId: z.string().max(200),
+      from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    }),
+    output: z.record(
+      z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      z.object({
+        total: z.number().int().min(0),
+        works: z.record(z.string().max(300), z.number().int().min(0)),
+        /** 그날의 하루 목표(닫는 시점 값). 목표가 없던 날은 키가 없다. */
+        goal: z.number().int().min(1).optional(),
+      }),
+    ),
+  },
 } as const;
 
 export type Contract = typeof contract;

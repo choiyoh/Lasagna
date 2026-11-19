@@ -31,6 +31,26 @@ export async function closeWatcherThen(
   exit();
 }
 
+/**
+ * 진행 중인 구독(subscribe)이 끝날 때까지 기다린다(성공·실패 모두).
+ * 구독 완료 전에 워커를 끝내면 네이티브 콜백이 죽은 환경에서 돌아 napi_fatal_error(SIGABRT)로 프로세스가 죽는다.
+ */
+export async function settleWatchStart(watchStart: Promise<unknown> | undefined): Promise<void> {
+  await watchStart?.catch(() => undefined);
+}
+
+/** 구독 시작을 기다린 **뒤** 감시를 정리하고 끝낸다(닫는 도중 구독이 시작되는 창을 없앤다). */
+export async function closeWatcherAfterStart(
+  watchStart: Promise<unknown> | undefined,
+  current: () => Pick<AsyncSubscription, 'unsubscribe'> | undefined,
+  cleanup: () => void,
+  exit: () => void,
+  opts: CloseWatcherOptions = {},
+): Promise<void> {
+  await settleWatchStart(watchStart);
+  await closeWatcherThen(current(), cleanup, exit, opts);
+}
+
 /** 마지막 감시 이벤트 시각을 기준으로 남은 조용한 시간. 이벤트가 없었으면 0. */
 export function watchSettleMs(lastEventAt: number, now: number): number {
   if (!lastEventAt) return 0;

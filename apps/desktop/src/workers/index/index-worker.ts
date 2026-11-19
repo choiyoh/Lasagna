@@ -5,7 +5,7 @@ import { realpathSync } from 'node:fs';
 import { lstat, readdir } from 'node:fs/promises';
 import { Indexer } from './indexer';
 import { WatchRecovery } from './watch-recovery';
-import { closeWatcherThen, watchSettleMs } from './close-watcher';
+import { closeWatcherAfterStart, watchSettleMs } from './close-watcher';
 import { classifyWatchEvents, type PendingKind, type WatchEvent } from './watch-events';
 import type { WorkerRequest, WorkerResponse, WorkerEvent } from './protocol';
 import { errorText } from '@nopsidian/core';
@@ -49,6 +49,10 @@ function flush() {
 }
 
 let sub: AsyncSubscription | undefined;
+/** startWatching() 의 진행 중인 약속. close 가 구독 도중에 오면 이걸 먼저 기다린다. */
+let watchStart: Promise<void> | undefined;
+/** close 가 시작됐는지. 닫는 중에는 새 구독·재스캔을 시작하지 않는다. */
+let closing = false;
 /** 마지막 감시 이벤트를 받은 시각. 닫을 때 디바운스 스레드가 잠잠해질 시간을 계산한다 */
 let lastWatchEventAt = 0;
 /** 감시 이벤트 묶음을 받은 순서대로 처리하는 사슬 */
@@ -58,7 +62,9 @@ let scanChain: Promise<void> = Promise.resolve();
 
 /** 증분 재스캔: 감시가 놓친 사이의 변화(바뀐 것·지워진 것)를 화면에 알린다. */
 function rescan(): Promise<void> {
+  if (closing) return Promise.resolve();
   const next = scanChain.then(async () => {
+    if (closing) return;
     const late = await ix.scanParallel();
     for (const rel of late.changedPaths.slice(0, 500)) post({ type: 'event', name: 'note.changed', payload: { path: rel, kind: 'change' } });
     for (const rel of late.removedPaths.slice(0, 500)) post({ type: 'event', name: 'note.changed', payload: { path: rel, kind: 'unlink' } });
@@ -71,6 +77,7 @@ function rescan(): Promise<void> {
 const recovery = new WatchRecovery({
   onError: (message) => post({ type: 'event', name: 'index.watchError', payload: { message } }),
   run: async () => {
+    if (closing) return;
     await sub?.unsubscribe().catch(() => undefined);
     sub = undefined;
     await startWatching();
@@ -79,8 +86,10 @@ const recovery = new WatchRecovery({
 });
 
 /** 감시를 새로 건다. 구독 자체가 실패하면 복구 스케줄러가 물러나며 다시 시도한다. */
-async function startWatching() {
-  sub = await subscribe(
+async function startWatching(): Promise<void> {
+  // 닫는 중이면 구독을 걸지 않는다(걸면 close 가 그 구독을 기다려야 하고, 정리 전에 exit 하면 죽는다).
+  if (closing) return;
+  const pendingSub = subscribe(
     watchRoot,
     (err, events) => {
       lastWatchEventAt = Date.now();
@@ -96,6 +105,17 @@ async function startWatching() {
     },
     { ignore: ['**/.nopsidian/**', '**/.git/**', '**/node_modules/**'] },
   );
+  watchStart = pendingSub.then(
+    () => undefined,
+    () => undefined,
+  );
+  const started = await pendingSub;
+  // 구독이 끝난 직후에 close 가 왔으면 바로 해제하고 닫기 쪽이 exit 하게 둔다.
+  if (closing) {
+    await started.unsubscribe().catch(() => undefined);
+    return;
+  }
+  sub = started;
 }
 
 /** 감시 이벤트를 pending 큐에 모은다. 새로 만든 폴더는 이벤트가 안 오므로 안을 훑어서 채운다. */
@@ -128,8 +148,10 @@ port.on('message', async (req: WorkerRequest) => {
         return post({ type: 'response', id: req.id, result: null });
       case 'close':
         recovery.stop();
-        await closeWatcherThen(
-          sub,
+        closing = true;
+        await closeWatcherAfterStart(
+          watchStart,
+          () => sub,
           () => {
             sub = undefined;
             ix.close();

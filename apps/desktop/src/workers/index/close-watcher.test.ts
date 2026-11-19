@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { WATCH_QUIET_MS, closeWatcherThen, watchSettleMs } from './close-watcher';
+import { WATCH_QUIET_MS, closeWatcherAfterStart, closeWatcherThen, settleWatchStart, watchSettleMs } from './close-watcher';
 
 describe('closeWatcherThen', () => {
   it('unsubscribe 가 끝난 뒤에만 정리하고 종료한다', async () => {
@@ -49,6 +49,58 @@ describe('closeWatcherThen', () => {
     expect(order).toEqual([]);
     await done;
     expect(order).toEqual(['cleanup', 'exit']);
+  });
+});
+
+describe('진행 중인 구독(subscribe)과 종료', () => {
+  it('구독이 끝나기 전에는 정리·종료하지 않고, 끝난 뒤 unsubscribe 까지 마치고 종료한다', async () => {
+    const order: string[] = [];
+    let release!: (sub: { unsubscribe: () => Promise<void> }) => void;
+    let lateSub: { unsubscribe: () => Promise<void> } | undefined;
+    const watchStart = new Promise<unknown>((resolve) => {
+      release = (s) => {
+        lateSub = s;
+        resolve(s);
+      };
+    });
+    const done = closeWatcherAfterStart(
+      watchStart,
+      () => lateSub,
+      () => order.push('cleanup'),
+      () => order.push('exit'),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(order).toEqual([]); // 구독이 아직 안 끝났으므로 아무것도 하지 않는다
+
+    release({
+      unsubscribe: async () => {
+        order.push('unsubscribe');
+      },
+    });
+    await done;
+    expect(order).toEqual(['unsubscribe', 'cleanup', 'exit']);
+  });
+
+  it('구독이 실패해도 정리·종료는 이어서 한다', async () => {
+    const order: string[] = [];
+    await closeWatcherAfterStart(
+      Promise.reject(new Error('subscribe failed')),
+      () => undefined,
+      () => order.push('cleanup'),
+      () => order.push('exit'),
+    );
+    expect(order).toEqual(['cleanup', 'exit']);
+  });
+
+  it('진행 중 구독이 없으면 바로 정리·종료한다', async () => {
+    const exit = vi.fn();
+    await closeWatcherAfterStart(undefined, () => undefined, () => undefined, exit);
+    expect(exit).toHaveBeenCalledOnce();
+  });
+
+  it('settleWatchStart 는 실패한 구독도 조용히 넘긴다', async () => {
+    await expect(settleWatchStart(Promise.reject(new Error('nope')))).resolves.toBeUndefined();
+    await expect(settleWatchStart(undefined)).resolves.toBeUndefined();
   });
 });
 

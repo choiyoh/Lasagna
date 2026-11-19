@@ -12,6 +12,7 @@ import { ShortcutsDialog } from './ShortcutsDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { changeWriterSettings } from './language';
 import { WorkSection } from './WorkSection';
+import { WritingStatsDialog } from './WritingStatsDialog';
 import { WorkCreateDialog } from './WorkCreateDialog';
 import { WorkGoalDialog } from './WorkGoalDialog';
 import { MergeExportDialog } from './MergeExportDialog';
@@ -108,6 +109,8 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
   const [workDialog, setWorkDialog] = useState(false);
   /** 원고 합본 내보내기 대상 작품 / 지금 열린 작품(팔레트가 같은 작품을 쓴다) */
   const [mergeWork, setMergeWork] = useState<string | null>(null);
+  /** 쓰기 통계 창 — 열린 작품(또는 카드에서 누른 작품)을 범위로 연다. */
+  const [statsWork, setStatsWork] = useState<{ work: string | null } | null>(null);
   const [openWorkName, setOpenWorkName] = useState<string | null>(null);
   /** 작품 목표(앱 데이터)와 목표 대화상자 */
   const [workGoals, setWorkGoals] = useState<Record<string, WorkGoal>>({});
@@ -454,6 +457,13 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               run: () => selected && previous && openPrevious(selected, previous),
             },
             {
+              id: 'writing-stats',
+              label: t('stats.title'),
+              keywords: ['stats', 'writing', 'statistics'],
+              enabled: works.length > 0,
+              run: () => setStatsWork({ work: openWorkName ?? works[0]?.name ?? null }),
+            },
+            {
               id: 'merge-export',
               label: t('palette.mergeExport'),
               keywords: ['merge', 'export', 'docx', 'txt'],
@@ -469,7 +479,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
       { id: 'theme', label: t('palette.theme'), keywords: ['theme', 'dark', 'light', '다크', '라이트', '테마', '다크모드'], run: cycleTheme },
       { id: 'close', label: t('palette.switchVault'), keywords: ['vault', '볼트', '닫기'], run: onClose },
     ],
-    [selected, dockVisible, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, importMarkdown, cycleTheme, deleteEntry, newFolder, quickNote, onClose, openPanel, tabs.activePane, tabs.panes.length, locale, writerOn, previous, openPrevious],
+    [selected, dockVisible, openDaily, toggleBookmark, renameCurrent, exportNote, exportVault, importNotion, importMarkdown, cycleTheme, deleteEntry, newFolder, quickNote, onClose, openPanel, tabs.activePane, tabs.panes.length, locale, writerOn, previous, openPrevious, works, openWorkName],
   );
 
   /** 사이드바 머리줄 `⋯` 메뉴. 같은 동작은 ⌘P 팔레트·단축키로도 닿는다. */
@@ -686,6 +696,7 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
               if (summary) void openEpisodeDb(summary.episodeFolder, work);
             }}
             onMergeExport={(work) => setMergeWork(work)}
+            onOpenStats={(work) => setStatsWork({ work })}
             onOpenWorkChange={setOpenWorkName}
             onCreateEpisode={(work) => {
               void showTextPrompt(t('episode.namePrompt'), '').then((name) => {
@@ -1028,6 +1039,16 @@ function Workspace({ vault, onClose }: { vault: VaultInfo; onClose: () => void }
             />
           );
         })()}
+      {statsWork && (
+        <WritingStatsDialog
+          vaultId={vault.id}
+          works={works.map((w) => w.name)}
+          initialWork={statsWork.work}
+          locale={locale}
+          dailyGoal={language.writerDailyGoal ?? null}
+          onClose={() => setStatsWork(null)}
+        />
+      )}
       {mergeWork &&
         (() => {
           const work = works.find((w) => w.name === mergeWork);

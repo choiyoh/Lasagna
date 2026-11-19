@@ -31,6 +31,8 @@ interface Props {
   /** 목표선 툴팁(마감일·남은 일수) */
   goalTitles: Record<string, string>;
   onOpenGoal: (work: string) => void;
+  /** 쓰기 통계 창(작품 범위로 연다) — 카드의 '오늘' 줄이 진입점이다. */
+  onOpenStats: (work: string) => void;
 }
 
 /** 칩 문구 — 920px 이하에서는 시안대로 숫자를 뺀다. 영어는 1 일 때 단수. */
@@ -73,10 +75,11 @@ export function workRowLabel(locale: 'ko' | 'en', name: string, episodes: number
  * 작가용 사이드바의 '작품' 섹션(목록형). 작가 모드에서만 렌더된다(일반 모드는 이 DOM 자체가 없다).
  * 열린 작품 1개만 4줄로 펼치고(이름+회차+⋯ / 회차·글자수 / 목표 / 칩 줄), 나머지는 이름 한 줄이다.
  */
-export function WorkSection({ locale, works, currentPath, spacing, narrow, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter, onCreateEpisode, onMergeExport, onOpenWorkChange, goalLines, goalTitles, onOpenGoal, onOpenEpisodeDb }: Props) {
+export function WorkSection({ locale, works, currentPath, spacing, narrow, today, dailyGoal, onOpenFolder, onCreateWork, onCreateCharacter, onCreateEpisode, onMergeExport, onOpenWorkChange, goalLines, goalTitles, onOpenGoal, onOpenEpisodeDb, onOpenStats }: Props) {
   const tr = (key: Parameters<typeof translate>[1], params?: Record<string, string | number>) => translate(locale, key, params);
   const count = (n: number) => formatNumber(n, locale);
   const ratio = dailyGoal !== null && dailyGoal > 0 ? Math.min(1, Math.max(0, today / dailyGoal)) : 0;
+  const todayText = tr('stats.workToday', { value: tr('stats.charsValue', { chars: count(today) }) });
 
   const current = workOfPath(works, currentPath);
   /** undefined = 규칙대로, null = 모두 접힘, 이름 = 사용자가 고른 작품 */
@@ -198,17 +201,28 @@ export function WorkSection({ locale, works, currentPath, spacing, narrow, today
                 >
                   {goalLines[work.name] || tr('work.goalSet')}
                 </button>
-                {dailyGoal !== null && dailyGoal > 0 ? (
-                  <div className="workcard__goal" title={tr('writer.todayGoal', { count: count(today), goal: count(dailyGoal) })}>
-                    <span className="workcard__today">{tr('work.today')}</span>
-                    <span className="note-editor__goalbar" aria-hidden>
-                      <i style={{ width: `${Math.round(ratio * 100)}%` }} />
-                    </span>
-                    <span className="workcard__goalnum">
-                      {count(today)}/{count(dailyGoal)}
-                    </span>
-                  </div>
-                ) : null}
+                {/* 오늘 줄은 하루 목표가 없어도 보여 주고, 누르면 쓰기 통계를 연다(진입점). */}
+                <button
+                  className="workcard__goal workcard__goalbtn"
+                  data-testid="work-today-stats"
+                  title={`${todayText} · ${tr('stats.openHint')}`}
+                  aria-label={`${todayText} · ${tr('stats.openHint')}`}
+                  onClick={() => onOpenStats(work.name)}
+                >
+                  {dailyGoal !== null && dailyGoal > 0 ? (
+                    <>
+                      <span className="workcard__today">{tr('work.today')}</span>
+                      <span className="note-editor__goalbar" aria-hidden>
+                        <i style={{ width: `${Math.round(ratio * 100)}%` }} />
+                      </span>
+                      <span className="workcard__goalnum">
+                        {count(today)}/{count(dailyGoal)}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="workcard__todayonly">{todayText}</span>
+                  )}
+                </button>
                 <div className="workcard__links">
                   <button className="workcard__link" onClick={() => onOpenEpisodeDb(work.name)} data-testid="work-chip-db">
                     {tr('work.episodeDb')}

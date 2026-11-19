@@ -102,3 +102,33 @@ test('볼트를 연 직후 대기 없이 전환해도 앱이 살아 있고 마�
   expect(hits).toBeGreaterThan(0);
   expect(await page.evaluate(async () => (await window.nops.vault.current())?.name)).toBe('VaultA');
 });
+
+test('작은 볼트에서도 연 직후(대기 없이) 전환해도 죽지 않는다', async () => {
+  // 작은 볼트는 구독(subscribe)이 즉시 끝나, close 가 "구독이 막 끝난" 창에 도착한다(실사용 기본 크기).
+  // 이 경로는 큰 볼트 스펙이 검증하지 못하는 곳이라 따로 고정한다.
+  const page = await app.firstWindow();
+  const smallA = path.join(base, 'SmallA');
+  const smallB = path.join(base, 'SmallB');
+  makeVault(smallA, '작은에이', 2);
+  makeVault(smallB, '작은비', 2);
+
+  for (let i = 0; i < 20; i += 1) {
+    // 열자마자(ready·감시 준비를 기다리지 않고) 곧바로 다른 볼트를 연다.
+    await app.evaluate(({ dialog }, dir) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as typeof dialog.showOpenDialog;
+    }, i % 2 === 0 ? smallA : smallB);
+    const first = page.evaluate(async () => (await window.nops.vault.pick())?.id ?? null);
+    await app.evaluate(({ dialog }, dir) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dir] })) as typeof dialog.showOpenDialog;
+    }, i % 2 === 0 ? smallB : smallA);
+    const second = page.evaluate(async () => (await window.nops.vault.pick())?.id ?? null);
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    // 크래시면 evaluate 가 던진다(메인 SIGABRT 로 렌더러도 닫힌다).
+    expect(await page.evaluate(() => 1)).toBe(1);
+  }
+
+  expect(await page.evaluate(async () => (await window.nops.vault.current())?.name)).toMatch(/^Small[AB]$/);
+  expect(await page.evaluate(async () => (await window.nops.note.list()).length)).toBeGreaterThan(0);
+});

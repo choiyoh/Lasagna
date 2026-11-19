@@ -32,6 +32,24 @@ export async function closeWatcherThen(
 }
 
 /**
+ * 구독을 시작하고, 구독이 끝난 시점에 이미 닫는 중이면 **그 자리에서 해제까지 마친다**.
+ * 돌려주는 약속은 닫는 중이었을 때 unsubscribe 완료 뒤에 resolve 하므로,
+ * close 가 이 약속을 기다리면 "해제가 끝나기 전에 exit" 하는 창이 없다.
+ */
+export async function startWatchOrRelease<T extends Pick<AsyncSubscription, 'unsubscribe'>>(
+  pending: Promise<T>,
+  setSub: (sub: T) => void,
+  isClosing: () => boolean,
+): Promise<void> {
+  const started = await pending;
+  if (isClosing()) {
+    await started.unsubscribe().catch(() => undefined);
+    return;
+  }
+  setSub(started);
+}
+
+/**
  * 진행 중인 구독(subscribe)이 끝날 때까지 기다린다(성공·실패 모두).
  * 구독 완료 전에 워커를 끝내면 네이티브 콜백이 죽은 환경에서 돌아 napi_fatal_error(SIGABRT)로 프로세스가 죽는다.
  */

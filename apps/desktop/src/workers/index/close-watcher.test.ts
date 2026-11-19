@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { WATCH_QUIET_MS, closeWatcherAfterStart, closeWatcherThen, settleWatchStart, watchSettleMs } from './close-watcher';
+import { WATCH_QUIET_MS, closeWatcherAfterStart, closeWatcherThen, settleWatchStart, startWatchOrRelease, watchSettleMs } from './close-watcher';
 
 describe('closeWatcherThen', () => {
   it('unsubscribe 가 끝난 뒤에만 정리하고 종료한다', async () => {
@@ -101,6 +101,46 @@ describe('진행 중인 구독(subscribe)과 종료', () => {
   it('settleWatchStart 는 실패한 구독도 조용히 넘긴다', async () => {
     await expect(settleWatchStart(Promise.reject(new Error('nope')))).resolves.toBeUndefined();
     await expect(settleWatchStart(undefined)).resolves.toBeUndefined();
+  });
+});
+
+describe('닫는 중에 끝난 구독', () => {
+  it('closing 이면 그 자리에서 unsubscribe 하고, 그 완료까지 close 가 기다린 뒤 종료한다', async () => {
+    const order: string[] = [];
+    let closing = false;
+    let releaseUnsub!: () => void;
+    const sub = {
+      unsubscribe: () => {
+        order.push('unsub-start');
+        return new Promise<void>((resolve) => (releaseUnsub = resolve)).then(() => {
+          order.push('unsub-done');
+        });
+      },
+    };
+    let setSubCalled = false;
+    // 구독이 해석되는 순간 이미 닫는 중인 상태
+    closing = true;
+    const start = startWatchOrRelease(Promise.resolve(sub), () => (setSubCalled = true), () => closing);
+    const close = closeWatcherAfterStart(
+      start,
+      () => undefined, // worker 는 sub 를 설정하지 않았다(해제는 start 안에서 끝났다)
+      () => order.push('cleanup'),
+      () => order.push('exit'),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(order).toEqual(['unsub-start']); // unsubscribe 완료 전에는 정리·종료하지 않는다
+    releaseUnsub();
+    await close;
+    expect(order).toEqual(['unsub-start', 'unsub-done', 'cleanup', 'exit']);
+    expect(setSubCalled).toBe(false);
+  });
+
+  it('닫는 중이 아니면 구독을 그대로 넘기고 해제하지 않는다', async () => {
+    const sub = { unsubscribe: vi.fn() };
+    let assigned: typeof sub | undefined;
+    await startWatchOrRelease(Promise.resolve(sub), (started) => (assigned = started), () => false);
+    expect(assigned).toBe(sub);
+    expect(sub.unsubscribe).not.toHaveBeenCalled();
   });
 });
 

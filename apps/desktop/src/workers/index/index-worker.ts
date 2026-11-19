@@ -5,7 +5,7 @@ import { realpathSync } from 'node:fs';
 import { lstat, readdir } from 'node:fs/promises';
 import { Indexer } from './indexer';
 import { WatchRecovery } from './watch-recovery';
-import { closeWatcherAfterStart, watchSettleMs } from './close-watcher';
+import { closeWatcherAfterStart, startWatchOrRelease, watchSettleMs } from './close-watcher';
 import { classifyWatchEvents, type PendingKind, type WatchEvent } from './watch-events';
 import type { WorkerRequest, WorkerResponse, WorkerEvent } from './protocol';
 import { errorText } from '@nopsidian/core';
@@ -105,17 +105,13 @@ async function startWatching(): Promise<void> {
     },
     { ignore: ['**/.nopsidian/**', '**/.git/**', '**/node_modules/**'] },
   );
-  watchStart = pendingSub.then(
+  // 구독이 끝난 직후에 close 가 왔으면 그 자리에서 해제까지 마친다. watchStart 는 그 해제 완료까지 포함한다.
+  const start = startWatchOrRelease(pendingSub, (started) => (sub = started), () => closing);
+  watchStart = start.then(
     () => undefined,
     () => undefined,
   );
-  const started = await pendingSub;
-  // 구독이 끝난 직후에 close 가 왔으면 바로 해제하고 닫기 쪽이 exit 하게 둔다.
-  if (closing) {
-    await started.unsubscribe().catch(() => undefined);
-    return;
-  }
-  sub = started;
+  await start;
 }
 
 /** 감시 이벤트를 pending 큐에 모은다. 새로 만든 폴더는 이벤트가 안 오므로 안을 훑어서 채운다. */

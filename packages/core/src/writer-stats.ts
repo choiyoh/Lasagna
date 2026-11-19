@@ -123,11 +123,18 @@ export class StatsSeries {
   private readonly history: StatsHistory;
   private readonly work: string | null;
   private readonly today: string;
+  /**
+   * 지금 설정된 하루 목표. 오늘은 아직 '닫힌 날'이 아니라 기록에 goal 이 없으므로
+   * (PR 1 은 하루를 닫을 때만 goal 을 남긴다) 오늘 값에만 이 목표를 붙인다.
+   * 저장된 오늘 goal 이 있으면 그것이 우선한다.
+   */
+  private readonly todayGoal: number | null;
 
-  constructor(history: StatsHistory, work: string | null, today: string) {
+  constructor(history: StatsHistory, work: string | null, today: string, todayGoal: number | null = null) {
     this.history = history;
     this.work = work;
     this.today = today;
+    this.todayGoal = typeof todayGoal === 'number' && Number.isFinite(todayGoal) && todayGoal > 0 ? Math.trunc(todayGoal) : null;
     const dates = Object.keys(history)
       .filter((date) => this.charsOf(history[date]!) > 0)
       .sort();
@@ -143,7 +150,9 @@ export class StatsSeries {
   day(date: string): StatsDayValue {
     const entry = this.history[date];
     const chars = entry ? this.charsOf(entry) : 0;
-    const goal = entry?.goal && entry.goal > 0 ? entry.goal : null;
+    const stored = entry?.goal && entry.goal > 0 ? entry.goal : null;
+    // 오늘은 기록에 goal 이 없으므로 지금 하루 목표를 쓴다(저장된 값이 있으면 그 값).
+    const goal = stored ?? (date === this.today ? this.todayGoal : null);
     return {
       date,
       chars,

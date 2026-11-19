@@ -118,6 +118,11 @@ test('카드의 오늘 줄(목표 없음)과 ⌘P 로 열고, 범위·달·Esc �
   await expect(row).toHaveAttribute('aria-label', /쓰기 통계 보기/);
   await expect(row.locator('.note-editor__goalbar')).toHaveCount(0); // 목표가 없으면 막대 없음
 
+  // 하루 목표를 켜면 같은 줄이 막대+`n/목표` 로 바뀌고, 그 목표가 오늘 달성 판정에 쓰인다.
+  await page.evaluate(() => window.nops.settings.setLanguage({ writerDailyGoal: 2000 }));
+  await expect(row.locator('.note-editor__goalbar')).toBeVisible();
+  await expect(row).toContainText('2,140/2,000');
+
   await row.click();
   const dialog = page.getByTestId('stats-dialog');
   await expect(dialog).toBeVisible();
@@ -133,6 +138,19 @@ test('카드의 오늘 줄(목표 없음)과 ⌘P 로 열고, 범위·달·Esc �
   await page.getByTestId('stats-scope-vault').click();
   const allWeek = weekPart + 1140;
   await expect(page.getByTestId('stats-week')).toContainText((inWeek ? allWeek + 3000 : allWeek).toLocaleString('ko'));
+
+  // 오늘은 아직 닫히지 않아 기록에 goal 이 없지만, 지금 하루 목표(2,000자)로 달성 표시가 나와야 한다.
+  const todayCell = dialog.locator(`.cal__cell[data-date="${today}"]`);
+  await expect(todayCell).toHaveClass(/goal/);
+  await expect(todayCell).toHaveAttribute('aria-label', /목표 달성/);
+  await expect(page.getByTestId('stats-month-sum')).toContainText('목표 달성 1일');
+  // 막대 목표선은 막대 영역 눈금(2,000/4,000 = 50%)과 같은 높이여야 한다.
+  const geo = await dialog.evaluate((el) => {
+    const bars = el.querySelector('.bars')!.getBoundingClientRect();
+    const line = el.querySelector('[data-testid="stats-goalline"]')!.getBoundingClientRect();
+    return { bottom: bars.bottom, height: bars.height, line: line.top };
+  });
+  expect(Math.abs(geo.line - (geo.bottom - geo.height * 0.5))).toBeLessThanOrEqual(1);
 
   // 작품 선택으로 다른 작품을 고르면 오늘 값만 남는다.
   await page.getByTestId('stats-scope-work').selectOption('별빛');
@@ -153,10 +171,19 @@ test('카드의 오늘 줄(목표 없음)과 ⌘P 로 열고, 범위·달·Esc �
   await page.getByTestId('stats-toggle-numbers').click();
   await expect(page.getByTestId('stats-numbers')).toBeVisible();
   await expect(page.getByTestId('stats-numbers')).toContainText('2,140');
+  // 오늘 행의 목표 열에는 '달성'이 보인다(그날 목표 기준).
+  await expect(page.getByTestId('stats-numbers').locator('tbody tr').last()).toContainText('달성');
   await page.getByTestId('stats-toggle-numbers').click();
   await expect(page.getByTestId('stats-numbers')).toHaveCount(0);
 
-  // Esc 로 닫고 진입점(카드 줄)으로 초점이 돌아온다.
+  // 대화상자 안 빈 곳을 눌러 포커스가 빠져도 Esc 로 닫힌다(설정 대화상자와 같은 동작).
+  await page.getByTestId('stats-summary').click();
+  await expect(page.evaluate(() => document.activeElement?.tagName)).resolves.toBe('BODY');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  // 다시 열어 진입점 복귀까지 확인한다.
+  await row.click();
+  await expect(page.getByTestId('stats-dialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(page.getByTestId('work-today-stats')).toBeFocused();

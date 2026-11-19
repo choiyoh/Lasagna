@@ -66,6 +66,22 @@ export function WritingStatsDialog({ vaultId, works, initialWork, locale, dailyG
     };
   }, []);
 
+  // 어디에 초점이 있어도(대화상자 빈 곳을 눌러 포커스가 빠져도) Esc 로 닫는다.
+  // 위에 다른 overlay 가 열려 있으면 그쪽이 처리하도록 양보한다.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const ours = boxRef.current?.closest('.dialog-backdrop') ?? null;
+      const others = [...document.querySelectorAll('.dialog-backdrop, .switcher, .nops-prompt, .ctxmask')].filter((el) => el !== ours);
+      if (others.length > 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [onClose]);
+
   // 통계 파일은 하루 1항목이라 10년치도 작다 — 한 번에 읽어 연속·달력 이동을 다시 조회 없이 한다.
   useEffect(() => {
     let alive = true;
@@ -82,7 +98,7 @@ export function WritingStatsDialog({ vaultId, works, initialWork, locale, dailyG
     };
   }, [vaultId, today]);
 
-  const series = useMemo(() => new StatsSeries(history, work, today), [history, work, today]);
+  const series = useMemo(() => new StatsSeries(history, work, today, dailyGoal), [history, work, today, dailyGoal]);
   const summary = useMemo(() => summarize(series, today, month), [series, today, month]);
   const shown = useMemo(() => monthTotals(series, month), [series, month]);
   const last30 = useMemo(() => series.last30(), [series]);
@@ -134,15 +150,7 @@ export function WritingStatsDialog({ vaultId, works, initialWork, locale, dailyG
         aria-labelledby="stats-title"
         data-testid="stats-dialog"
         ref={boxRef}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            e.stopPropagation();
-            onClose();
-            return;
-          }
-          trapFocus(e, boxRef.current);
-        }}
+        onKeyDown={(e) => trapFocus(e, boxRef.current)}
       >
         <div className="statsdlg__head">
           <h3 className="statsdlg__title" id="stats-title">
@@ -265,8 +273,9 @@ export function WritingStatsDialog({ vaultId, works, initialWork, locale, dailyG
                 aria-label={t('stats.chartAria', { value: charsValue(last30.reduce((sum, day) => sum + day.chars, 0)) })}
               >
                 <div className="plot__baseline" />
-                {goalGoal && <div className="plot__goalline" style={{ bottom: `${barPercent(goalGoal)}%` }} aria-hidden />}
                 <div className="bars" aria-hidden>
+                  {/* 목표선은 막대 영역(바닥 16px 위 72px) 기준이라 눈금과 정확히 맞는다. 4,000자를 넘는 목표는 위에 붙는다. */}
+                  {goalGoal && <div className="plot__goalline" style={{ bottom: `${barPercent(goalGoal)}%` }} data-testid="stats-goalline" />}
                   {last30.map((day) => (
                     <div className={day.date === today ? 'bar is-today' : 'bar'} key={day.date}>
                       <span

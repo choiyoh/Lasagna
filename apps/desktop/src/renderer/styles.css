@@ -1218,7 +1218,8 @@ button.primary:disabled { background: var(--border); color: var(--muted); border
 .sect-lbl .hint { font-weight: 400; font-variant-numeric: tabular-nums; }
 .plot { position: relative; height: 110px; padding: 22px 0 0; }
 .plot__baseline { position: absolute; left: 0; right: 0; bottom: 16px; border-top: 1px solid var(--border); }
-.plot__goalline { position: absolute; left: 0; right: 0; border-top: 1px dashed color-mix(in srgb, var(--fg) 34%, transparent); pointer-events: none; }
+/* 막대 영역(.bars) 안에 놓여 눈금과 같은 기준을 쓴다 */
+.plot__goalline { position: absolute; left: 0; right: 0; z-index: 1; border-top: 1px dashed color-mix(in srgb, var(--fg) 34%, transparent); pointer-events: none; }
 .bars { position: absolute; left: 0; right: 0; bottom: 16px; top: 22px; display: flex; align-items: flex-end; gap: 2px; }
 .bar { flex: 1; position: relative; height: 100%; display: flex; align-items: flex-end; }
 .bar__fill { width: 100%; border-radius: 2px 2px 0 0; background: color-mix(in srgb, var(--accent) 62%, var(--bg)); }

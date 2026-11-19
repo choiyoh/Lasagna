@@ -10,6 +10,7 @@ import {
   daysInMonth,
   endOfMonth,
   heatLevel,
+  monthTotals,
   startOfMonth,
   startOfWeek,
   summarize,
@@ -191,5 +192,37 @@ describe('쓰기 통계 — 요약', () => {
     expect(summary.weekTotal).toBe(3000);
     expect(summary.monthTotal).toBe(3000);
     expect(summary.goalDays).toBe(1); // 11-19 만 달빛 2000 ≥ 1500
+  });
+});
+
+describe('쓰기 통계 — 오늘의 하루 목표', () => {
+  const data = history({ '2026-11-18': { total: 1600, goal: 3000 }, '2026-11-19': 2140 });
+
+  it('오늘은 기록에 goal 이 없어도 지금 하루 목표로 달성 여부를 판단한다', () => {
+    const series = new StatsSeries(data, null, TODAY, 2000);
+    expect(series.day(TODAY)).toMatchObject({ chars: 2140, goal: 2000, goalMet: true });
+    // 요약의 달성 일수에도 들어간다(어제는 1,600 < 3,000 로 미달).
+    expect(summarize(series, TODAY, TODAY).goalDays).toBe(1);
+  });
+
+  it('지난 날짜에는 현재 목표를 붙이지 않는다(그날의 goal 만)', () => {
+    const series = new StatsSeries(data, null, TODAY, 2000);
+    expect(series.day('2026-11-18')).toMatchObject({ goal: 3000, goalMet: false });
+  });
+
+  it('저장된 오늘 goal 이 있으면 그 값이 우선한다', () => {
+    const stored = history({ '2026-11-19': { total: 2140, goal: 1000 } });
+    const series = new StatsSeries(stored, null, TODAY, 2000);
+    expect(series.day(TODAY).goal).toBe(1000);
+  });
+
+  it('목표가 없거나 0 이하면 붙이지 않는다', () => {
+    expect(new StatsSeries(data, null, TODAY, null).day(TODAY).goal).toBeNull();
+    expect(new StatsSeries(data, null, TODAY, 0).day(TODAY).goal).toBeNull();
+  });
+
+  it('목표 달성일수(달력 머리)에 오늘도 포함된다', () => {
+    const series = new StatsSeries(data, null, TODAY, 2000);
+    expect(monthTotals(series, TODAY).goalDays).toBe(1);
   });
 });

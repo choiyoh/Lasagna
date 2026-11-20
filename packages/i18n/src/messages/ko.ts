@@ -449,6 +449,8 @@ export const ko = {
   'find.replacePlaceholder': '바꿀 말',
   'find.replace': '바꾸기',
   'find.replaceAll': '모두 바꾸기',
+  'find.particles': '조사 맞추기',
+  'find.particlesTitle': "'유리는' → '요한은' 처럼 새 말의 받침에 맞춰 조사를 고쳐요",
   'cover.uploadFailed': '올리지 못했어요',
   'cover.pickerAria': '커버 고르기',
   'cover.tabsAria': '커버 종류',

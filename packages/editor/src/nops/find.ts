@@ -1,3 +1,4 @@
+import type { EditorState, Transaction } from 'prosemirror-state';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
 import {
@@ -10,6 +11,7 @@ import {
   search,
   setSearchState,
 } from 'prosemirror-search';
+import { adjustParticleAt } from './particles';
 
 /** 노트 안 찾기·바꾸기(⌘F). 일치 항목 강조는 `prosemirror-search` 플러그인이 한다. */
 export const createFindPlugin = () => search();
@@ -61,8 +63,87 @@ export function findFromCursor(view: EditorView): boolean {
   return true;
 }
 
-/** 지금 선택된 일치를 바꾸고 다음으로 간다(선택된 것이 없으면 다음 일치를 고른다) */
-export const replaceOne = (view: EditorView) => replaceNext(view.state, view.dispatch);
+/** 한 자리를 이 글로 바꾼다(서식은 그 자리의 것을 이어받는다) */
+function replaceAt(tr: Transaction, state: EditorState, from: number, to: number, text: string): void {
+  if (!text) {
+    tr.delete(from, to);
+    return;
+  }
+  const marks = state.doc.resolve(from).marksAcross(state.doc.resolve(to));
+  tr.replaceWith(from, to, state.schema.text(text, marks));
+}
 
-/** 모든 일치를 바꾼다(되돌리기 한 번으로 돌아온다) */
-export const replaceEvery = (view: EditorView) => replaceAll(view.state, view.dispatch);
+/**
+ * 일치 하나를 바꾼다. `adjustParticles` 면 바로 뒤 조사도 새 말의 받침에 맞춰 함께 바꾼다.
+ * 조사 자리(뒤)를 먼저 바꾸므로 일치 자리 좌표는 그대로 쓸 수 있다.
+ */
+function replaceMatch(tr: Transaction, state: EditorState, from: number, to: number, text: string, adjustParticles: boolean): void {
+  if (adjustParticles) {
+    const $to = state.doc.resolve(to);
+    if ($to.parent.isTextblock) {
+      const following = $to.parent.textBetween($to.parentOffset, $to.parent.content.size, undefined, ' ');
+      const found = adjustParticleAt(text, following);
+      if (found && found.text !== following.slice(0, found.length)) replaceAt(tr, state, to, to + found.length, found.text);
+    }
+  }
+  replaceAt(tr, state, from, to, text);
+}
+
+/** 지금 자리에서 다음 일치(끝이면 처음으로 돈다) */
+function nextMatch(state: EditorState, st: NonNullable<ReturnType<typeof getSearchState>>, curFrom: number, curTo: number) {
+  const range = st.range || { from: 0, to: state.doc.content.size };
+  return st.query.findNext(state, Math.max(curTo, range.from), range.to) ?? st.query.findNext(state, range.from, Math.min(curFrom, range.to));
+}
+
+/** 조사까지 맞춰 일치 하나를 바꾸고 다음 일치로 간다 */
+function replaceOneWithParticles(view: EditorView): boolean {
+  const state = view.state;
+  const st = getSearchState(state);
+  if (!st || !st.query.valid) return false;
+  const { from, to } = state.selection;
+  // 커서 자리부터 찾는다(선택된 일치가 있으면 그 일치가 나온다 — replaceNext 와 같다)
+  const next = nextMatch(state, st, from, from);
+  if (!next) return false;
+  if (from !== next.from || to !== next.to) {
+    view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, next.from, next.to)).scrollIntoView());
+    return true;
+  }
+  const tr = state.tr;
+  replaceMatch(tr, state, next.from, next.to, st.query.replace, true);
+  const after = nextMatch(state, st, next.from, next.to);
+  if (after) tr.setSelection(TextSelection.create(tr.doc, tr.mapping.map(after.from, 1), tr.mapping.map(after.to, -1)));
+  else tr.setSelection(TextSelection.create(tr.doc, tr.mapping.map(next.to, 1)));
+  view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
+/** 조사까지 맞춰 모든 일치를 바꾼다(트랜잭션 하나 → 되돌리기 한 번) */
+function replaceEveryWithParticles(view: EditorView): boolean {
+  const state = view.state;
+  const st = getSearchState(state);
+  if (!st) return false;
+  const range = st.range || { from: 0, to: state.doc.content.size };
+  const matches: { from: number; to: number }[] = [];
+  for (let pos = range.from; ;) {
+    const next = st.query.findNext(state, pos, range.to);
+    if (!next) break;
+    if (next.to > pos || !matches.length) matches.push({ from: next.from, to: next.to });
+    pos = Math.max(next.to, pos + 1);
+  }
+  if (!matches.length) return false;
+  const tr = state.tr;
+  for (let i = matches.length - 1; i >= 0; i--) replaceMatch(tr, state, matches[i].from, matches[i].to, st.query.replace, true);
+  view.dispatch(tr);
+  return true;
+}
+
+/**
+ * 지금 선택된 일치를 바꾸고 다음으로 간다(선택된 것이 없으면 다음 일치를 고른다).
+ * `adjustParticles` 면 바로 뒤 조사를 새 말의 받침에 맞춘다(끄면 예전과 같다).
+ */
+export const replaceOne = (view: EditorView, adjustParticles = false) =>
+  adjustParticles ? replaceOneWithParticles(view) : replaceNext(view.state, view.dispatch);
+
+/** 모든 일치를 바꾼다(되돌리기 한 번으로 돌아온다). `adjustParticles` 는 replaceOne 과 같다. */
+export const replaceEvery = (view: EditorView, adjustParticles = false) =>
+  adjustParticles ? replaceEveryWithParticles(view) : replaceAll(view.state, view.dispatch);

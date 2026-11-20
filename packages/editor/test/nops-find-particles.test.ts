@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { undo } from 'prosemirror-history';
 import type { Node as PMNode } from 'prosemirror-model';
-import { createNopsEditor, parseDocument, replaceEvery, replaceOne, setFind } from '../src/nops';
+import { clearFind, createNopsEditor, parseDocument, replaceEvery, replaceOne, setFind } from '../src/nops';
 
 function setup(src: string) {
   const host = document.createElement('div');
@@ -88,5 +88,27 @@ describe('찾기·바꾸기 조사 맞추기', () => {
     const { view } = setup('사과\n');
     setFind(view, '없는말', '배');
     expect(replaceEvery(view, true)).toBe(false);
+  });
+
+  // 조사 자리가 바로 뒤 일치와 겹치면 조사는 그대로 두고 본문만 바꾼다(겹친 일치의 글자를 잃지 않는다)
+  it('바로 뒤에 다른 일치가 붙어 있어도 모두 바꾸기에서 글자를 잃지 않는다', () => {
+    const { view } = setup('나는 하나나 둘을 세었다\n');
+    setFind(view, '나', '요한');
+    replaceEvery(view, true);
+    expect(view.state.doc.textContent).toBe('요한은 하요한요한 둘을 세었다');
+  });
+
+  it('바로 뒤에 다른 일치가 붙어 있어도 바꾸기(하나)를 반복하면 글자가 늘지 않는다', () => {
+    const { view } = setup('나나\n');
+    setFind(view, '나', '요한');
+    for (let i = 0; i < 6; i++) replaceOne(view, true);
+    expect(view.state.doc.textContent).toBe('요한요한');
+  });
+
+  it('파괴된 view 를 정리해도 던지지 않는다(찾기 막대를 연 채 노트를 옮길 때)', () => {
+    const { editor, view } = setup('유리는 유리가\n');
+    setFind(view, '유리', '요한');
+    editor.destroy();
+    expect(() => clearFind(view)).not.toThrow();
   });
 });

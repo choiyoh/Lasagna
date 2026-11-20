@@ -27,7 +27,11 @@ export function setFind(view: EditorView, text: string, replace = '', options: F
   view.dispatch(setSearchState(view.state.tr, query));
 }
 
-export const clearFind = (view: EditorView) => setFind(view, '');
+/** 강조를 지운다. 이미 파괴된 view 는 건드리지 않는다(화면을 닫는 정리에서도 불린다). */
+export const clearFind = (view: EditorView) => {
+  if (view.isDestroyed) return;
+  setFind(view, '');
+};
 
 /** 일치 개수와 지금 선택된 일치의 순번(1부터, 없으면 0). 너무 많으면 `limit` 에서 센다. */
 export function findCount(view: EditorView, limit = 9999): { current: number; total: number } {
@@ -73,19 +77,35 @@ function replaceAt(tr: Transaction, state: EditorState, from: number, to: number
   tr.replaceWith(from, to, state.schema.text(text, marks));
 }
 
+/** 일치 바로 뒤 조사 자리를 새 말에 맞춰 바꿀 범위(바뀔 것이 없으면 null) */
+interface ParticleEdit {
+  from: number;
+  to: number;
+  text: string;
+}
+
 /**
- * 일치 하나를 바꾼다. `adjustParticles` 면 바로 뒤 조사도 새 말의 받침에 맞춰 함께 바꾼다.
+ * 일치 바로 뒤 조사를 새 말의 받침에 맞춘다.
+ * 조사 자리가 다른 일치와 겹치면 맞추지 않는다 — 그 일치를 덮어써 글자가 사라지기 때문이다.
+ */
+function particleEdit(state: EditorState, query: SearchQuery, to: number, text: string): ParticleEdit | null {
+  const $to = state.doc.resolve(to);
+  if (!$to.parent.isTextblock) return null;
+  const following = $to.parent.textBetween($to.parentOffset, $to.parent.content.size, undefined, ' ');
+  const found = adjustParticleAt(text, following);
+  if (!found || found.text === following.slice(0, found.length)) return null;
+  // 일치는 서로 겹치지 않으므로 조사 자리 안에서 시작하는 일치만 확인하면 된다
+  const other = query.findNext(state, to);
+  if (other && other.from < to + found.length) return null;
+  return { from: to, to: to + found.length, text: found.text };
+}
+
+/**
+ * 일치 하나를 바꾼다. `particle` 이 있으면 바로 뒤 조사도 함께 바꾼다.
  * 조사 자리(뒤)를 먼저 바꾸므로 일치 자리 좌표는 그대로 쓸 수 있다.
  */
-function replaceMatch(tr: Transaction, state: EditorState, from: number, to: number, text: string, adjustParticles: boolean): void {
-  if (adjustParticles) {
-    const $to = state.doc.resolve(to);
-    if ($to.parent.isTextblock) {
-      const following = $to.parent.textBetween($to.parentOffset, $to.parent.content.size, undefined, ' ');
-      const found = adjustParticleAt(text, following);
-      if (found && found.text !== following.slice(0, found.length)) replaceAt(tr, state, to, to + found.length, found.text);
-    }
-  }
+function replaceMatch(tr: Transaction, state: EditorState, from: number, to: number, text: string, particle: ParticleEdit | null): void {
+  if (particle) replaceAt(tr, state, particle.from, particle.to, particle.text);
   replaceAt(tr, state, from, to, text);
 }
 
@@ -109,7 +129,8 @@ function replaceOneWithParticles(view: EditorView): boolean {
     return true;
   }
   const tr = state.tr;
-  replaceMatch(tr, state, next.from, next.to, st.query.replace, true);
+  const particle = particleEdit(state, st.query, next.to, st.query.replace);
+  replaceMatch(tr, state, next.from, next.to, st.query.replace, particle);
   const after = nextMatch(state, st, next.from, next.to);
   if (after) tr.setSelection(TextSelection.create(tr.doc, tr.mapping.map(after.from, 1), tr.mapping.map(after.to, -1)));
   else tr.setSelection(TextSelection.create(tr.doc, tr.mapping.map(next.to, 1)));
@@ -132,7 +153,10 @@ function replaceEveryWithParticles(view: EditorView): boolean {
   }
   if (!matches.length) return false;
   const tr = state.tr;
-  for (let i = matches.length - 1; i >= 0; i--) replaceMatch(tr, state, matches[i].from, matches[i].to, st.query.replace, true);
+  for (let i = matches.length - 1; i >= 0; i--) {
+    const particle = particleEdit(state, st.query, matches[i].to, st.query.replace);
+    replaceMatch(tr, state, matches[i].from, matches[i].to, st.query.replace, particle);
+  }
   view.dispatch(tr);
   return true;
 }

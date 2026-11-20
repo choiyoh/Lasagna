@@ -2,6 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { selectSettingsPage } from './settings';
 import { waitForWatcher, writeExternalNote } from './watcher';
 
 // FEAT: 찾기·바꾸기 '조사 맞추기'(⌘F). '유리는' 에서 '유리' → '요한' 이면 '요한은'.
@@ -41,19 +42,14 @@ async function openVaultIfNeeded(page: Page): Promise<void> {
   await waitForWatcher(page);
 }
 
-/** 찾기 막대가 열려 있으면 닫는다(연 채 노트를 옮기는 것은 이 기능과 상관없다) */
-async function closeFindIfOpen(page: Page): Promise<void> {
-  const bar = page.getByTestId('find-bar');
-  if ((await bar.count()) === 0) return;
-  await bar.getByRole('button', { name: '찾기 닫기' }).click();
-  await expect(bar).toHaveCount(0);
-}
+/** 화면 오류 대체 화면이 떴는지 */
+const errorScreen = (page: Page) => page.locator('.errorboundary');
 
 async function openNote(page: Page, title: string): Promise<void> {
-  await closeFindIfOpen(page);
   await page.locator('aside.sidebar').getByRole('button', { name: title, exact: true }).click();
   await expect(page.locator('.ProseMirror h1')).toHaveText(title);
   await page.locator('.ProseMirror p').first().click();
+  await expect(errorScreen(page)).toHaveCount(0);
 }
 
 /** ⌘F 로 찾기·바꾸기 막대를 열고 찾을 말·바꿀 말을 채운다 */
@@ -74,6 +70,8 @@ async function undoOnce(page: Page): Promise<void> {
 }
 
 const SENTENCE = '유리는 유리가 유리를 유리와 유리로 유리야 유리가게';
+const ADJACENT = '나는 하나나 둘을 세었다';
+const ADJACENT_DONE = '요한은 하요한요한 둘을 세었다';
 const ADJUSTED = '요한은 요한이 요한을 요한과 요한으로 요한야 요한가게';
 const KEPT = '요한는 요한가 요한를 요한와 요한로 요한야 요한가게';
 
@@ -85,6 +83,9 @@ test.beforeAll(async () => {
   writeExternalNote(path.join(vaultDir, '서식.md'), '# 서식\n\n**유리**는 밝다\n');
   writeExternalNote(path.join(vaultDir, '끄기.md'), `# 끄기\n\n${SENTENCE}\n`);
   writeExternalNote(path.join(vaultDir, '하나.md'), `# 하나\n\n${SENTENCE}\n`);
+  writeExternalNote(path.join(vaultDir, '인접.md'), `# 인접\n\n${ADJACENT}\n`);
+  writeExternalNote(path.join(vaultDir, '반복.md'), '# 반복\n\n나나\n');
+  writeExternalNote(path.join(vaultDir, '이동.md'), '# 이동\n\n본문\n');
   app = await launch();
 });
 
@@ -163,4 +164,76 @@ test('바꾸기(하나)도 조사를 맞춘다', async () => {
 
   await undoOnce(page);
   await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15_000 }).toBe(`# 하나\n\n${SENTENCE}\n`);
+});
+
+test('바로 뒤에 다른 일치가 붙어 있어도 모두 바꾸기가 글자를 잃지 않는다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await openNote(page, '인접');
+  const file = path.join(vaultDir, '인접.md');
+
+  const bar = await openFind(page, '나', '요한');
+  await bar.getByRole('button', { name: '모두 바꾸기' }).click();
+  await expect(page.locator('.ProseMirror p').first()).toHaveText(ADJACENT_DONE);
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15_000 }).toBe(`# 인접\n\n${ADJACENT_DONE}\n`);
+
+  await undoOnce(page);
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 15_000 }).toBe(`# 인접\n\n${ADJACENT}\n`);
+});
+
+test('바로 뒤에 다른 일치가 붙어 있어도 바꾸기(하나)를 반복하면 글자가 늘지 않는다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await openNote(page, '반복');
+
+  const bar = await openFind(page, '나', '요한');
+  const one = bar.getByRole('button', { name: '바꾸기', exact: true });
+  // 1·3번째는 일치 고르기, 2·4번째가 실제 바꾸기
+  for (let i = 0; i < 4 && (await one.isEnabled()); i++) await one.click();
+  await expect(page.locator('.ProseMirror p').first()).toHaveText('요한요한');
+});
+
+test('찾기 막대를 연 채 다른 노트로 옮겨도 오류 화면 없이 편집·저장된다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await openNote(page, '조사');
+  await expect(await openFind(page, '유리', '요한')).toBeVisible();
+
+  // 막대를 닫지 않고 사이드바에서 다른 노트를 연다
+  await page.locator('aside.sidebar').getByRole('button', { name: '이동', exact: true }).click();
+  await expect(page.locator('.ProseMirror h1')).toHaveText('이동');
+  await expect(errorScreen(page)).toHaveCount(0);
+
+  await page.locator('.ProseMirror p').first().click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' more');
+  await expect.poll(() => readFileSync(path.join(vaultDir, '이동.md'), 'utf8'), { timeout: 15_000 }).toContain('more');
+});
+
+test('찾기 막대를 연 채 언어를 바꿔도 오류 화면이 없다', async () => {
+  const page = await app.firstWindow();
+  await openVaultIfNeeded(page);
+  await openNote(page, '이동');
+  await expect(await openFind(page, '본문', '내용')).toBeVisible();
+
+  await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, '일반');
+  await page.getByRole('radiogroup', { name: '언어' }).getByRole('radio', { name: 'English' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.keyboard.press('Escape');
+  await expect(errorScreen(page)).toHaveCount(0);
+  await expect(page.locator('.ProseMirror h1')).toHaveText('이동');
+
+  // 같은 화면에서 계속 편집된다
+  await page.locator('.ProseMirror p').first().click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' ok');
+  await expect.poll(() => readFileSync(path.join(vaultDir, '이동.md'), 'utf8'), { timeout: 15_000 }).toContain('ok');
+
+  // 다음 테스트가 한국어로 돌도록 되돌린다(e2e 에서 '시스템 따르기' 는 ko)
+  await page.getByTestId('settings-btn').click();
+  await selectSettingsPage(page, 'General');
+  await page.getByRole('radiogroup', { name: 'Language' }).getByRole('radio', { name: 'Follow system' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+  await page.keyboard.press('Escape');
 });

@@ -725,14 +725,16 @@ input[type='range'], input[type='checkbox'], input[type='radio'], input[type='co
 .note-editor { position: relative; }
 .findbar { position: sticky; top: 8px; z-index: 30; margin: 0 12px 0 auto; width: fit-content; max-width: calc(100% - 24px); float: right; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); }
 .findbar__row { display: flex; align-items: center; gap: 4px; }
-.findbar input { width: 220px; padding: 4px 8px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
+.findbar input { width: 220px; min-width: 0; padding: 4px 8px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
 .findbar input:focus { outline: none; border-color: var(--accent); }
-.findbar button { min-width: 26px; height: 26px; padding: 0 6px; border-radius: 6px; font-size: 13px; color: var(--fg); }
+.findbar button { min-width: 26px; height: 26px; padding: 0 6px; border-radius: 6px; font-size: 13px; color: var(--fg); white-space: nowrap; flex-shrink: 0; }
 .findbar button:hover:not(:disabled) { background: var(--hover); }
 .findbar button:disabled { opacity: 0.4; }
 .findbar__opt[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); }
 .findbar__toggle, .findbar__spacer { width: 22px; min-width: 22px; color: var(--muted); }
 .findbar__count { min-width: 48px; font-size: 12px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+.findbar__check { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; cursor: pointer; }
+.findbar__check input { width: auto; margin: 0; accent-color: var(--accent); }
 
 /* 표: 여러 행 선택·우클릭 메뉴 */
 .dbtable__check { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); z-index: 2; margin: 0; opacity: 0; cursor: pointer; accent-color: var(--accent); }

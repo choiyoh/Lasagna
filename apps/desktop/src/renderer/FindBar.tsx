@@ -2,6 +2,7 @@ import { t } from '@nopsidian/i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { EditorView } from 'prosemirror-view';
 import { clearFind, findCount, findFromCursor, findMove, replaceEvery, replaceOne, setFind } from '@nopsidian/editor/nops';
+import { loadFindParticles, saveFindParticles } from './find-prefs';
 import { keys } from './keys';
 
 interface Props {
@@ -21,6 +22,8 @@ export function FindBar({ view, initial, focusTick, docTick, onClose }: Props) {
   const [replace, setReplace] = useState('');
   const [showReplace, setShowReplace] = useState(false);
   const [caseSensitive, setCaseSensitive] = useState(false);
+  // 기기 설정에 기억한다(기본 켬)
+  const [particles, setParticles] = useState(() => loadFindParticles());
   const [count, setCount] = useState({ current: 0, total: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -49,6 +52,19 @@ export function FindBar({ view, initial, focusTick, docTick, onClose }: Props) {
 
   const move = (dir: 1 | -1) => {
     findMove(view, dir);
+    setCount(findCount(view));
+  };
+  const toggleParticles = () => {
+    const next = !particles;
+    setParticles(next);
+    saveFindParticles(next);
+  };
+  const replaceAtCursor = () => {
+    replaceOne(view, particles);
+    setCount(findCount(view));
+  };
+  const replaceEverywhere = () => {
+    replaceEvery(view, particles);
     setCount(findCount(view));
   };
   const close = () => {
@@ -116,32 +132,23 @@ export function FindBar({ view, initial, focusTick, docTick, onClose }: Props) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
-                replaceOne(view);
-                setCount(findCount(view));
+                replaceAtCursor();
               } else if (e.key === 'Escape') {
                 e.preventDefault();
                 close();
               }
             }}
           />
-          <button
-            disabled={!count.total}
-            onClick={() => {
-              replaceOne(view);
-              setCount(findCount(view));
-            }}
-          >
+          <button disabled={!count.total} onClick={replaceAtCursor}>
             {t('find.replace')}
           </button>
-          <button
-            disabled={!count.total}
-            onClick={() => {
-              replaceEvery(view);
-              setCount(findCount(view));
-            }}
-          >
+          <button disabled={!count.total} onClick={replaceEverywhere}>
             {t('find.replaceAll')}
           </button>
+          <label className="findbar__check" title={t('find.particlesTitle')}>
+            <input type="checkbox" checked={particles} onChange={toggleParticles} />
+            {t('find.particles')}
+          </label>
         </div>
       )}
     </div>

@@ -448,6 +448,8 @@ export const en: Record<MessageKey, string> = {
   'find.replacePlaceholder': 'Replace with',
   'find.replace': 'Replace',
   'find.replaceAll': 'Replace all',
+  'find.particles': 'Match Korean particles',
+  'find.particlesTitle': "Fits the particle to the new word: '유리는' → '요한은'",
   'cover.uploadFailed': 'Couldn\'t upload',
   'cover.pickerAria': 'Pick a cover',
   'cover.tabsAria': 'Cover type',
